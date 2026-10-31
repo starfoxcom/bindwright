@@ -40,6 +40,10 @@ let latest = 0;
 let shown = [];
 // The state before the last answer; the tags compare with it.
 let baseline = emptyState();
+// The question index of the last answer picked, or -1 before any answer.
+let lastAnswer = -1;
+// Each item's New or Changed tag and the answer that made it, keyed like data-key.
+const tagHistory = new Map();
 let fileChange = null;
 // The tally on screen, counting toward the summary's numbers.
 let tally = { parts: 0, rules: 0 };
@@ -67,6 +71,9 @@ function choose(question, value) {
     snapshots.set(question, baseline);
   }
   answered.add(question);
+  lastAnswer = questions.findIndex((node) => questionOf(node) === question);
+  // A new pick on this question replaces the tags its earlier pick left.
+  for (const [key, entry] of tagHistory) if (entry.answer >= lastAnswer) tagHistory.delete(key);
   // A new setup starts from that setup's defaults, as setup itself does.
   if (answers[question] !== value) answers = setupFor({ ...answers, [question]: value });
   render();
@@ -195,11 +202,12 @@ async function refresh() {
     const next = await repoFiles(answers);
     if (ticket !== latest) return;
     // What the files did against the state before the last answer; none before an answer.
-    fileChange = answered.size ? diffFiles(tagBase().files, new Map(next)) : null;
+    fileChange = answered.size ? diffFiles(baseline.files, new Map(next)) : null;
     files = next;
     if (!files.some(([path]) => path === selected)) selected = files[0]?.[0];
     drawGroups();
     drawTree();
+    settleTags();
     drawFile();
     $("status").textContent = "What you get is updated.";
   } catch (err) {
@@ -216,14 +224,6 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-// The state the tags compare with: the one before the last answer, or, once the
-// setup is ready, the one after the first answer, so the tags sum up what the
-// later answers added, changed and removed.
-function tagBase() {
-  if (step < questions.length) return baseline;
-  return snapshots.get(questionOf(questions[1])) ?? emptyState();
-}
-
 function emptyState() {
   return { cards: [], files: new Map() };
 }
@@ -237,10 +237,30 @@ function tagOf(id, added, changed = new Set()) {
   return changed.has(id) ? "Changed" : "";
 }
 
-// Stamps the badge word on an item; an empty word leaves it untagged.
-function tagged(node, word) {
+// Stamps the item's history key and its badge word; an empty word leaves it
+// untagged, and a removed item passes no key because its tag is never kept.
+function tagged(node, word, key = "") {
+  if (key) node.dataset.key = key;
   if (word) node.dataset.tag = word;
   return node;
+}
+
+// Keeps each item's New or Changed tag under the answer that made it. This draw's
+// lit tags are stored, and an item this draw leaves untagged shows its stored tag dimmed.
+function settleTags() {
+  const nodes = [...document.querySelectorAll("[data-key]")];
+  const present = new Set(nodes.map((node) => node.dataset.key));
+  for (const key of tagHistory.keys()) if (!present.has(key)) tagHistory.delete(key);
+  for (const node of nodes) {
+    const { key } = node.dataset;
+    if (node.dataset.tag) {
+      // The first question's tags compare with nothing, so they are not kept.
+      if (lastAnswer > 0) tagHistory.set(key, { word: node.dataset.tag, answer: lastAnswer });
+    } else if (tagHistory.has(key)) {
+      node.dataset.tag = tagHistory.get(key).word;
+      node.dataset.stale = "";
+    }
+  }
 }
 
 // The summary. Cards the setup adds rise in list order; cards it removes
@@ -248,13 +268,13 @@ function tagged(node, word) {
 function drawGroups() {
   const next = answered.size ? summarize(files, answers) : [];
   const motion = compare(shown, next);
-  const tags = compare(tagBase().cards, next);
+  const tags = compare(baseline.cards, next);
   shown = next;
   let risen = 0;
   const items = next.map((group) => {
     const added = motion.addedGroups.has(group.id);
     const title = tagged(el("b", { textContent: group.title }),
-      tagOf(group.id, tags.addedGroups, tags.changedGroups));
+      tagOf(group.id, tags.addedGroups, tags.changedGroups), `g:${group.id}`);
     const item = el("li", {}, title, el("p", { textContent: group.say }));
     item.dataset.id = group.id;
     if (added) {
@@ -315,7 +335,8 @@ function paintTally() {
 function factsList(group, tags) {
   const rows = group.facts.map((fact) => {
     const word = tagOf(fact.id, tags.addedFacts, tags.changedFacts);
-    return el("li", { className: TAG_CLASS[word] ?? "" }, tagged(el("span", { textContent: fact.text }), word));
+    const text = tagged(el("span", { textContent: fact.text }), word, `f:${fact.id}`);
+    return el("li", { className: TAG_CLASS[word] ?? "" }, text);
   });
   for (const fact of tags.removedFacts.filter((f) => f.group === group.id)) {
     rows.push(el("li", { className: "removed" }, tagged(el("span", { textContent: fact.text }), "Removed")));
@@ -328,7 +349,7 @@ function rulesList(rules, tags) {
   const rows = rules.map(([name, line], i) => {
     const word = tagOf(name, tags.addedRules);
     const row = el("li", { className: TAG_CLASS[word] ?? "" },
-      tagged(el("b", { textContent: name }), word), ` ${line}`);
+      tagged(el("b", { textContent: name }), word, `r:${name}`), ` ${line}`);
     row.style.setProperty("--i", i);
     return row;
   });
@@ -359,7 +380,7 @@ function drawTree() {
     }
     const word = fileTag(path);
     const kind = `file ${TAG_CLASS[word] ?? ""}`.trim();
-    const file = tagged(row("button", kind, dirs.length, parts.at(-1)), word);
+    const file = tagged(row("button", kind, dirs.length, parts.at(-1)), word, `p:${path}`);
     file.type = "button";
     file.dataset.path = path;
     if (path === selected) file.setAttribute("aria-current", "true");
@@ -503,6 +524,8 @@ function unanswer(index, before) {
   // The last answer left is the one before the question just un-answered.
   const earlier = index > 0 ? snapshots.get(questionOf(questions[index - 1])) : undefined;
   baseline = earlier ?? emptyState();
+  for (const [key, entry] of tagHistory) if (entry.answer >= index) tagHistory.delete(key);
+  lastAnswer = index - 1;
   shown = shown.filter((group) => before.has(group.id));
   render();
 }
@@ -513,6 +536,8 @@ function reset() {
   answered.clear();
   snapshots.clear();
   baseline = emptyState();
+  tagHistory.clear();
+  lastAnswer = -1;
   shown = [];
   fileChange = null;
   selected = "CLAUDE.md";

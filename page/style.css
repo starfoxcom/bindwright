@@ -274,6 +274,8 @@ h1 {
 }
 [data-tag="Changed"]::before { background: var(--chg); }
 [data-tag="Removed"]::before { background: var(--del); }
+/* A tag from an earlier answer keeps its colour but dims. */
+[data-tag][data-stale]::before { opacity: 0.4; }
 .groups > li.removed, .rules li.removed, .facts li.removed { color: var(--del); }
 .groups > li.removed > b, .groups > li.removed > p, .rules li.removed > b, .facts li.removed {
   color: var(--del); text-decoration: line-through;
