@@ -1,6 +1,8 @@
 // The setup's files as a few plain groups, for people who will never open
 // them: what each group does for the project, not what the files are called.
 
+import { flagsFor } from "../engine/model.js";
+
 const GROUPS = [
   {
     id: "rules", title: "Rules Claude follows", match: /^\.claude\/rules\//,
@@ -33,7 +35,7 @@ const GROUPS = [
   {
     id: "project", title: "Project files",
     match: /^(CLAUDE\.md|README|LICENSE|CHANGELOG|CONTRIBUTING|\.gitattributes|docs\/)/,
-    say: "The main file Claude reads about your project, plus a readme, license and changelog. "
+    say: "The main file Claude reads about your project, plus a readme and changelog. "
       + "Setup merges them with yours.",
   },
   { id: "notes", title: "Bindwright's notes", match: /^\.bindwright\//,
@@ -59,34 +61,114 @@ const RULES = {
   "visual": ["Screen changes in small steps", "Anything people see is built in pieces you check by eye."],
 };
 
-// What an answer change did to the summary: groups and rules that came or went.
+// Each license as a visitor reads it.
+const LICENSE_WORDS = {
+  MIT: "MIT, free for anyone to reuse",
+  "Apache-2.0": "Apache 2.0, free for anyone to reuse",
+  "BSD-3-Clause": "BSD, free for anyone to reuse",
+  Proprietary: "all rights reserved",
+};
+
+// Answer-driven detail lines on a card. `id` names the line's slot, so a pair
+// of lines for on and off shares one id and a changed text reads as Changed.
+// `show` gets the engine's flags, the answers and has(path), which says whether
+// a file is in the setup. `text` is a string or a function of the answers.
+const FACTS = [
+  {
+    id: "license", group: "project", text: (a) => `License: ${LICENSE_WORDS[a.project.license]}`,
+    show: (f, a, has) => has("LICENSE"),
+  },
+  {
+    id: "contributing", group: "project", text: "A contributing guide for teammates",
+    show: (f, a, has) => has("CONTRIBUTING.md"),
+  },
+  {
+    id: "deep-review", group: "reviews",
+    text: "Risky changes get a deeper second review on their own",
+    show: (f) => f.github_actions_deep_review_auto_fire,
+  },
+  {
+    id: "deep-review", group: "reviews",
+    text: "A deeper second review runs when someone asks for one",
+    show: (f) => f.github_actions_deep_review && !f.github_actions_deep_review_auto_fire,
+  },
+  {
+    id: "docs-merge", group: "reviews",
+    text: "Changes to docs only merge without waiting for a review",
+    show: (f) => f.github_actions_paths_ignore_auto_merge,
+  },
+  {
+    id: "docs-merge", group: "reviews",
+    text: "Every change waits for its review, docs included",
+    show: (f) => f.github_actions_routine_review && !f.github_actions_paths_ignore_auto_merge,
+  },
+  {
+    id: "pr-form", group: "reviews",
+    text: "A pull request form that asks what changed and why",
+    show: (f, a, has) => has(".github/PULL_REQUEST_TEMPLATE.md"),
+  },
+  {
+    id: "codeowners", group: "reviews", text: "Reviewers picked by folder",
+    show: (f, a, has) => has(".github/CODEOWNERS"),
+  },
+  {
+    id: "precommit", group: "checks", text: "Checks run before every commit",
+    show: (f) => f.precommit_hooks_scaffold,
+  },
+  {
+    id: "audit-trail", group: "rules", text: "Commits record which work had AI help",
+    show: (f) => f.audit_trail_commits,
+  },
+];
+
+const indexById = (list) => new Map(list.map((g) => [g.id, g]));
+const factIndex = (cards) => new Map(cards.flatMap((g) => g.facts).map((fact) => [fact.id, fact]));
+const ruleNames = (index) => new Set((index.get("rules")?.rules ?? []).map(([name]) => name));
+// A card's content as text: a card whose files, rules or lines differ has changed.
+const signature = (group) => JSON.stringify([group.files, group.rules ?? null, group.facts]);
+
+// What changed from `before` to `after`. Cards and rules are told apart by name,
+// facts by id. A fact whose id stays but whose text differs is changed, not removed.
 export function compare(before, after) {
-  const ids = (list) => new Set(list.map((g) => g.id));
-  const ruleNames = (list) => new Set((list.find((g) => g.id === "rules")?.rules ?? []).map(([name]) => name));
-  const [was, now] = [ids(before), ids(after)];
-  const [hadRules, hasRules] = [ruleNames(before), ruleNames(after)];
+  const [was, now] = [indexById(before), indexById(after)];
+  const [hadRules, hasRules] = [ruleNames(was), ruleNames(now)];
+  const [hadFacts, hasFacts] = [factIndex(before), factIndex(after)];
+  const kept = [...now.keys()].filter((id) => was.has(id));
   return {
-    addedGroups: new Set([...now].filter((id) => !was.has(id))),
+    addedGroups: new Set([...now.keys()].filter((id) => !was.has(id))),
     removedGroups: before.filter((g) => !now.has(g.id)),
+    changedGroups: new Set(kept.filter((id) => signature(was.get(id)) !== signature(now.get(id)))),
     addedRules: new Set([...hasRules].filter((name) => !hadRules.has(name))),
     removedRules: [...hadRules].filter((name) => !hasRules.has(name)),
+    addedFacts: new Set([...hasFacts.keys()].filter((id) => !hadFacts.has(id))),
+    changedFacts: new Set([...hasFacts.keys()].filter((id) => hadFacts.has(id)
+      && hadFacts.get(id).text !== hasFacts.get(id).text)),
+    removedFacts: [...hadFacts.values()]
+      .filter((fact) => !hasFacts.has(fact.id) && now.has(fact.group)),
   };
 }
 
-// "Code checks and the Working together rule", for the change note.
-export function describe(groups, rules) {
-  const parts = [...groups, ...rules.map((name) => `the ${name} rule`)];
-  if (parts.length < 2) return parts.join("");
-  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+// The facts the setup shows, as { id, group, text } in FACTS order.
+function factsFor(files, answers) {
+  const flags = flagsFor(answers);
+  const paths = new Set(files.map(([path]) => path));
+  const has = (path) => paths.has(path);
+  return FACTS.filter((fact) => fact.show(flags, answers, has)).map((fact) => ({
+    id: fact.id,
+    group: fact.group,
+    text: typeof fact.text === "function" ? fact.text(answers) : fact.text,
+  }));
 }
 
-// [{ id, title, say, files, rules? }] for the groups that have files, in GROUPS order.
-export function summarize(files) {
+// [{ id, title, say, files, rules?, facts }] for the groups that have files, in GROUPS order.
+export function summarize(files, answers) {
   const groups = GROUPS.map((g) => ({ ...g, files: [] }));
   const other = { id: "other", title: "Other files", say: "Supporting files the rest relies on.", files: [] };
   for (const [path] of files) (groups.find((g) => g.match.test(path)) ?? other).files.push(path);
   const rules = groups.find((g) => g.id === "rules");
   rules.rules = rules.files.map((p) => p.split("/").pop().replace(/\.md$/, ""))
     .map((name) => RULES[name] ?? [name, ""]);
-  return [...groups, other].filter((g) => g.files.length);
+  const facts = factsFor(files, answers);
+  return [...groups, other].filter((g) => g.files.length)
+    .map((g) => ({ ...g, facts: facts.filter((f) => f.group === g.id) }));
 }

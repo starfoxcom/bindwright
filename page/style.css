@@ -225,12 +225,7 @@ h1 {
 }
 .command > .toggle { flex: none; min-width: 84px; }
 
-/* Keeps a line's room while empty, so a note that appears pushes nothing down. */
-.changed {
-  min-height: calc(1lh + 20px); margin-bottom: 10px; padding: 10px 14px; border-radius: 12px;
-  background: var(--key); font-size: 15px; font-weight: 600;
-}
-.changed.fade-up, .done.fade-up { animation: text-rise 240ms ease both; }
+.done.fade-up { animation: text-rise 240ms ease both; }
 @keyframes text-rise { from { opacity: 0; transform: translateY(8px); } }
 .idle {
   display: grid; place-items: center; min-height: 340px; text-align: center; color: var(--text-2);
@@ -258,7 +253,7 @@ h1 {
   to { background-color: transparent; }
 }
 .rules li.added { box-shadow: inset 3px 0 0 var(--add); padding-left: 12px; }
-.rules li.added { animation: glow 900ms ease-out; }
+.rules li.added, .facts li.added { animation: glow 900ms ease-out; }
 @keyframes lift { from { opacity: 0; transform: translateY(10px); } }
 @keyframes dissolve {
   to {
@@ -268,17 +263,28 @@ h1 {
 }
 .groups > li.enter { animation: lift 420ms ease both; }
 .groups > li.leaving { animation: dissolve 700ms ease-in both; }
-.groups > li.added > b::after, .rules li.added > b::after {
-  content: "New"; margin-left: 8px; padding: 1px 7px; border-radius: 12px;
-  font-size: 13px; font-weight: 600; color: var(--canvas); background: var(--add);
+/* A tag names what changed since the question before: New, Changed or Removed. */
+[data-tag]::after {
+  content: attr(data-tag); display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 12px;
+  font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--canvas); background: var(--add);
 }
-.groups > li.removed, .rules li.removed { color: var(--del); }
-.groups > li.removed > b, .groups > li.removed > p, .rules li.removed > b {
+[data-tag="Changed"]::after { background: var(--accent); }
+[data-tag="Removed"]::after { background: var(--del); }
+.groups > li.removed, .rules li.removed, .facts li.removed { color: var(--del); }
+.groups > li.removed > b, .groups > li.removed > p, .rules li.removed > b, .facts li.removed {
   color: var(--del); text-decoration: line-through;
 }
 .groups > li { padding: 20px; border-radius: 14px; background: var(--key); }
 .groups > li > b { font-size: 18px; font-weight: 700; }
 .groups > li > p { margin-top: 2px; font-size: 15px; color: var(--text-2); }
+.facts {
+  display: grid; gap: 4px; margin-top: 10px; padding: 0; list-style: none; font-size: 14px; color: var(--text-2);
+}
+.facts li { position: relative; padding-left: 14px; }
+.facts li::before {
+  content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent); opacity: 0.6;
+}
 /* The rules card always shows its rules, takes a row of its own and sits a
    shade apart from the other cards. Its rules fade in one after another as it rises. */
 .groups > li.has-rules {
@@ -311,7 +317,6 @@ h1 {
 .tree .file[aria-current="true"] { background: var(--key); box-shadow: inset 2px 0 0 var(--accent); }
 
 .tree .file.added { color: var(--add); }
-.tree .file.added::after { content: " (new)"; font-size: 12px; }
 .tree .file.removed { color: var(--del); text-decoration: line-through; cursor: default; }
 .view { display: flex; flex-direction: column; min-width: 0; }
 .view .path { padding: 12px 16px 8px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
@@ -320,6 +325,8 @@ h1 {
   font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text); white-space: pre-wrap;
   overflow-wrap: anywhere; tab-size: 4;
 }
+.view pre .line { display: block; min-height: 1lh; }
+.view pre .line-new { background-color: color-mix(in oklch, var(--add) 28%, transparent); }
 .view.swap { animation: swap-in 160ms ease both; }
 @keyframes swap-in { from { opacity: 0; } }
 

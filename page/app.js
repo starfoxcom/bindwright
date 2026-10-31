@@ -2,7 +2,7 @@
 // so the page and /bindwright:setup always start from the same defaults.
 import { defaults } from "../engine/model.js";
 import { repoFiles, byFolder } from "./files.js";
-import { summarize, compare, describe } from "./summary.js";
+import { summarize, compare } from "./summary.js";
 import { encodeSetupCode } from "../engine/setupcode.js";
 
 // One accent hue per setup (docs/v2/DESIGN.md).
@@ -36,9 +36,10 @@ const answered = new Set();
 let files = [];
 let selected = "CLAUDE.md";
 let latest = 0;
-// The summary on screen, and the name of the key that last changed it.
+// The summary on screen.
 let shown = [];
-let choice = null;
+// The state before the last answer; the tags compare with it.
+let baseline = emptyState();
 let fileChange = null;
 // The tally on screen, counting toward the summary's numbers.
 let tally = { parts: 0, rules: 0 };
@@ -46,7 +47,7 @@ let tallyFrame = 0;
 // Set while the summary dissolves before the page starts over.
 let dissolving = false;
 let snapTimer = 0;
-// The group ids on screen just before each question's answer was picked.
+// The state on screen just before each question's answer was picked.
 const snapshots = new Map();
 // The setup step on screen: a question's index, or questions.length for Done.
 let step = 0;
@@ -58,17 +59,16 @@ function setupFor(parts) {
   return defaults({ team: parts.team, client: parts.client, isPrivate: parts.private });
 }
 
-function choose(question, value, label) {
+function choose(question, value) {
   if (dissolving) return;
   if (!answered.has(question) || answers[question] !== value) {
-    snapshots.set(question, new Set(shown.map((group) => group.id)));
+    // Before the first answer nothing is shown, files included.
+    baseline = answered.size ? { cards: shown, files: new Map(files) } : emptyState();
+    snapshots.set(question, baseline);
   }
   answered.add(question);
-  const same = answers[question] === value;
-  // Picking the answer already set changes nothing, so no change is named.
-  choice = same ? null : label;
   // A new setup starts from that setup's defaults, as setup itself does.
-  if (!same) answers = setupFor({ ...answers, [question]: value });
+  if (answers[question] !== value) answers = setupFor({ ...answers, [question]: value });
   render();
 }
 
@@ -77,7 +77,7 @@ function choose(question, value, label) {
 function pick(key) {
   if (dissolving) return;
   const from = questions.indexOf(key.closest(".q"));
-  choose(key.dataset.q, key.dataset.v === "true", key.querySelector("b").textContent);
+  choose(key.dataset.q, key.dataset.v === "true");
   setTimeout(() => { if (step === from) show(from + 1); }, ADVANCE_MS);
 }
 
@@ -93,8 +93,11 @@ function pickByDigit(event) {
 // Keyboard focus on the step being left moves to the new step's heading.
 function show(next) {
   const leaving = $("stage").contains(document.activeElement);
+  const crossesDone = (next === questions.length) !== (step === questions.length);
   step = next;
   paintStage();
+  // The tags compare with a different state on the Done card, so the files and cards redraw.
+  if (crossesDone) refresh();
   if (leaving) stageHeading().focus({ preventScroll: true });
 }
 
@@ -191,19 +194,14 @@ async function refresh() {
   try {
     const next = await repoFiles(answers);
     if (ticket !== latest) return;
-    const before = new Set(files.map(([path]) => path));
+    // What the files did against the state before the last answer; none before an answer.
+    fileChange = answered.size ? diffFiles(tagBase().files, new Map(next)) : null;
     files = next;
-    const now = new Set(files.map(([path]) => path));
-    // Files the last answer change added or removed; none on the first draw.
-    fileChange = choice && before.size ? {
-      added: new Set([...now].filter((path) => !before.has(path))),
-      removed: [...before].filter((path) => !now.has(path)),
-    } : null;
     if (!files.some(([path]) => path === selected)) selected = files[0]?.[0];
     drawGroups();
     drawTree();
     drawFile();
-    $("status").textContent = $("changed").textContent || "What you get is updated.";
+    $("status").textContent = "What you get is updated.";
   } catch (err) {
     if (ticket !== latest) return;
     const fail = document.createElement("li");
@@ -218,36 +216,59 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-// The summary. Groups the change adds rise in list order; groups it removes
-// dissolve as they leave. Unchanged groups are drawn again without motion.
+// The state the tags compare with: the one before the last answer, or the empty
+// start once the setup is ready.
+function tagBase() {
+  return step === questions.length ? emptyState() : baseline;
+}
+
+function emptyState() {
+  return { cards: [], files: new Map() };
+}
+
+// The word on an item's badge, and the class that colours its row.
+const TAG_CLASS = { New: "added", Changed: "changed", Removed: "removed" };
+
+// New, Changed or no tag for an id, given the sets a comparison made.
+function tagOf(id, added, changed = new Set()) {
+  if (added.has(id)) return "New";
+  return changed.has(id) ? "Changed" : "";
+}
+
+// Stamps the badge word on an item; an empty word leaves it untagged.
+function tagged(node, word) {
+  if (word) node.dataset.tag = word;
+  return node;
+}
+
+// The summary. Cards the setup adds rise in list order; cards it removes
+// dissolve as they leave. Every card is drawn again, tagged against the tag base.
 function drawGroups() {
-  const before = shown;
-  const next = answered.size ? summarize(files) : [];
-  const change = compare(before, next);
+  const next = answered.size ? summarize(files, answers) : [];
+  const motion = compare(shown, next);
+  const tags = compare(tagBase().cards, next);
   shown = next;
   let risen = 0;
   const items = next.map((group) => {
-    const added = change.addedGroups.has(group.id);
-    const item = el("li", {},
-      el("b", { textContent: group.title }), el("p", { textContent: group.say }));
+    const added = motion.addedGroups.has(group.id);
+    const title = tagged(el("b", { textContent: group.title }),
+      tagOf(group.id, tags.addedGroups, tags.changedGroups));
+    const item = el("li", {}, title, el("p", { textContent: group.say }));
     item.dataset.id = group.id;
     if (added) {
-      item.className = "added enter";
+      item.className = "enter";
       item.style.animationDelay = `${risen++ * RISE_STEP_MS}ms`;
     }
+    const facts = factsList(group, tags);
+    if (facts.childElementCount) item.append(facts);
     if (group.rules) {
       item.classList.add("has-rules");
-      item.append(rulesList(group.rules, change, added));
+      item.append(rulesList(group.rules, tags));
     }
     return item;
   });
-  items.push(...departing(change.removedGroups));
+  items.push(...departing(motion.removedGroups));
   $("groups").replaceChildren(...items);
-  // The first summary has nothing to compare with, so it names no change.
-  const note = choice && before.length ? changeNote(change) : "";
-  if (note && note !== $("changed").textContent) restart($("changed"), "fade-up");
-  $("changed").textContent = note;
-  setShown($("changed"), Boolean(note));
   countTally(next);
   setFilesView(filesOpen());
 }
@@ -256,8 +277,9 @@ function drawGroups() {
 function departing(gone) {
   if (still()) return [];
   return gone.map((group, i) => {
+    const title = tagged(el("b", { textContent: group.title }), "Removed");
     const item = el("li", { className: "removed leaving" },
-      el("b", { textContent: group.title }), el("p", { textContent: group.say }));
+      title, el("p", { textContent: group.say }));
     item.style.animationDelay = `${i * DISSOLVE_STEP_MS}ms`;
     item.addEventListener("animationend", () => item.remove(), { once: true });
     return item;
@@ -286,32 +308,37 @@ function paintTally() {
   $("tally").textContent = answered.size ? text : "";
 }
 
-// A group the change added is marked New, and its rules are not marked again.
-function rulesList(rules, change, entering) {
-  const isNew = (name) => !entering && change.addedRules.has(name);
+// The card's detail lines: each tagged New or Changed, and the ones the change
+// removed kept on screen, struck through.
+function factsList(group, tags) {
+  const rows = group.facts.map((fact) => {
+    const word = tagOf(fact.id, tags.addedFacts, tags.changedFacts);
+    return tagged(el("li", { className: TAG_CLASS[word] ?? "", textContent: fact.text }), word);
+  });
+  for (const fact of tags.removedFacts.filter((f) => f.group === group.id)) {
+    rows.push(tagged(el("li", { className: "removed", textContent: fact.text }), "Removed"));
+  }
+  return el("ul", { className: "facts" }, ...rows);
+}
+
+// The rules card's rows: rules the change added are New, rules it removed stay struck through.
+function rulesList(rules, tags) {
   const rows = rules.map(([name, line], i) => {
-    const row = el("li", { className: isNew(name) ? "added" : "" },
-      el("b", { textContent: name }), ` ${line}`);
+    const word = tagOf(name, tags.addedRules);
+    const row = el("li", { className: TAG_CLASS[word] ?? "" },
+      tagged(el("b", { textContent: name }), word), ` ${line}`);
     row.style.setProperty("--i", i);
     return row;
   });
-  for (const name of change.removedRules) {
-    rows.push(el("li", { className: "removed" }, el("b", { textContent: name })));
+  for (const name of tags.removedRules) {
+    const title = tagged(el("b", { textContent: name }), "Removed");
+    rows.push(el("li", { className: "removed" }, title));
   }
   return el("ul", { className: "rules" }, ...rows);
 }
 
-function changeNote(change) {
-  const newGroups = [...change.addedGroups].map((id) => shown.find((g) => g.id === id).title);
-  const added = describe(newGroups, [...change.addedRules]);
-  const removed = describe(change.removedGroups.map((g) => g.title), change.removedRules);
-  if (!added && !removed) return `${choice} changes settings inside the files, not this list.`;
-  if (!added) return `${choice} removes ${removed}.`;
-  return `${choice} adds ${added}. ${removed ? `It removes ${removed}.` : "Nothing is removed."}`;
-}
-
 // Folder rows wherever a path enters a new folder, then the file itself. Files
-// the last change added are marked green; removed ones stay, struck through.
+// the last change added or edited are tagged; removed ones stay, struck through.
 function drawTree() {
   const rows = [];
   let open = [];
@@ -325,10 +352,12 @@ function drawTree() {
     for (let d = same; d < dirs.length; d++) rows.push(row("div", "dir", d, `${dirs[d]}/`));
     open = dirs;
     if (removed.has(path)) {
-      rows.push(row("div", "file removed", dirs.length, parts.at(-1)));
+      rows.push(tagged(row("div", "file removed", dirs.length, parts.at(-1)), "Removed"));
       continue;
     }
-    const file = row("button", fileChange?.added.has(path) ? "file added" : "file", dirs.length, parts.at(-1));
+    const word = fileTag(path);
+    const kind = `file ${TAG_CLASS[word] ?? ""}`.trim();
+    const file = tagged(row("button", kind, dirs.length, parts.at(-1)), word);
     file.type = "button";
     file.dataset.path = path;
     if (path === selected) file.setAttribute("aria-current", "true");
@@ -343,11 +372,51 @@ function row(tag, kind, depth, text) {
   return node;
 }
 
+// The file's badge: New when added, Changed when its text differs, or none.
+function fileTag(path) {
+  if (fileChange?.added.has(path)) return "New";
+  return fileChange?.changed.has(path) ? "Changed" : "";
+}
+
+// The added, removed and edited files against the state before the last answer.
+// `previousText` keeps that state's texts, for the line marks.
+function diffFiles(previous, now) {
+  return {
+    added: new Set([...now.keys()].filter((path) => !previous.has(path))),
+    removed: [...previous.keys()].filter((path) => !now.has(path)),
+    changed: new Set([...now]
+      .filter(([path, text]) => previous.has(path) && previous.get(path) !== text)
+      .map(([path]) => path)),
+    previousText: previous,
+  };
+}
+
 function drawFile() {
   const file = files.find(([path]) => path === selected);
   $("path").textContent = file ? file[0] : "";
-  $("code").textContent = file ? file[1] : "";
+  if (file && fileChange?.changed.has(file[0])) drawChangedCode(file[0], file[1]);
+  else $("code").textContent = file ? file[1] : "";
   $("code").scrollTop = 0;
+}
+
+// An edited file's code, one element per line; lines the old text had no copy of are marked.
+function drawChangedCode(path, text) {
+  const fresh = newLines(fileChange.previousText.get(path), text);
+  const lines = text.split("\n").map((line, i) => el("span", {
+    className: fresh[i] ? "line line-new" : "line", textContent: line,
+  }));
+  $("code").replaceChildren(...lines);
+}
+
+// For each line of the new text, whether the old text has no spare copy of it.
+function newLines(oldText, newText) {
+  const spare = new Map();
+  for (const line of oldText.split("\n")) spare.set(line, (spare.get(line) ?? 0) + 1);
+  return newText.split("\n").map((line) => {
+    const left = spare.get(line) ?? 0;
+    if (left > 0) spare.set(line, left - 1);
+    return left === 0;
+  });
 }
 
 $("tree").addEventListener("click", (event) => {
@@ -415,7 +484,7 @@ function goBack() {
   show(to);
   const question = questionOf(questions[to]);
   if (!answered.has(question)) return;
-  const before = snapshots.get(question) ?? new Set();
+  const before = new Set((snapshots.get(question)?.cards ?? []).map((group) => group.id));
   const added = [...$("groups").children]
     .filter((item) => item.dataset.id && !before.has(item.dataset.id));
   snap(added, () => unanswer(to, before));
@@ -429,7 +498,9 @@ function unanswer(index, before) {
     answered.delete(key);
     answers = setupFor({ ...answers, [key]: base[key] });
   }
-  choice = null;
+  // The last answer left is the one before the question just un-answered.
+  const earlier = index > 0 ? snapshots.get(questionOf(questions[index - 1])) : undefined;
+  baseline = earlier ?? emptyState();
   shown = shown.filter((group) => before.has(group.id));
   render();
 }
@@ -439,7 +510,7 @@ function reset() {
   answers = defaults();
   answered.clear();
   snapshots.clear();
-  choice = null;
+  baseline = emptyState();
   shown = [];
   fileChange = null;
   selected = "CLAUDE.md";
