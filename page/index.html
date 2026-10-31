@@ -124,12 +124,25 @@
         <div class="command" id="command" aria-labelledby="command-title">
           <p class="command-step">Last step</p>
           <h3 class="command-title" id="command-title">Paste this into Claude Code</h3>
-          <p class="command-how">Open Claude Code in your project folder, paste the command and press Enter.
+          <p class="command-how">Open Claude Code in your project folder, then paste each command and press Enter.
             Setup writes the files above and never overwrites one of yours without asking.</p>
-          <button class="copy" id="copy" type="button">Copy command</button>
-          <div class="command-line">
-            <code class="cmd" id="cmd-text"></code>
-          </div>
+          <ol class="command-steps">
+            <li>
+              <p class="command-sub"><b>First time? Install Bindwright.</b> Once per computer.
+                Already have it? Skip to step 2.</p>
+              <div class="install-line"><code>/plugin marketplace add starfoxcom/claude-code-templates</code>
+                <button class="mini-copy" type="button" data-copy>Copy</button></div>
+              <div class="install-line"><code>/plugin install bindwright@bindwright</code>
+                <button class="mini-copy" type="button" data-copy>Copy</button></div>
+            </li>
+            <li>
+              <p class="command-sub"><b>Set up this project.</b></p>
+              <button class="copy" id="copy" type="button">Copy command</button>
+              <div class="command-line">
+                <code class="cmd" id="cmd-text"></code>
+              </div>
+            </li>
+          </ol>
         </div>
       </div>
     </div>

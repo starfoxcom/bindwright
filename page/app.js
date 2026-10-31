@@ -441,7 +441,19 @@ $("switch").addEventListener("click", (event) => {
 $("back").addEventListener("click", goBack);
 $("edit").addEventListener("click", editAnswers);
 $("restart").addEventListener("click", startOver);
+// Each install command has its own small Copy button for the line beside it.
+function copyInstallLine(event) {
+  const button = event.target.closest("[data-copy]");
+  if (!button) return;
+  const text = button.parentElement.querySelector("code").textContent;
+  navigator.clipboard.writeText(text).then(
+    () => { button.textContent = "Copied"; },
+    () => { button.textContent = "Select it"; });
+  setTimeout(() => { button.textContent = "Copy"; }, 1500);
+}
+
 $("copy").addEventListener("click", copyCommand);
+$("command").addEventListener("click", copyInstallLine);
 document.addEventListener("keydown", pickByDigit);
 buildSteps();
 render();

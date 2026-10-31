@@ -268,9 +268,32 @@ h1 {
   overflow-wrap: anywhere; word-break: break-all; user-select: all;
 }
 .copy {
-  display: block; min-width: 156px; min-height: 44px; margin-top: 18px; padding: 0 20px; font: 700 15px/1 "Hubot Sans", sans-serif;
+  display: block; min-width: 156px; min-height: 44px; margin-top: 10px; padding: 0 20px; font: 700 15px/1 "Hubot Sans", sans-serif;
   color: var(--on-accent); cursor: pointer; background: var(--accent); border: 0; border-radius: 12px;
   box-shadow: inset 0 -3px 0 var(--accent-deep);
+}
+/* Two numbered steps: install once, then set up this project. */
+.command-steps { display: grid; gap: 24px; margin: 20px 0 0; padding: 0; list-style: none; counter-reset: step; }
+.command-steps > li { position: relative; padding-left: 40px; counter-increment: step; }
+.command-steps > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%; font-weight: 700; font-size: 14px;
+  color: var(--on-accent); background: var(--accent);
+}
+.command-sub { min-height: 28px; padding-top: 4px; font-size: 15px; color: var(--text-2); }
+.command-sub b { color: var(--text); }
+.install-line {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 8px 8px 14px;
+  border-radius: 12px; background: var(--canvas);
+}
+.install-line code {
+  flex: 1; min-width: 0; font: 400 14px/1.5 "Fragment Mono", ui-monospace, monospace;
+  overflow-wrap: anywhere; user-select: all;
+}
+.mini-copy {
+  flex: none; min-width: 72px; min-height: 32px; padding: 0 12px; font: 600 13px/1 "Hubot Sans", sans-serif;
+  color: var(--text); cursor: pointer; background: var(--key); border: 0; border-radius: 10px;
+  box-shadow: inset 0 -2px 0 oklch(0 0 0 / .3);
 }
 .copy:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 var(--accent-deep); }
 
@@ -371,6 +394,7 @@ footer {
   .out-tools .toggle { min-height: 40px; }
   .command { padding: 20px; }
   .command-line { padding: 12px; }
+  .command-steps > li { padding-left: 0; padding-top: 36px; }
   .copy { width: 100%; }
 }
 
