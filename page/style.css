@@ -16,7 +16,6 @@
   --del: oklch(0.72 0.15 25);
   color-scheme: dark;
   scroll-padding: 96px 0;
-  interpolate-size: allow-keywords;
   transition: --hue 380ms cubic-bezier(.2, .8, .2, 1);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -272,19 +271,15 @@ h1 {
 .groups > li { padding: 20px; border-radius: 14px; background: var(--key); }
 .groups > li > b { font-size: 18px; font-weight: 700; }
 .groups > li > p { margin-top: 2px; font-size: 15px; color: var(--text-2); }
-.groups details { margin-top: 8px; }
-.groups summary { width: fit-content; font-size: 15px; font-weight: 600; cursor: pointer; }
-/* The rules open and close by height; interpolate-size lets the browser measure it. */
-.groups details::details-content {
-  block-size: 0; overflow: hidden;
-  transition: block-size 280ms ease, content-visibility 280ms allow-discrete;
+/* The rules card always shows its rules, takes a row of its own and sits a
+   shade apart from the other cards. Its rules fade in one after another as it rises. */
+.groups > li.has-rules {
+  grid-column: 1 / -1;
+  background: color-mix(in oklch, var(--key), var(--accent) 6%);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 18%, transparent);
 }
-.groups details[open]::details-content { block-size: auto; }
 @keyframes rule-in { from { opacity: 0; } }
-.groups details[open] .rules li { animation: rule-in 200ms calc(var(--i, 0) * 30ms) ease both; }
-.groups details[open] .rules li.added {
-  animation: glow 900ms ease-out, rule-in 200ms calc(var(--i, 0) * 30ms) ease both;
-}
+.groups > li.enter .rules li { animation: rule-in 200ms calc(300ms + var(--i, 0) * 30ms) ease both; }
 .rules { display: grid; gap: 6px; margin-top: 10px; padding-left: 18px; font-size: 15px; color: var(--text-2); }
 .rules b { font-weight: 600; color: var(--text); }
 
@@ -354,11 +349,9 @@ footer {
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .q, .done, .enter, .leaving { animation: none; }
   .k:hover { transform: none; }
-  .groups details::details-content { transition: none; }
 }
 
-/* An opened rules list takes a row of its own and flows in columns. */
-.groups > li:has(details[open]) { grid-column: 1 / -1; }
+/* The rules flow in columns. */
 .groups .rules {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 28px;
   margin-top: 12px; padding: 0; list-style: none;

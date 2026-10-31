@@ -215,7 +215,10 @@ function drawGroups() {
       item.className = "added enter";
       item.style.animationDelay = `${risen++ * RISE_STEP_MS}ms`;
     }
-    if (group.rules) item.append(rulesList(group.rules, change, added));
+    if (group.rules) {
+      item.classList.add("has-rules");
+      item.append(rulesList(group.rules, change, added));
+    }
     return item;
   });
   items.push(...departing(change.removedGroups));
@@ -275,9 +278,7 @@ function rulesList(rules, change, entering) {
   for (const name of change.removedRules) {
     rows.push(el("li", { className: "removed" }, el("b", { textContent: name })));
   }
-  const changed = !entering && (change.addedRules.size || change.removedRules.length);
-  return el("details", { open: Boolean(changed) },
-    el("summary", { textContent: `See the ${rules.length} rules` }), el("ul", { className: "rules" }, ...rows));
+  return el("ul", { className: "rules" }, ...rows);
 }
 
 function changeNote(change) {
@@ -427,28 +428,6 @@ function reset() {
   render();
 }
 
-// Opening or closing a rules list resizes its card to the full row and moves
-// the cards after it; each card glides from where it was instead of jumping.
-function glideRules(event) {
-  const summary = event.target.closest("summary");
-  if (!summary || still()) return;
-  event.preventDefault();
-  const cards = [...$("groups").children];
-  const before = cards.map((card) => card.getBoundingClientRect());
-  summary.parentElement.open = !summary.parentElement.open;
-  cards.forEach((card, i) => {
-    const was = before[i];
-    const now = card.getBoundingClientRect();
-    const dx = was.left - now.left;
-    const dy = was.top - now.top;
-    if (!dx && !dy && was.width === now.width) return;
-    card.animate([
-      { transform: `translate(${dx}px, ${dy}px)`, width: `${was.width}px` },
-      { transform: "none", width: `${now.width}px` },
-    ], { duration: 280, easing: "cubic-bezier(.2, .8, .2, 1)" });
-  });
-}
-
 for (const key of document.querySelectorAll(".k[data-q]")) {
   key.addEventListener("click", () => pick(key));
 }
@@ -456,7 +435,6 @@ $("switch").addEventListener("click", (event) => {
   const opt = event.target.closest(".seg-opt");
   if (opt) setFilesView(opt.dataset.view === "files");
 });
-$("groups").addEventListener("click", glideRules);
 $("back").addEventListener("click", goBack);
 $("edit").addEventListener("click", () => snap([...$("groups").children], reset));
 $("copy").addEventListener("click", copyCommand);
