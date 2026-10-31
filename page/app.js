@@ -216,10 +216,12 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-// The state the tags compare with: the one before the last answer, or the empty
-// start once the setup is ready.
+// The state the tags compare with: the one before the last answer, or, once the
+// setup is ready, the one after the first answer, so the tags sum up what the
+// later answers added, changed and removed.
 function tagBase() {
-  return step === questions.length ? emptyState() : baseline;
+  if (step < questions.length) return baseline;
+  return snapshots.get(questionOf(questions[1])) ?? emptyState();
 }
 
 function emptyState() {
@@ -313,10 +315,10 @@ function paintTally() {
 function factsList(group, tags) {
   const rows = group.facts.map((fact) => {
     const word = tagOf(fact.id, tags.addedFacts, tags.changedFacts);
-    return tagged(el("li", { className: TAG_CLASS[word] ?? "", textContent: fact.text }), word);
+    return el("li", { className: TAG_CLASS[word] ?? "" }, tagged(el("span", { textContent: fact.text }), word));
   });
   for (const fact of tags.removedFacts.filter((f) => f.group === group.id)) {
-    rows.push(tagged(el("li", { className: "removed", textContent: fact.text }), "Removed"));
+    rows.push(el("li", { className: "removed" }, tagged(el("span", { textContent: fact.text }), "Removed")));
   }
   return el("ul", { className: "facts" }, ...rows);
 }

@@ -263,13 +263,16 @@ h1 {
 }
 .groups > li.enter { animation: lift 420ms ease both; }
 .groups > li.leaving { animation: dissolve 700ms ease-in both; }
-/* A tag names what changed since the question before: New, Changed or Removed. */
-[data-tag]::after {
-  content: attr(data-tag); display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 12px;
-  font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--canvas); background: var(--add);
+/* A tag names what changed since the question before: New, Changed or Removed.
+   It leads the line at one width, so the text after every tag lines up. */
+[data-tag] { display: flex; align-items: baseline; }
+[data-tag]::before {
+  content: attr(data-tag); flex: none; min-width: 64px; margin-right: 8px; padding: 1px 7px;
+  border-radius: 12px; font-size: 12px; font-weight: 600; line-height: 1.5; text-align: center;
+  vertical-align: 1px; color: var(--canvas); background: var(--add);
 }
-[data-tag="Changed"]::after { background: var(--accent); }
-[data-tag="Removed"]::after { background: var(--del); }
+[data-tag="Changed"]::before { background: var(--accent); }
+[data-tag="Removed"]::before { background: var(--del); }
 .groups > li.removed, .rules li.removed, .facts li.removed { color: var(--del); }
 .groups > li.removed > b, .groups > li.removed > p, .rules li.removed > b, .facts li.removed {
   color: var(--del); text-decoration: line-through;
@@ -304,10 +307,12 @@ h1 {
 .out-body > * { min-height: 0; }
 
 .tree { overflow: auto; padding: 10px 10px 10px 0; border-right: 1px solid var(--rule); font-size: 14px; }
+/* Every row keeps a tag column on the left, so a tag never shifts a name off its indent. */
 .tree .dir, .tree .file {
-  display: block; width: 100%; padding: 3px 8px 3px calc(10px + var(--d) * 14px);
+  position: relative; display: block; width: 100%; padding: 3px 8px 3px calc(82px + var(--d) * 14px);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.tree [data-tag]::before { position: absolute; left: 8px; top: 50%; margin: 0; transform: translateY(-50%); }
 .tree .dir { color: var(--text-2); }
 .tree .file {
   min-height: 26px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
