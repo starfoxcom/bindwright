@@ -118,7 +118,9 @@ h1 {
 }
 .panel h2 { margin-bottom: 14px; font-size: 15px; font-weight: 600; color: var(--text-2); }
 .clip { box-shadow: inset 0 1px 0 oklch(1 0 0 / .06); }
-.ask, .composing { max-width: 760px; margin: 0 auto; }
+.ask { max-width: 760px; margin: 0 auto; }
+/* A fixed width, so the file names ticking by never resize the panel. */
+.composing { width: min(560px, 100%); margin: 0 auto; }
 .out-body { margin-top: 4px; }
 
 /* Hidden but still laid out, so showing it moves nothing around it. */
@@ -210,6 +212,7 @@ h1 {
 }
 @keyframes type-in { from { opacity: 0; transform: translateX(-6px); } }
 @keyframes check-in { to { transform: rotate(45deg) scale(1); } }
+.compose-files li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .compose-files {
   height: 120px; margin: 18px 0 0; padding: 0; list-style: none; overflow: hidden;
   font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text-2); opacity: 0.45;
@@ -243,19 +246,35 @@ h1 {
   background: var(--key); border: 0; border-radius: 12px; box-shadow: inset 0 -2px 0 oklch(0 0 0 / .3);
 }
 .toggle:active { transform: translateY(1px); box-shadow: none; }
-.toggle.pulse { animation: pulse 240ms ease; }
+.toggle.pulse, .copy.pulse { animation: pulse 240ms ease; }
 @keyframes pulse { 50% { transform: scale(1.06); } }
 
+/* The last step: what to do with the command, then the command and a large Copy button. */
 .command {
-  display: flex; align-items: center; gap: 16px; margin-top: 24px; padding: 18px 22px;
-  background: var(--panel); border-radius: 18px; box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
-  font: 400 14px/1.4 "Fragment Mono", ui-monospace, monospace;
+  margin-top: 32px; padding: 28px; border-radius: 20px;
+  background: color-mix(in oklch, var(--panel), var(--accent) 8%);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 35%, transparent),
+    0 18px 40px -24px color-mix(in oklch, var(--accent) 60%, transparent);
+}
+.command-step {
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+}
+.command-title { margin-top: 4px; font-size: clamp(22px, 2.4vw, 28px); font-weight: 750; }
+.command-how { max-width: 640px; margin-top: 6px; font-size: 15px; color: var(--text-2); }
+.command-line {
+  display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 10px 10px 10px 18px;
+  border-radius: 14px; background: var(--canvas);
 }
 .cmd {
-  flex: 1; min-width: 0; color: var(--text);
+  flex: 1; min-width: 0; font: 400 15px/1.4 "Fragment Mono", ui-monospace, monospace; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.command > .toggle { flex: none; min-width: 84px; }
+.copy {
+  flex: none; min-width: 156px; min-height: 44px; padding: 0 20px; font: 700 15px/1 "Hubot Sans", sans-serif;
+  color: var(--on-accent); cursor: pointer; background: var(--accent); border: 0; border-radius: 12px;
+  box-shadow: inset 0 -3px 0 var(--accent-deep);
+}
+.copy:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 var(--accent-deep); }
 
 .groups {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
@@ -349,6 +368,12 @@ footer {
 
 @media (max-width: 560px) {
   .changes ul, .groups { grid-template-columns: minmax(0, 1fr); }
+  .out-tools { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .out-tools .seg { grid-column: 1 / -1; }
+  .out-tools .toggle { min-height: 40px; }
+  .command { padding: 20px; }
+  .command-line { flex-direction: column; align-items: stretch; padding: 12px; }
+  .copy { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

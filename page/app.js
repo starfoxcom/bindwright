@@ -150,7 +150,7 @@ async function copyCommand() {
     $("copy").textContent = "Select and copy";
   }
   clearTimeout(copyTimer);
-  copyTimer = setTimeout(() => { $("copy").textContent = "Copy"; }, 1500);
+  copyTimer = setTimeout(() => { $("copy").textContent = "Copy command"; }, 1500);
 }
 
 function render() {
