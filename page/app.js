@@ -10,8 +10,6 @@ const HUES = { "false,false": 150, "true,false": 200, "false,true": 70, "true,tr
 const hueFor = (team, client) => HUES[`${team},${client}`];
 const $ = (id) => document.getElementById(id);
 const questions = [...document.querySelectorAll(".q")];
-// The questions on the path: the private question only follows "Someone else's".
-const onPath = () => questions.filter((node) => !node.dataset.when || answers[node.dataset.when]);
 const questionOf = (node) => node.querySelector("[data-q]").dataset.q;
 const ADVANCE_MS = 350;
 const RISE_STEP_MS = 90;
@@ -66,8 +64,6 @@ function choose(question, value, label) {
     snapshots.set(question, new Set(shown.map((group) => group.id)));
   }
   answered.add(question);
-  // Mine has no private question, so an earlier private answer goes with it.
-  if (question === "client" && !value) answered.delete("private");
   const same = answers[question] === value;
   // Picking the answer already set changes nothing, so no change is named.
   choice = same ? null : label;
@@ -79,7 +75,8 @@ function choose(question, value, label) {
 // Answer from a key, then move to the next step after a short pause. A pause
 // that finds the reader on another step does nothing.
 function pick(key) {
-  const from = onPath().indexOf(key.closest(".q"));
+  if (dissolving) return;
+  const from = questions.indexOf(key.closest(".q"));
   choose(key.dataset.q, key.dataset.v === "true", key.querySelector("b").textContent);
   setTimeout(() => { if (step === from) show(from + 1); }, ADVANCE_MS);
 }
@@ -88,7 +85,7 @@ function pick(key) {
 function pickByDigit(event) {
   if (event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.target.closest("input, textarea, select, [contenteditable]")) return;
-  const keys = onPath()[step]?.querySelectorAll(".k") ?? [];
+  const keys = questions[step]?.querySelectorAll(".k") ?? [];
   const key = keys[Number(event.key) - 1];
   if (key) pick(key);
 }
@@ -102,29 +99,31 @@ function show(next) {
 }
 
 function stageHeading() {
-  const path = onPath();
-  const node = step < path.length ? path[step] : $("done");
+  const node = step < questions.length ? questions[step] : $("done");
   return node.querySelector("h3");
 }
 
+// Hides a node but keeps its room (the "off" class), so nothing around it moves.
+// A stage step that comes back rises in again.
+function setShown(node, visible) {
+  if (visible && node.classList.contains("off") && node.closest(".stage")) restart(node, "rise-in");
+  node.classList.toggle("off", !visible);
+}
+
 function paintStage() {
-  const path = onPath();
-  buildSteps(path.length + 1);
-  questions.forEach((node) => { node.hidden = node !== path[step]; });
-  $("done").hidden = step !== path.length;
-  $("back").hidden = step === 0;
+  questions.forEach((node, i) => setShown(node, i === step));
+  setShown($("done"), step === questions.length);
+  setShown($("back"), step > 0);
   [...$("steps").children].forEach((dot, i) => {
     if (i === step) dot.setAttribute("aria-current", "step");
     else dot.removeAttribute("aria-current");
   });
 }
 
-// One progress dot per question on the path plus Done, rebuilt when the count
-// changes. The dots only show progress: Back moves one step at a time and
-// Edit answers starts over.
-function buildSteps(count) {
-  if ($("steps").children.length === count) return;
-  const labels = Array.from({ length: count }, (_, i) => (i < count - 1 ? `Question ${i + 1}` : "Done"));
+// One progress dot per question plus the final Done step. The dots only show
+// progress: Back moves one step at a time and Edit answers starts over.
+function buildSteps() {
+  const labels = [...questions.map((_, i) => `Question ${i + 1}`), "Done"];
   const dots = labels.map((label) => {
     const dot = el("li", { className: "dot" });
     dot.setAttribute("aria-label", label);
@@ -133,10 +132,10 @@ function buildSteps(count) {
   $("steps").replaceChildren(...dots);
 }
 
-// Whose project, in plain words: mine, or someone else's, private or public.
+// Whose project and who can see it, in plain words.
 function ownerWords() {
-  if (!answers.client) return "my own project";
-  return answers.private ? "someone else's private project" : "someone else's public project";
+  const owner = answers.client ? "someone else's" : "my own";
+  return `${owner} ${answers.private ? "private" : "public"} project`;
 }
 
 // The answers in plain words, e.g. "Just me, my own project".
@@ -173,10 +172,10 @@ function render() {
     const next = { team, client, [question]: value };
     key.style.setProperty("--h", hueFor(next.team, next.client));
   }
-  const ready = onPath().every((node) => answered.has(questionOf(node)));
+  const ready = answered.size === questions.length;
   $("cmd-text").textContent = commandLine();
   $("command").hidden = !ready;
-  $("switch").hidden = !ready;
+  setShown($("switch"), ready);
   $("idle").hidden = answered.size > 0;
   const line = plainAnswers();
   if (line !== $("done-line").textContent) restart($("done"), "fade-up");
@@ -236,7 +235,10 @@ function drawGroups() {
       item.className = "added enter";
       item.style.animationDelay = `${risen++ * RISE_STEP_MS}ms`;
     }
-    if (group.rules) item.append(rulesList(group.rules, change, added));
+    if (group.rules) {
+      item.classList.add("has-rules");
+      item.append(rulesList(group.rules, change, added));
+    }
     return item;
   });
   items.push(...departing(change.removedGroups));
@@ -245,7 +247,7 @@ function drawGroups() {
   const note = choice && before.length ? changeNote(change) : "";
   if (note && note !== $("changed").textContent) restart($("changed"), "fade-up");
   $("changed").textContent = note;
-  $("changed").hidden = !note;
+  setShown($("changed"), Boolean(note));
   countTally(next);
   setFilesView(filesOpen());
 }
@@ -296,9 +298,7 @@ function rulesList(rules, change, entering) {
   for (const name of change.removedRules) {
     rows.push(el("li", { className: "removed" }, el("b", { textContent: name })));
   }
-  const changed = !entering && (change.addedRules.size || change.removedRules.length);
-  return el("details", { open: Boolean(changed) },
-    el("summary", { textContent: `See the ${rules.length} rules` }), el("ul", { className: "rules" }, ...rows));
+  return el("ul", { className: "rules" }, ...rows);
 }
 
 function changeNote(change) {
@@ -413,7 +413,7 @@ function goBack() {
   if (step === 0 || dissolving) return;
   const to = step - 1;
   show(to);
-  const question = questionOf(onPath()[to]);
+  const question = questionOf(questions[to]);
   if (!answered.has(question)) return;
   const before = snapshots.get(question) ?? new Set();
   const added = [...$("groups").children]
@@ -424,7 +424,7 @@ function goBack() {
 // Drops the answers from a question index on, so the summary falls back to what came before.
 function unanswer(index, before) {
   const base = defaults();
-  for (const node of onPath().slice(index)) {
+  for (const node of questions.slice(index)) {
     const key = questionOf(node);
     answered.delete(key);
     answers = setupFor({ ...answers, [key]: base[key] });
@@ -448,28 +448,6 @@ function reset() {
   render();
 }
 
-// Opening or closing a rules list resizes its card to the full row and moves
-// the cards after it; each card glides from where it was instead of jumping.
-function glideRules(event) {
-  const summary = event.target.closest("summary");
-  if (!summary || still()) return;
-  event.preventDefault();
-  const cards = [...$("groups").children];
-  const before = cards.map((card) => card.getBoundingClientRect());
-  summary.parentElement.open = !summary.parentElement.open;
-  cards.forEach((card, i) => {
-    const was = before[i];
-    const now = card.getBoundingClientRect();
-    const dx = was.left - now.left;
-    const dy = was.top - now.top;
-    if (!dx && !dy && was.width === now.width) return;
-    card.animate([
-      { transform: `translate(${dx}px, ${dy}px)`, width: `${was.width}px` },
-      { transform: "none", width: `${now.width}px` },
-    ], { duration: 280, easing: "cubic-bezier(.2, .8, .2, 1)" });
-  });
-}
-
 for (const key of document.querySelectorAll(".k[data-q]")) {
   key.addEventListener("click", () => pick(key));
 }
@@ -477,9 +455,9 @@ $("switch").addEventListener("click", (event) => {
   const opt = event.target.closest(".seg-opt");
   if (opt) setFilesView(opt.dataset.view === "files");
 });
-$("groups").addEventListener("click", glideRules);
 $("back").addEventListener("click", goBack);
 $("edit").addEventListener("click", () => snap([...$("groups").children], reset));
 $("copy").addEventListener("click", copyCommand);
 document.addEventListener("keydown", pickByDigit);
+buildSteps();
 render();
