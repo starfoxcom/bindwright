@@ -92,16 +92,19 @@ def utf16_len(s):
     return len(s.encode("utf-16-le", "surrogatepass")) // 2
 
 
-def defaults(team=False, client=False):
+def defaults(team=False, client=False, private=None):
+    # None means the same as client: a someone-else's project is private unless told otherwise.
+    if private is None:
+        private = client
     return {
-        "team": team, "client": client,
+        "team": team, "client": client, "private": client and private,
         "project": {"name": "my-project", "repoUrl": "", "licenseHolder": "", "license": "Proprietary" if client else "MIT"},
         "advanced": {
             "aiReview": True,
             "deepEscalation": team,
             "precommit": "lefthook" if team else "none",
             "uiRule": False,
-            "confidentiality": client,
+            "confidentiality": client and private,
             "cleanRoom": False,
             "plainWriting": False,
             "codeResearch": "none",
@@ -165,14 +168,20 @@ def _check_custom_tool(tool, custom):
         _check(custom is None or custom is UNDEFINED, 'codeResearchCustom is only for codeResearch "custom"')
 
 
-def validate(a):
+def validate(saved):
     # Setup codes carry answers from outside the page, so the shape comes first.
-    _check(isinstance(a, dict) and isinstance(a.get("project"), dict) and isinstance(a.get("advanced"), dict),
+    _check(isinstance(saved, dict) and isinstance(saved.get("project"), dict) and isinstance(saved.get("advanced"), dict),
            "the answers must hold project and advanced objects")
+    # Answers saved before the private question existed count as private = client.
+    a = dict(saved)
+    if "private" not in a:
+        a["private"] = a.get("client", UNDEFINED)
     adv = a["advanced"]
     project = a["project"]
     get = lambda d, k: d.get(k, UNDEFINED)
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
+    _check(_is_bool(get(a, "private")), "private must be true or false")
+    _check(not a["private"] or a["client"], "private is only for someone else's project")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
@@ -244,7 +253,7 @@ def flags_for(a):
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
         "contributing_md": a["team"],
-        "audit_trail_commits": a["client"],
+        "audit_trail_commits": a["client"] and a["private"],
         "definition_of_done_verification": True,
         "lazy_rules_folder": True,
         "memory_system": True,

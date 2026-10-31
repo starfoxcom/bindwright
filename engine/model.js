@@ -57,16 +57,17 @@ export const DEFERRED = new Set([
   "LEAD_USER", "TEAM_OR_USER",
 ]);
 
-export function defaults({ team = false, client = false } = {}) {
+export function defaults({ team = false, client = false, isPrivate = client } = {}) {
   return {
     team, client,
+    private: client && isPrivate,
     project: { name: "my-project", repoUrl: "", licenseHolder: "", license: client ? "Proprietary" : "MIT" },
     advanced: {
       aiReview: true,
       deepEscalation: team,
       precommit: team ? "lefthook" : "none",
       uiRule: false,
-      confidentiality: client,
+      confidentiality: client && isPrivate,
       cleanRoom: false,
       plainWriting: false,
       codeResearch: "none",
@@ -107,11 +108,15 @@ const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProp
 
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
-export function validate(a) {
+export function validate(saved) {
   // Setup codes carry answers from outside the page, so the shape comes first.
-  check(isObject(a) && isObject(a.project) && isObject(a.advanced), "the answers must hold project and advanced objects");
+  check(isObject(saved) && isObject(saved.project) && isObject(saved.advanced), "the answers must hold project and advanced objects");
+  // Answers saved before the private question existed count as private = client.
+  const a = { ...saved, private: own(saved, "private") ? saved.private : saved.client };
   const adv = a.advanced;
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
+  check(typeof a.private === "boolean", "private must be true or false");
+  check(!a.private || a.client, "private is only for someone else's project");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
@@ -176,7 +181,7 @@ export function flagsFor(a) {
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     contributing_md: a.team,
-    audit_trail_commits: a.client,
+    audit_trail_commits: a.client && a.private,
     definition_of_done_verification: true,
     lazy_rules_folder: true,
     memory_system: true,

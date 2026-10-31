@@ -71,6 +71,7 @@ function oneAtATime() {
       cases.push(escaped);
     }
   }
+  for (const team of [false, true]) cases.push(defaults({ team, client: true, isPrivate: false }));
   return cases;
 }
 
@@ -86,7 +87,9 @@ function seeded(count) {
   const pick = (xs) => xs[Math.floor(rand() * xs.length)];
   const bool = () => rand() < 0.5;
   return Array.from({ length: count }, () => {
-    const a = defaults({ team: bool(), client: bool() });
+    const team = bool();
+    const client = bool();
+    const a = defaults({ team, client, isPrivate: client && bool() });
     a.project.license = pick(Object.keys(LICENSES));
     Object.assign(a.advanced, {
       aiReview: bool(), deepEscalation: bool(), uiRule: bool(), confidentiality: bool(), cleanRoom: bool(), plainWriting: bool(),
@@ -113,6 +116,8 @@ function refused() {
     (a) => { a.advanced = []; },
     (a) => { a.project = "x"; },
     (a) => { a.team = "yes"; },
+    (a) => { a.private = true; },
+    (a) => { a.private = "yes"; },
     (a) => { a.advanced.cleanRoom = 1; },
     (a) => { delete a.advanced.uiRule; },
     (a) => { a.project.name = "-leading-dash"; },
