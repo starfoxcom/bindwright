@@ -60,8 +60,8 @@ export const DEFERRED = new Set([
 export function defaults({ team = false, client = false, isPrivate = client } = {}) {
   return {
     team, client,
-    private: client && isPrivate,
-    project: { name: "my-project", repoUrl: "", licenseHolder: "", license: client ? "Proprietary" : "MIT" },
+    private: isPrivate,
+    project: { name: "my-project", repoUrl: "", licenseHolder: "", license: client || isPrivate ? "Proprietary" : "MIT" },
     advanced: {
       aiReview: true,
       deepEscalation: team,
@@ -116,7 +116,6 @@ export function validate(saved) {
   const adv = a.advanced;
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
   check(typeof a.private === "boolean", "private must be true or false");
-  check(!a.private || a.client, "private is only for someone else's project");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);

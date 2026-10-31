@@ -93,12 +93,12 @@ def utf16_len(s):
 
 
 def defaults(team=False, client=False, private=None):
-    # None means the same as client: a someone-else's project is private unless told otherwise.
+    # None means the same as client, as answers saved before the question read.
     if private is None:
         private = client
     return {
-        "team": team, "client": client, "private": client and private,
-        "project": {"name": "my-project", "repoUrl": "", "licenseHolder": "", "license": "Proprietary" if client else "MIT"},
+        "team": team, "client": client, "private": private,
+        "project": {"name": "my-project", "repoUrl": "", "licenseHolder": "", "license": "Proprietary" if client or private else "MIT"},
         "advanced": {
             "aiReview": True,
             "deepEscalation": team,
@@ -181,7 +181,6 @@ def validate(saved):
     get = lambda d, k: d.get(k, UNDEFINED)
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
     _check(_is_bool(get(a, "private")), "private must be true or false")
-    _check(not a["private"] or a["client"], "private is only for someone else's project")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")

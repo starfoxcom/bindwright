@@ -16,7 +16,7 @@ A Python twin (`model.py`, `render.py`, `bind.py`, standard library only, Python
 
 | File | Job |
 |---|---|
-| `model.js`, `model.py` | The answer model: the questions (`team`, `client`, and `private` when `client` is true), advanced choices, and every flag, choice and value derived from them. |
+| `model.js`, `model.py` | The answer model: the questions (`team`, `client`, `private`), advanced choices, and every flag, choice and value derived from them. |
 | `render.js`, `render.py` | Resolves one template: toggle blocks, then placeholders, then blank-line cleanup. |
 | `bind.js`, `bind.py` | Picks which templates ship, where each lands, and renders them all. |
 | `setupcode.js`, `setupcode.py` | The setup code the page hands to `/bindwright:setup`: `bw1-` plus the answers as UTF-8 JSON in base64url without padding. JS encodes and decodes; Python decodes. Both refuse a bad code with the same message. |

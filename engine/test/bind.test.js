@@ -68,10 +68,12 @@ test("answers saved without a private key bind as private = client", async () =>
   }
 });
 
-test("private is only for someone else's project", async () => {
-  const a = defaults({ team: true });
-  a.private = true;
-  await assert.rejects(run(a), /private is only for someone else's project/);
+test("my own project licenses by visibility: private is Proprietary, public is MIT", async () => {
+  for (const [isPrivate, words] of [[true, "All rights reserved"], [false, "MIT License"]]) {
+    const files = await run(defaults({ isPrivate }));
+    assert.ok(files.get(`${STAGING}LICENSE`).includes(words), `private=${isPrivate}`);
+    assert.ok(!files.has(".claude/rules/confidentiality.md"), `private=${isPrivate}`);
+  }
 });
 
 test("every code-research tool binds cleanly", async () => {
