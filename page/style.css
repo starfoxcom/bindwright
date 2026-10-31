@@ -160,9 +160,10 @@ h1 {
 .keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
 .k {
-  position: relative; min-height: 76px; padding: 14px 40px 16px 16px;
+  display: flex; flex-direction: column; justify-content: flex-start; gap: 4px;
+  min-height: 76px; padding: 14px 16px 16px;
   font: inherit; text-align: left; color: var(--text); cursor: pointer;
-  background: var(--key); border: 1px solid transparent; border-radius: 12px;
+  background: var(--key); border: 1px solid oklch(0.80 0.13 var(--h) / .4); border-radius: 12px;
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .08), 0 0 0 1px oklch(0 0 0 / .35), inset 0 -3px 0 oklch(0 0 0 / .3);
   transition: transform 150ms ease, box-shadow 150ms ease, background-color 180ms ease,
     border-color 180ms ease, color 180ms ease;
@@ -176,10 +177,6 @@ h1 {
   transform: translateY(2px);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .05), 0 0 0 1px oklch(0 0 0 / .35), inset 0 -1px 0 oklch(0 0 0 / .3);
 }
-.k::after {
-  content: ""; position: absolute; top: 18px; right: 16px; width: 8px; height: 8px; border-radius: 50%;
-  background: oklch(0.80 0.13 var(--h)); box-shadow: 0 0 0 3px oklch(0.80 0.13 var(--h) / .16);
-}
 .k b { display: block; font-size: 17px; font-weight: 650; }
 .k span { font-size: 14px; color: var(--text-2); }
 .k[aria-pressed="true"] {
@@ -187,7 +184,6 @@ h1 {
   box-shadow: inset 0 -3px 0 var(--accent-deep);
 }
 .k[aria-pressed="true"]:active { box-shadow: inset 0 -1px 0 var(--accent-deep); }
-.k[aria-pressed="true"]::after { background: var(--on-accent); box-shadow: none; }
 .k[aria-pressed="true"] span { color: oklch(0.30 0.05 var(--hue)); }
 
 /* The composing view: a bar, one line per summary group and the file paths ticking by. */

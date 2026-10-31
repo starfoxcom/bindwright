@@ -188,7 +188,7 @@ function render() {
     const question = key.dataset.q;
     const picked = answered.has(question) && answers[question] === value;
     key.setAttribute("aria-pressed", String(picked));
-    // The key's light shows the setup that pressing it would give.
+    // The key's border shows the setup that pressing it would give.
     const next = { team, client, [question]: value };
     key.style.setProperty("--h", hueFor(next.team, next.client));
   }
