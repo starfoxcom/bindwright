@@ -14,6 +14,7 @@
   --on-accent: oklch(0.20 0.03 var(--hue));
   --add: oklch(0.80 0.14 150);
   --del: oklch(0.72 0.15 25);
+  --chg: oklch(0.82 0.14 80);
   color-scheme: dark;
   scroll-padding: 96px 0;
   transition: --hue 380ms cubic-bezier(.2, .8, .2, 1);
@@ -271,7 +272,7 @@ h1 {
   border-radius: 12px; font-size: 12px; font-weight: 600; line-height: 1.5;
   color: var(--canvas); background: var(--add);
 }
-[data-tag="Changed"]::before { background: var(--accent); }
+[data-tag="Changed"]::before { background: var(--chg); }
 [data-tag="Removed"]::before { background: var(--del); }
 .groups > li.removed, .rules li.removed, .facts li.removed { color: var(--del); }
 .groups > li.removed > b, .groups > li.removed > p, .rules li.removed > b, .facts li.removed {
