@@ -119,15 +119,15 @@ function paintStage() {
   });
 }
 
-// One progress dot per question on the path plus Done; each jumps to its step.
-// Rebuilt only when the count changes, so a focused dot keeps its focus.
+// One progress dot per question on the path plus Done, rebuilt when the count
+// changes. The dots only show progress: Back moves one step at a time and
+// Edit answers starts over.
 function buildSteps(count) {
   if ($("steps").children.length === count) return;
   const labels = Array.from({ length: count }, (_, i) => (i < count - 1 ? `Question ${i + 1}` : "Done"));
-  const dots = labels.map((label, i) => {
-    const dot = el("button", { type: "button", className: "dot" });
+  const dots = labels.map((label) => {
+    const dot = el("li", { className: "dot" });
     dot.setAttribute("aria-label", label);
-    dot.addEventListener("click", () => show(i));
     return dot;
   });
   $("steps").replaceChildren(...dots);
@@ -367,10 +367,10 @@ $("tree").addEventListener("click", (event) => {
 // rebuilt, so the summary's cards keep their place and do not rise again.
 function setFilesView(open) {
   const view = open ? "files" : "overview";
-  const files = $("files");
+  const panel = $("files");
   const groups = $("groups");
-  if (files.classList.contains("away") === open) {
-    const [leaving, arriving] = open ? [groups, files] : [files, groups];
+  if (panel.classList.contains("away") === open) {
+    const [leaving, arriving] = open ? [groups, panel] : [panel, groups];
     leaving.classList.remove("arrive");
     leaving.classList.add("away", "leave");
     arriving.classList.remove("away", "leave");
