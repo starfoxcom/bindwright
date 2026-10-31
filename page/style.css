@@ -263,14 +263,16 @@ h1 {
 }
 .groups > li.enter { animation: lift 420ms ease both; }
 .groups > li.leaving { animation: dissolve 700ms ease-in both; }
-/* A tag names what changed since the question before: New, Changed or Removed.
-   It leads the line at one width, so the text after every tag lines up. */
-[data-tag] { display: flex; align-items: baseline; }
+/* A tag names what changed: New, Changed or Removed. It sits on its own line
+   above the item, so the item's text keeps its place. */
+[data-tag] { display: block; }
 [data-tag]::before {
-  content: attr(data-tag); flex: none; min-width: 64px; margin-right: 8px; padding: 1px 7px;
-  border-radius: 12px; font-size: 12px; font-weight: 600; line-height: 1.5; text-align: center;
-  vertical-align: 1px; color: var(--canvas); background: var(--add);
+  content: attr(data-tag); display: block; width: fit-content; margin-bottom: 4px; padding: 1px 8px;
+  border-radius: 12px; font-size: 12px; font-weight: 600; line-height: 1.5;
+  color: var(--canvas); background: var(--add);
 }
+/* A tagged fact drops its dot; the tag marks the line instead. */
+.facts li:has([data-tag])::before { display: none; }
 [data-tag="Changed"]::before { background: var(--accent); }
 [data-tag="Removed"]::before { background: var(--del); }
 .groups > li.removed, .rules li.removed, .facts li.removed { color: var(--del); }
