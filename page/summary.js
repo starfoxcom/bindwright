@@ -43,12 +43,14 @@ const GROUPS = [
 // One plain line per rule file, by name.
 const RULES = {
   "architecture": ["Your code structure", "New code goes into the layers of the structure you picked."],
+  "clean-code": ["Code a newcomer reads", "Clear names, short comments, no copies of the same code."],
   "clean-room": ["Clean room", "Code inspired by another product never copies it."],
   "code-size": ["Small, readable code", "Functions and files stay short enough to follow."],
   "collaboration": ["Working together", "How teammates share branches and answer reviews."],
   "confidentiality": ["Client secrets", "Client secrets stay out of Claude's memory."],
   "git": ["Clean history", "Clear commit messages and one branch per change."],
   "review-tiers": ["How reviews work", "What the AI reviewer checks, and when it looks deeper."],
+  "security": ["No secrets ship", "Keys and passwords stay out of the code and everything you release."],
   "shipped-text": ["Plain writing", "Text people read sounds like a person wrote it."],
   "task-tracking": ["A visible to-do list", "Claude keeps a task list on any job with several steps."],
   "testing": ["Real tests", "Tests check the real code, edge cases included."],
