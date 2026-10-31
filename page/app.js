@@ -47,7 +47,6 @@ let busy = false;
 // The tally on screen, counting toward the summary's numbers.
 let tally = { parts: 0, rules: 0 };
 let tallyFrame = 0;
-let copyTimer = 0;
 
 // The engine's defaults for these answers. Private is the engine's isPrivate
 // argument, so it is passed on under that name.
@@ -141,16 +140,44 @@ function commandLine() {
   return `/bindwright:setup ${encodeSetupCode(answers)}`;
 }
 
-async function copyCommand() {
+const COPY_FEEDBACK_MS = 1500;
+const copyResetTimers = new WeakMap();
+
+// Shows a copy result on its icon button: a check mark when copied, or a
+// hint to copy by hand when the clipboard refused.
+function showCopyResult(button, copied) {
+  clearTimeout(copyResetTimers.get(button));
+  button.classList.toggle("copied", copied);
+  button.setAttribute("aria-label", copied ? "Copied" : "Select and copy");
+  if (copied) restart(button, "pulse");
+  copyResetTimers.set(button, setTimeout(() => {
+    button.classList.remove("copied");
+    button.setAttribute("aria-label", "Copy command");
+  }, COPY_FEEDBACK_MS));
+}
+
+// Selects the code's text so the reader can copy it by hand.
+function selectCodeText(code) {
+  const range = document.createRange();
+  range.selectNodeContents(code);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+// Copies text for a command box, then reports the result on its button.
+async function copyBoxText(button, code, text) {
   try {
-    await navigator.clipboard.writeText(commandLine());
-    $("copy").textContent = "Copied";
-    restart($("copy"), "pulse");
+    await navigator.clipboard.writeText(text);
+    showCopyResult(button, true);
   } catch {
-    $("copy").textContent = "Select and copy";
+    selectCodeText(code);
+    showCopyResult(button, false);
   }
-  clearTimeout(copyTimer);
-  copyTimer = setTimeout(() => { $("copy").textContent = "Copy command"; }, 1500);
+}
+
+function copyCommand() {
+  return copyBoxText($("copy"), $("cmd-text"), commandLine());
 }
 
 function render() {
@@ -441,15 +468,12 @@ $("switch").addEventListener("click", (event) => {
 $("back").addEventListener("click", goBack);
 $("edit").addEventListener("click", editAnswers);
 $("restart").addEventListener("click", startOver);
-// Each install command has its own small Copy button for the line beside it.
+// Each install command has its own icon copy button inside its box.
 function copyInstallLine(event) {
   const button = event.target.closest("[data-copy]");
   if (!button) return;
-  const text = button.parentElement.querySelector("code").textContent;
-  navigator.clipboard.writeText(text).then(
-    () => { button.textContent = "Copied"; },
-    () => { button.textContent = "Select it"; });
-  setTimeout(() => { button.textContent = "Copy"; }, 1500);
+  const code = button.parentElement.querySelector("code");
+  copyBoxText(button, code, code.textContent);
 }
 
 $("copy").addEventListener("click", copyCommand);
