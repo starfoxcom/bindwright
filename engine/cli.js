@@ -18,6 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind } from "./bind.js";
 import { MAX_DEPTH, decodeSetupCode, depthOf } from "./setupcode.js";
+import { expandAnswers } from "./model.js";
 import { applyFiles } from "./apply.js";
 import { decode, runUpdate } from "./update.js";
 import { runSettings } from "./layers.js";
@@ -55,7 +56,9 @@ async function run(argv) {
   const adopt = argv.includes("--adopt");
   if (adopt && folder === undefined) throw new Error("--adopt needs --write");
   if (year !== undefined && !/^[0-9]+$/.test(year)) throw new Error("--year needs a whole number");
-  const answers = code === undefined ? JSON.parse(readFileSync(0, "utf8")) : decodeSetupCode(code);
+  const answers = code === undefined
+    ? JSON.parse(readFileSync(0, "utf8"))
+    : expandAnswers(decodeSetupCode(code));
   const coreFiles = JSON.parse(readFileSync(join(root, "engine", "core-files.json"), "utf8"));
   const readFile = async (p) => readFileSync(join(root, p), "utf8");
   // The template version the pristine render records: VERSION without its "v".

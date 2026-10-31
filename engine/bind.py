@@ -25,7 +25,10 @@ import sys
 # script's own folder off the import path, so it is added here.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from model import validate, flags_for, choices_for, values_for, CHOICE_OPTIONS, DEFERRED, LICENSES, JS_WHITESPACE
+from model import (
+    validate, expand_answers, flags_for, choices_for, values_for,
+    CHOICE_OPTIONS, DEFERRED, LICENSES, JS_WHITESPACE,
+)
 from render import render_template, fill_placeholders
 from setupcode import decode_setup_code, SetupCodeError, MAX_DEPTH, _depth, _not_json
 from apply import apply_files, ApplyError
@@ -261,7 +264,7 @@ def _single(argv, run):
         adopt = "--adopt" in argv
         if adopt and folder is None:
             raise ValueError("--adopt needs --write")
-        answers = _stdin_json() if code is None else decode_setup_code(code)
+        answers = _stdin_json() if code is None else expand_answers(decode_setup_code(code))
         if year is not None and not re.fullmatch("[0-9]+", year):
             raise ValueError("--year needs a whole number")
         year = None if year is None else int(year)

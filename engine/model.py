@@ -231,6 +231,36 @@ def _check_tracker(tracker, board):
         _check(board is None or board is UNDEFINED, 'trackerProject is only for tracker "github"')
 
 
+def _given(d, key):
+    """d[key] as JavaScript reads it: a missing key counts as its default."""
+    return False if d.get(key, UNDEFINED) is UNDEFINED else d[key]
+
+
+def _fill_keys(part, dflt):
+    """The keys of part plus each default key it lacks. A part that is not an
+    object is returned as it is, so validate reports it."""
+    if part is UNDEFINED:
+        return dflt
+    if not isinstance(part, dict) or all(key in part for key in dflt):
+        return part
+    keys = list(dflt) + [key for key in part if key not in dflt]
+    return {key: part[key] if key in part else dflt[key] for key in keys}
+
+
+def expand_answers(saved):
+    """Fills the project and advanced keys a setup code leaves out with the
+    defaults for its three answers. Full answers come back unchanged."""
+    if not isinstance(saved, dict):
+        return saved
+    a = dict(saved)
+    if "private" not in a:
+        a["private"] = a.get("client", UNDEFINED)
+    base = defaults(team=_given(a, "team"), client=_given(a, "client"),
+                    private=_given(a, "private"))
+    return dict(a, project=_fill_keys(a.get("project", UNDEFINED), base["project"]),
+                advanced=_fill_keys(a.get("advanced", UNDEFINED), base["advanced"]))
+
+
 # Every toggle name the templates use must resolve here to True or False.
 def flags_for(a):
     adv = a["advanced"]

@@ -159,6 +159,30 @@ export function validate(saved) {
   return a;
 }
 
+// The keys of `part` plus each default key it lacks, in the defaults' order so
+// the answers stringify as a page-made set does. A part that is not an object
+// is returned as it is, so validate reports it.
+function fillKeys(part, dflt) {
+  if (part === undefined) return dflt;
+  if (!isObject(part) || Object.keys(dflt).every((key) => own(part, key))) return part;
+  const keys = [...Object.keys(dflt), ...Object.keys(part).filter((key) => !own(dflt, key))];
+  return Object.fromEntries(keys.map((key) => [key, own(part, key) ? part[key] : dflt[key]]));
+}
+
+// Fills the project and advanced keys a setup code leaves out with the defaults
+// for its three answers. Full answers come back unchanged. A missing private
+// counts as client, as validate reads it.
+export function expandAnswers(saved) {
+  if (!isObject(saved)) return saved;
+  const a = own(saved, "private") ? { ...saved } : { ...saved, private: saved.client };
+  const base = defaults({ team: a.team, client: a.client, isPrivate: a.private });
+  return {
+    ...a,
+    project: fillKeys(a.project, base.project),
+    advanced: fillKeys(a.advanced, base.advanced),
+  };
+}
+
 // Every toggle name the templates use must resolve here to true or false.
 export function flagsFor(a) {
   const adv = a.advanced;

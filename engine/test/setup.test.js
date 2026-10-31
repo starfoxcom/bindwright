@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind, STAGING as BIND_STAGING } from "../bind.js";
-import { defaults } from "../model.js";
+import { defaults, expandAnswers } from "../model.js";
 import { PREFIX, encodeSetupCode, decodeSetupCode } from "../setupcode.js";
 import { applyFiles, STAGING } from "../apply.js";
 import { python } from "./python.js";
@@ -25,7 +25,19 @@ const named = () => {
   a.project = { ...a.project, name: "Ember.holm_2-x", licenseHolder: "Ana Núñez 😀" };
   return a;
 };
-const ANSWERS = [defaults(), defaults({ team: true }), named(), {}];
+const ANSWERS = [defaults(), defaults({ team: true }), named()];
+// Every combination of the three answers, each its own named row.
+const COMBOS = [false, true].flatMap((team) => [false, true].flatMap((client) =>
+  [false, true].map((isPrivate) => ({ team, client, isPrivate }))));
+// Team defaults with one project value and one advanced value changed.
+const changedOne = () => {
+  const a = defaults({ team: true });
+  return {
+    ...a,
+    project: { ...a.project, name: "shop-front" },
+    advanced: { ...a.advanced, codeResearch: "tokensave" },
+  };
+};
 
 const START = "Invalid setup code: it must start with bw1-";
 const LONG = "Invalid setup code: it is too long";
@@ -80,6 +92,16 @@ for code in json.loads(sys.stdin.buffer.read().decode("utf-8")):
 sys.stdout.write(json.dumps(out, ensure_ascii=True))
 `;
 
+const PY_EXPAND = `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from setupcode import decode_setup_code
+from model import expand_answers
+codes = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+expanded = [expand_answers(decode_setup_code(c)) for c in codes]
+sys.stdout.write(json.dumps(expanded, ensure_ascii=True))
+`;
+
 const PY_APPLY = `
 import json, sys
 sys.path.insert(0, sys.argv[1])
@@ -92,11 +114,38 @@ except ApplyError as e:
 sys.stdout.write(json.dumps(out, ensure_ascii=True))
 `;
 
-test("a setup code reads back as the answers it was made from", () => {
+test("a full setup code reads back as the answers it was made from", () => {
   for (const a of ANSWERS) {
-    const code = encodeSetupCode(a);
+    const code = encodeSetupCode(a, { full: true });
     assert.match(code, /^bw1-[A-Za-z0-9_-]+$/);
     assert.deepEqual(decodeSetupCode(code), a);
+  }
+});
+
+for (const { team, client, isPrivate } of COMBOS) {
+  test(`team ${team}, client ${client}, private ${isPrivate}: short code is defaults`, () => {
+    const a = defaults({ team, client, isPrivate });
+    const code = encodeSetupCode(a);
+    assert.ok(code.length < 100, code);
+    assert.deepEqual(expandAnswers(decodeSetupCode(code)), a);
+  });
+}
+
+test("only the changed project and advanced keys travel in a code", () => {
+  const code = encodeSetupCode(changedOne());
+  assert.deepEqual(decodeSetupCode(code), {
+    team: true,
+    client: false,
+    private: false,
+    project: { name: "shop-front" },
+    advanced: { codeResearch: "tokensave" },
+  });
+  assert.deepEqual(expandAnswers(decodeSetupCode(code)), changedOne());
+});
+
+test("a code made the old way, with every answer, expands to the same answers", () => {
+  for (const a of [defaults(), named()]) {
+    assert.deepEqual(expandAnswers(decodeSetupCode(codeOf(JSON.stringify(a)))), a);
   }
 });
 
@@ -109,6 +158,15 @@ test("the Python decoder reads every code as the JS decoder does", { skip: noPyt
   const codes = [...ANSWERS.map(encodeSetupCode), ...BAD.map(([code]) => code), ...ODD];
   const py = runPython(PY_DECODE, codes);
   for (const [i, code] of codes.entries()) assert.deepEqual(py[i], decodeJs(code), String(code).slice(0, 80));
+});
+
+test("the Python twin expands short and old codes as JS does", { skip: noPython }, () => {
+  const shortCodes = COMBOS.map((combo) => encodeSetupCode(defaults(combo)));
+  const codes = [...shortCodes, encodeSetupCode(changedOne()), codeOf(JSON.stringify(named()))];
+  const py = runPython(PY_EXPAND, codes);
+  for (const [i, code] of codes.entries()) {
+    assert.deepEqual(py[i], expandAnswers(decodeSetupCode(code)), code);
+  }
 });
 
 // Every file under `root`, as [relative path, bytes], sorted.
