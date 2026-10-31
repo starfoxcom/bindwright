@@ -69,92 +69,58 @@ const LICENSE_WORDS = {
   Proprietary: "all rights reserved",
 };
 
-// Answer-driven detail lines on a card. `id` names the line's slot, so a pair
-// of lines for on and off shares one id and a changed text reads as Changed.
-// `show` gets the engine's flags, the answers and has(path), which says whether
-// a file is in the setup. `text` is a string or a function of the answers.
+// Answer-driven detail lines on a card. `show` gets the engine's flags, the
+// answers and has(path), which says whether a file is in the setup. `text` is a
+// string or a function of the answers.
 const FACTS = [
   {
-    id: "license", group: "project", text: (a) => `License: ${LICENSE_WORDS[a.project.license]}`,
+    group: "project", text: (a) => `License: ${LICENSE_WORDS[a.project.license]}`,
     show: (f, a, has) => has("LICENSE"),
   },
   {
-    id: "contributing", group: "project", text: "A contributing guide for teammates",
+    group: "project", text: "A contributing guide for teammates",
     show: (f, a, has) => has("CONTRIBUTING.md"),
   },
   {
-    id: "deep-review", group: "reviews",
-    text: "Risky changes get a deeper second review on their own",
+    group: "reviews", text: "Risky changes get a deeper second review on their own",
     show: (f) => f.github_actions_deep_review_auto_fire,
   },
   {
-    id: "deep-review", group: "reviews",
-    text: "A deeper second review runs when someone asks for one",
+    group: "reviews", text: "A deeper second review runs when someone asks for one",
     show: (f) => f.github_actions_deep_review && !f.github_actions_deep_review_auto_fire,
   },
   {
-    id: "docs-merge", group: "reviews",
-    text: "Changes to docs only merge without waiting for a review",
+    group: "reviews", text: "Changes to docs only merge without waiting for a review",
     show: (f) => f.github_actions_paths_ignore_auto_merge,
   },
   {
-    id: "docs-merge", group: "reviews",
-    text: "Every change waits for its review, docs included",
+    group: "reviews", text: "Every change waits for its review, docs included",
     show: (f) => f.github_actions_routine_review && !f.github_actions_paths_ignore_auto_merge,
   },
   {
-    id: "pr-form", group: "reviews",
-    text: "A pull request form that asks what changed and why",
+    group: "reviews", text: "A pull request form that asks what changed and why",
     show: (f, a, has) => has(".github/PULL_REQUEST_TEMPLATE.md"),
   },
   {
-    id: "codeowners", group: "reviews", text: "Reviewers picked by folder",
+    group: "reviews", text: "Reviewers picked by folder",
     show: (f, a, has) => has(".github/CODEOWNERS"),
   },
   {
-    id: "precommit", group: "checks", text: "Checks run before every commit",
+    group: "checks", text: "Checks run before every commit",
     show: (f) => f.precommit_hooks_scaffold,
   },
   {
-    id: "audit-trail", group: "rules", text: "Commits record which work had AI help",
+    group: "rules", text: "Commits record which work had AI help",
     show: (f) => f.audit_trail_commits,
   },
 ];
 
-const indexById = (list) => new Map(list.map((g) => [g.id, g]));
-const factIndex = (cards) => new Map(cards.flatMap((g) => g.facts).map((fact) => [fact.id, fact]));
-const ruleNames = (index) => new Set((index.get("rules")?.rules ?? []).map(([name]) => name));
-// A card's content as text: a card whose files, rules or lines differ has changed.
-const signature = (group) => JSON.stringify([group.files, group.rules ?? null, group.facts]);
-
-// What changed from `before` to `after`. Cards and rules are told apart by name,
-// facts by id. A fact whose id stays but whose text differs is changed, not removed.
-export function compare(before, after) {
-  const [was, now] = [indexById(before), indexById(after)];
-  const [hadRules, hasRules] = [ruleNames(was), ruleNames(now)];
-  const [hadFacts, hasFacts] = [factIndex(before), factIndex(after)];
-  const kept = [...now.keys()].filter((id) => was.has(id));
-  return {
-    addedGroups: new Set([...now.keys()].filter((id) => !was.has(id))),
-    removedGroups: before.filter((g) => !now.has(g.id)),
-    changedGroups: new Set(kept.filter((id) => signature(was.get(id)) !== signature(now.get(id)))),
-    addedRules: new Set([...hasRules].filter((name) => !hadRules.has(name))),
-    removedRules: [...hadRules].filter((name) => !hasRules.has(name)),
-    addedFacts: new Set([...hasFacts.keys()].filter((id) => !hadFacts.has(id))),
-    changedFacts: new Set([...hasFacts.keys()].filter((id) => hadFacts.has(id)
-      && hadFacts.get(id).text !== hasFacts.get(id).text)),
-    removedFacts: [...hadFacts.values()]
-      .filter((fact) => !hasFacts.has(fact.id) && now.has(fact.group)),
-  };
-}
-
-// The facts the setup shows, as { id, group, text } in FACTS order.
+// The facts the setup shows, as { group, text } in FACTS order.
 function factsFor(files, answers) {
   const flags = flagsFor(answers);
   const paths = new Set(files.map(([path]) => path));
   const has = (path) => paths.has(path);
   return FACTS.filter((fact) => fact.show(flags, answers, has)).map((fact) => ({
-    id: fact.id,
     group: fact.group,
     text: typeof fact.text === "function" ? fact.text(answers) : fact.text,
   }));

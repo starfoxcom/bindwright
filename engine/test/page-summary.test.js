@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { summarize, compare } from "../../page/summary.js";
+import { summarize } from "../../page/summary.js";
 import { bind } from "../bind.js";
 import { defaults } from "../model.js";
 
@@ -86,13 +86,3 @@ for (const [name, options, expected] of LICENSE_ROWS) {
     assert.deepEqual(lines, expected);
   });
 }
-
-test("public to private changes the license fact by id, adding and removing none", async () => {
-  const [before, after] = await Promise.all([
-    cardsFor(defaults({})), cardsFor(defaults({ isPrivate: true })),
-  ]);
-  const change = compare(before, after);
-  assert.deepEqual([...change.changedFacts], ["license"]);
-  assert.deepEqual([...change.addedFacts], []);
-  assert.deepEqual(change.removedFacts, []);
-});

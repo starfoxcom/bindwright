@@ -12,9 +12,7 @@
   --accent: oklch(0.80 0.13 var(--hue));
   --accent-deep: oklch(0.62 0.13 var(--hue));
   --on-accent: oklch(0.20 0.03 var(--hue));
-  --add: oklch(0.80 0.14 150);
   --del: oklch(0.72 0.15 25);
-  --chg: oklch(0.82 0.14 80);
   color-scheme: dark;
   scroll-padding: 96px 0;
   transition: --hue 380ms cubic-bezier(.2, .8, .2, 1);
@@ -118,34 +116,39 @@ h1 {
   background: var(--panel); border-radius: 18px; padding: 22px;
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
 }
-.panel + .panel { margin-top: 24px; }
 .panel h2 { margin-bottom: 14px; font-size: 15px; font-weight: 600; color: var(--text-2); }
-.panel.out, .clip { box-shadow: inset 0 1px 0 oklch(1 0 0 / .06); }
-.panel.out { position: relative; min-height: 420px; }
-/* The setup's own cards carry the surface; the rows around them stay open. */
-.setup .panel { background: none; box-shadow: none; padding: 0; }
-.setup .panel + .panel { margin-top: 56px; }
-.ask { max-width: 760px; margin: 0 auto; }
+.clip { box-shadow: inset 0 1px 0 oklch(1 0 0 / .06); }
+.ask, .composing { max-width: 760px; margin: 0 auto; }
 .out-body { margin-top: 4px; }
 
 /* Hidden but still laid out, so showing it moves nothing around it. */
 .off { visibility: hidden; pointer-events: none; }
+/* The three views share one cell: the frame keeps the tallest view's height. */
+.frame { display: grid; }
+.frame > * { grid-area: 1 / 1; min-width: 0; }
+.frame > .arrive { animation: view-in 220ms ease both; }
+.frame > .leave { animation: view-out 220ms ease both; }
 /* Every step shares one cell: the stage keeps the tallest step's height. */
 .stage { display: grid; }
 .stage > * { grid-area: 1 / 1; }
 @keyframes rise { from { opacity: 0; transform: translateX(16px); } }
-.q.rise-in, .done.rise-in { animation: rise 300ms ease both; }
-.q h3, .done h3 { margin-bottom: 10px; font-size: 17px; font-weight: 600; }
-.q h3:focus, .done h3:focus { outline: none; }
-.done p { margin-bottom: 14px; font-size: 15px; color: var(--text-2); }
+.q.rise-in { animation: rise 300ms ease both; }
+.q h3, .composing h3 { margin-bottom: 10px; font-size: 17px; font-weight: 600; }
+.q h3:focus, .composing h3:focus, .result h3:focus { outline: none; }
 
 .steps { display: flex; gap: 4px; margin: 0 0 18px; padding: 0; list-style: none; }
-.dot { position: relative; width: 24px; height: 24px; }
+/* A dot is lit once its question has an answer; the current step keeps a ring. */
+.dot {
+  position: relative; display: block; width: 24px; height: 24px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+}
+.dot:disabled { cursor: default; }
 .dot::before {
   content: ""; position: absolute; inset: 7px; border-radius: 50%;
   background: var(--key); box-shadow: 0 0 0 1px oklch(0 0 0 / .35);
 }
-.dot[aria-current="step"]::before { background: var(--accent); box-shadow: none; }
+.dot.lit::before { background: var(--accent); }
+.dot[aria-current="step"]::before { box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px var(--text-2); }
 .back {
   margin-top: 16px; padding: 0; font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2);
   background: none; border: 0; cursor: pointer;
@@ -185,11 +188,39 @@ h1 {
 .k[aria-pressed="true"]::after { background: var(--on-accent); box-shadow: none; }
 .k[aria-pressed="true"] span { color: oklch(0.30 0.05 var(--hue)); }
 
+/* The composing view: a bar, one line per summary group and the file paths ticking by. */
+.bar { height: 4px; margin: 4px 0 18px; border-radius: 4px; background: var(--key); overflow: hidden; }
+.bar-fill {
+  display: block; height: 100%; background: var(--accent);
+  transform: scaleX(0); transform-origin: left;
+}
+.bar-fill.fill { animation: fill-bar 2400ms linear both; }
+@keyframes fill-bar { to { transform: scaleX(1); } }
+.compose-lines {
+  display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 15px; color: var(--text-2);
+}
+.compose-lines li {
+  display: flex; align-items: center; animation: type-in 220ms ease both; animation-delay: var(--delay);
+}
+.compose-lines li::after {
+  content: ""; flex: none; width: 5px; height: 9px; margin-left: 10px;
+  border: solid var(--accent); border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  animation: check-in 160ms ease-out both; animation-delay: calc(var(--delay) + 220ms);
+}
+@keyframes type-in { from { opacity: 0; transform: translateX(-6px); } }
+@keyframes check-in { to { transform: rotate(45deg) scale(1); } }
+.compose-files {
+  height: 120px; margin: 18px 0 0; padding: 0; list-style: none; overflow: hidden;
+  font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text-2); opacity: 0.45;
+}
+
 .out-head {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
   margin-bottom: 14px;
 }
 .out-head h3 { font-size: 17px; font-weight: 600; }
+.out-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .tally { margin-left: 6px; font-weight: 400; color: var(--text-2); }
 .seg {
   position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -226,11 +257,6 @@ h1 {
 }
 .command > .toggle { flex: none; min-width: 84px; }
 
-.done.fade-up { animation: text-rise 240ms ease both; }
-@keyframes text-rise { from { opacity: 0; transform: translateY(8px); } }
-.idle {
-  display: grid; place-items: center; min-height: 340px; text-align: center; color: var(--text-2);
-}
 .groups {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
   padding: 0; list-style: none;
@@ -249,37 +275,8 @@ h1 {
   from { visibility: visible; }
   to { opacity: 0; transform: translateY(-8px); visibility: hidden; }
 }
-@keyframes glow {
-  from { background-color: color-mix(in oklch, var(--add) 28%, transparent); }
-  to { background-color: transparent; }
-}
-.rules li.added { box-shadow: inset 3px 0 0 var(--add); padding-left: 12px; }
-.rules li.added, .facts li.added { animation: glow 900ms ease-out; }
 @keyframes lift { from { opacity: 0; transform: translateY(10px); } }
-@keyframes dissolve {
-  to {
-    opacity: 0; filter: blur(6px); letter-spacing: 0.15em;
-    transform: translate(28px, -14px) rotate(2deg);
-  }
-}
 .groups > li.enter { animation: lift 420ms ease both; }
-.groups > li.leaving { animation: dissolve 700ms ease-in both; }
-/* A tag names what changed: New, Changed or Removed. It sits on its own line
-   above the item, so the item's text keeps its place. */
-[data-tag] { display: block; }
-[data-tag]::before {
-  content: attr(data-tag); display: block; width: fit-content; margin-bottom: 4px; padding: 1px 8px;
-  border-radius: 12px; font-size: 12px; font-weight: 600; line-height: 1.5;
-  color: var(--canvas); background: var(--add);
-}
-[data-tag="Changed"]::before { background: var(--chg); }
-[data-tag="Removed"]::before { background: var(--del); }
-/* A tag from an earlier answer keeps its colour but dims. */
-[data-tag][data-stale]::before { opacity: 0.4; }
-.groups > li.removed, .rules li.removed, .facts li.removed { color: var(--del); }
-.groups > li.removed > b, .groups > li.removed > p, .rules li.removed > b, .facts li.removed {
-  color: var(--del); text-decoration: line-through;
-}
 .groups > li { padding: 20px; border-radius: 14px; background: var(--key); }
 .groups > li > b { font-size: 18px; font-weight: 700; }
 .groups > li > p { margin-top: 2px; font-size: 15px; color: var(--text-2); }
@@ -305,12 +302,10 @@ h1 {
 .out-body > * { min-height: 0; }
 
 .tree { overflow: auto; padding: 10px 10px 10px 0; border-right: 1px solid var(--rule); font-size: 14px; }
-/* Every row keeps a tag column on the left, so a tag never shifts a name off its indent. */
 .tree .dir, .tree .file {
-  position: relative; display: block; width: 100%; padding: 3px 8px 3px calc(82px + var(--d) * 14px);
+  position: relative; display: block; width: 100%; padding: 3px 8px 3px calc(10px + var(--d) * 14px);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tree [data-tag]::before { position: absolute; left: 8px; top: 50%; margin: 0; transform: translateY(-50%); }
 .tree .dir { color: var(--text-2); }
 .tree .file {
   min-height: 26px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
@@ -319,8 +314,6 @@ h1 {
 .tree .file:hover { background: var(--key); }
 .tree .file[aria-current="true"] { background: var(--key); box-shadow: inset 2px 0 0 var(--accent); }
 
-.tree .file.added { color: var(--add); }
-.tree .file.removed { color: var(--del); text-decoration: line-through; cursor: default; }
 .view { display: flex; flex-direction: column; min-width: 0; }
 .view .path { padding: 12px 16px 8px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .view pre {
@@ -328,8 +321,6 @@ h1 {
   font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text); white-space: pre-wrap;
   overflow-wrap: anywhere; tab-size: 4;
 }
-.view pre .line { display: block; min-height: 1lh; }
-.view pre .line-new { background-color: color-mix(in oklch, var(--add) 28%, transparent); }
 .view.swap { animation: swap-in 160ms ease both; }
 @keyframes swap-in { from { opacity: 0; } }
 
@@ -353,7 +344,6 @@ footer {
   .changes, .setup { margin-top: 64px; }
   .out-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 220px 420px; height: auto; }
   .tree { border-right: 0; border-bottom: 1px solid var(--rule); }
-  .panel.out { min-height: 240px; }
   footer { padding: 20px 16px 32px; }
 }
 
@@ -364,7 +354,6 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   :root { transition: none; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
-  .q, .done, .enter, .leaving { animation: none; }
   .k:hover { transform: none; }
 }
 
