@@ -10,6 +10,9 @@ const HUES = { "false,false": 150, "true,false": 200, "false,true": 70, "true,tr
 const hueFor = (team, client) => HUES[`${team},${client}`];
 const $ = (id) => document.getElementById(id);
 const questions = [...document.querySelectorAll(".q")];
+// The questions on the path: the private question only follows "Someone else's".
+const onPath = () => questions.filter((node) => !node.dataset.when || answers[node.dataset.when]);
+const questionOf = (node) => node.querySelector("[data-q]").dataset.q;
 const ADVANCE_MS = 350;
 const RISE_STEP_MS = 90;
 const DISSOLVE_STEP_MS = 70;
@@ -51,24 +54,32 @@ const snapshots = new Map();
 let step = 0;
 let copyTimer = 0;
 
+// The engine's defaults for these answers. Private is the engine's isPrivate
+// argument, so it is passed on under that name.
+function setupFor(parts) {
+  return defaults({ team: parts.team, client: parts.client, isPrivate: parts.private });
+}
+
 function choose(question, value, label) {
   if (dissolving) return;
   if (!answered.has(question) || answers[question] !== value) {
     snapshots.set(question, new Set(shown.map((group) => group.id)));
   }
   answered.add(question);
+  // Mine has no private question, so an earlier private answer goes with it.
+  if (question === "client" && !value) answered.delete("private");
   const same = answers[question] === value;
   // Picking the answer already set changes nothing, so no change is named.
   choice = same ? null : label;
   // A new setup starts from that setup's defaults, as setup itself does.
-  if (!same) answers = defaults({ ...answers, [question]: value });
+  if (!same) answers = setupFor({ ...answers, [question]: value });
   render();
 }
 
 // Answer from a key, then move to the next step after a short pause. A pause
 // that finds the reader on another step does nothing.
 function pick(key) {
-  const from = questions.indexOf(key.closest(".q"));
+  const from = onPath().indexOf(key.closest(".q"));
   choose(key.dataset.q, key.dataset.v === "true", key.querySelector("b").textContent);
   setTimeout(() => { if (step === from) show(from + 1); }, ADVANCE_MS);
 }
@@ -77,7 +88,7 @@ function pick(key) {
 function pickByDigit(event) {
   if (event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.target.closest("input, textarea, select, [contenteditable]")) return;
-  const keys = questions[step]?.querySelectorAll(".k") ?? [];
+  const keys = onPath()[step]?.querySelectorAll(".k") ?? [];
   const key = keys[Number(event.key) - 1];
   if (key) pick(key);
 }
@@ -91,13 +102,16 @@ function show(next) {
 }
 
 function stageHeading() {
-  const node = step < questions.length ? questions[step] : $("done");
+  const path = onPath();
+  const node = step < path.length ? path[step] : $("done");
   return node.querySelector("h3");
 }
 
 function paintStage() {
-  questions.forEach((node, i) => { node.hidden = i !== step; });
-  $("done").hidden = step !== questions.length;
+  const path = onPath();
+  buildSteps(path.length + 1);
+  questions.forEach((node) => { node.hidden = node !== path[step]; });
+  $("done").hidden = step !== path.length;
   $("back").hidden = step === 0;
   [...$("steps").children].forEach((dot, i) => {
     if (i === step) dot.setAttribute("aria-current", "step");
@@ -105,9 +119,11 @@ function paintStage() {
   });
 }
 
-// One progress dot per question plus the final Done step; each jumps to its step.
-function buildSteps() {
-  const labels = [...questions.map((_, i) => `Question ${i + 1}`), "Done"];
+// One progress dot per question on the path plus Done; each jumps to its step.
+// Rebuilt only when the count changes, so a focused dot keeps its focus.
+function buildSteps(count) {
+  if ($("steps").children.length === count) return;
+  const labels = Array.from({ length: count }, (_, i) => (i < count - 1 ? `Question ${i + 1}` : "Done"));
   const dots = labels.map((label, i) => {
     const dot = el("button", { type: "button", className: "dot" });
     dot.setAttribute("aria-label", label);
@@ -117,11 +133,16 @@ function buildSteps() {
   $("steps").replaceChildren(...dots);
 }
 
-// The two answers in plain words, e.g. "Just me, my own project".
+// Whose project, in plain words: mine, or someone else's, private or public.
+function ownerWords() {
+  if (!answers.client) return "my own project";
+  return answers.private ? "someone else's private project" : "someone else's public project";
+}
+
+// The answers in plain words, e.g. "Just me, my own project".
 function plainAnswers() {
   const team = answers.team ? "A team" : "Just me";
-  const client = answers.client ? "a client's project" : "my own project";
-  return `${team}, ${client}`;
+  return `${team}, ${ownerWords()}`;
 }
 
 function commandLine() {
@@ -152,7 +173,7 @@ function render() {
     const next = { team, client, [question]: value };
     key.style.setProperty("--h", hueFor(next.team, next.client));
   }
-  const ready = answered.size === questions.length;
+  const ready = onPath().every((node) => answered.has(questionOf(node)));
   $("cmd-text").textContent = commandLine();
   $("command").hidden = !ready;
   $("switch").hidden = !ready;
@@ -392,7 +413,7 @@ function goBack() {
   if (step === 0 || dissolving) return;
   const to = step - 1;
   show(to);
-  const question = questions[to].querySelector("[data-q]").dataset.q;
+  const question = questionOf(onPath()[to]);
   if (!answered.has(question)) return;
   const before = snapshots.get(question) ?? new Set();
   const added = [...$("groups").children]
@@ -403,10 +424,10 @@ function goBack() {
 // Drops the answers from a question index on, so the summary falls back to what came before.
 function unanswer(index, before) {
   const base = defaults();
-  for (const node of questions.slice(index)) {
-    const key = node.querySelector("[data-q]").dataset.q;
+  for (const node of onPath().slice(index)) {
+    const key = questionOf(node);
     answered.delete(key);
-    answers = defaults({ ...answers, [key]: base[key] });
+    answers = setupFor({ ...answers, [key]: base[key] });
   }
   choice = null;
   shown = shown.filter((group) => before.has(group.id));
@@ -461,5 +482,4 @@ $("back").addEventListener("click", goBack);
 $("edit").addEventListener("click", () => snap([...$("groups").children], reset));
 $("copy").addEventListener("click", copyCommand);
 document.addEventListener("keydown", pickByDigit);
-buildSteps();
 render();
