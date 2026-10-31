@@ -265,9 +265,10 @@ h1 {
   display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 10px 10px 10px 18px;
   border-radius: 14px; background: var(--canvas);
 }
+/* The whole command shows, wrapped at any character so it fits every width. */
 .cmd {
-  flex: 1; min-width: 0; font: 400 15px/1.4 "Fragment Mono", ui-monospace, monospace; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0; font: 400 15px/1.5 "Fragment Mono", ui-monospace, monospace; color: var(--text);
+  overflow-wrap: anywhere; word-break: break-all; user-select: all;
 }
 .copy {
   flex: none; min-width: 156px; min-height: 44px; padding: 0 20px; font: 700 15px/1 "Hubot Sans", sans-serif;
