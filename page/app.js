@@ -68,6 +68,7 @@ function choose(question, value, label) {
 // Answer from a key, then move to the next step after a short pause. A pause
 // that finds the reader on another step does nothing.
 function pick(key) {
+  if (dissolving) return;
   const from = questions.indexOf(key.closest(".q"));
   choose(key.dataset.q, key.dataset.v === "true", key.querySelector("b").textContent);
   setTimeout(() => { if (step === from) show(from + 1); }, ADVANCE_MS);
@@ -95,10 +96,17 @@ function stageHeading() {
   return node.querySelector("h3");
 }
 
+// Hides a node but keeps its room (the "off" class), so nothing around it moves.
+// A stage step that comes back rises in again.
+function setShown(node, visible) {
+  if (visible && node.classList.contains("off") && node.closest(".stage")) restart(node, "rise-in");
+  node.classList.toggle("off", !visible);
+}
+
 function paintStage() {
-  questions.forEach((node, i) => { node.hidden = i !== step; });
-  $("done").hidden = step !== questions.length;
-  $("back").hidden = step === 0;
+  questions.forEach((node, i) => setShown(node, i === step));
+  setShown($("done"), step === questions.length);
+  setShown($("back"), step > 0);
   [...$("steps").children].forEach((dot, i) => {
     if (i === step) dot.setAttribute("aria-current", "step");
     else dot.removeAttribute("aria-current");
@@ -155,7 +163,7 @@ function render() {
   const ready = answered.size === questions.length;
   $("cmd-text").textContent = commandLine();
   $("command").hidden = !ready;
-  $("switch").hidden = !ready;
+  setShown($("switch"), ready);
   $("idle").hidden = answered.size > 0;
   const line = plainAnswers();
   if (line !== $("done-line").textContent) restart($("done"), "fade-up");
@@ -227,7 +235,7 @@ function drawGroups() {
   const note = choice && before.length ? changeNote(change) : "";
   if (note && note !== $("changed").textContent) restart($("changed"), "fade-up");
   $("changed").textContent = note;
-  $("changed").hidden = !note;
+  setShown($("changed"), Boolean(note));
   countTally(next);
   setFilesView(filesOpen());
 }
