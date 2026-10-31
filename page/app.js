@@ -15,7 +15,7 @@ const VIEWS = { questions: $("ask"), composing: $("composing"), result: $("resul
 const ADVANCE_MS = 350;
 const RISE_STEP_MS = 90;
 const TALLY_MS = 500;
-const COMPOSE_MS = 2400;
+const COMPOSE_MS = 4200;
 const TICK_MS = 90;
 const TICKER_ROWS = 5;
 const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
