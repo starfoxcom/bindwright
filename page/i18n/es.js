@@ -171,4 +171,29 @@ export default {
     + "que copiar. Empieza de nuevo y responde las preguntas otra vez.",
   "failure": "Esta parte de la página no pudo cargar ({error}), así que recarga la página para intentarlo "
     + "de nuevo.",
+
+  "advanced.open": "Más ajustes",
+  "advanced.title": "Más ajustes",
+  "advanced.close": "Listo",
+  "advanced.say": "Tus respuestas ya eligieron estos. Cambia cualquiera y lo que obtienes se actualiza.",
+  "share.button": "Compartir",
+  "switch.aiReview.label": "Revisión con IA en cada pull request",
+  "switch.aiReview.hint": "Una IA lee cada cambio antes de integrarlo.",
+  "switch.deepEscalation.label": "Una segunda revisión más a fondo en cambios riesgosos",
+  "switch.deepEscalation.hint": "Los cambios en código riesgoso reciben una revisión más detallada "
+    + "por sí solos.",
+  "switch.attributionGuard.label": "Sin créditos de IA en los commits",
+  "switch.attributionGuard.hint": "Viene encendido, así tu historial queda a tu nombre. Apágalo si "
+    + "quieres que los commits digan que una IA ayudó.",
+  "switch.plainWriting.label": "Escritura sencilla en la documentación",
+  "switch.plainWriting.hint": "El texto que lee la gente, como el readme, suena escrito por una persona.",
+  "switch.uiRule.label": "Cambios visuales en pasos pequeños",
+  "switch.uiRule.hint": "Todo lo que la gente ve se construye en partes que revisas a simple vista.",
+  "switch.codeSizeCheck.label": "Revisión del tamaño del código en cada pull request",
+  "switch.codeSizeCheck.hint": "Las funciones y los archivos que crecen demasiado no pasan la revisión.",
+  "switch.handoffFile.label": "Una nota de relevo en el repo",
+  "switch.handoffFile.hint": "Cada sesión deja una nota breve para la siguiente.",
+  "share.done": "Enlace copiado",
+  "link.refused": "Las respuestas de este enlace no pasaron las revisiones de la configuración, así que la "
+    + "página empezó de cero.",
 };

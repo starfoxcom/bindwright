@@ -424,3 +424,57 @@ footer {
 }
 .groups .rules li { border: 0; box-shadow: none; padding: 0; }
 .groups .rules li b { display: block; margin-bottom: 2px; }
+
+/* The link note, shown when a shared link's answers are refused. */
+.link-note {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: var(--key);
+  font-size: 15px; color: var(--text-2);
+}
+/* Share keeps one width for "Share" and "Link copied", in both languages. */
+.toggle.share { min-width: 9.5rem; justify-content: center; }
+
+/* More settings: a bottom sheet on a narrow screen, a side sheet from 901px. */
+.drawer {
+  inset: auto 0 0 0; width: 100%; max-width: 100%; max-height: 85vh; margin: 0;
+  padding: 24px; border: 0; border-radius: 18px 18px 0 0; overflow: auto;
+  background: var(--panel); color: var(--text); box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
+}
+.drawer[open] { animation: slide-up 250ms ease both; }
+.drawer::backdrop { background: oklch(0 0 0 / .5); }
+.drawer h3 { font-size: 18px; font-weight: 650; }
+.drawer-say { margin: 6px 0 14px; font-size: 14px; color: var(--text-2); }
+.drawer .toggle { margin-top: 18px; }
+@keyframes slide-up { from { transform: translateY(100%); } }
+@keyframes slide-in { from { transform: translateX(100%); } }
+@media (min-width: 901px) {
+  .drawer {
+    inset: 0 0 0 auto; width: min(420px, 100vw); max-width: none; max-height: none; height: 100%;
+    border-radius: 0;
+  }
+  .drawer[open] { animation-name: slide-in; }
+}
+
+.switches { margin: 0; padding: 0; list-style: none; }
+/* A switch row: the label on top, its hint under it, and a 44x24 track with a knob on the right. */
+.sw {
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 4px 16px;
+  width: 100%; padding: 12px 0; font: inherit; text-align: left; color: var(--text); cursor: pointer;
+  background: none; border: 0; border-top: 1px solid var(--rule);
+}
+.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+.sw:disabled { opacity: .45; cursor: default; }
+.sw-label { font-size: 15px; font-weight: 600; }
+.sw-hint { font-size: 14px; color: var(--text-2); }
+.sw::before, .sw::after {
+  content: ""; grid-column: 2; grid-row: 1 / span 2; align-self: center;
+}
+.sw::before {
+  justify-self: end; width: 44px; height: 24px; border-radius: 12px;
+  background: var(--key); box-shadow: inset 0 0 0 1px oklch(0 0 0 / .35); transition: background-color 150ms ease;
+}
+.sw::after {
+  justify-self: start; width: 20px; height: 20px; margin-left: 2px; border-radius: 50%;
+  background: var(--text-2); transition: transform 150ms ease, background-color 150ms ease;
+}
+.sw[aria-checked="true"]::before { background: var(--accent); }
+.sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--on-accent); }

@@ -5,6 +5,10 @@ import { repoFiles, byFolder } from "./files.js";
 import { summarize } from "./summary.js";
 import { t } from "./i18n/index.js";
 import { decodeSetupCode, encodeSetupCode } from "../engine/setupcode.js";
+import { answersFromHash, hashFor } from "./link.js";
+import { setupAdvanced, paintSwitches } from "./advanced.js";
+import { copyBoxText } from "./copy.js";
+import { el, restart, still } from "./dom.js";
 
 // One accent hue per setup (docs/v2/DESIGN.md).
 const HUES = { "false,false": 150, "true,false": 200, "false,true": 70, "true,true": 340 };
@@ -19,20 +23,11 @@ const TALLY_MS = 500;
 const COMPOSE_MS = 4200;
 const TICK_MS = 90;
 const TICKER_ROWS = 5;
-const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const mix = (from, to, share) => Math.round(from + (to - from) * share);
 const ruleCount = (groups) => groups.reduce((sum, group) => sum + (group.rules?.length ?? 0), 0);
 const filesOpen = () => !$("files").classList.contains("away");
 // Where the file list and the open file share the width, side by side.
 const sideBySide = matchMedia("(min-width: 901px)");
-
-// Restarts the one-shot CSS animation that the named class sets on the node.
-function restart(node, name) {
-  if (still()) return;
-  node.classList.remove(name);
-  void node.offsetWidth;
-  node.classList.add(name);
-}
 
 let answers = defaults();
 // The questions the reader has picked an answer for.
@@ -61,6 +56,7 @@ function setupFor(parts) {
 // Records an answer. A new setup starts from that setup's defaults, as setup itself does.
 function choose(question, value) {
   answered.add(question);
+  $("link-note").hidden = true;
   if (answers[question] !== value) answers = setupFor({ ...answers, [question]: value });
   render();
 }
@@ -150,42 +146,6 @@ function commandLine() {
     return null;
   }
   return `/bindwright:setup ${code}`;
-}
-
-const COPY_FEEDBACK_MS = 1500;
-const copyResetTimers = new WeakMap();
-
-// Shows a copy result on its icon button: a check mark when copied, or a
-// hint to copy by hand when the clipboard refused.
-function showCopyResult(button, copied) {
-  clearTimeout(copyResetTimers.get(button));
-  button.classList.toggle("copied", copied);
-  button.setAttribute("aria-label", t(copied ? "copy.done" : "copy.manual"));
-  if (copied) restart(button, "pulse");
-  copyResetTimers.set(button, setTimeout(() => {
-    button.classList.remove("copied");
-    button.setAttribute("aria-label", t("copy.command"));
-  }, COPY_FEEDBACK_MS));
-}
-
-// Selects the code's text so the reader can copy it by hand.
-function selectCodeText(code) {
-  const range = document.createRange();
-  range.selectNodeContents(code);
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
-// Copies text for a command box, then reports the result on its button.
-async function copyBoxText(button, code, text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    showCopyResult(button, true);
-  } catch {
-    selectCodeText(code);
-    showCopyResult(button, false);
-  }
 }
 
 function copyCommand() {
@@ -283,6 +243,8 @@ function showResults() {
   const line = commandLine();
   $("cmd-text").textContent = line ?? t("command.refused");
   $("copy").disabled = line === null;
+  history.replaceState(null, "", hashFor(answers));
+  paintSwitches();
   showView("result");
   $("status").textContent = t("status.updated");
 }
@@ -291,12 +253,6 @@ function showFailure(err) {
   const fail = el("li", { textContent: t("failure", { error: err.message || err }) });
   $("groups").replaceChildren(fail);
   showView("result");
-}
-
-function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
-  return node;
 }
 
 // The summary cards. Each card rises in turn, and its rules always show.
@@ -491,6 +447,50 @@ function startOver() {
   paintTally();
   showView("questions");
   render();
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
+// A drawer switch changes one advanced answer. The files are rebuilt in place,
+// so the result view stays as it is.
+async function setAdvanced(key, value) {
+  answers = { ...answers, advanced: { ...answers.advanced, [key]: value } };
+  await rebuild();
+}
+
+// Builds the files for the answers and shows them; a failure shows in the list.
+async function rebuild() {
+  try {
+    files = await repoFiles(answers);
+    showResults();
+  } catch (err) {
+    showFailure(err);
+  }
+}
+
+// A link with answers opens on the result view at once, with no compose animation.
+// A link that fails setup's checks leaves the fresh start and says why.
+async function openLink() {
+  const linked = answersFromHash(location.hash);
+  if (linked === null) return;
+  if (linked.error) {
+    refuseLink();
+    return;
+  }
+  answers = linked;
+  for (const question of ["team", "client", "private"]) answered.add(question);
+  render();
+  show(questions.length - 1);
+  busy = true;
+  await rebuild();
+  busy = false;
+  $("setup").scrollIntoView({ block: "start" });
+}
+
+function refuseLink() {
+  const message = t("link.refused");
+  $("link-note").textContent = message;
+  $("link-note").hidden = false;
+  $("status").textContent = message;
 }
 
 for (const key of document.querySelectorAll(".k[data-q]")) {
@@ -519,5 +519,7 @@ function copyInstallLine(event) {
 $("copy").addEventListener("click", copyCommand);
 $("command").addEventListener("click", copyInstallLine);
 document.addEventListener("keydown", pickByDigit);
+setupAdvanced({ getAnswers: () => answers, setAdvanced });
 buildSteps();
 render();
+openLink();

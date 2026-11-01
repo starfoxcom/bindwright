@@ -92,4 +92,22 @@ export default {
   "command.refused": "These answers didn't pass the setup's own checks, so there's no command to copy. "
     + "Start over and answer the questions again.",
   "failure": "This part of the page couldn't load ({error}), so reload the page to try again.",
+
+  "switch.aiReview.label": "AI review on every pull request",
+  "switch.aiReview.hint": "An AI reads each change before it merges.",
+  "switch.deepEscalation.label": "A deeper second review for risky changes",
+  "switch.deepEscalation.hint": "Changes to risky code get a closer look on their own.",
+  "switch.attributionGuard.label": "Keep AI credit out of commits",
+  "switch.attributionGuard.hint": "On by default, so your history stays yours. Turn it off if you want "
+    + "commits to say an AI helped.",
+  "switch.plainWriting.label": "Plain writing for docs",
+  "switch.plainWriting.hint": "Text people read, like the readme, sounds written by a person.",
+  "switch.uiRule.label": "Visual changes in small steps",
+  "switch.uiRule.hint": "Anything people see gets built in parts you check by eye.",
+  "switch.codeSizeCheck.label": "A code size check on every pull request",
+  "switch.codeSizeCheck.hint": "Functions and files that grow too long fail the check.",
+  "switch.handoffFile.label": "A hand-off note in the repo",
+  "switch.handoffFile.hint": "Each session leaves a short note for the next one.",
+  "share.done": "Link copied",
+  "link.refused": "This link's answers didn't pass setup's checks, so the page started fresh.",
 };

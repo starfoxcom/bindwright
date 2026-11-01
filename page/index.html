@@ -67,6 +67,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="setup" id="setup" aria-labelledby="setup-title">
     <h2 id="setup-title" data-t="setup.title">Set up your project</h2>
+    <p class="link-note" id="link-note" hidden></p>
     <div class="frame" id="frame">
       <div class="ask" id="ask">
         <ol class="steps" id="steps" aria-label="Setup steps" data-t-attr="aria-label:steps.label"></ol>
@@ -127,6 +128,8 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
             </div>
             <button class="toggle" id="edit" type="button" data-t="answers.edit">Edit my answers</button>
             <button class="toggle" id="restart" type="button" data-t="answers.restart">Start over</button>
+            <button class="toggle" id="more" type="button" data-t="advanced.open">More settings</button>
+            <button class="toggle share" id="share" type="button" data-t="share.button">Share</button>
           </div>
         </div>
         <div class="views">
@@ -214,6 +217,12 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     </div>
   </section>
   <p class="sr-status" id="status" role="status" aria-live="polite"></p>
+  <dialog class="drawer" id="drawer" aria-labelledby="drawer-title">
+    <h3 id="drawer-title" data-t="advanced.title">More settings</h3>
+    <p class="drawer-say" data-t="advanced.say">Your answers already picked these. Change any of them and what you get updates.</p>
+    <ul class="switches" id="switches"></ul>
+    <button class="toggle" id="drawer-done" type="button" data-t="advanced.close">Done</button>
+  </dialog>
 </main>
 <footer>
   <p data-t="footer.note">Bindwright works with Claude Code. It is not made by, endorsed by or
