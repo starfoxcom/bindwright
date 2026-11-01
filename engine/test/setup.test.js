@@ -174,7 +174,8 @@ test("the Python decoder reads every code as the JS decoder does", { skip: noPyt
 
 test("the Python twin expands short and old codes as JS does", { skip: noPython }, () => {
   const shortCodes = COMBOS.map((combo) => encodeSetupCode(defaults(combo)));
-  const codes = [...shortCodes, ...[changedOne(), advancedOnly()].map(encodeSetupCode), codeOf(JSON.stringify(named()))];
+  const changed = [changedOne(), advancedOnly()].map(encodeSetupCode);
+  const codes = [...shortCodes, ...changed, codeOf(JSON.stringify(named()))];
   const py = runPython(PY_EXPAND, codes);
   for (const [i, code] of codes.entries()) sameBytes(py[i], expandAnswers(decodeSetupCode(code)), code);
 });

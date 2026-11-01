@@ -103,7 +103,10 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
     .filter((p) => included(p, a, flags))
     .map((p) => ({ src: CORE + p, dest: destination(p) }));
   if (a.advanced.architecture !== "none") {
-    plan.push({ src: `${CORE}.claude/rules/architecture/${a.advanced.architecture}.md`, dest: ".claude/rules/architecture.md" });
+    plan.push({
+      src: `${CORE}.claude/rules/architecture/${a.advanced.architecture}.md`,
+      dest: ".claude/rules/architecture.md",
+    });
   }
   if (a.advanced.precommit !== "none") {
     const profile = precommitProfiles[a.advanced.precommit];
@@ -182,7 +185,9 @@ export async function bind(answers, { readFile, coreFiles, year, version = null 
   const out = new Map();
   for (const { src, dest } of planFiles(a, coreFiles, precommitProfiles)) {
     const text = await readFile(src);
-    out.set(dest, VERBATIM.some((p) => dest.startsWith(p)) ? text.replace(/\r\n/g, "\n") : renderTemplate(text, ctx, src));
+    out.set(dest, VERBATIM.some((p) => dest.startsWith(p))
+      ? text.replace(/\r\n/g, "\n")
+      : renderTemplate(text, ctx, src));
   }
   if (out.has(SHIPPED_TEXT_RULE) && a.advanced.shippedTextPaths) {
     out.set(SHIPPED_TEXT_RULE, withPaths(out.get(SHIPPED_TEXT_RULE), a.advanced.shippedTextPaths, SHIPPED_TEXT_RULE));

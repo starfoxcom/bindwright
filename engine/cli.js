@@ -63,7 +63,12 @@ async function run(argv) {
   const readFile = async (p) => readFileSync(join(root, p), "utf8");
   // The template version the pristine render records: VERSION without its "v".
   const version = (await readFile("VERSION")).trim().replace(/^v+/, "");
-  const bound = await bind(answers, { readFile, coreFiles, year: year === undefined ? undefined : Number(year), version });
+  const bound = await bind(answers, {
+    readFile,
+    coreFiles,
+    year: year === undefined ? undefined : Number(year),
+    version,
+  });
   const files = [...bound.entries()];
   return folder === undefined ? { files } : applyFiles(files, folder, { adopt });
 }

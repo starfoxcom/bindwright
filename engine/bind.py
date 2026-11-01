@@ -148,7 +148,10 @@ def plan_files(answers, core_files, precommit_profiles):
     adv = a["advanced"]
     plan = [{"src": CORE + p, "dest": _destination(p)} for p in core_files if _included(p, a, flags)]
     if adv["architecture"] != "none":
-        plan.append({"src": "%s.claude/rules/architecture/%s.md" % (CORE, adv["architecture"]), "dest": ".claude/rules/architecture.md"})
+        plan.append({
+            "src": "%s.claude/rules/architecture/%s.md" % (CORE, adv["architecture"]),
+            "dest": ".claude/rules/architecture.md",
+        })
     if adv["precommit"] != "none":
         profile = precommit_profiles[adv["precommit"]]
         plan.append({"src": CORE + profile["template_ref"], "dest": profile["config_filename"]})
@@ -222,7 +225,13 @@ def bind(answers, read_file, core_files, year=None, version=None):
         values["TOOLS_PRECOMMIT_NAME"] = adv["precommit"]
         values["TOOLS_PRECOMMIT_URL"] = p["url"]
     license_text = read_file("_core/licenses/" + LICENSES[a["project"]["license"]])
-    ctx = {"flags": flags_for(a), "choices": choices_for(a), "options": CHOICE_OPTIONS, "values": values, "deferred": DEFERRED}
+    ctx = {
+        "flags": flags_for(a),
+        "choices": choices_for(a),
+        "options": CHOICE_OPTIONS,
+        "values": values,
+        "deferred": DEFERRED,
+    }
     values["LICENSE_BODY"] = render_template(license_text, ctx, "license").rstrip(JS_WHITESPACE)
 
     out = {}

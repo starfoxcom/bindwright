@@ -10,11 +10,26 @@ export const REVIEW_EFFORTS = { routine: "low", deep: "low", backup: "high" };
 
 export const CODE_RESEARCH_TOOLS = {
   // match: regex over tool-call names, used by the session-close adherence count.
-  tokensave: { name: "tokensave", url: "https://github.com/aovestdipaperino/tokensave", bypass: "TOKENSAVE_BYPASS:", match: "tokensave" },
-  "lsp-plugins": { name: "Claude Code LSP plugins", url: "https://code.claude.com/docs/en/discover-plugins", bypass: null, match: "^LSP$" },
+  tokensave: {
+    name: "tokensave",
+    url: "https://github.com/aovestdipaperino/tokensave",
+    bypass: "TOKENSAVE_BYPASS:",
+    match: "tokensave",
+  },
+  "lsp-plugins": {
+    name: "Claude Code LSP plugins",
+    url: "https://code.claude.com/docs/en/discover-plugins",
+    bypass: null,
+    match: "^LSP$",
+  },
   codegraph: { name: "CodeGraph", url: "https://github.com/colbymchenry/codegraph", bypass: null, match: "codegraph" },
   serena: { name: "Serena", url: "https://github.com/oraios/serena", bypass: null, match: "serena" },
-  "codebase-memory": { name: "codebase-memory-mcp", url: "https://github.com/DeusData/codebase-memory-mcp", bypass: null, match: "codebase.memory" },
+  "codebase-memory": {
+    name: "codebase-memory-mcp",
+    url: "https://github.com/DeusData/codebase-memory-mcp",
+    bypass: null,
+    match: "codebase.memory",
+  },
   none: { name: "none", url: "(no homepage)", bypass: null, match: null },
   // A tool the person names: valuesFor fills all four from codeResearchCustom.
   custom: { name: null, url: null, bypass: null, match: null },
@@ -48,7 +63,12 @@ export const TRACKERS = ["github", "file"];
 const TRACKER_PROJECT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[1-9][0-9]{0,5}$/;
 // "<owner>/<repo>" of the public roadmap repo; the repo part follows GitHub's rule.
 const PUBLIC_REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/(?!\.+$)[A-Za-z0-9._-]{1,100}$/;
-export const LICENSES = { MIT: "MIT.txt", "Apache-2.0": "Apache-2.0.txt", "BSD-3-Clause": "BSD-3-Clause.txt", Proprietary: "Proprietary.txt" };
+export const LICENSES = {
+  MIT: "MIT.txt",
+  "Apache-2.0": "Apache-2.0.txt",
+  "BSD-3-Clause": "BSD-3-Clause.txt",
+  Proprietary: "Proprietary.txt",
+};
 
 // Filled later by the tailoring step, which reads the user's repo.
 export const DEFERRED = new Set([
@@ -120,24 +140,32 @@ export function validate(saved) {
   const adv = a.advanced;
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
   check(typeof a.private === "boolean", "private must be true or false");
-  const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"];
+  const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
+    "plainWriting", "codeSizeCheck", "handoffFile"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
   }
-  check(typeof a.project.name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(a.project.name), "project name must be 1-64 letters, digits, dot, dash or underscore");
-  check(typeof a.project.repoUrl === "string" && typeof a.project.licenseHolder === "string", "repoUrl and licenseHolder must be text");
+  check(typeof a.project.name === "string" &&
+      /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(a.project.name),
+    "project name must be 1-64 letters, digits, dot, dash or underscore");
+  check(typeof a.project.repoUrl === "string" && typeof a.project.licenseHolder === "string",
+    "repoUrl and licenseHolder must be text");
   check(own(LICENSES, a.project.license), `unknown license "${a.project.license}"`);
   check(own(CODE_RESEARCH_TOOLS, adv.codeResearch), `unknown code-research tool "${adv.codeResearch}"`);
   const custom = adv.codeResearchCustom;
   if (adv.codeResearch === "custom") {
     check(custom !== null && typeof custom === "object" && !Array.isArray(custom) &&
-      typeof custom.name === "string" && CUSTOM_NAME.test(custom.name) && custom.name.replace(/[^A-Za-z0-9]/g, "").length >= 3 &&
+      typeof custom.name === "string" && CUSTOM_NAME.test(custom.name) &&
+      custom.name.replace(/[^A-Za-z0-9]/g, "").length >= 3 &&
       typeof custom.url === "string" && CUSTOM_URL.test(custom.url),
-    "codeResearchCustom needs a name (up to 40 letters, digits, spaces, dot, plus, dash or underscore, with at least three letters or digits, starting with a letter or digit, not ending in a space) and an https:// url of plain ASCII without spaces or quotes");
+    "codeResearchCustom needs a name (up to 40 letters, digits, spaces, dot, plus, dash or underscore, "
+    + "with at least three letters or digits, starting with a letter or digit, not ending in a space) "
+    + "and an https:// url of plain ASCII without spaces or quotes");
   } else {
     check(custom === null || custom === undefined, 'codeResearchCustom is only for codeResearch "custom"');
   }
-  check(adv.precommit === "none" || PRECOMMIT_MANAGERS.includes(adv.precommit), `unknown pre-commit manager "${adv.precommit}"`);
+  check(adv.precommit === "none" || PRECOMMIT_MANAGERS.includes(adv.precommit),
+    `unknown pre-commit manager "${adv.precommit}"`);
   check(ARCHITECTURES.includes(adv.architecture), `unknown architecture "${adv.architecture}"`);
   check(["gitflow", "trunk"].includes(adv.branching), `unknown branching model "${adv.branching}"`);
   check(MERGE_STYLES.includes(adv.mergeStyle), `unknown merge style "${adv.mergeStyle}"`);
@@ -148,16 +176,21 @@ export function validate(saved) {
   // Each glob lands in a double-quoted YAML string, so quotes, backslashes
   // and control characters are refused rather than escaped.
   check(adv.shippedTextPaths === null || (Array.isArray(adv.shippedTextPaths) && adv.shippedTextPaths.length > 0 &&
-    adv.shippedTextPaths.every((g) => typeof g === "string" && /^[^"\\\x00-\x1f\x7f]{1,200}$/.test(g) && g.trim() === g)),
-  "shippedTextPaths must be null or a non-empty list of globs without quotes, backslashes, line breaks or outer spaces");
+    adv.shippedTextPaths.every((g) => typeof g === "string" &&
+      /^[^"\\\x00-\x1f\x7f]{1,200}$/.test(g) && g.trim() === g)),
+  "shippedTextPaths must be null or a non-empty list of globs "
+  + "without quotes, backslashes, line breaks or outer spaces");
   check(TRACKERS.includes(adv.tracker), `unknown tracker "${adv.tracker}"`);
   if (adv.tracker === "github") {
-    check(adv.trackerProject === null || (typeof adv.trackerProject === "string" && TRACKER_PROJECT.test(adv.trackerProject)),
-      'trackerProject must be null or "<owner>/<number>": a GitHub user or organization name and the board\'s number');
+    check(adv.trackerProject === null ||
+      (typeof adv.trackerProject === "string" && TRACKER_PROJECT.test(adv.trackerProject)),
+      'trackerProject must be null or "<owner>/<number>": '
+      + 'a GitHub user or organization name and the board\'s number');
     check(adv.publicRoadmap === null || (typeof adv.publicRoadmap === "string" && PUBLIC_REPO.test(adv.publicRoadmap)),
       'publicRoadmap must be null or "<owner>/<repo>": the public repo that mirrors the roadmap');
   } else {
-    check(adv.trackerProject === null || adv.trackerProject === undefined, 'trackerProject is only for tracker "github"');
+    check(adv.trackerProject === null || adv.trackerProject === undefined,
+      'trackerProject is only for tracker "github"');
     check(adv.publicRoadmap === null || adv.publicRoadmap === undefined, 'publicRoadmap is only for tracker "github"');
   }
   return a;
@@ -223,7 +256,12 @@ export const CHOICE_OPTIONS = {
 
 export function choicesFor(a) {
   const adv = a.advanced;
-  return { code_research: adv.codeResearch, precommit: adv.precommit, merge_style: adv.mergeStyle, tracker: adv.tracker };
+  return {
+    code_research: adv.codeResearch,
+    precommit: adv.precommit,
+    merge_style: adv.mergeStyle,
+    tracker: adv.tracker,
+  };
 }
 
 function upperSnake(s) {
@@ -236,7 +274,13 @@ function upperSnake(s) {
 // name also match an underscore or nothing, as servers spell names either way.
 function customTool({ name, url }) {
   const kebab = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return { name, url, kebab, bypass: `${upperSnake(name)}_BYPASS:`, match: `^mcp__.*${kebab.split("-").join("[-_]?")}` };
+  return {
+    name,
+    url,
+    kebab,
+    bypass: `${upperSnake(name)}_BYPASS:`,
+    match: `^mcp__.*${kebab.split("-").join("[-_]?")}`,
+  };
 }
 
 export function researchTool(adv) {

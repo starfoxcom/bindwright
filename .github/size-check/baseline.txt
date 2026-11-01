@@ -1,0 +1,20 @@
+# Hard size breaches the project had when this was written. One that is
+# not listed, or whose value grew past the listed one, fails the check.
+# Delete a line once its code complies. Rewrite with --write-baseline.
+# path|construct|name|value
+docs/v2/mockup-data.js|line_length|-|6
+redesign/about.jsx|line_length|-|3
+redesign/app.jsx|line_length|-|9
+redesign/bind.jsx|ccn|return|29
+redesign/bind.jsx|file|-|2346
+redesign/bind.jsx|function|return|2047
+redesign/bind.jsx|line_length|-|51
+redesign/compare.jsx|function|CompareFolio|185
+redesign/compare.jsx|line_length|-|14
+redesign/data.jsx|line_length|-|101
+redesign/howbinds.jsx|function|HowFolio|295
+redesign/howbinds.jsx|line_length|-|27
+redesign/receipts.jsx|function|ReceiptsFolio|315
+redesign/receipts.jsx|line_length|-|16
+redesign/toggles.jsx|line_length|-|4
+redesign/tweaks-panel.jsx|line_length|-|1

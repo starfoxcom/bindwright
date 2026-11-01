@@ -335,9 +335,11 @@ def decide(triage_result, routine=None, escalated=False, deep=None):
         return _failed(deep, "deep")
     if triage_result == "skip":
         if deep == "pass":
-            return _check("completed", "success", "Deep review 🟢", "The diff has no reviewable files and the deep review passed.")
+            return _check("completed", "success", "Deep review 🟢",
+                          "The diff has no reviewable files and the deep review passed.")
         if escalated:
-            return _check("in_progress", None, "Deep review in progress", "A deep review was asked for on a diff with no reviewable files.")
+            return _check("in_progress", None, "Deep review in progress",
+                          "A deep review was asked for on a diff with no reviewable files.")
         return _check("completed", "success", "No review needed", "The diff has no reviewable files.")
     if routine == "pending":
         return _check("in_progress", None, "Routine review in progress", "Waiting for the routine review's verdict.")
@@ -346,8 +348,10 @@ def decide(triage_result, routine=None, escalated=False, deep=None):
     if deep == "pass":
         return _check("completed", "success", "Routine and deep reviews 🟢", "Both review tiers passed.")
     if escalated:
-        return _check("in_progress", None, "Deep review in progress", "The routine review passed and asked for a deep review.")
-    return _check("completed", "success", "Routine review 🟢", "The routine review passed and asked for no deep review.")
+        return _check("in_progress", None, "Deep review in progress",
+                      "The routine review passed and asked for a deep review.")
+    return _check("completed", "success", "Routine review 🟢",
+                  "The routine review passed and asked for no deep review.")
 
 
 def parse_state(text):
