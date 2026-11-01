@@ -44,6 +44,8 @@ for (const team of [false, true]) {
       assert.equal(files.has(".claude/rules/collaboration.md"), team);
       assert.equal(files.has(`${STAGING}CONTRIBUTING.md`), team);
       assert.equal(files.has(`${STAGING}LICENSE`), !client);
+      const namesLicense = [...files.values()].some((text) => text.includes("LICENSE"));
+      assert.equal(namesLicense, !client, "the files name LICENSE only when it ships");
       assert.equal(files.has(".claude/rules/confidentiality.md"), client);
       assert.ok(![...files.keys()].some((p) => p.endsWith(".template")), "no .template names remain");
     });

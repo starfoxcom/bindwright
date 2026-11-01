@@ -261,8 +261,9 @@ def expand_answers(saved):
         a["private"] = a.get("client", UNDEFINED)
     base = defaults(team=_given(a, "team"), client=_given(a, "client"),
                     private=_given(a, "private"))
-    return dict(a, project=_fill_keys(a.get("project", UNDEFINED), base["project"]),
-                advanced=_fill_keys(a.get("advanced", UNDEFINED), base["advanced"]))
+    project, advanced = a.pop("project", UNDEFINED), a.pop("advanced", UNDEFINED)
+    return dict(a, project=_fill_keys(project, base["project"]),
+                advanced=_fill_keys(advanced, base["advanced"]))
 
 
 # Every toggle name the templates use must resolve here to True or False.
@@ -286,6 +287,7 @@ def flags_for(a):
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
         "contributing_md": a["team"],
+        "license_file": not a["client"],
         "audit_trail_commits": a["client"] and a["private"],
         "definition_of_done_verification": True,
         "lazy_rules_folder": True,

@@ -84,7 +84,7 @@ def _included(path, a, flags):
         "CONTRIBUTING.md": a["team"],
         ".github/CODEOWNERS.template": a["team"],
         ".github/PULL_REQUEST_TEMPLATE.md": a["team"] or a["client"],
-        "LICENSE.template": not a["client"],
+        "LICENSE.template": flags["license_file"],
         ".claude/rules/collaboration.md": a["team"],
         ".claude/rules/confidentiality.md": adv["confidentiality"],
         ".claude/rules/clean-room.md": adv["cleanRoom"],

@@ -34,6 +34,7 @@ Legend: ✅ on by default · ❌ off by default · ⚙️ asked during interview
 | `skill_session_close` | `.claude/skills/session-close/SKILL.md` | ✅ | ✅ | ✅ | ✅ |
 | `permissions_file_template` | `.claude/settings.local.json.template` | ✅ | ✅ | ✅ | ✅ |
 | `contributing_md` | `CONTRIBUTING.md` | ❌ | ✅ | ❌ | ✅ |
+| `license_file` | `LICENSE` + the License lines in `README.md` and `CONTRIBUTING.md`; off for someone else's project, whose own license stands | ✅ | ✅ | ❌ | ❌ |
 | `pr_template` | `.github/PULL_REQUEST_TEMPLATE.md` | ❌ | ✅ | ❌ | ✅ |
 | `codeowners` | `.github/CODEOWNERS` | ❌ | ⚙️ | ❌ | ✅ |
 | `collaboration_rule` | `.claude/rules/collaboration.md` + section in `CLAUDE.md` | ❌ | ✅ | ❌ | ✅ |

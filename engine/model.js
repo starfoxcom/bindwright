@@ -178,13 +178,9 @@ function fillKeys(part, dflt) {
 // counts as client, as validate reads it.
 export function expandAnswers(saved) {
   if (!isObject(saved)) return saved;
-  const a = own(saved, "private") ? { ...saved } : { ...saved, private: saved.client };
-  const base = defaults({ team: a.team, client: a.client, isPrivate: a.private });
-  return {
-    ...a,
-    project: fillKeys(a.project, base.project),
-    advanced: fillKeys(a.advanced, base.advanced),
-  };
+  const { project, advanced, ...rest } = own(saved, "private") ? saved : { ...saved, private: saved.client };
+  const base = defaults({ team: rest.team, client: rest.client, isPrivate: rest.private });
+  return { ...rest, project: fillKeys(project, base.project), advanced: fillKeys(advanced, base.advanced) };
 }
 
 // Every toggle name the templates use must resolve here to true or false.
@@ -208,6 +204,7 @@ export function flagsFor(a) {
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     contributing_md: a.team,
+    license_file: !a.client,
     audit_trail_commits: a.client && a.private,
     definition_of_done_verification: true,
     lazy_rules_folder: true,

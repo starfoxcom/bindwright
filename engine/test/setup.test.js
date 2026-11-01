@@ -38,6 +38,14 @@ const changedOne = () => {
     advanced: { ...a.advanced, codeResearch: "tokensave" },
   };
 };
+// Only an advanced switch differs, so the code carries no project part.
+const advancedOnly = () => {
+  const a = defaults({ team: true });
+  return { ...a, advanced: { ...a.advanced, aiReview: false } };
+};
+// Key order matters: the expanded answers are written to .bindwright/project.json.
+const sameBytes = (actual, expected, message) =>
+  assert.equal(JSON.stringify(actual), JSON.stringify(expected), message);
 
 const START = "Invalid setup code: it must start with bw1-";
 const LONG = "Invalid setup code: it is too long";
@@ -140,7 +148,11 @@ test("only the changed project and advanced keys travel in a code", () => {
     project: { name: "shop-front" },
     advanced: { codeResearch: "tokensave" },
   });
-  assert.deepEqual(expandAnswers(decodeSetupCode(code)), changedOne());
+  sameBytes(expandAnswers(decodeSetupCode(code)), changedOne());
+});
+
+test("a code that changes only an advanced switch expands in the full code's key order", () => {
+  sameBytes(expandAnswers(decodeSetupCode(encodeSetupCode(advancedOnly()))), advancedOnly());
 });
 
 test("a code made the old way, with every answer, expands to the same answers", () => {
@@ -162,11 +174,9 @@ test("the Python decoder reads every code as the JS decoder does", { skip: noPyt
 
 test("the Python twin expands short and old codes as JS does", { skip: noPython }, () => {
   const shortCodes = COMBOS.map((combo) => encodeSetupCode(defaults(combo)));
-  const codes = [...shortCodes, encodeSetupCode(changedOne()), codeOf(JSON.stringify(named()))];
+  const codes = [...shortCodes, ...[changedOne(), advancedOnly()].map(encodeSetupCode), codeOf(JSON.stringify(named()))];
   const py = runPython(PY_EXPAND, codes);
-  for (const [i, code] of codes.entries()) {
-    assert.deepEqual(py[i], expandAnswers(decodeSetupCode(code)), code);
-  }
+  for (const [i, code] of codes.entries()) sameBytes(py[i], expandAnswers(decodeSetupCode(code)), code);
 });
 
 // Every file under `root`, as [relative path, bytes], sorted.
