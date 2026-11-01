@@ -58,6 +58,7 @@ header {
 header nav { display: flex; gap: 28px; font-size: 15px; color: var(--text-2); }
 header nav a { display: inline-block; padding: 4px 0; text-decoration: none; }
 header nav a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 4px; }
+header nav:first-of-type { margin-left: auto; }
 
 main { max-width: 1360px; margin: 0 auto; padding: 36px 40px 64px; }
 
