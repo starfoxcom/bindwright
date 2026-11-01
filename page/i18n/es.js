@@ -72,9 +72,9 @@ export default {
   "command.market.text": "Una vez por computadora, así que si ya tienes Bindwright instalado, pasa al paso "
     + "4.",
   "command.setup.title": "Configura este proyecto.",
-  "command.setup.text": "Pégalo y presiona Enter, y la configuración te pregunta antes de tocar cualquier "
-    + "archivo que ya tengas. Los archivos que escribe están en inglés, y Claude te sigue respondiendo en "
-    + "español.",
+  "command.setup.text": "Pega el comando de abajo y presiona Enter. La configuración te pregunta antes de "
+    + "cambiar cualquier archivo que ya tengas, y aunque los archivos que escribe están en inglés, Claude "
+    + "te sigue respondiendo en español.",
   "command.copy": "Copiar comando",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
 
