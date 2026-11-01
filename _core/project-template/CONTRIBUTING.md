@@ -81,4 +81,9 @@ For features with a visible surface (UI, API, CLI):
 
 ## License
 
+<!-- TOGGLE:license_file START -->
 By contributing, you agree your contributions are licensed under the project's license (see `LICENSE`).
+<!-- TOGGLE:license_file END -->
+<!-- TOGGLE:license_file:off START -->
+By contributing, you agree your contributions are licensed under the project owner's terms.
+<!-- TOGGLE:license_file:off END -->

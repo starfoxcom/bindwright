@@ -12,14 +12,17 @@
   --accent: oklch(0.80 0.13 var(--hue));
   --accent-deep: oklch(0.62 0.13 var(--hue));
   --on-accent: oklch(0.20 0.03 var(--hue));
-  --add: oklch(0.80 0.14 150);
   --del: oklch(0.72 0.15 25);
   color-scheme: dark;
   scroll-padding: 96px 0;
   transition: --hue 380ms cubic-bezier(.2, .8, .2, 1);
 }
+@media (prefers-reduced-motion: no-preference) {
+  :root { scroll-behavior: smooth; }
+}
 
 * { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
 
 body {
   background: var(--canvas);
@@ -72,6 +75,8 @@ h1 {
 .lede { margin-top: 22px; max-width: 46ch; font-size: 19px; color: var(--text-2); }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; margin-top: 34px; }
+.source { font-size: 14px; color: var(--text-2); text-underline-offset: 4px; }
+.source:hover { color: var(--text); }
 
 .go {
   display: inline-flex; align-items: center; min-height: 52px; padding: 0 26px;
@@ -81,8 +86,6 @@ h1 {
 }
 .go:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 var(--accent-deep); }
 
-.more { font-size: 16px; color: var(--text-2); text-underline-offset: 4px; }
-.more:hover { color: var(--text); }
 
 .clip { margin: 0; aspect-ratio: 16 / 11; display: grid; place-items: center; text-align: center; }
 
@@ -91,55 +94,285 @@ h1 {
   margin-bottom: 24px; font-size: 30px; line-height: 1.1;
   font-weight: 700; font-stretch: 112%; letter-spacing: -0.02em;
 }
+.changes { margin-top: 120px; }
+.changes h2 { margin-bottom: 36px; font-size: clamp(36px, 4vw, 56px); line-height: 1; letter-spacing: -0.03em; }
 .changes ul {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 0; list-style: none;
 }
-.changes li { padding-top: 16px; border-top: 1px solid var(--rule); color: var(--text-2); }
+.changes li {
+  padding: 32px; border-radius: 18px; background: var(--panel); font-size: 17px; color: var(--text-2);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
+}
+.changes .was {
+  display: block; font-size: 15px; color: var(--del);
+  text-decoration: line-through; text-decoration-color: oklch(0.72 0.15 25 / .55);
+}
 .changes li b {
-  display: block; margin-bottom: 6px; font-size: 18px; font-weight: 650; line-height: 1.3; color: var(--text);
+  display: block; margin: 10px 0 12px; font-size: clamp(24px, 2.2vw, 32px); line-height: 1.15;
+  font-weight: 700; font-stretch: 112%; letter-spacing: -0.02em; color: var(--text);
 }
-
-.rig { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 24px; }
 
 .panel {
   background: var(--panel); border-radius: 18px; padding: 22px;
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
 }
 .panel h2 { margin-bottom: 14px; font-size: 15px; font-weight: 600; color: var(--text-2); }
-.panel.out, .clip { box-shadow: inset 0 1px 0 oklch(1 0 0 / .06), inset 0 3px 0 var(--accent); }
-.panel.out { min-height: 420px; }
+.clip { box-shadow: inset 0 1px 0 oklch(1 0 0 / .06); }
+.ask { max-width: 760px; margin: 0 auto; }
+/* A fixed width, so the file names ticking by never resize the panel. */
+.composing { width: min(560px, 100%); margin: 0 auto; }
+.out-body { margin-top: 4px; }
 
-.q + .q { margin-top: 22px; }
-.q h3 { margin-bottom: 10px; font-size: 17px; font-weight: 600; }
+/* Hidden but still laid out, so showing it moves nothing around it. */
+.off { visibility: hidden; pointer-events: none; }
+/* The three views share one cell: the frame keeps the tallest view's height. */
+.frame { display: grid; }
+.frame > * { grid-area: 1 / 1; min-width: 0; }
+.frame > .arrive { animation: view-in 220ms ease both; }
+.frame > .leave { animation: view-out 220ms ease both; }
+/* Every step shares one cell: the stage keeps the tallest step's height. */
+.stage { display: grid; }
+.stage > * { grid-area: 1 / 1; }
+@keyframes rise { from { opacity: 0; transform: translateX(16px); } }
+.q.rise-in { animation: rise 300ms ease both; }
+.q h3, .composing h3 { margin-bottom: 10px; font-size: 17px; font-weight: 600; }
+.q h3:focus, .composing h3:focus, .result h3:focus { outline: none; }
+
+.steps { display: flex; gap: 4px; margin: 0 0 18px; padding: 0; list-style: none; }
+/* A dot is lit once its question has an answer; the current step keeps a ring. */
+.dot {
+  position: relative; display: block; width: 24px; height: 24px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+}
+.dot:disabled { cursor: default; }
+.dot::before {
+  content: ""; position: absolute; inset: 7px; border-radius: 50%;
+  background: var(--key); box-shadow: 0 0 0 1px oklch(0 0 0 / .35);
+}
+.dot.lit::before { background: var(--accent); }
+.dot[aria-current="step"]::before { box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px var(--text-2); }
+.back {
+  margin-top: 16px; padding: 0; font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2);
+  background: none; border: 0; cursor: pointer;
+}
+.back:hover { color: var(--text); text-decoration: underline; text-underline-offset: 4px; }
 
 .keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
 .k {
-  position: relative; min-height: 76px; padding: 14px 40px 16px 16px;
+  display: flex; flex-direction: column; justify-content: flex-start; gap: 4px;
+  min-height: 76px; padding: 14px 16px 16px;
   font: inherit; text-align: left; color: var(--text); cursor: pointer;
-  background: var(--key); border: 0; border-radius: 12px;
+  background: var(--key); border: 1px solid oklch(0.80 0.13 var(--h) / .4); border-radius: 12px;
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .08), 0 0 0 1px oklch(0 0 0 / .35), inset 0 -3px 0 oklch(0 0 0 / .3);
-  transition: transform .08s, box-shadow .08s, background-color .08s;
+  transition: transform 150ms ease, box-shadow 150ms ease, background-color 180ms ease,
+    border-color 180ms ease, color 180ms ease;
+}
+.k:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / .08), 0 0 0 1px oklch(0 0 0 / .35), inset 0 -3px 0 oklch(0 0 0 / .3),
+    0 10px 20px -12px oklch(0 0 0 / .7);
 }
 .k:active {
   transform: translateY(2px);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .05), 0 0 0 1px oklch(0 0 0 / .35), inset 0 -1px 0 oklch(0 0 0 / .3);
 }
-.k::after {
-  content: ""; position: absolute; top: 18px; right: 16px; width: 8px; height: 8px; border-radius: 50%;
-  background: oklch(0.80 0.13 var(--h)); box-shadow: 0 0 0 3px oklch(0.80 0.13 var(--h) / .16);
-}
 .k b { display: block; font-size: 17px; font-weight: 650; }
 .k span { font-size: 14px; color: var(--text-2); }
 .k[aria-pressed="true"] {
-  background: var(--accent); color: var(--on-accent);
-  box-shadow: inset 0 -3px 0 var(--accent-deep), 0 0 0 1px oklch(1 0 0 / .25);
+  background: var(--accent); color: var(--on-accent); border-color: oklch(1 0 0 / .25);
+  box-shadow: inset 0 -3px 0 var(--accent-deep);
 }
-.k[aria-pressed="true"]:active { box-shadow: inset 0 -1px 0 var(--accent-deep), 0 0 0 1px oklch(1 0 0 / .25); }
-.k[aria-pressed="true"]::after { background: var(--on-accent); box-shadow: none; }
+.k[aria-pressed="true"]:active { box-shadow: inset 0 -1px 0 var(--accent-deep); }
 .k[aria-pressed="true"] span { color: oklch(0.30 0.05 var(--hue)); }
 
-.empty { color: var(--text-2); }
+/* The composing view: a bar, one line per summary group and the file paths ticking by. */
+.bar { height: 4px; margin: 4px 0 18px; border-radius: 4px; background: var(--key); overflow: hidden; }
+.bar-fill {
+  display: block; height: 100%; background: var(--accent);
+  transform: scaleX(0); transform-origin: left;
+}
+.bar-fill.fill { animation: fill-bar 4200ms linear both; }
+@keyframes fill-bar { to { transform: scaleX(1); } }
+.compose-lines {
+  display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 15px; color: var(--text-2);
+}
+.compose-lines li {
+  display: flex; align-items: center; animation: type-in 220ms ease both; animation-delay: var(--delay);
+}
+.compose-lines li::after {
+  content: ""; flex: none; width: 5px; height: 9px; margin-left: 10px;
+  border: solid var(--accent); border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  animation: check-in 160ms ease-out both; animation-delay: calc(var(--delay) + 220ms);
+}
+@keyframes type-in { from { opacity: 0; transform: translateX(-6px); } }
+@keyframes check-in { to { transform: rotate(45deg) scale(1); } }
+.compose-files li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compose-files {
+  height: 120px; margin: 18px 0 0; padding: 0; list-style: none; overflow: hidden;
+  font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text-2); opacity: 0.45;
+}
+
+.out-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+  margin-bottom: 14px;
+}
+.out-head h3 { font-size: 17px; font-weight: 600; }
+.out-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tally { margin-left: 6px; font-weight: 400; color: var(--text-2); }
+.seg {
+  position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: none; padding: 3px; border-radius: 12px; background: var(--key);
+  box-shadow: inset 0 -2px 0 oklch(0 0 0 / .3);
+}
+.seg-pill {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 2);
+  border-radius: 9px; background: var(--accent); transition: transform 220ms ease;
+}
+.seg[data-view="files"] .seg-pill { transform: translateX(100%); }
+.seg-opt {
+  position: relative; min-height: 36px; padding: 0 14px; font: 600 14px/1 "Hubot Sans", sans-serif;
+  color: var(--text-2); white-space: nowrap; cursor: pointer;
+  background: none; border: 0; border-radius: 9px;
+}
+.seg-opt[aria-pressed="true"] { color: var(--on-accent); }
+.toggle {
+  min-height: 32px; padding: 0 12px; font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text); cursor: pointer;
+  background: var(--key); border: 0; border-radius: 12px; box-shadow: inset 0 -2px 0 oklch(0 0 0 / .3);
+}
+.toggle:active { transform: translateY(1px); box-shadow: none; }
+.toggle.pulse, .icon-copy.pulse { animation: pulse 240ms ease; }
+@keyframes pulse { 50% { transform: scale(1.06); } }
+
+/* The last step: what to do with the command, then the command and a large Copy button. */
+.command {
+  margin-top: 32px; padding: 28px; border-radius: 20px;
+  background: color-mix(in oklch, var(--panel), var(--accent) 8%);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 35%, transparent),
+    0 18px 40px -24px color-mix(in oklch, var(--accent) 60%, transparent);
+}
+.command-step {
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+}
+.command-title { margin-top: 4px; font-size: clamp(22px, 2.4vw, 28px); font-weight: 750; }
+.command-how { max-width: 640px; margin-top: 6px; font-size: 15px; color: var(--text-2); }
+/* Command boxes keep their right padding clear of the icon copy button. */
+.command-line {
+  position: relative; margin-top: 12px; padding: 14px 52px 14px 18px; border-radius: 14px; background: var(--canvas);
+}
+/* The whole command shows, wrapped at any character so it fits every width. */
+.cmd {
+  display: block; font: 400 15px/1.5 "Fragment Mono", ui-monospace, monospace; color: var(--text);
+  overflow-wrap: anywhere; word-break: break-all; user-select: all;
+}
+.icon-copy {
+  position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  color: var(--text-2); cursor: pointer; background: var(--key); border: 0; border-radius: 10px;
+}
+.icon-copy:hover { color: var(--text); }
+.icon-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.icon-copy .ico-check { display: none; }
+.icon-copy.copied { color: var(--accent); }
+.icon-copy.copied .ico-copy { display: none; }
+.icon-copy.copied .ico-check { display: block; }
+/* Two numbered steps: install once, then set up this project. */
+.command-steps { display: grid; gap: 24px; margin: 20px 0 0; padding: 0; list-style: none; counter-reset: step; }
+.command-steps > li { position: relative; padding-left: 40px; counter-increment: step; }
+.command-steps > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%; font-weight: 700; font-size: 14px;
+  color: var(--on-accent); background: var(--accent);
+}
+.command-sub { min-height: 28px; padding-top: 4px; font-size: 15px; color: var(--text-2); }
+.command-sub b { color: var(--text); }
+/* Min height fits the 36px icon button with its 8px inset top and bottom. */
+.install-line {
+  position: relative; display: flex; align-items: center; min-height: 52px; margin-top: 8px;
+  padding: 8px 52px 8px 14px; border-radius: 12px; background: var(--canvas);
+}
+.install-line code {
+  flex: 1; min-width: 0; font: 400 14px/1.5 "Fragment Mono", ui-monospace, monospace;
+  overflow-wrap: anywhere; user-select: all;
+}
+
+.groups {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
+  padding: 0; list-style: none;
+}
+/* The summary and the files share one cell, so the box keeps the taller view's
+   height and switching moves nothing below it. The view switched out stays laid
+   out, so its cards never rise again; it fades and slides out, and the one
+   coming in fades up. */
+.views { display: grid; }
+.views > * { grid-area: 1 / 1; min-width: 0; }
+.views > .away { visibility: hidden; pointer-events: none; }
+.views > .leave { animation: view-out 220ms ease both; }
+.views > .arrive { animation: view-in 220ms ease both; }
+@keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes view-out {
+  from { visibility: visible; }
+  to { opacity: 0; transform: translateY(-8px); visibility: hidden; }
+}
+@keyframes lift { from { opacity: 0; transform: translateY(10px); } }
+.groups > li.enter { animation: lift 420ms ease both; }
+.groups > li { padding: 20px; border-radius: 14px; background: var(--key); }
+.groups > li > b { font-size: 18px; font-weight: 700; }
+.groups > li > p { margin-top: 2px; font-size: 15px; color: var(--text-2); }
+.facts {
+  display: grid; gap: 8px; margin-top: 12px; padding: 0; list-style: none; font-size: 14px; color: var(--text-2);
+}
+/* The rules card always shows its rules, takes a row of its own and sits a
+   shade apart from the other cards. Its rules fade in one after another as it rises. */
+.groups > li.has-rules {
+  grid-column: 1 / -1;
+  background: color-mix(in oklch, var(--key), var(--accent) 6%);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 18%, transparent);
+}
+@keyframes rule-in { from { opacity: 0; } }
+.groups > li.enter .rules li { animation: rule-in 200ms calc(300ms + var(--i, 0) * 30ms) ease both; }
+.rules { display: grid; gap: 6px; margin-top: 10px; padding-left: 18px; font-size: 15px; color: var(--text-2); }
+.rules b { font-weight: 600; color: var(--text); }
+
+.out-body {
+  display: grid; grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+  height: 560px; border-top: 1px solid var(--rule);
+}
+.out-body > * { min-height: 0; }
+
+.tree { overflow: auto; padding: 10px 10px 10px 0; border-right: 1px solid var(--rule); font-size: 14px; }
+.tree .dir, .tree .file {
+  position: relative; display: block; width: 100%; padding: 3px 8px 3px calc(10px + var(--d) * 14px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree .dir, .tree .file {
+  min-height: 26px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
+  background: none; border: 0; border-radius: 0 12px 12px 0;
+}
+.tree .dir { color: var(--text-2); }
+.tree .dir::before {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 9px 2px 0;
+  border-right: 1.5px solid; border-bottom: 1.5px solid; transform: rotate(45deg); transition: transform 150ms ease;
+}
+.tree .dir[aria-expanded="false"]::before { transform: rotate(-45deg); }
+.tree .dir:hover, .tree .file:hover { background: var(--key); }
+.tree .file[aria-current="true"] { background: var(--key); box-shadow: inset 2px 0 0 var(--accent); }
+
+.view { display: flex; flex-direction: column; min-width: 0; }
+.view .path { padding: 12px 16px 8px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.view pre {
+  flex: 1; overflow: auto; padding: 0 16px 16px;
+  font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text); white-space: pre-wrap;
+  overflow-wrap: anywhere; tab-size: 4;
+}
+.view.swap, .tree.swap { animation: swap-in 160ms ease both; }
+.back-files {
+  display: none; align-self: flex-start; min-height: 40px; margin: 8px 0 0; padding: 0 16px;
+  font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2); background: none; border: 0; cursor: pointer;
+}
+.back-files:hover { color: var(--text); }
+@keyframes swap-in { from { opacity: 0; } }
+
 
 .sr-status {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -156,18 +389,37 @@ footer {
   header nav { gap: 20px; }
   main { padding: 16px 16px 48px; }
   .hero { grid-template-columns: minmax(0, 1fr); gap: 32px; min-height: 0; padding-top: 16px; }
-  .changes ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .changes li { padding: 24px; }
   .changes, .setup { margin-top: 64px; }
-  .rig { grid-template-columns: minmax(0, 1fr); }
-  .panel.out { min-height: 240px; }
+  .out-body { display: block; height: auto; }
+  .tree { overflow: visible; padding: 6px 0; border-right: 0; }
+  .tree .dir, .tree .file { min-height: 40px; padding-top: 10px; padding-bottom: 10px; }
+  .out-body:not(.reading) .view, .out-body.reading .tree { display: none; }
+  .back-files { display: inline-flex; align-items: center; }
+  .view pre { overflow: visible; }
   footer { padding: 20px 16px 32px; }
 }
 
 @media (max-width: 560px) {
-  .changes ul { grid-template-columns: minmax(0, 1fr); }
+  .changes ul, .groups { grid-template-columns: minmax(0, 1fr); }
+  .out-tools { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .out-tools .seg { grid-column: 1 / -1; }
+  .out-tools .toggle { min-height: 40px; }
+  .command { padding: 20px; }
+  .command-line { padding: 12px 52px 12px 12px; }
+  .command-steps > li { padding-left: 0; padding-top: 36px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root { transition: none; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
+  .k:hover { transform: none; }
 }
+
+/* The rules flow in columns. */
+.groups .rules {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 28px;
+  margin-top: 12px; padding: 0; list-style: none;
+}
+.groups .rules li { border: 0; box-shadow: none; padding: 0; }
+.groups .rules li b { display: block; margin-bottom: 2px; }

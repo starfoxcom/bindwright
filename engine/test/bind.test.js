@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bind, STAGING } from "../bind.js";
+import { bind, STAGING, ANSWERS } from "../bind.js";
 import { defaults, flagsFor, valuesFor, DEFERRED, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES } from "../model.js";
 import { listCore } from "../list-core.js";
 
@@ -43,11 +43,40 @@ for (const team of [false, true]) {
       assert.ok(files.has(".claude/rules/git.md"));
       assert.equal(files.has(".claude/rules/collaboration.md"), team);
       assert.equal(files.has(`${STAGING}CONTRIBUTING.md`), team);
+      assert.equal(files.has(`${STAGING}LICENSE`), !client);
+      const namesLicense = [...files.values()].some((text) => text.includes("LICENSE"));
+      assert.equal(namesLicense, !client, "the files name LICENSE only when it ships");
       assert.equal(files.has(".claude/rules/confidentiality.md"), client);
       assert.ok(![...files.keys()].some((p) => p.endsWith(".template")), "no .template names remain");
     });
   }
 }
+
+test("someone else's public project ships no confidentiality rule and no audit trail", async () => {
+  const a = defaults({ team: true, client: true, isPrivate: false });
+  const files = await run(a);
+  assert.ok(!files.has(".claude/rules/confidentiality.md"));
+  assert.ok(!files.has(`${STAGING}LICENSE`));
+  assert.equal(flagsFor(a).audit_trail_commits, false);
+});
+
+test("answers saved without a private key bind as private = client", async () => {
+  // The saved answers file echoes the answers, so it is the one file that differs.
+  const withoutAnswers = (files) => new Map([...files].filter(([path]) => path !== ANSWERS));
+  for (const client of [false, true]) {
+    const saved = defaults({ team: true, client });
+    delete saved.private;
+    assert.deepEqual(withoutAnswers(await run(saved)), withoutAnswers(await run({ ...saved, private: client })));
+  }
+});
+
+test("my own project licenses by visibility: private is Proprietary, public is MIT", async () => {
+  for (const [isPrivate, words] of [[true, "All rights reserved"], [false, "MIT License"]]) {
+    const files = await run(defaults({ isPrivate }));
+    assert.ok(files.get(`${STAGING}LICENSE`).includes(words), `private=${isPrivate}`);
+    assert.ok(!files.has(".claude/rules/confidentiality.md"), `private=${isPrivate}`);
+  }
+});
 
 test("every code-research tool binds cleanly", async () => {
   for (const tool of Object.keys(CODE_RESEARCH_TOOLS)) {
