@@ -14,11 +14,31 @@ REVIEW_EFFORTS = {"routine": "low", "deep": "low", "backup": "high"}
 
 CODE_RESEARCH_TOOLS = {
     # match: regex over tool-call names, used by the session-close adherence count.
-    "tokensave": {"name": "tokensave", "url": "https://github.com/aovestdipaperino/tokensave", "bypass": "TOKENSAVE_BYPASS:", "match": "tokensave"},
-    "lsp-plugins": {"name": "Claude Code LSP plugins", "url": "https://code.claude.com/docs/en/discover-plugins", "bypass": None, "match": "^LSP$"},
-    "codegraph": {"name": "CodeGraph", "url": "https://github.com/colbymchenry/codegraph", "bypass": None, "match": "codegraph"},
+    "tokensave": {
+        "name": "tokensave",
+        "url": "https://github.com/aovestdipaperino/tokensave",
+        "bypass": "TOKENSAVE_BYPASS:",
+        "match": "tokensave",
+    },
+    "lsp-plugins": {
+        "name": "Claude Code LSP plugins",
+        "url": "https://code.claude.com/docs/en/discover-plugins",
+        "bypass": None,
+        "match": "^LSP$",
+    },
+    "codegraph": {
+        "name": "CodeGraph",
+        "url": "https://github.com/colbymchenry/codegraph",
+        "bypass": None,
+        "match": "codegraph",
+    },
     "serena": {"name": "Serena", "url": "https://github.com/oraios/serena", "bypass": None, "match": "serena"},
-    "codebase-memory": {"name": "codebase-memory-mcp", "url": "https://github.com/DeusData/codebase-memory-mcp", "bypass": None, "match": "codebase.memory"},
+    "codebase-memory": {
+        "name": "codebase-memory-mcp",
+        "url": "https://github.com/DeusData/codebase-memory-mcp",
+        "bypass": None,
+        "match": "codebase.memory",
+    },
     "none": {"name": "none", "url": "(no homepage)", "bypass": None, "match": None},
     # A tool the person names: values_for fills all four from codeResearchCustom.
     "custom": {"name": None, "url": None, "bypass": None, "match": None},
@@ -51,7 +71,12 @@ TRACKERS = ["github", "file"]
 # command lines, so it is held to GitHub's own name rule.
 TRACKER_PROJECT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[1-9][0-9]{0,5}")
 PUBLIC_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.+$)[A-Za-z0-9._-]{1,100}")
-LICENSES = {"MIT": "MIT.txt", "Apache-2.0": "Apache-2.0.txt", "BSD-3-Clause": "BSD-3-Clause.txt", "Proprietary": "Proprietary.txt"}
+LICENSES = {
+    "MIT": "MIT.txt",
+    "Apache-2.0": "Apache-2.0.txt",
+    "BSD-3-Clause": "BSD-3-Clause.txt",
+    "Proprietary": "Proprietary.txt",
+}
 
 # Filled later by the tailoring step, which reads the user's repo.
 DEFERRED = {
@@ -185,7 +210,8 @@ def validate(saved):
     get = lambda d, k: d.get(k, UNDEFINED)
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
     _check(_is_bool(get(a, "private")), "private must be true or false")
-    switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"]
+    switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
+                "plainWriting", "codeSizeCheck", "handoffFile"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
     name = get(project, "name")
@@ -194,7 +220,8 @@ def validate(saved):
     _check(isinstance(get(project, "repoUrl"), str) and isinstance(get(project, "licenseHolder"), str),
            "repoUrl and licenseHolder must be text")
     _check(_own(LICENSES, get(project, "license")), 'unknown license "%s"' % js_str(get(project, "license")))
-    _check(_own(CODE_RESEARCH_TOOLS, get(adv, "codeResearch")), 'unknown code-research tool "%s"' % js_str(get(adv, "codeResearch")))
+    _check(_own(CODE_RESEARCH_TOOLS, get(adv, "codeResearch")),
+           'unknown code-research tool "%s"' % js_str(get(adv, "codeResearch")))
     _check_custom_tool(adv["codeResearch"], get(adv, "codeResearchCustom"))
     precommit = get(adv, "precommit")
     _check(precommit == "none" or (isinstance(precommit, str) and precommit in PRECOMMIT_MANAGERS),
@@ -215,7 +242,8 @@ def validate(saved):
     # and control characters are refused rather than escaped.
     paths = get(adv, "shippedTextPaths")
     _check(paths is None or (isinstance(paths, list) and len(paths) > 0 and all(_glob_ok(g) for g in paths)),
-           "shippedTextPaths must be null or a non-empty list of globs without quotes, backslashes, line breaks or outer spaces")
+           "shippedTextPaths must be null or a non-empty list of globs "
+           "without quotes, backslashes, line breaks or outer spaces")
     _check_tracker(get(adv, "tracker"), get(adv, "trackerProject"))
     public = get(adv, "publicRoadmap")
     if get(adv, "tracker") == "github":
@@ -230,7 +258,8 @@ def _check_tracker(tracker, board):
     _check(isinstance(tracker, str) and tracker in TRACKERS, 'unknown tracker "%s"' % js_str(tracker))
     if tracker == "github":
         _check(board is None or (isinstance(board, str) and TRACKER_PROJECT.fullmatch(board) is not None),
-               'trackerProject must be null or "<owner>/<number>": a GitHub user or organization name and the board\'s number')
+               'trackerProject must be null or "<owner>/<number>": '
+               'a GitHub user or organization name and the board\'s number')
     else:
         _check(board is None or board is UNDEFINED, 'trackerProject is only for tracker "github"')
 

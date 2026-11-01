@@ -59,7 +59,8 @@ def resolve_blocks(text, ctx=None, file="template"):
         else:
             top = open_blocks.pop() if open_blocks else None
             if not top or top["id"] != block_id:
-                raise TemplateError('%s: END for "%s" does not close "%s"' % (where, block_id, top["id"] if top else "nothing"))
+                raise TemplateError(
+                    '%s: END for "%s" does not close "%s"' % (where, block_id, top["id"] if top else "nothing"))
     if open_blocks:
         raise TemplateError('%s: unclosed block "%s"' % (file, open_blocks[-1]["id"]))
     return "\n".join(out)

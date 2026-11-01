@@ -22,7 +22,8 @@ function keepBlock(name, value, { flags = {}, choices = {}, options = {} }, wher
     // Own keys only: a marker named "constructor" is not a choice.
     const own = (obj) => Object.prototype.hasOwnProperty.call(obj, name);
     if (!own(choices)) throw new TemplateError(`${where}: unknown choice "${name}"`);
-    if (!(own(options) ? options[name] : []).includes(value)) throw new TemplateError(`${where}: "${value}" is not an option of "${name}"`);
+    if (!(own(options) ? options[name] : []).includes(value))
+      throw new TemplateError(`${where}: "${value}" is not an option of "${name}"`);
     return choices[name] === value;
   }
   if (typeof flags[name] !== "boolean") throw new TemplateError(`${where}: unknown flag "${name}"`);
@@ -48,7 +49,8 @@ export function resolveBlocks(text, ctx = {}, file = "template") {
       open.push({ id, keep: parentKeep && keepBlock(name, value, ctx, where) });
     } else {
       const top = open.pop();
-      if (!top || top.id !== id) throw new TemplateError(`${where}: END for "${id}" does not close "${top ? top.id : "nothing"}"`);
+      if (!top || top.id !== id)
+        throw new TemplateError(`${where}: END for "${id}" does not close "${top ? top.id : "nothing"}"`);
     }
   });
   if (open.length) throw new TemplateError(`${file}: unclosed block "${open[open.length - 1].id}"`);
