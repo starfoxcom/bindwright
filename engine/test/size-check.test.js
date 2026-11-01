@@ -224,38 +224,39 @@ test("the shipped rule's tables parse: named rows, Other, and spaced thousands",
   assert.doesNotMatch(r.out, /d\.ts/);
 });
 
-// Calls one function of the shipped script with JSON arguments and returns its JSON result.
-function scriptCall(expr, args, { site = false } = {}) {
+// Calls one function of the shipped script with a JSON argument and returns its JSON result.
+function scriptCall(expr, arg) {
   const code = `import json, sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n`
-    + `args = json.loads(sys.stdin.read())\nprint(json.dumps(${expr}))\n`;
+    + `arg = json.loads(sys.stdin.read())\nprint(json.dumps(${expr}))\n`;
   // -B: no bytecode left in the shipped scripts folder.
-  const flags = site ? ["-B"] : ["-B", "-S"];
-  const r = spawnSync(python, [...flags, "-c", code, dirname(SCRIPT)],
-    { input: JSON.stringify(args), encoding: "utf8" });
+  const r = spawnSync(python, ["-B", "-S", "-c", code, dirname(SCRIPT)],
+    { input: JSON.stringify(arg), encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return JSON.parse(r.stdout);
 }
 
 test("TypeScript is cut before each top-level statement, line numbers kept", { skip }, () => {
   const text = "const a = {\n  x: 1,\n}\n\nfunction f() {\n  return 1\n}\n// note\nexport type T = { a: string }\n";
-  const chunks = scriptCall("size_check.top_level_chunks(args)", text);
+  const chunks = scriptCall("size_check.top_level_chunks(arg)", text);
   assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 7, 8]);
   assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
 });
 
-const hasLizard = python && spawnSync(python, ["-c", "import lizard"]).status === 0;
+// Where a statement may start: [name, source, the line indexes that start one].
+const STARTS = [
+  ["column-0 text inside a template literal", "function f() {\n  return `\nx {\n`\n}\nconst b = 1\n", [0, 5]],
+  ["a template's ${} with braces inside", "const t = `${ {a: 1}.a }\n{`\nconst u = 2\n", [0, 2]],
+  ["column-0 text inside a block comment", "/*\nx {\n*/\nconst b = 1\n", [0, 3]],
+  ["brackets inside strings and comments", "const s = '{' // {\nconst t = \"}\"\n", [0, 1]],
+  ["an escaped quote keeps the string open", "const s = '\\'{'\nconst t = 1\n", [0, 1]],
+  ["brackets inside a regex literal", "const r = s.replace(/\\[[^\\]]*\\]$/, '')\nconst t = 1\n", [0, 1]],
+  ["a slash after a value divides", "const h = (a / 2) / (b)\nconst t = 1\n", [0, 1]],
+  ["a line still inside brackets", "foo(\nbar)\nbaz()\n", [0, 2]],
+  ["brackets that do not add up read the file whole", "}\nconst a = 1\n", null],
+];
 
-// lizard drops or merges the functions after an object type inside a generic;
-// the misread stays inside the statement that holds the type.
-const needsLizard = { skip: !hasLizard && "needs lizard" };
-
-test("a function after an object type in a generic keeps its own length", needsLizard, () => {
-  const dir = mkdtempSync(join(tmpdir(), "size-ts-"));
-  const file = join(dir, "a.tsx");
-  writeFileSync(file, "async function info(id: string): Promise<{ name: string } | null> {\n  return null\n}\n\n"
-    + "function next(a: number) {\n  return a + 1\n}\n");
-  const found = scriptCall("[[f.name, f.start_line, f.end_line] for f in "
-    + "size_check.typescript_functions(__import__('lizard'), args)]", file, { site: true });
-  assert.deepEqual(found.map(([name]) => name), ["info", "next"]);
-  assert.deepEqual(found[1], ["next", 5, 7]);
-});
+for (const [name, text, starts] of STARTS) {
+  test(`top-level starts: ${name}`, { skip }, () => {
+    assert.deepEqual(scriptCall("size_check.top_level_starts(arg)", text), starts);
+  });
+}
