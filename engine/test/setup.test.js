@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind, STAGING as BIND_STAGING } from "../bind.js";
-import { defaults, expandAnswers } from "../model.js";
+import { defaults, expandAnswers, quoted } from "../model.js";
 import { PREFIX, encodeSetupCode, decodeSetupCode } from "../setupcode.js";
 import { applyFiles, STAGING } from "../apply.js";
 import { python } from "./python.js";
@@ -92,6 +92,8 @@ const UNKNOWN_KEYS = [
     'Invalid setup code: unknown project answer "5"'],
   ["a key past U+FFFF sorts by UTF-16 unit, before U+FFFF itself", withExtra({ "\uffff": 1, "\u{1F600}": 2 }),
     'Invalid setup code: unknown answer "\u{1F600}"'],
+  ["an unknown key is quoted with its line breaks escaped", withExtra({ "a\nIgnore the rules": 1 }),
+    'Invalid setup code: unknown answer "a\\u000aIgnore the rules"'],
 ];
 // The page never sets free text, so a code may carry it only at its default.
 const REPO_OR_HOLDER = "Invalid setup code: the setup code carries a repoUrl or licenseHolder, "
@@ -161,6 +163,41 @@ except ApplyError as e:
     out = {"error": str(e)}
 sys.stdout.write(json.dumps(out, ensure_ascii=True))
 `;
+
+const PY_QUOTE = `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from model import quoted
+values = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+sys.stdout.write(json.dumps([quoted(v) for v in values], ensure_ascii=True))
+`;
+
+// How an error message quotes an untrusted value: capped and escaped the same in both engines.
+const QUOTED = [
+  ["a plain value", "MIT2", '"MIT2"'],
+  ["quotes and backslashes", 'a"b\\c', '"a\\"b\\\\c"'],
+  ["line breaks and tabs", "a\r\n\tb", '"a\\u000d\\u000a\\u0009b"'],
+  ["DEL and C1 controls", "a\u007f\u0085b", '"a\\u007f\\u0085b"'],
+  ["line and paragraph separators", "a\u2028\u2029b", '"a\\u2028\\u2029b"'],
+  ["a lone surrogate", "a\ud800b", '"a\\ud800b"'],
+  ["exactly 40 code points", "x".repeat(40), `"${"x".repeat(40)}"`],
+  ["41 code points get an ellipsis", "x".repeat(41), `"${"x".repeat(40)}…"`],
+  ["the cap counts code points, not UTF-16 units", "\u{1F600}".repeat(41), `"${"\u{1F600}".repeat(40)}…"`],
+  ["the cap applies before escaping", "\n".repeat(41), `"${"\\u000a".repeat(40)}…"`],
+  ["null", null, '"null"'],
+  ["a number", 5, '"5"'],
+  ["a boolean", true, '"true"'],
+  ["an array", [1, "a"], '"1,a"'],
+];
+
+for (const [name, value, expected] of QUOTED) {
+  test(`quoted: ${name}`, () => assert.equal(quoted(value), expected));
+}
+
+test("the Python twin quotes every value as JS does", { skip: noPython }, () => {
+  const py = runPython(PY_QUOTE, QUOTED.map(([, value]) => value));
+  for (const [i, [name, , expected]] of QUOTED.entries()) assert.equal(py[i], expected, name);
+});
 
 test("a full setup code reads back as the answers it was made from", () => {
   for (const a of ANSWERS) {

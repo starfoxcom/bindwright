@@ -125,6 +125,24 @@ function check(cond, msg) {
   if (!cond) throw new Error(`Invalid answers: ${msg}`);
 }
 
+const QUOTE_MAX = 40;
+
+// An untrusted value as a message quotes it: at most QUOTE_MAX code points, then
+// an ellipsis, with quotes, backslashes, control characters, line separators and
+// lone surrogates escaped, so a tampered answer cannot break the message's lines.
+// The Python twin (model.py quoted) gives the same text.
+export function quoted(value) {
+  const points = Array.from(String(value));
+  const shown = points.slice(0, QUOTE_MAX).map((ch) => {
+    const code = ch.codePointAt(0);
+    if (ch === '"' || ch === "\\") return `\\${ch}`;
+    const unsafe = code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029
+      || (code >= 0xd800 && code <= 0xdfff);
+    return unsafe ? `\\u${code.toString(16).padStart(4, "0")}` : ch;
+  }).join("");
+  return `"${shown}${points.length > QUOTE_MAX ? "…" : ""}"`;
+}
+
 // Own keys only, so "toString" is not a license. The Python twin
 // (model.py) has no prototype chain; this keeps the two in step.
 const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
@@ -150,8 +168,8 @@ export function validate(saved) {
     "project name must be 1-64 letters, digits, dot, dash or underscore");
   check(typeof a.project.repoUrl === "string" && typeof a.project.licenseHolder === "string",
     "repoUrl and licenseHolder must be text");
-  check(own(LICENSES, a.project.license), `unknown license "${a.project.license}"`);
-  check(own(CODE_RESEARCH_TOOLS, adv.codeResearch), `unknown code-research tool "${adv.codeResearch}"`);
+  check(own(LICENSES, a.project.license), `unknown license ${quoted(a.project.license)}`);
+  check(own(CODE_RESEARCH_TOOLS, adv.codeResearch), `unknown code-research tool ${quoted(adv.codeResearch)}`);
   const custom = adv.codeResearchCustom;
   if (adv.codeResearch === "custom") {
     check(custom !== null && typeof custom === "object" && !Array.isArray(custom) &&
@@ -165,14 +183,14 @@ export function validate(saved) {
     check(custom === null || custom === undefined, 'codeResearchCustom is only for codeResearch "custom"');
   }
   check(adv.precommit === "none" || PRECOMMIT_MANAGERS.includes(adv.precommit),
-    `unknown pre-commit manager "${adv.precommit}"`);
-  check(ARCHITECTURES.includes(adv.architecture), `unknown architecture "${adv.architecture}"`);
-  check(["gitflow", "trunk"].includes(adv.branching), `unknown branching model "${adv.branching}"`);
-  check(MERGE_STYLES.includes(adv.mergeStyle), `unknown merge style "${adv.mergeStyle}"`);
+    `unknown pre-commit manager ${quoted(adv.precommit)}`);
+  check(ARCHITECTURES.includes(adv.architecture), `unknown architecture ${quoted(adv.architecture)}`);
+  check(["gitflow", "trunk"].includes(adv.branching), `unknown branching model ${quoted(adv.branching)}`);
+  check(MERGE_STYLES.includes(adv.mergeStyle), `unknown merge style ${quoted(adv.mergeStyle)}`);
   check(typeof adv.devIsDefault === "boolean", "devIsDefault must be true or false");
-  check(HOOK_LOCATIONS.includes(adv.hookLocation), `unknown hook location "${adv.hookLocation}"`);
+  check(HOOK_LOCATIONS.includes(adv.hookLocation), `unknown hook location ${quoted(adv.hookLocation)}`);
   check(typeof adv.attributionGuard === "boolean", "attributionGuard must be true or false");
-  check(DENY_PROFILES.includes(adv.denyProfile), `unknown deny profile "${adv.denyProfile}"`);
+  check(DENY_PROFILES.includes(adv.denyProfile), `unknown deny profile ${quoted(adv.denyProfile)}`);
   // Each glob lands in a double-quoted YAML string, so quotes, backslashes
   // and control characters are refused rather than escaped.
   check(adv.shippedTextPaths === null || (Array.isArray(adv.shippedTextPaths) && adv.shippedTextPaths.length > 0 &&
@@ -180,7 +198,7 @@ export function validate(saved) {
       /^[^"\\\x00-\x1f\x7f]{1,200}$/.test(g) && g.trim() === g)),
   "shippedTextPaths must be null or a non-empty list of globs "
   + "without quotes, backslashes, line breaks or outer spaces");
-  check(TRACKERS.includes(adv.tracker), `unknown tracker "${adv.tracker}"`);
+  check(TRACKERS.includes(adv.tracker), `unknown tracker ${quoted(adv.tracker)}`);
   if (adv.tracker === "github") {
     check(adv.trackerProject === null ||
       (typeof adv.trackerProject === "string" && TRACKER_PROJECT.test(adv.trackerProject)),
