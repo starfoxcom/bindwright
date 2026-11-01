@@ -6,6 +6,8 @@ import base64
 import json
 import re
 
+from model import defaults
+
 PREFIX = "bw1-"
 # Real answers encode to about 1 KB and nest three levels deep. The caps keep
 # a huge code from reaching the JSON reader, and a deep one from Python's,
@@ -48,6 +50,21 @@ def _depth(text):
     return deepest
 
 
+def _refuse_unknown_keys(answers):
+    """A page-made answer set holds the same keys at every team, client and
+    private combination; any other key is refused. Checked on decode only, so
+    saved project.json files that hold keys since dropped still load."""
+    known = defaults()
+    levels = [("answer", answers, known), ("project answer", answers.get("project"), known["project"]),
+              ("advanced answer", answers.get("advanced"), known["advanced"])]
+    for label, part, dflt in levels:
+        if not isinstance(part, dict):
+            continue
+        unknown = next((key for key in part if key not in dflt), None)
+        if unknown is not None:
+            _fail('unknown %s "%s"' % (label, unknown))
+
+
 def decode_setup_code(code):
     if not isinstance(code, str) or not code.startswith(PREFIX):
         _fail("it must start with " + PREFIX)
@@ -71,4 +88,5 @@ def decode_setup_code(code):
         _fail("it does not hold UTF-8 JSON")
     if not isinstance(answers, dict):
         _fail("the answers must be an object")
+    _refuse_unknown_keys(answers)
     return answers

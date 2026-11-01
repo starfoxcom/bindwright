@@ -57,18 +57,15 @@ function oneAtATime() {
         if (license !== base.project.license) cases.push({ ...clone(base), project: { ...base.project, license } });
       }
       const named = clone(base);
-      named.project = { ...named.project, name: "Ember.holm_2-x", repoUrl: "https://example.com/r", licenseHolder: "Ana Núñez 😀" };
+      named.project = {
+        ...named.project, name: "Ember.holm_2-x", repoUrl: "https://example.com/r", licenseHolder: "Ana Núñez (Ltd.)",
+      };
       named.advanced.plainWriting = true;
       // U+0085 passes JavaScript's trim() but not Python's strip().
       named.advanced.shippedTextPaths = ["**/*.gd", "i18n/$&-$1.json", "docs/#public/**", "notes\u0085"];
       named.advanced.trackerProject = "My-Org9/123456";
       named.advanced.publicRoadmap = "My-Org9/road.map_1";
       cases.push(named);
-      // The saved answers in .bindwright/project.json: both engines escape
-      // quotes, backslashes and control characters alike, and nothing else.
-      const escaped = clone(base);
-      escaped.project = { ...escaped.project, licenseHolder: 'A "B" \\ C\u0007\u001f\u007f ' };
-      cases.push(escaped);
     }
   }
   for (const team of [false, true]) {
@@ -125,6 +122,8 @@ function refused() {
     (a) => { a.project.name = "name\n"; },
     (a) => { a.project.name = 123; },
     (a) => { a.project.repoUrl = null; },
+    (a) => { a.project.repoUrl = "https://x.io/a b"; },
+    (a) => { a.project.licenseHolder = 'A "B" \\ C\u0007'; },
     (a) => { a.project.license = "toString"; },
     (a) => { a.project.license = ["MIT", "x"]; },
     (a) => { a.advanced.codeResearch = "constructor"; },

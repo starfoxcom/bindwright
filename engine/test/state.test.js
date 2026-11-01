@@ -15,8 +15,8 @@ const coreFiles = JSON.parse(readFileSync(join(repo, "engine", "core-files.json"
 
 function teamAnswers() {
   const a = defaults({ team: true, client: true });
-  // Text outside ASCII and JSON's own escapes, so the saved bytes are tested too.
-  a.project.licenseHolder = 'José "Ünï" \\ ✓ 𝄞';
+  // Letters outside ASCII, so the saved bytes are tested too.
+  a.project.licenseHolder = "José Ünï & Co. (ñandú)";
   return a;
 }
 

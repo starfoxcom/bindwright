@@ -74,6 +74,21 @@ export function encodeSetupCode(answers, { full = false } = {}) {
   return PREFIX + btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// A page-made answer set holds the same keys at every team, client and private
+// combination, so any other key is refused: a code cannot carry text the setup
+// did not choose. Checked here, not in validate, so saved project.json files
+// that hold keys since dropped still load.
+function refuseUnknownKeys(answers) {
+  const known = defaults();
+  const levels = [["answer", answers, known], ["project answer", answers.project, known.project],
+    ["advanced answer", answers.advanced, known.advanced]];
+  for (const [label, part, dflt] of levels) {
+    if (!isObjectLike(part) || Array.isArray(part)) continue;
+    const unknown = Object.keys(part).find((key) => !Object.hasOwn(dflt, key));
+    if (unknown !== undefined) fail(`unknown ${label} "${unknown}"`);
+  }
+}
+
 export function decodeSetupCode(code) {
   if (typeof code !== "string" || !code.startsWith(PREFIX)) fail(`it must start with ${PREFIX}`);
   const body = code.slice(PREFIX.length);
@@ -94,5 +109,6 @@ export function decodeSetupCode(code) {
     fail("it does not hold UTF-8 JSON");
   }
   if (answers === null || typeof answers !== "object" || Array.isArray(answers)) fail("the answers must be an object");
+  refuseUnknownKeys(answers);
   return answers;
 }
