@@ -1,10 +1,10 @@
 // The page's state and controls. The engine's own model holds the answers,
 // so the page and /bindwright:setup always start from the same defaults.
-import { defaults } from "../engine/model.js";
+import { defaults, expandAnswers, validate } from "../engine/model.js";
 import { repoFiles, byFolder } from "./files.js";
 import { summarize } from "./summary.js";
 import { t } from "./i18n/index.js";
-import { encodeSetupCode } from "../engine/setupcode.js";
+import { decodeSetupCode, encodeSetupCode } from "../engine/setupcode.js";
 
 // One accent hue per setup (docs/v2/DESIGN.md).
 const HUES = { "false,false": 150, "true,false": 200, "false,true": 70, "true,true": 340 };
@@ -140,8 +140,16 @@ function buildSteps() {
   $("steps").replaceChildren(...dots);
 }
 
+// The setup command for the answers, or null when their code fails the same
+// checks setup runs, so tampered page state never shows a command to paste.
 function commandLine() {
-  return `/bindwright:setup ${encodeSetupCode(answers)}`;
+  const code = encodeSetupCode(answers);
+  try {
+    validate(expandAnswers(decodeSetupCode(code)));
+  } catch {
+    return null;
+  }
+  return `/bindwright:setup ${code}`;
 }
 
 const COPY_FEEDBACK_MS = 1500;
@@ -181,7 +189,8 @@ async function copyBoxText(button, code, text) {
 }
 
 function copyCommand() {
-  return copyBoxText($("copy"), $("cmd-text"), commandLine());
+  const line = commandLine();
+  if (line) copyBoxText($("copy"), $("cmd-text"), line);
 }
 
 function render() {
@@ -271,7 +280,9 @@ function showResults() {
   drawTree();
   drawFile();
   $("files").classList.remove("reading");
-  $("cmd-text").textContent = commandLine();
+  const line = commandLine();
+  $("cmd-text").textContent = line ?? t("command.refused");
+  $("copy").disabled = line === null;
   showView("result");
   $("status").textContent = t("status.updated");
 }

@@ -6,6 +6,8 @@ import base64
 import json
 import re
 
+from model import defaults
+
 PREFIX = "bw1-"
 # Real answers encode to about 1 KB and nest three levels deep. The caps keep
 # a huge code from reaching the JSON reader, and a deep one from Python's,
@@ -48,6 +50,35 @@ def _depth(text):
     return deepest
 
 
+def _refuse_unknown_keys(answers):
+    """A page-made answer set holds the same keys at every team, client and
+    private combination; any other key is refused. Checked on decode only, so
+    saved project.json files that hold keys since dropped still load. The
+    first unknown key in UTF-16 order is named, so the JS twin names the same one."""
+    known = defaults()
+    levels = [("answer", answers, known), ("project answer", answers.get("project"), known["project"]),
+              ("advanced answer", answers.get("advanced"), known["advanced"])]
+    for label, part, dflt in levels:
+        if not isinstance(part, dict):
+            continue
+        unknown = sorted((key for key in part if key not in dflt),
+                         key=lambda key: key.encode("utf-16-be", "surrogatepass"))
+        if unknown:
+            _fail('unknown %s "%s"' % (label, unknown[0]))
+
+
+def _refuse_free_text(answers):
+    """The page never sets free text, so a code that carries any was edited: the project
+    strings must be empty and the custom tool and path values must be None."""
+    project = answers.get("project")
+    if isinstance(project, dict) and any(key in project and project[key] != "" for key in ("repoUrl", "licenseHolder")):
+        _fail("the setup code carries a repoUrl or licenseHolder, which the page never sets")
+    advanced = answers.get("advanced")
+    if isinstance(advanced, dict) and any(
+            advanced.get(key) is not None for key in ("codeResearchCustom", "shippedTextPaths")):
+        _fail("the setup code carries custom tool or path text, which the page never sets")
+
+
 def decode_setup_code(code):
     if not isinstance(code, str) or not code.startswith(PREFIX):
         _fail("it must start with " + PREFIX)
@@ -71,4 +102,6 @@ def decode_setup_code(code):
         _fail("it does not hold UTF-8 JSON")
     if not isinstance(answers, dict):
         _fail("the answers must be an object")
+    _refuse_unknown_keys(answers)
+    _refuse_free_text(answers)
     return answers

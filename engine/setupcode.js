@@ -74,6 +74,37 @@ export function encodeSetupCode(answers, { full = false } = {}) {
   return PREFIX + btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// A page-made answer set holds the same keys at every team, client and private
+// combination, so any other key is refused: a code cannot carry text the setup
+// did not choose. Checked here, not in validate, so saved project.json files
+// that hold keys since dropped still load. The first unknown key in UTF-16
+// order is named, so the Python twin names the same one.
+function refuseUnknownKeys(answers) {
+  const known = defaults();
+  const levels = [["answer", answers, known], ["project answer", answers.project, known.project],
+    ["advanced answer", answers.advanced, known.advanced]];
+  for (const [label, part, dflt] of levels) {
+    if (!isObjectLike(part) || Array.isArray(part)) continue;
+    const unknown = Object.keys(part).filter((key) => !Object.hasOwn(dflt, key)).sort()[0];
+    if (unknown !== undefined) fail(`unknown ${label} "${unknown}"`);
+  }
+}
+
+// The page never sets free text, so a code that carries any was edited: the project
+// strings must be empty and the custom tool and path values must be null.
+function refuseFreeText(answers) {
+  const isPlainObject = (x) => isObjectLike(x) && !Array.isArray(x);
+  const { project, advanced } = answers;
+  const carriesFreeText = (key) => key in project && project[key] !== "";
+  if (isPlainObject(project) && ["repoUrl", "licenseHolder"].some(carriesFreeText)) {
+    fail("the setup code carries a repoUrl or licenseHolder, which the page never sets");
+  }
+  const carriesCustomText = (key) => advanced[key] !== undefined && advanced[key] !== null;
+  if (isPlainObject(advanced) && ["codeResearchCustom", "shippedTextPaths"].some(carriesCustomText)) {
+    fail("the setup code carries custom tool or path text, which the page never sets");
+  }
+}
+
 export function decodeSetupCode(code) {
   if (typeof code !== "string" || !code.startsWith(PREFIX)) fail(`it must start with ${PREFIX}`);
   const body = code.slice(PREFIX.length);
@@ -94,5 +125,7 @@ export function decodeSetupCode(code) {
     fail("it does not hold UTF-8 JSON");
   }
   if (answers === null || typeof answers !== "object" || Array.isArray(answers)) fail("the answers must be an object");
+  refuseUnknownKeys(answers);
+  refuseFreeText(answers);
   return answers;
 }

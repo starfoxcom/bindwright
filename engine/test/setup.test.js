@@ -22,7 +22,7 @@ const noPython = !python && "needs Python 3.8+";
 const codeOf = (text) => PREFIX + Buffer.from(text).toString("base64url");
 const named = () => {
   const a = defaults({ team: true, client: true });
-  a.project = { ...a.project, name: "Ember.holm_2-x", licenseHolder: "Ana Núñez 😀" };
+  a.project = { ...a.project, name: "Ember.holm_2-x" };
   return a;
 };
 const ANSWERS = [defaults(), defaults({ team: true }), named()];
@@ -68,8 +68,48 @@ const BAD = [
 ];
 // Codes both decoders accept that the page would never make.
 const ODD = [
-  codeOf("\ufeff{}"), codeOf(" {} "), codeOf('{"a":1,"a":2}'), codeOf('{"a":"\\ud800"}'),
-  codeOf(`{"a":"${"[".repeat(100)}"}`), codeOf(`{"a":"\\"${"{".repeat(100)}"}`),
+  codeOf("\ufeff{}"), codeOf(" {} "), codeOf('{"team":true,"team":false}'), codeOf('{"project":{"name":"\\ud800"}}'),
+  codeOf(`{"project":{"name":"${"[".repeat(100)}"}}`), codeOf(`{"project":{"name":"\\"${"{".repeat(100)}"}}`),
+];
+// One code per level that carries a key a page-made answer set never holds.
+const withExtra = (extra) => codeOf(JSON.stringify({ ...defaults(), ...extra }));
+const withProject = (project) => withExtra({ project: { ...defaults().project, ...project } });
+const withAdvanced = (advanced) => withExtra({ advanced: { ...defaults().advanced, ...advanced } });
+const UNKNOWN_KEYS = [
+  ["an unknown top-level answer is refused", withExtra({ extra: 1 }),
+    'Invalid setup code: unknown answer "extra"'],
+  ["an unknown project answer is refused", withProject({ extra: 1 }),
+    'Invalid setup code: unknown project answer "extra"'],
+  ["an unknown advanced answer is refused", withAdvanced({ extra: 1 }),
+    'Invalid setup code: unknown advanced answer "extra"'],
+  ["the top level is checked before project", withExtra({ project: { ...defaults().project, p: 1 }, extra: 1 }),
+    'Invalid setup code: unknown answer "extra"'],
+  ["the alphabetically first unknown advanced key is named", withAdvanced({ zeta: 1, alpha: 2 }),
+    'Invalid setup code: unknown advanced answer "alpha"'],
+  ["an integer-like unknown key is named as the JS sort names it", withExtra({ zeta: 1, 5: 2 }),
+    'Invalid setup code: unknown answer "5"'],
+  ["an integer-like unknown project key is named the same way", withProject({ zeta: 1, 5: 2 }),
+    'Invalid setup code: unknown project answer "5"'],
+  ["a key past U+FFFF sorts by UTF-16 unit, before U+FFFF itself", withExtra({ "\uffff": 1, "\u{1F600}": 2 }),
+    'Invalid setup code: unknown answer "\u{1F600}"'],
+];
+// The page never sets free text, so a code may carry it only at its default.
+const REPO_OR_HOLDER = "Invalid setup code: the setup code carries a repoUrl or licenseHolder, "
+  + "which the page never sets";
+const CUSTOM_TEXT = "Invalid setup code: the setup code carries custom tool or path text, "
+  + "which the page never sets";
+const FREE_TEXT = [
+  ["a repoUrl is refused", withProject({ repoUrl: "https://example.com/r" }), REPO_OR_HOLDER],
+  ["a licenseHolder is refused", withProject({ licenseHolder: "Ana Núñez" }), REPO_OR_HOLDER],
+  ["codeResearchCustom is refused", withAdvanced({ codeResearchCustom: { name: "x", url: "https://x.io" } }),
+    CUSTOM_TEXT],
+  ["shippedTextPaths is refused", withAdvanced({ shippedTextPaths: ["**/*.gd"] }), CUSTOM_TEXT],
+];
+const DEFAULT_FREE_TEXT = [
+  ["repoUrl at its default is accepted", withProject({ repoUrl: "" })],
+  ["licenseHolder at its default is accepted", withProject({ licenseHolder: "" })],
+  ["codeResearchCustom at its default is accepted", withAdvanced({ codeResearchCustom: null })],
+  ["shippedTextPaths at its default is accepted", withAdvanced({ shippedTextPaths: null })],
 ];
 
 function decodeJs(code) {
@@ -166,8 +206,18 @@ test("bad setup codes are refused with a message that says why", () => {
   for (const code of ODD) assert.ok(decodeJs(code).answers, code);
 });
 
+for (const [name, code, message] of [...UNKNOWN_KEYS, ...FREE_TEXT]) {
+  test(name, () => assert.deepEqual(decodeJs(code), { error: message }));
+}
+
+for (const [name, code] of DEFAULT_FREE_TEXT) {
+  test(name, () => assert.ok(decodeJs(code).answers));
+}
+
 test("the Python decoder reads every code as the JS decoder does", { skip: noPython }, () => {
-  const codes = [...ANSWERS.map(encodeSetupCode), ...BAD.map(([code]) => code), ...ODD];
+  const codes = [...ANSWERS.map(encodeSetupCode), ...BAD.map(([code]) => code), ...ODD,
+    ...UNKNOWN_KEYS.map(([, code]) => code), ...FREE_TEXT.map(([, code]) => code),
+    ...DEFAULT_FREE_TEXT.map(([, code]) => code)];
   const py = runPython(PY_DECODE, codes);
   for (const [i, code] of codes.entries()) assert.deepEqual(py[i], decodeJs(code), String(code).slice(0, 80));
 });
