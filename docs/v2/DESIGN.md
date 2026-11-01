@@ -4,7 +4,7 @@ Approved direction, 2026-09-23. `mockup.html` is the reference. This file holds 
 
 ## Idea
 
-The main page is a landing page. Most visitors do not know what a rule file or a hook is; they want Claude Code to work better on their project. The first screen has 3 to 5 seconds to say what they get, so it leads with the outcome: a plain promise, one button, and a short clip of a real session with and without Bindwright (decided 2026-10-31, replacing the 2026-09-23 idea of the file tree as the hero). The setup follows below: the two questions and a plain "What you get" list. The file tree and preview stay one click deeper ("Show the files") for people who want to read the files.
+The main page is a landing page. Most visitors do not know what a rule file or a hook is; they want Claude Code to work better on their project. The first screen has 3 to 5 seconds to say what they get, so it leads with the outcome: a plain promise, one button, and a short clip of a real session with and without Bindwright (decided 2026-10-31, replacing the 2026-09-23 idea of the file tree as the hero). The setup follows below: three questions, one at a time, then a plain "What you get" view of cards. The file tree and preview stay one click deeper, behind an Overview / Files switch, for people who want to read the files.
 
 Controls feel physical, like keys on a keyboard or a synth. Color is used for one thing only: showing which setup you are building.
 
@@ -51,8 +51,8 @@ Radii: 12 px for keys and buttons, 18 px for panels. No other values.
 
 - First screen (desktop): the promise, one line under it, the primary button ("Set up my project") and the clip beside them. Nothing technical: no file names, paths or setting keys.
 - Then the benefits, each one outcome in plain words.
-- Then the setup: the two questions on the left, "What you get" on the right, with the file tree behind "Show the files".
-- Mobile: one column, the clip under the button. The setup's result collapses into a sticky bottom bar that opens a sheet with a visible close button.
+- Then the setup, in one place that changes view: the questions, then a short animation while the setup is put together, then "What you get" with the Overview / Files switch, "Edit my answers" and "Start over", and the commands to paste last.
+- Mobile: one column, the clip under the button. In the file view, folders fold and a tapped file opens full width with a way back to the list.
 
 ## Rules that keep it from looking generated
 

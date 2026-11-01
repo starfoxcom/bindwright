@@ -21,7 +21,7 @@ Rename the project to **Bindwright** and rebuild it so the path from "land on th
 | Name | Bindwright. "for Claude Code" only as descriptive text, never in the name or logo. |
 | Page tech | Plain HTML, CSS and JS. No React, no in-browser Babel, no build step. |
 | Look | Dark graphite with tactile key controls. The answer combo's hue is the only accent. See `DESIGN.md` and `mockup.html`. |
-| Choices | Two questions (just me or a team; my project or a client's) plus an Advanced drawer with at most seven switches. |
+| Choices | Three questions (just me or a team; mine or someone else's; private or public) plus an Advanced drawer with at most seven switches. |
 | Bind | Deterministic. Decided 2026-09-24: Bindwright ships as a Claude Code plugin. The page ends in a setup code; `/bindwright:setup <code>` renders `_core/` in the repo with the plugin's own engine and templates, then does the judgment work (merge existing `CLAUDE.md`, README and friends, fill real lint and test commands, trim the code-size table to the repo's languages, offer the `~/.claude` extras). A zip download stays as the fallback for people without plugins. |
 | Previews | Three live panes on the page: (1) the files the setup produces; (2) a small TypeScript demo app with planted problems, shown before and after for every setting that has a visible effect, as red and green diffs; (3) a Claude Code terminal replay of skills and rules in action, with and without Bindwright, chosen from a list of scenario prompts. Panes 2 and 3 come only from real recorded runs: session logs replayed as a terminal chat, never hand-written. Each recording stores a hash of the files it exercised, and a test fails when they change so stale demos cannot ship. |
 | Plugin lifecycle | `/bindwright:update` rebuilds with the answers saved in `.bindwright/` and a three-way merge against the stored pristine render, so hand edits are never overwritten silently. A once-a-day SessionStart notice (cached, silent offline) says when the plugin or the repo's files are behind. `/bindwright:audit` reads recent session logs, measures how the rules hold up, and proposes exact edits that apply only on approval. |
@@ -81,7 +81,7 @@ Until Phase 3 lands, the current page (`index.html`, `redesign/*.jsx`) and `SETU
 ### Phase 3: the page
 Built in visual slices of about 150 lines each, checked locally by the maintainer before any push.
 - [ ] Shell, tokens, fonts, header, theme, and the landing screen: a plain promise, one button, the clip slot and what changes (decided 2026-10-31: the page is a landing page that has to hook a visitor in 3 to 5 seconds; see `DESIGN.md`).
-- [ ] Two-question picker with key controls and the hue accent.
+- [ ] Three-question setup, one question at a time, with key controls and the hue accent.
 - [ ] "What you get": the renderer's files as a few plain groups (what each does for the project), with the file tree and preview behind an Overview / Files switch.
 - [x] Demo project (`demo/`): a small TypeScript app with one planted problem per rule that has a visible effect. The list of planted problems lives in `recordings/planted.json`, outside `demo/`, so a recorded session cannot read it; `engine/test/demo.test.js` fails when one is no longer there.
 - [ ] Recording harness: headless Claude Code runs per scenario, with and without Bindwright, saved as sanitized replay data with the staleness hash test.
