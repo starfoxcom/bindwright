@@ -225,7 +225,8 @@ def typescript_functions(lizard, full):
     # object type inside a generic (Promise<{ a: string }>), and folds the
     # functions after it into one. Reading each top-level statement on its own
     # keeps a misread inside that statement.
-    with open(full, encoding="utf-8") as f:
+    # As lizard reads a file: a byte that is not UTF-8 never stops the check, and a BOM is dropped.
+    with open(full, encoding="utf-8-sig", errors="replace") as f:
         text = f.read()
     return [fn for chunk in top_level_chunks(text)
             for fn in lizard.analyze_file.analyze_source_code(full, chunk).function_list]

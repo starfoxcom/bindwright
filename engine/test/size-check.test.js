@@ -224,6 +224,14 @@ test("the shipped rule's tables parse: named rows, Other, and spaced thousands",
   assert.doesNotMatch(r.out, /d\.ts/);
 });
 
+test("a TypeScript file that is not UTF-8 is measured, not a crash", { skip }, () => {
+  const { root } = makeRepo({ "a.ts": Buffer.from("// caf\xe9\nconst a = 1\n", "latin1") },
+    readFileSync(RULE, "utf8"));
+  const r = check(root, [], { stub: { "a.ts": [{ name: "big", length: 101 }] } });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /a\.ts: function big = 101 \(hard limit 100\)/);
+});
+
 // Calls one function of the shipped script with a JSON argument and returns its JSON result.
 function scriptCall(expr, arg) {
   const code = `import json, sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n`
