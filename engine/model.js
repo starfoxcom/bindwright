@@ -57,16 +57,20 @@ export const DEFERRED = new Set([
   "LEAD_USER", "TEAM_OR_USER",
 ]);
 
-export function defaults({ team = false, client = false } = {}) {
+export function defaults({ team = false, client = false, isPrivate = client } = {}) {
   return {
     team, client,
-    project: { name: "my-project", repoUrl: "", licenseHolder: "", license: client ? "Proprietary" : "MIT" },
+    private: isPrivate,
+    project: {
+      name: "my-project", repoUrl: "", licenseHolder: "",
+      license: client || isPrivate ? "Proprietary" : "MIT",
+    },
     advanced: {
       aiReview: true,
       deepEscalation: team,
       precommit: team ? "lefthook" : "none",
       uiRule: false,
-      confidentiality: client,
+      confidentiality: client && isPrivate,
       cleanRoom: false,
       plainWriting: false,
       codeResearch: "none",
@@ -107,11 +111,15 @@ const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProp
 
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 
-export function validate(a) {
+export function validate(saved) {
   // Setup codes carry answers from outside the page, so the shape comes first.
-  check(isObject(a) && isObject(a.project) && isObject(a.advanced), "the answers must hold project and advanced objects");
+  check(isObject(saved) && isObject(saved.project) && isObject(saved.advanced),
+    "the answers must hold project and advanced objects");
+  // Answers saved before the private question existed count as private = client.
+  const a = { ...saved, private: own(saved, "private") ? saved.private : saved.client };
   const adv = a.advanced;
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
+  check(typeof a.private === "boolean", "private must be true or false");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
@@ -155,6 +163,26 @@ export function validate(a) {
   return a;
 }
 
+// The keys of `part` plus each default key it lacks, in the defaults' order so
+// the answers stringify as a page-made set does. A part that is not an object
+// is returned as it is, so validate reports it.
+function fillKeys(part, dflt) {
+  if (part === undefined) return dflt;
+  if (!isObject(part) || Object.keys(dflt).every((key) => own(part, key))) return part;
+  const keys = [...Object.keys(dflt), ...Object.keys(part).filter((key) => !own(dflt, key))];
+  return Object.fromEntries(keys.map((key) => [key, own(part, key) ? part[key] : dflt[key]]));
+}
+
+// Fills the project and advanced keys a setup code leaves out with the defaults
+// for its three answers. Full answers come back unchanged. A missing private
+// counts as client, as validate reads it.
+export function expandAnswers(saved) {
+  if (!isObject(saved)) return saved;
+  const { project, advanced, ...rest } = own(saved, "private") ? saved : { ...saved, private: saved.client };
+  const base = defaults({ team: rest.team, client: rest.client, isPrivate: rest.private });
+  return { ...rest, project: fillKeys(project, base.project), advanced: fillKeys(advanced, base.advanced) };
+}
+
 // Every toggle name the templates use must resolve here to true or false.
 export function flagsFor(a) {
   const adv = a.advanced;
@@ -176,7 +204,8 @@ export function flagsFor(a) {
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     contributing_md: a.team,
-    audit_trail_commits: a.client,
+    license_file: !a.client,
+    audit_trail_commits: a.client && a.private,
     definition_of_done_verification: true,
     lazy_rules_folder: true,
     memory_system: true,

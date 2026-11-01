@@ -92,16 +92,22 @@ def utf16_len(s):
     return len(s.encode("utf-16-le", "surrogatepass")) // 2
 
 
-def defaults(team=False, client=False):
+def defaults(team=False, client=False, private=None):
+    # None means the same as client, as answers saved before the question read.
+    if private is None:
+        private = client
     return {
-        "team": team, "client": client,
-        "project": {"name": "my-project", "repoUrl": "", "licenseHolder": "", "license": "Proprietary" if client else "MIT"},
+        "team": team, "client": client, "private": private,
+        "project": {
+            "name": "my-project", "repoUrl": "", "licenseHolder": "",
+            "license": "Proprietary" if client or private else "MIT",
+        },
         "advanced": {
             "aiReview": True,
             "deepEscalation": team,
             "precommit": "lefthook" if team else "none",
             "uiRule": False,
-            "confidentiality": client,
+            "confidentiality": client and private,
             "cleanRoom": False,
             "plainWriting": False,
             "codeResearch": "none",
@@ -165,14 +171,20 @@ def _check_custom_tool(tool, custom):
         _check(custom is None or custom is UNDEFINED, 'codeResearchCustom is only for codeResearch "custom"')
 
 
-def validate(a):
+def validate(saved):
     # Setup codes carry answers from outside the page, so the shape comes first.
-    _check(isinstance(a, dict) and isinstance(a.get("project"), dict) and isinstance(a.get("advanced"), dict),
-           "the answers must hold project and advanced objects")
+    has_parts = (isinstance(saved, dict) and isinstance(saved.get("project"), dict)
+                 and isinstance(saved.get("advanced"), dict))
+    _check(has_parts, "the answers must hold project and advanced objects")
+    # Answers saved before the private question existed count as private = client.
+    a = dict(saved)
+    if "private" not in a:
+        a["private"] = a.get("client", UNDEFINED)
     adv = a["advanced"]
     project = a["project"]
     get = lambda d, k: d.get(k, UNDEFINED)
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
+    _check(_is_bool(get(a, "private")), "private must be true or false")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting", "codeSizeCheck", "handoffFile"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
@@ -223,6 +235,37 @@ def _check_tracker(tracker, board):
         _check(board is None or board is UNDEFINED, 'trackerProject is only for tracker "github"')
 
 
+def _given(d, key):
+    """d[key] as JavaScript reads it: a missing key counts as its default."""
+    return False if d.get(key, UNDEFINED) is UNDEFINED else d[key]
+
+
+def _fill_keys(part, dflt):
+    """The keys of part plus each default key it lacks. A part that is not an
+    object is returned as it is, so validate reports it."""
+    if part is UNDEFINED:
+        return dflt
+    if not isinstance(part, dict) or all(key in part for key in dflt):
+        return part
+    keys = list(dflt) + [key for key in part if key not in dflt]
+    return {key: part[key] if key in part else dflt[key] for key in keys}
+
+
+def expand_answers(saved):
+    """Fills the project and advanced keys a setup code leaves out with the
+    defaults for its three answers. Full answers come back unchanged."""
+    if not isinstance(saved, dict):
+        return saved
+    a = dict(saved)
+    if "private" not in a:
+        a["private"] = a.get("client", UNDEFINED)
+    base = defaults(team=_given(a, "team"), client=_given(a, "client"),
+                    private=_given(a, "private"))
+    project, advanced = a.pop("project", UNDEFINED), a.pop("advanced", UNDEFINED)
+    return dict(a, project=_fill_keys(project, base["project"]),
+                advanced=_fill_keys(advanced, base["advanced"]))
+
+
 # Every toggle name the templates use must resolve here to True or False.
 def flags_for(a):
     adv = a["advanced"]
@@ -244,7 +287,8 @@ def flags_for(a):
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
         "contributing_md": a["team"],
-        "audit_trail_commits": a["client"],
+        "license_file": not a["client"],
+        "audit_trail_commits": a["client"] and a["private"],
         "definition_of_done_verification": True,
         "lazy_rules_folder": True,
         "memory_system": True,

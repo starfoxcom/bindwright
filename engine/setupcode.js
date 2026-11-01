@@ -1,6 +1,10 @@
 // The setup code the page hands to /bindwright:setup: "bw1-" followed by the
-// answers as UTF-8 JSON in base64url without padding. The Python twin
+// answers as UTF-8 JSON in base64url without padding. A code carries the three
+// answers plus only the project and advanced values that differ from the
+// defaults; expandAnswers (model.js) fills the rest. The Python twin
 // (setupcode.py) decodes it with the same checks and messages.
+
+import { defaults } from "./model.js";
 
 export const PREFIX = "bw1-";
 // Real answers encode to about 1 KB and nest three levels deep. The caps keep
@@ -31,8 +35,40 @@ export function depthOf(text) {
   return deepest;
 }
 
-export function encodeSetupCode(answers) {
-  const bytes = new TextEncoder().encode(JSON.stringify(answers));
+const isObjectLike = (x) => x !== null && typeof x === "object";
+
+// Deep equality for the JSON values answers hold.
+function same(a, b) {
+  if (a === b) return true;
+  if (!isObjectLike(a) || !isObjectLike(b) || Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
+}
+
+// The keys of `part` whose values differ from the default part's.
+function changedKeys(part, dflt) {
+  const diff = {};
+  for (const [key, value] of Object.entries(part)) {
+    if (!same(value, Object.hasOwn(dflt, key) ? dflt[key] : undefined)) diff[key] = value;
+  }
+  return diff;
+}
+
+// The three answers, and project and advanced only where something differs.
+function compactAnswers(answers) {
+  const base = defaults({ team: answers.team, client: answers.client, isPrivate: answers.private });
+  const out = { team: answers.team, client: answers.client, private: answers.private };
+  for (const part of ["project", "advanced"]) {
+    const diff = changedKeys(answers[part], base[part]);
+    if (Object.keys(diff).length > 0) out[part] = diff;
+  }
+  return out;
+}
+
+// The compact form unless `full` asks for every answer.
+export function encodeSetupCode(answers, { full = false } = {}) {
+  const bytes = new TextEncoder().encode(JSON.stringify(full ? answers : compactAnswers(answers)));
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
   return PREFIX + btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
