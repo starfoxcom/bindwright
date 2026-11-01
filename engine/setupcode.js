@@ -4,7 +4,7 @@
 // defaults; expandAnswers (model.js) fills the rest. The Python twin
 // (setupcode.py) decodes it with the same checks and messages.
 
-import { defaults } from "./model.js";
+import { defaults, quoted } from "./model.js";
 
 export const PREFIX = "bw1-";
 // Real answers encode to about 1 KB and nest three levels deep. The caps keep
@@ -86,7 +86,7 @@ function refuseUnknownKeys(answers) {
   for (const [label, part, dflt] of levels) {
     if (!isObjectLike(part) || Array.isArray(part)) continue;
     const unknown = Object.keys(part).filter((key) => !Object.hasOwn(dflt, key)).sort()[0];
-    if (unknown !== undefined) fail(`unknown ${label} "${unknown}"`);
+    if (unknown !== undefined) fail(`unknown ${label} ${quoted(unknown)}`);
   }
 }
 

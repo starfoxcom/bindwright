@@ -6,7 +6,7 @@ import base64
 import json
 import re
 
-from model import defaults
+from model import defaults, quoted
 
 PREFIX = "bw1-"
 # Real answers encode to about 1 KB and nest three levels deep. The caps keep
@@ -64,7 +64,7 @@ def _refuse_unknown_keys(answers):
         unknown = sorted((key for key in part if key not in dflt),
                          key=lambda key: key.encode("utf-16-be", "surrogatepass"))
         if unknown:
-            _fail('unknown %s "%s"' % (label, unknown[0]))
+            _fail('unknown %s %s' % (label, quoted(unknown[0])))
 
 
 def _refuse_free_text(answers):

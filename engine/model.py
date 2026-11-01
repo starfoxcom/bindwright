@@ -112,6 +112,24 @@ def js_str(v):
         return "[object Object]"
     return str(v)
 
+QUOTE_MAX = 40
+
+
+def quoted(value):
+    """An untrusted value as a message quotes it, the same text as model.js quoted:
+    at most QUOTE_MAX code points, then an ellipsis, with quotes, backslashes,
+    control characters, line separators and lone surrogates escaped."""
+    points = js_str(value)
+
+    def shown(ch):
+        code = ord(ch)
+        if ch in '"\\':
+            return "\\" + ch
+        unsafe = code < 0x20 or 0x7f <= code <= 0x9f or code in (0x2028, 0x2029) or 0xd800 <= code <= 0xdfff
+        return "\\u%04x" % code if unsafe else ch
+
+    return '"%s%s"' % ("".join(shown(ch) for ch in points[:QUOTE_MAX]), "…" if len(points) > QUOTE_MAX else "")
+
 
 def utf16_len(s):
     return len(s.encode("utf-16-le", "surrogatepass")) // 2
@@ -219,25 +237,25 @@ def validate(saved):
            "project name must be 1-64 letters, digits, dot, dash or underscore")
     _check(isinstance(get(project, "repoUrl"), str) and isinstance(get(project, "licenseHolder"), str),
            "repoUrl and licenseHolder must be text")
-    _check(_own(LICENSES, get(project, "license")), 'unknown license "%s"' % js_str(get(project, "license")))
+    _check(_own(LICENSES, get(project, "license")), 'unknown license %s' % quoted(get(project, "license")))
     _check(_own(CODE_RESEARCH_TOOLS, get(adv, "codeResearch")),
-           'unknown code-research tool "%s"' % js_str(get(adv, "codeResearch")))
+           'unknown code-research tool %s' % quoted(get(adv, "codeResearch")))
     _check_custom_tool(adv["codeResearch"], get(adv, "codeResearchCustom"))
     precommit = get(adv, "precommit")
     _check(precommit == "none" or (isinstance(precommit, str) and precommit in PRECOMMIT_MANAGERS),
-           'unknown pre-commit manager "%s"' % js_str(precommit))
+           'unknown pre-commit manager %s' % quoted(precommit))
     _check(isinstance(get(adv, "architecture"), str) and adv["architecture"] in ARCHITECTURES,
-           'unknown architecture "%s"' % js_str(get(adv, "architecture")))
+           'unknown architecture %s' % quoted(get(adv, "architecture")))
     _check(isinstance(get(adv, "branching"), str) and adv["branching"] in ["gitflow", "trunk"],
-           'unknown branching model "%s"' % js_str(get(adv, "branching")))
+           'unknown branching model %s' % quoted(get(adv, "branching")))
     _check(isinstance(get(adv, "mergeStyle"), str) and adv["mergeStyle"] in MERGE_STYLES,
-           'unknown merge style "%s"' % js_str(get(adv, "mergeStyle")))
+           'unknown merge style %s' % quoted(get(adv, "mergeStyle")))
     _check(_is_bool(get(adv, "devIsDefault")), "devIsDefault must be true or false")
     _check(isinstance(get(adv, "hookLocation"), str) and adv["hookLocation"] in HOOK_LOCATIONS,
-           'unknown hook location "%s"' % js_str(get(adv, "hookLocation")))
+           'unknown hook location %s' % quoted(get(adv, "hookLocation")))
     _check(_is_bool(get(adv, "attributionGuard")), "attributionGuard must be true or false")
     _check(isinstance(get(adv, "denyProfile"), str) and adv["denyProfile"] in DENY_PROFILES,
-           'unknown deny profile "%s"' % js_str(get(adv, "denyProfile")))
+           'unknown deny profile %s' % quoted(get(adv, "denyProfile")))
     # Each glob lands in a double-quoted YAML string, so quotes, backslashes
     # and control characters are refused rather than escaped.
     paths = get(adv, "shippedTextPaths")
@@ -255,7 +273,7 @@ def validate(saved):
 
 
 def _check_tracker(tracker, board):
-    _check(isinstance(tracker, str) and tracker in TRACKERS, 'unknown tracker "%s"' % js_str(tracker))
+    _check(isinstance(tracker, str) and tracker in TRACKERS, 'unknown tracker %s' % quoted(tracker))
     if tracker == "github":
         _check(board is None or (isinstance(board, str) and TRACKER_PROJECT.fullmatch(board) is not None),
                'trackerProject must be null or "<owner>/<number>": '
