@@ -43,10 +43,15 @@ class _R:
     def __init__(self, fns): self.function_list = fns
 def get_reader_for(path):
     return None if path.endswith(".dart") else object()
-def analyze_file(path):
+def _table(path):
     table = json.loads(os.environ.get("LIZARD_STUB", "{}"))
-    key = os.path.relpath(path, os.getcwd()).replace(os.sep, "/")
-    return _R([_F(d) for d in table.get(key, [])])
+    return table.get(os.path.relpath(path, os.getcwd()).replace(os.sep, "/"), [])
+class _Analyzer:
+    def __call__(self, path): return _R([_F(d) for d in _table(path)])
+    # TypeScript is read one top-level piece at a time; the first piece holds the table.
+    def analyze_source_code(self, path, code):
+        return _R([] if code.startswith("\\n") else [_F(d) for d in _table(path)])
+analyze_file = _Analyzer()
 `;
 
 const lines = (n, width = 1) => `${Array.from({ length: n }, () => "x".repeat(width)).join("\n")}\n`;
@@ -217,4 +222,40 @@ test("the shipped rule's tables parse: named rows, Other, and spaced thousands",
   assert.match(r.out, /b\.rb: file - = 1201 \(hard limit 1200\)/);
   assert.match(r.out, /c\.h: file - = 1501 \(hard limit 1500\)/);
   assert.doesNotMatch(r.out, /d\.ts/);
+});
+
+// Calls one function of the shipped script with JSON arguments and returns its JSON result.
+function scriptCall(expr, args, { site = false } = {}) {
+  const code = `import json, sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n`
+    + `args = json.loads(sys.stdin.read())\nprint(json.dumps(${expr}))\n`;
+  // -B: no bytecode left in the shipped scripts folder.
+  const flags = site ? ["-B"] : ["-B", "-S"];
+  const r = spawnSync(python, [...flags, "-c", code, dirname(SCRIPT)],
+    { input: JSON.stringify(args), encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout);
+}
+
+test("TypeScript is cut before each top-level statement, line numbers kept", { skip }, () => {
+  const text = "const a = {\n  x: 1,\n}\n\nfunction f() {\n  return 1\n}\n// note\nexport type T = { a: string }\n";
+  const chunks = scriptCall("size_check.top_level_chunks(args)", text);
+  assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 7, 8]);
+  assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
+});
+
+const hasLizard = python && spawnSync(python, ["-c", "import lizard"]).status === 0;
+
+// lizard drops or merges the functions after an object type inside a generic;
+// the misread stays inside the statement that holds the type.
+const needsLizard = { skip: !hasLizard && "needs lizard" };
+
+test("a function after an object type in a generic keeps its own length", needsLizard, () => {
+  const dir = mkdtempSync(join(tmpdir(), "size-ts-"));
+  const file = join(dir, "a.tsx");
+  writeFileSync(file, "async function info(id: string): Promise<{ name: string } | null> {\n  return null\n}\n\n"
+    + "function next(a: number) {\n  return a + 1\n}\n");
+  const found = scriptCall("[[f.name, f.start_line, f.end_line] for f in "
+    + "size_check.typescript_functions(__import__('lizard'), args)]", file, { site: true });
+  assert.deepEqual(found.map(([name]) => name), ["info", "next"]);
+  assert.deepEqual(found[1], ["next", 5, 7]);
 });

@@ -129,8 +129,33 @@ def functions(path):
         return None
     if lizard.get_reader_for(path) is None:
         return False
-    found = lizard.analyze_file(os.path.join(ROOT, path)).function_list
+    full = os.path.join(ROOT, path)
+    if path.endswith((".ts", ".tsx")):
+        found = typescript_functions(lizard, full)
+    else:
+        found = lizard.analyze_file(full).function_list
     return [(f.name, f.end_line - f.start_line + 1, f.cyclomatic_complexity, param_count(path, f)) for f in found]
+
+
+def top_level_chunks(text):
+    """The text cut before every line that starts in column 0 with anything
+    but a closing bracket: one piece per top-level statement of formatted code.
+    Blank lines stand in for the lines before each piece, so line numbers hold."""
+    lines = text.splitlines(keepends=True)
+    starts = [i for i, line in enumerate(lines) if line[:1] not in ("", " ", "\t", "\r", "\n", "}", ")", "]")]
+    bounds = [0] + [i for i in starts if i > 0] + [len(lines)]
+    return ["\n" * a + "".join(lines[a:b]) for a, b in zip(bounds, bounds[1:]) if b > a]
+
+
+def typescript_functions(lizard, full):
+    # lizard loses its place in TypeScript after some type shapes, such as an
+    # object type inside a generic (Promise<{ a: string }>), and folds the
+    # functions after it into one. Reading each top-level statement on its own
+    # keeps a misread inside that statement.
+    with open(full, encoding="utf-8") as f:
+        text = f.read()
+    return [fn for chunk in top_level_chunks(text)
+            for fn in lizard.analyze_file.analyze_source_code(full, chunk).function_list]
 
 
 def param_count(path, f):
