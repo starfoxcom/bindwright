@@ -3,6 +3,7 @@
 import { defaults } from "../engine/model.js";
 import { repoFiles, byFolder } from "./files.js";
 import { summarize } from "./summary.js";
+import { t } from "./i18n/index.js";
 import { encodeSetupCode } from "../engine/setupcode.js";
 
 // One accent hue per setup (docs/v2/DESIGN.md).
@@ -18,9 +19,8 @@ const TALLY_MS = 500;
 const COMPOSE_MS = 4200;
 const TICK_MS = 90;
 const TICKER_ROWS = 5;
-const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-const mix = (from, to, t) => Math.round(from + (to - from) * t);
+const mix = (from, to, share) => Math.round(from + (to - from) * share);
 const ruleCount = (groups) => groups.reduce((sum, group) => sum + (group.rules?.length ?? 0), 0);
 const filesOpen = () => !$("files").classList.contains("away");
 // Where the file list and the open file share the width, side by side.
@@ -134,7 +134,7 @@ function buildSteps() {
   const dots = questions.map((_, i) => {
     const dot = el("button", { className: "dot", type: "button" });
     dot.dataset.step = i;
-    dot.setAttribute("aria-label", `Question ${i + 1}`);
+    dot.setAttribute("aria-label", t("step.question", { number: i + 1 }));
     return el("li", {}, dot);
   });
   $("steps").replaceChildren(...dots);
@@ -152,11 +152,11 @@ const copyResetTimers = new WeakMap();
 function showCopyResult(button, copied) {
   clearTimeout(copyResetTimers.get(button));
   button.classList.toggle("copied", copied);
-  button.setAttribute("aria-label", copied ? "Copied" : "Select and copy");
+  button.setAttribute("aria-label", t(copied ? "copy.done" : "copy.manual"));
   if (copied) restart(button, "pulse");
   copyResetTimers.set(button, setTimeout(() => {
     button.classList.remove("copied");
-    button.setAttribute("aria-label", "Copy command");
+    button.setAttribute("aria-label", t("copy.command"));
   }, COPY_FEEDBACK_MS));
 }
 
@@ -232,23 +232,11 @@ async function compose() {
   busy = false;
 }
 
-// What the composing view says while it builds each group.
-const COMPOSE_WORDS = {
-  rules: "Writing your rules",
-  reviews: "Setting up pull request reviews",
-  guards: "Adding safety guards",
-  sessions: "Adding session routines",
-  checks: "Adding code checks",
-  issues: "Adding issue forms",
-  project: "Preparing your project files",
-  notes: "Saving your answers",
-};
-
 // Types one line per group, fills the bar and ticks the file paths by, for COMPOSE_MS.
 function playCompose(groups) {
   const gap = COMPOSE_MS / (groups.length + 1);
   $("compose-lines").replaceChildren(...groups.map((group, i) => {
-    const line = el("li", { textContent: COMPOSE_WORDS[group.id] ?? `Adding ${group.title.toLowerCase()}` });
+    const line = el("li", { textContent: t(`compose.${group.id}`) });
     line.style.setProperty("--delay", `${Math.round(i * gap)}ms`);
     return line;
   }));
@@ -285,14 +273,11 @@ function showResults() {
   $("files").classList.remove("reading");
   $("cmd-text").textContent = commandLine();
   showView("result");
-  $("status").textContent = "What you get is updated.";
+  $("status").textContent = t("status.updated");
 }
 
 function showFailure(err) {
-  const fail = el("li", {
-    textContent: `This part of the page could not load (${err.message || err}). `
-      + "Reload the page to try again.",
-  });
+  const fail = el("li", { textContent: t("failure", { error: err.message || err }) });
   $("groups").replaceChildren(fail);
   showView("result");
 }
@@ -330,10 +315,10 @@ function countTally(groups) {
   const start = performance.now();
   cancelAnimationFrame(tallyFrame);
   const frame = (now) => {
-    const t = still() ? 1 : Math.min(Math.max(now - start, 0) / TALLY_MS, 1);
-    tally = { parts: mix(from.parts, to.parts, t), rules: mix(from.rules, to.rules, t) };
+    const share = still() ? 1 : Math.min(Math.max(now - start, 0) / TALLY_MS, 1);
+    tally = { parts: mix(from.parts, to.parts, share), rules: mix(from.rules, to.rules, share) };
     paintTally();
-    if (t < 1) tallyFrame = requestAnimationFrame(frame);
+    if (share < 1) tallyFrame = requestAnimationFrame(frame);
   };
   frame(start);
 }
@@ -341,7 +326,10 @@ function countTally(groups) {
 // "· 6 parts, 23 rules" after the heading; empty until the first answer.
 function paintTally() {
   const { parts, rules } = tally;
-  const text = `· ${count(parts, "part")}, ${count(rules, "rule")}`;
+  const text = t("tally", {
+    parts: t("tally.parts", { count: parts }),
+    rules: t("tally.rules", { count: rules }),
+  });
   $("tally").textContent = answered.size ? text : "";
 }
 
@@ -463,7 +451,7 @@ function setFilesView(open) {
   for (const opt of $("switch").querySelectorAll(".seg-opt")) {
     opt.setAttribute("aria-pressed", String(opt.dataset.view === mode));
   }
-  $("files-opt").textContent = `Files · ${files.length}`;
+  $("files-opt").textContent = t("files.count", { count: files.length });
 }
 
 // Back returns one question. Nothing is un-answered.

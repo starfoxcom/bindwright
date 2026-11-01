@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-t="meta.title">Bindwright</title>
+<meta name="description" data-t-attr="content:meta.description"
+  content="Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo trabajas desde el primer mensaje.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/claude-code-templates/page/">
+<!-- /alternates -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<script type="module" src="../app.js"></script>
+</head>
+<body>
+<a class="skip" href="#setup" data-t="skip.link">Ir a la configuración</a>
+<header>
+  <a class="mark" href="./">Bindwright</a>
+  <nav aria-label="Sitio" data-t-attr="aria-label:nav.site">
+    <a href="https://github.com/starfoxcom/claude-code-templates" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Idioma" data-langs data-t-attr="aria-label:nav.language">
+    <a href="../" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="hero">
+    <div class="pitch">
+      <h1 data-t="hero.title">Deja de explicarle tu proyecto a Claude cada vez.</h1>
+      <p class="lede" data-t="hero.lede">Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la configuración es un solo comando.</p>
+      <div class="actions">
+        <a class="go" href="#setup" data-t="hero.go">Configurar mi proyecto</a>
+        <a class="source" href="https://github.com/starfoxcom/claude-code-templates"
+          data-t="hero.source">Ver en GitHub</a>
+      </div>
+    </div>
+    <figure class="panel clip" aria-label="Una sesión grabada" data-t-attr="aria-label:hero.figure">
+      <p class="empty" data-t="hero.empty">Aquí se reproduce una sesión real, Claude arreglando el mismo error con y sin Bindwright.</p>
+    </figure>
+  </section>
+
+  <section class="changes" id="changes" aria-labelledby="changes-title">
+    <h2 id="changes-title" data-t="changes.title">Qué cambia</h2>
+    <ul>
+      <li><span class="was" data-t="changes.1.was">Claude olvida cómo trabajas en cada sesión</span>
+        <b data-t="changes.1.title">Claude deja de repetir errores</b>
+        <span data-t="changes.1.text">Lee tus reglas al inicio de cada sesión, así las funciones pequeñas y las pruebas reales dejan de ser algo que tienes que pedir cada vez.</span></li>
+      <li><span class="was" data-t="changes.2.was">Los cambios se integran sin que nadie los revise</span>
+        <b data-t="changes.2.title">Cada pull request se revisa</b>
+        <span data-t="changes.2.text">Una IA revisa cada cambio antes de integrarlo, y si la revisión no pasa, nada entra.</span></li>
+      <li><span class="was" data-t="changes.3.was">Cada sesión empieza desde cero</span>
+        <b data-t="changes.3.title">Las sesiones siguen donde se quedaron</b>
+        <span data-t="changes.3.text">Cada sesión empieza con un plan y termina con una nota para la siguiente, así el trabajo sigue justo donde se quedó.</span></li>
+      <li><span class="was" data-t="changes.4.was">Un comando equivocado puede borrar tu rama principal</span>
+        <b data-t="changes.4.title">Los comandos peligrosos se bloquean</b>
+        <span data-t="changes.4.text">Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un comando equivocado ahí te puede costar días de trabajo.</span></li>
+    </ul>
+  </section>
+
+  <section class="setup" id="setup" aria-labelledby="setup-title">
+    <h2 id="setup-title" data-t="setup.title">Configura tu proyecto</h2>
+    <div class="frame" id="frame">
+      <div class="ask" id="ask">
+        <ol class="steps" id="steps" aria-label="Pasos de la configuración" data-t-attr="aria-label:steps.label"></ol>
+        <div class="stage" id="stage">
+          <div class="q" role="group" aria-labelledby="q-team">
+            <h3 id="q-team" tabindex="-1" data-t="q.team.title">¿Quién trabaja en el proyecto?</h3>
+            <div class="keys">
+              <button class="k" type="button" data-q="team" data-v="false" aria-pressed="false">
+                <b data-t="q.team.no.label">Solo yo</b>
+                <span data-t="q.team.no.hint">Una persona, una computadora</span></button>
+              <button class="k" type="button" data-q="team" data-v="true" aria-pressed="false">
+                <b data-t="q.team.yes.label">Un equipo</b>
+                <span data-t="q.team.yes.hint">Ramas y revisiones compartidas</span></button>
+            </div>
+          </div>
+          <div class="q off" role="group" aria-labelledby="q-client">
+            <h3 id="q-client" tabindex="-1" data-t="q.client.title">¿De quién es el proyecto?</h3>
+            <div class="keys">
+              <button class="k" type="button" data-q="client" data-v="false" aria-pressed="false">
+                <b data-t="q.client.no.label">Mío</b><span data-t="q.client.no.hint">Un proyecto que es mío</span></button>
+              <button class="k" type="button" data-q="client" data-v="true" aria-pressed="false">
+                <b data-t="q.client.yes.label">De alguien más</b>
+                <span data-t="q.client.yes.hint">Código abierto, un cliente o un equipo al que me uní</span></button>
+            </div>
+          </div>
+          <div class="q off" role="group" aria-labelledby="q-private">
+            <h3 id="q-private" tabindex="-1" data-t="q.private.title">¿Es privado?</h3>
+            <div class="keys">
+              <button class="k" type="button" data-q="private" data-v="true" aria-pressed="false">
+                <b data-t="q.private.yes.label">Privado</b>
+                <span data-t="q.private.yes.hint">Solo quien tiene acceso puede verlo</span></button>
+              <button class="k" type="button" data-q="private" data-v="false" aria-pressed="false">
+                <b data-t="q.private.no.label">Público</b>
+                <span data-t="q.private.no.hint">Cualquiera puede ver el código</span></button>
+            </div>
+          </div>
+        </div>
+        <button class="back off" id="back" type="button" data-t="step.back">Atrás</button>
+      </div>
+      <div class="composing off" id="composing" aria-live="polite">
+        <h3 tabindex="-1" data-t="composing.title">Armando tu configuración</h3>
+        <div class="bar"><span class="bar-fill" id="compose-bar"></span></div>
+        <ol class="compose-lines" id="compose-lines"></ol>
+        <ul class="compose-files" id="compose-files" aria-hidden="true"></ul>
+      </div>
+      <div class="result off" id="result">
+        <div class="out-head">
+          <h3 id="out-title" tabindex="-1"><span data-t="result.title">Lo que obtienes</span><span class="tally" id="tally"></span></h3>
+          <div class="out-tools">
+            <div class="seg" id="switch" data-view="overview" role="group" aria-label="Mostrar"
+              data-t-attr="aria-label:view.label">
+              <span class="seg-pill" aria-hidden="true"></span>
+              <button class="seg-opt" type="button" data-view="overview" aria-pressed="true"
+                aria-controls="groups" data-t="view.overview">Resumen</button>
+              <button class="seg-opt" id="files-opt" type="button" data-view="files" aria-pressed="false"
+                aria-controls="files">Files · 0</button>
+            </div>
+            <button class="toggle" id="edit" type="button" data-t="answers.edit">Editar mis respuestas</button>
+            <button class="toggle" id="restart" type="button" data-t="answers.restart">Empezar de nuevo</button>
+          </div>
+        </div>
+        <div class="views">
+          <ul class="groups" id="groups"></ul>
+          <div class="out-body away" id="files">
+            <nav class="tree" id="tree" aria-label="Archivos" data-t-attr="aria-label:files.label"></nav>
+            <div class="view">
+              <button class="back-files" id="back-files" type="button" data-t="files.back">&larr; Todos los archivos</button>
+              <p class="path" id="path"></p>
+              <pre id="code" tabindex="0" aria-labelledby="path"></pre>
+            </div>
+          </div>
+        </div>
+        <div class="command" id="command" aria-labelledby="command-title">
+          <p class="command-step" data-t="command.step">Ya casi</p>
+          <h3 class="command-title" id="command-title" data-t="command.title">Configúralo en Claude Code</h3>
+          <p class="command-how" data-t="command.how">Un comando por paso, en este orden, así que pega cada uno en Claude Code, presiona Enter y espera a que termine antes de pasar al siguiente.</p>
+          <ol class="command-steps">
+            <li>
+              <p class="command-sub"><b data-t="command.open.title">Abre Claude Code en la carpeta de tu proyecto.</b>
+                <span data-t="command.open.text">La configuración escribe en la carpeta donde está abierto Claude Code, así que empieza ahí.</span></p>
+            </li>
+            <li>
+              <p class="command-sub"><b data-t="command.market.title">Agrega el marketplace de Bindwright.</b>
+                <span data-t="command.market.text">Una vez por computadora, así que si ya tienes Bindwright instalado, pasa al paso 4.</span></p>
+              <div class="install-line"><code>/plugin marketplace add starfoxcom/claude-code-templates</code>
+                <button class="icon-copy" type="button" aria-label="Copiar comando" data-copy
+                  data-t-attr="aria-label:command.copy">
+                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect x="8" y="8" width="14" height="14" rx="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
+                </button></div>
+            </li>
+            <li>
+              <p class="command-sub"><b data-t="command.install.title">Instala Bindwright.</b>
+                <span data-t="command.install.text">Una vez por computadora, justo después del paso 2, y espera a que termine.</span></p>
+              <div class="install-line"><code>/plugin install bindwright@bindwright</code>
+                <button class="icon-copy" type="button" aria-label="Copiar comando" data-copy
+                  data-t-attr="aria-label:command.copy">
+                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect x="8" y="8" width="14" height="14" rx="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
+                </button></div>
+            </li>
+            <li>
+              <p class="command-sub"><b data-t="command.setup.title">Configura este proyecto.</b>
+                <span data-t="command.setup.text">Pega el comando de abajo y presiona Enter. La configuración te pregunta antes de cambiar cualquier archivo que ya tengas, y aunque los archivos que escribe están en inglés, Claude te sigue respondiendo en español.</span></p>
+              <div class="command-line">
+                <code class="cmd" id="cmd-text"></code>
+                <button class="icon-copy" id="copy" type="button" aria-label="Copiar comando"
+                  data-t-attr="aria-label:command.copy">
+                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect x="8" y="8" width="14" height="14" rx="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
+                </button>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+  <p class="sr-status" id="status" role="status" aria-live="polite"></p>
+</main>
+<footer>
+  <p data-t="footer.note">Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.</p>
+</footer>
+</body>
+</html>

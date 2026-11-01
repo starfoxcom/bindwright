@@ -2,115 +2,106 @@
 // them: what each group does for the project, not what the files are called.
 
 import { flagsFor } from "../engine/model.js";
+import { t } from "./i18n/index.js";
 
 const GROUPS = [
   {
-    id: "rules", title: "Rules Claude follows", match: /^\.claude\/rules\//,
-    say: "Claude reads these at the start of every session, so it works your way without being told again.",
+    id: "rules", title: t("group.rules.title"), match: /^\.claude\/rules\//,
+    say: t("group.rules.say"),
   },
   {
-    id: "reviews", title: "Pull request reviews",
+    id: "reviews", title: t("group.reviews.title"),
     match: new RegExp("^\\.github/(workflows/(claude|pin-check)|review-|CODEOWNERS|PULL_REQUEST"
       + "|scripts/(review_gate|setup-review-gate|pin_check))"),
-    say: "An AI reviews every pull request, and nothing merges until the review passes.",
+    say: t("group.reviews.say"),
   },
   {
-    id: "guards", title: "Safety guards", match: /^\.claude\/(hooks\/|settings)/,
-    say: "Risky commands, like a force push to your main branch, are stopped before they run.",
+    id: "guards", title: t("group.guards.title"), match: /^\.claude\/(hooks\/|settings)/,
+    say: t("group.guards.say"),
   },
   {
-    id: "sessions", title: "Session routines", match: /^(\.claude\/skills\/|\.bindwright\/session-steps)/,
-    say: "/session-start plans the work with you. /session-close checks what is really done "
-      + "and leaves a note for next time.",
+    id: "sessions", title: t("group.sessions.title"), match: /^(\.claude\/skills\/|\.bindwright\/session-steps)/,
+    say: t("group.sessions.say"),
   },
   {
-    id: "checks", title: "Code checks",
+    id: "checks", title: t("group.checks.title"),
     match: /^(lefthook\.yml|\.husky\/|\.pre-commit|\.github\/(workflows\/size-check|scripts\/size_check|size-check\/))/,
-    say: "Checks that run before each commit or on every pull request.",
+    say: t("group.checks.say"),
   },
   {
-    id: "issues", title: "Issue forms", match: /^\.github\/ISSUE_TEMPLATE\//,
-    say: "Ready-made forms for bug reports, feature requests and planned work.",
+    id: "issues", title: t("group.issues.title"), match: /^\.github\/ISSUE_TEMPLATE\//,
+    say: t("group.issues.say"),
   },
   {
-    id: "project", title: "Project files",
+    id: "project", title: t("group.project.title"),
     match: /^(CLAUDE\.md|README|LICENSE|CHANGELOG|CONTRIBUTING|\.gitattributes|docs\/)/,
-    say: "The main file Claude reads about your project, plus a readme and changelog. "
-      + "Setup merges them with yours.",
+    say: t("group.project.say"),
   },
-  { id: "notes", title: "Bindwright's notes", match: /^\.bindwright\//,
-    say: "Your answers, so a later update keeps your own edits." },
+  {
+    id: "notes", title: t("group.notes.title"), match: /^\.bindwright\//,
+    say: t("group.notes.say"),
+  },
 ];
 
-// One plain line per rule file, by name.
-const RULES = {
-  "architecture": ["Your code structure", "New code goes into the layers of the structure you picked."],
-  "clean-code": ["Code a newcomer reads", "Clear names, short comments, no copies of the same code."],
-  "clean-room": ["Clean room", "Code inspired by another product never copies it."],
-  "code-size": ["Small, readable code", "Functions and files stay short enough to follow."],
-  "collaboration": ["Working together", "How teammates share branches and answer reviews."],
-  "confidentiality": ["Client secrets", "Client secrets stay out of Claude's memory."],
-  "git": ["Clean history", "Clear commit messages and one branch per change."],
-  "review-tiers": ["How reviews work", "What the AI reviewer checks, and when it looks deeper."],
-  "security": ["No secrets ship", "Keys and passwords stay out of the code and everything you release."],
-  "shipped-text": ["Plain writing", "Text people read sounds like a person wrote it."],
-  "task-tracking": ["A visible to-do list", "Claude keeps a task list on any job with several steps."],
-  "testing": ["Real tests", "Tests check the real code, edge cases included."],
-  "token-efficiency": ["Less wasted usage", "Claude looks code up before reading whole files."],
-  "tracker": ["Work tracking", "Work is written down between sessions, so nothing gets lost."],
-  "visual": ["Screen changes in small steps", "Anything people see is built in pieces you check by eye."],
-};
+// The rule files the page names in plain words, by file name.
+const RULE_NAMES = [
+  "architecture", "clean-code", "clean-room", "code-size", "collaboration", "confidentiality",
+  "git", "review-tiers", "security", "shipped-text", "task-tracking", "testing",
+  "token-efficiency", "tracker", "visual",
+];
 
-// Each license as a visitor reads it.
-const LICENSE_WORDS = {
-  MIT: "MIT, free for anyone to reuse",
-  "Apache-2.0": "Apache 2.0, free for anyone to reuse",
-  "BSD-3-Clause": "BSD, free for anyone to reuse",
-  Proprietary: "all rights reserved",
-};
+// One plain [name, line] pair per rule file, by name.
+const RULES = Object.fromEntries(RULE_NAMES.map((name) => [
+  name, [t(`rule.${name}.name`), t(`rule.${name}.line`)],
+]));
 
-// Answer-driven detail lines on a card. `show` gets the engine's flags, the
-// answers and has(path), which says whether a file is in the setup. `text` is a
-// string or a function of the answers.
+// Each license as a visitor reads it, by license id.
+const LICENSE_IDS = ["MIT", "Apache-2.0", "BSD-3-Clause", "Proprietary"];
+const LICENSE_WORDS = Object.fromEntries(LICENSE_IDS.map((id) => [id, t(`license.${id}`)]));
+
+// Answer-driven detail lines on a card, each keyed by `fact.${id}`. `show` gets the
+// engine's flags, the answers and has(path), which says whether a file is in the
+// setup. `values` gives the text's {placeholders} from the answers, when it has any.
 const FACTS = [
   {
-    group: "project", text: (a) => `License: ${LICENSE_WORDS[a.project.license]}`,
+    id: "license", group: "project",
     show: (f, a, has) => has("LICENSE"),
+    values: (a) => ({ words: LICENSE_WORDS[a.project.license] }),
   },
   {
-    group: "project", text: "A contributing guide for teammates",
+    id: "contributing", group: "project",
     show: (f, a, has) => has("CONTRIBUTING.md"),
   },
   {
-    group: "reviews", text: "Risky changes get a deeper second review on their own",
+    id: "deep-auto", group: "reviews",
     show: (f) => f.github_actions_deep_review_auto_fire,
   },
   {
-    group: "reviews", text: "A deeper second review runs when someone asks for one",
+    id: "deep-asked", group: "reviews",
     show: (f) => f.github_actions_deep_review && !f.github_actions_deep_review_auto_fire,
   },
   {
-    group: "reviews", text: "Changes to docs only merge without waiting for a review",
+    id: "docs-auto", group: "reviews",
     show: (f) => f.github_actions_paths_ignore_auto_merge,
   },
   {
-    group: "reviews", text: "Every change waits for its review, docs included",
+    id: "review-all", group: "reviews",
     show: (f) => f.github_actions_routine_review && !f.github_actions_paths_ignore_auto_merge,
   },
   {
-    group: "reviews", text: "A pull request form that asks what changed and why",
+    id: "pr-form", group: "reviews",
     show: (f, a, has) => has(".github/PULL_REQUEST_TEMPLATE.md"),
   },
   {
-    group: "reviews", text: "Reviewers picked by folder",
+    id: "owners", group: "reviews",
     show: (f, a, has) => has(".github/CODEOWNERS"),
   },
   {
-    group: "checks", text: "Checks run before every commit",
+    id: "precommit", group: "checks",
     show: (f) => f.precommit_hooks_scaffold,
   },
   {
-    group: "rules", text: "Commits record which work had AI help",
+    id: "ai-commits", group: "rules",
     show: (f) => f.audit_trail_commits,
   },
 ];
@@ -122,14 +113,16 @@ function factsFor(files, answers) {
   const has = (path) => paths.has(path);
   return FACTS.filter((fact) => fact.show(flags, answers, has)).map((fact) => ({
     group: fact.group,
-    text: typeof fact.text === "function" ? fact.text(answers) : fact.text,
+    text: t(`fact.${fact.id}`, fact.values?.(answers)),
   }));
 }
 
 // [{ id, title, say, files, rules?, facts }] for the groups that have files, in GROUPS order.
 export function summarize(files, answers) {
   const groups = GROUPS.map((g) => ({ ...g, files: [] }));
-  const other = { id: "other", title: "Other files", say: "Supporting files the rest relies on.", files: [] };
+  const other = {
+    id: "other", title: t("group.other.title"), say: t("group.other.say"), files: [],
+  };
   for (const [path] of files) (groups.find((g) => g.match.test(path)) ?? other).files.push(path);
   const rules = groups.find((g) => g.id === "rules");
   rules.rules = rules.files.map((p) => p.split("/").pop().replace(/\.md$/, ""))
