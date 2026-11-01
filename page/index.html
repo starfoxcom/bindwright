@@ -3,152 +3,203 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bindwright</title>
-<meta name="description" content="Bindwright writes the files that tell Claude Code how your project works.">
+<title data-t="meta.title">Bindwright</title>
+<meta name="description" data-t-attr="content:meta.description"
+  content="Bindwright writes the files that tell Claude Code how your project works.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/claude-code-templates/page/">
+<!-- /alternates -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap" rel="stylesheet">
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
-<a class="skip" href="#setup">Skip to the setup</a>
+<a class="skip" href="#setup" data-t="skip.link">Skip to the setup</a>
 <header>
   <a class="mark" href="./">Bindwright</a>
-  <nav aria-label="Site">
-    <a href="https://github.com/starfoxcom/claude-code-templates">GitHub</a>
+  <nav aria-label="Site" data-t-attr="aria-label:nav.site">
+    <a href="https://github.com/starfoxcom/claude-code-templates" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Language" data-langs data-t-attr="aria-label:nav.language">
+    <a href="es/" hreflang="es" lang="es">Español</a>
   </nav>
 </header>
 <main id="main">
   <section class="hero">
     <div class="pitch">
-      <h1>Stop re&#8209;explaining your project to Claude.</h1>
-      <p class="lede">Bindwright gives Claude Code your house rules, safety guards and automatic pull request
-        reviews, so every session starts out knowing how you work. Set up in one command.</p>
+      <h1 data-t="hero.title">Stop re&#8209;explaining your project to Claude.</h1>
+      <p class="lede" data-t="hero.lede">Bindwright gives Claude Code your house rules, safety guards and
+        automatic pull request reviews, so every session starts out knowing how you work. Set up in one command.</p>
       <div class="actions">
-        <a class="go" href="#setup">Set up my project</a>
-        <a class="source" href="https://github.com/starfoxcom/claude-code-templates">View on GitHub</a>
+        <a class="go" href="#setup" data-t="hero.go">Set up my project</a>
+        <a class="source" href="https://github.com/starfoxcom/claude-code-templates"
+          data-t="hero.source">View on GitHub</a>
       </div>
     </div>
-    <figure class="panel clip" aria-label="A recorded session">
-      <p class="empty">A real session plays here: Claude fixing the same bug with and without Bindwright.</p>
+    <figure class="panel clip" aria-label="A recorded session" data-t-attr="aria-label:hero.figure">
+      <p class="empty" data-t="hero.empty">A real session plays here: Claude fixing the same bug
+        with and without Bindwright.</p>
     </figure>
   </section>
 
   <section class="changes" id="changes" aria-labelledby="changes-title">
-    <h2 id="changes-title">What changes</h2>
+    <h2 id="changes-title" data-t="changes.title">What changes</h2>
     <ul>
-      <li><span class="was">Claude forgets how you work every session</span>
-        <b>Claude stops repeating mistakes</b>
-        It reads your rules at the start of every session: small functions, real tests, clear commits.</li>
-      <li><span class="was">Changes merge without anyone checking them</span>
-        <b>Every pull request gets reviewed</b>
-        An AI review checks each change, and nothing merges until it passes.</li>
-      <li><span class="was">Each session starts from scratch</span>
-        <b>Sessions pick up where they stopped</b>
-        Each one starts with a plan and ends with a hand-off for the next.</li>
-      <li><span class="was">One wrong command can wipe your main branch</span>
-        <b>Risky commands get blocked</b>
-        Force pushes to your main branch are stopped before they run.</li>
+      <li><span class="was" data-t="changes.1.was">Claude forgets how you work every session</span>
+        <b data-t="changes.1.title">Claude stops repeating mistakes</b>
+        <span data-t="changes.1.text">It reads your rules at the start of every session: small functions,
+          real tests, clear commits.</span></li>
+      <li><span class="was" data-t="changes.2.was">Changes merge without anyone checking them</span>
+        <b data-t="changes.2.title">Every pull request gets reviewed</b>
+        <span data-t="changes.2.text">An AI review checks each change, and nothing merges until it passes.</span></li>
+      <li><span class="was" data-t="changes.3.was">Each session starts from scratch</span>
+        <b data-t="changes.3.title">Sessions pick up where they stopped</b>
+        <span data-t="changes.3.text">Each one starts with a plan and ends with a hand-off for the next.</span></li>
+      <li><span class="was" data-t="changes.4.was">One wrong command can wipe your main branch</span>
+        <b data-t="changes.4.title">Risky commands get blocked</b>
+        <span data-t="changes.4.text">Force pushes to your main branch are stopped before they run.</span></li>
     </ul>
   </section>
 
   <section class="setup" id="setup" aria-labelledby="setup-title">
-    <h2 id="setup-title">Set up your project</h2>
+    <h2 id="setup-title" data-t="setup.title">Set up your project</h2>
     <div class="frame" id="frame">
       <div class="ask" id="ask">
-        <ol class="steps" id="steps" aria-label="Setup steps"></ol>
+        <ol class="steps" id="steps" aria-label="Setup steps" data-t-attr="aria-label:steps.label"></ol>
         <div class="stage" id="stage">
           <div class="q" role="group" aria-labelledby="q-team">
-            <h3 id="q-team" tabindex="-1">Who works on the project?</h3>
+            <h3 id="q-team" tabindex="-1" data-t="q.team.title">Who works on the project?</h3>
             <div class="keys">
               <button class="k" type="button" data-q="team" data-v="false" aria-pressed="false">
-                <b>Just me</b><span>One person, one machine</span></button>
+                <b data-t="q.team.no.label">Just me</b>
+                <span data-t="q.team.no.hint">One person, one machine</span></button>
               <button class="k" type="button" data-q="team" data-v="true" aria-pressed="false">
-                <b>A team</b><span>Shared branches and reviews</span></button>
+                <b data-t="q.team.yes.label">A team</b>
+                <span data-t="q.team.yes.hint">Shared branches and reviews</span></button>
             </div>
           </div>
           <div class="q off" role="group" aria-labelledby="q-client">
-            <h3 id="q-client" tabindex="-1">Whose project is it?</h3>
+            <h3 id="q-client" tabindex="-1" data-t="q.client.title">Whose project is it?</h3>
             <div class="keys">
               <button class="k" type="button" data-q="client" data-v="false" aria-pressed="false">
-                <b>Mine</b><span>A project I own</span></button>
+                <b data-t="q.client.no.label">Mine</b><span data-t="q.client.no.hint">A project I own</span></button>
               <button class="k" type="button" data-q="client" data-v="true" aria-pressed="false">
-                <b>Someone else's</b><span>Open source, a client, or a team I joined</span></button>
+                <b data-t="q.client.yes.label">Someone else's</b>
+                <span data-t="q.client.yes.hint">Open source, a client, or a team I joined</span></button>
             </div>
           </div>
           <div class="q off" role="group" aria-labelledby="q-private">
-            <h3 id="q-private" tabindex="-1">Is it private?</h3>
+            <h3 id="q-private" tabindex="-1" data-t="q.private.title">Is it private?</h3>
             <div class="keys">
               <button class="k" type="button" data-q="private" data-v="true" aria-pressed="false">
-                <b>Private</b><span>Only people with access can see it</span></button>
+                <b data-t="q.private.yes.label">Private</b>
+                <span data-t="q.private.yes.hint">Only people with access can see it</span></button>
               <button class="k" type="button" data-q="private" data-v="false" aria-pressed="false">
-                <b>Public</b><span>Anyone can see the code</span></button>
+                <b data-t="q.private.no.label">Public</b>
+                <span data-t="q.private.no.hint">Anyone can see the code</span></button>
             </div>
           </div>
         </div>
-        <button class="back off" id="back" type="button">Back</button>
+        <button class="back off" id="back" type="button" data-t="step.back">Back</button>
       </div>
       <div class="composing off" id="composing" aria-live="polite">
-        <h3 tabindex="-1">Composing your setup</h3>
+        <h3 tabindex="-1" data-t="composing.title">Composing your setup</h3>
         <div class="bar"><span class="bar-fill" id="compose-bar"></span></div>
         <ol class="compose-lines" id="compose-lines"></ol>
         <ul class="compose-files" id="compose-files" aria-hidden="true"></ul>
       </div>
       <div class="result off" id="result">
         <div class="out-head">
-          <h3 id="out-title" tabindex="-1">What you get<span class="tally" id="tally"></span></h3>
+          <h3 id="out-title" tabindex="-1"><span data-t="result.title">What you get</span
+            ><span class="tally" id="tally"></span></h3>
           <div class="out-tools">
-            <div class="seg" id="switch" data-view="overview" role="group" aria-label="Show">
+            <div class="seg" id="switch" data-view="overview" role="group" aria-label="Show"
+              data-t-attr="aria-label:view.label">
               <span class="seg-pill" aria-hidden="true"></span>
               <button class="seg-opt" type="button" data-view="overview" aria-pressed="true"
-                aria-controls="groups">Overview</button>
+                aria-controls="groups" data-t="view.overview">Overview</button>
               <button class="seg-opt" id="files-opt" type="button" data-view="files" aria-pressed="false"
                 aria-controls="files">Files · 0</button>
             </div>
-            <button class="toggle" id="edit" type="button">Edit my answers</button>
-            <button class="toggle" id="restart" type="button">Start over</button>
+            <button class="toggle" id="edit" type="button" data-t="answers.edit">Edit my answers</button>
+            <button class="toggle" id="restart" type="button" data-t="answers.restart">Start over</button>
           </div>
         </div>
         <div class="views">
           <ul class="groups" id="groups"></ul>
           <div class="out-body away" id="files">
-            <nav class="tree" id="tree" aria-label="Files"></nav>
+            <nav class="tree" id="tree" aria-label="Files" data-t-attr="aria-label:files.label"></nav>
             <div class="view">
-              <button class="back-files" id="back-files" type="button">&larr; All files</button>
+              <button class="back-files" id="back-files" type="button" data-t="files.back">&larr; All files</button>
               <p class="path" id="path"></p>
               <pre id="code" tabindex="0" aria-labelledby="path"></pre>
             </div>
           </div>
         </div>
         <div class="command" id="command" aria-labelledby="command-title">
-          <p class="command-step">Last step</p>
-          <h3 class="command-title" id="command-title">Paste this into Claude Code</h3>
-          <p class="command-how">Open Claude Code in your project folder, then paste each command and press Enter.
-            Setup writes the files above and never overwrites one of yours without asking.</p>
+          <p class="command-step" data-t="command.step">Last step</p>
+          <h3 class="command-title" id="command-title" data-t="command.title">Paste this into Claude Code</h3>
+          <p class="command-how" data-t="command.how">Open Claude Code in your project folder, then paste each
+            command and press Enter. Setup writes the files above and never overwrites one of yours without asking.</p>
           <ol class="command-steps">
             <li>
-              <p class="command-sub"><b>First time? Install Bindwright.</b> Once per computer.
-                Already have it? Skip to step 2.</p>
+              <p class="command-sub"><b data-t="command.install.title">First time? Install Bindwright.</b>
+                <span data-t="command.install.text">Once per computer. Already have it? Skip to step 2.</span></p>
               <div class="install-line"><code>/plugin marketplace add starfoxcom/claude-code-templates</code>
-                <button class="icon-copy" type="button" aria-label="Copy command" data-copy>
-                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+                  data-t-attr="aria-label:command.copy">
+                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect x="8" y="8" width="14" height="14" rx="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
                 </button></div>
               <div class="install-line"><code>/plugin install bindwright@bindwright</code>
-                <button class="icon-copy" type="button" aria-label="Copy command" data-copy>
-                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+                  data-t-attr="aria-label:command.copy">
+                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect x="8" y="8" width="14" height="14" rx="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
                 </button></div>
             </li>
             <li>
-              <p class="command-sub"><b>Set up this project.</b></p>
+              <p class="command-sub"><b data-t="command.setup">Set up this project.</b></p>
               <div class="command-line">
                 <code class="cmd" id="cmd-text"></code>
-                <button class="icon-copy" id="copy" type="button" aria-label="Copy command">
-                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                <button class="icon-copy" id="copy" type="button" aria-label="Copy command"
+                  data-t-attr="aria-label:command.copy">
+                  <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <rect x="8" y="8" width="14" height="14" rx="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5"/>
+                  </svg>
                 </button>
               </div>
             </li>
@@ -160,7 +211,8 @@
   <p class="sr-status" id="status" role="status" aria-live="polite"></p>
 </main>
 <footer>
-  <p>Bindwright works with Claude Code. It is not made by, endorsed by or affiliated with Anthropic.</p>
+  <p data-t="footer.note">Bindwright works with Claude Code. It is not made by, endorsed by or
+    affiliated with Anthropic.</p>
 </footer>
 </body>
 </html>
