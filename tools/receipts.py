@@ -138,29 +138,39 @@ def read_transcript(path, session, seen, replies):
             if not isinstance(message, dict) or not isinstance(message.get("content"), list):
                 continue
             if entry.get("type") == "assistant":
-                # A streamed reply repeats its id on several lines, and its output
-                # count can grow from line to line; keep the largest.
-                if reply_id and message.get("usage"):
-                    tokens = message["usage"].get("output_tokens", 0)
-                    session["usage"][reply_id] = max(tokens, session["usage"].get(reply_id, 0))
-                for part in message["content"]:
-                    if not isinstance(part, dict) or part.get("type") != "tool_use":
-                        continue
-                    if not first_time(seen, ("tool", part.get("id"))):
-                        continue
-                    name, args = part.get("name", ""), part.get("input") or {}
-                    session["tools"][name] = session["tools"].get(name, 0) + 1
-                    target = args.get("file_path") or args.get("notebook_path")
-                    if name in EDIT_TOOLS and target:
-                        session["edited"].add(target)
-                    kind = classify(name, args)
-                    session["research"] += kind == "research"
-                    session["fallback"] += kind == "fallback"
+                count_reply(message, reply_id, session, seen)
             elif entry.get("type") == "user":
-                for part in message["content"]:
-                    if (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("is_error")
-                            and first_time(seen, ("result", part.get("tool_use_id")))):
-                        session["errors"] += 1
+                count_errors(message, session, seen)
+
+
+def count_reply(message, reply_id, session, seen):
+    """Adds one model reply's output tokens and its tool calls not counted yet."""
+    # A streamed reply repeats its id on several lines, and its output
+    # count can grow from line to line; keep the largest.
+    if reply_id and message.get("usage"):
+        tokens = message["usage"].get("output_tokens", 0)
+        session["usage"][reply_id] = max(tokens, session["usage"].get(reply_id, 0))
+    for part in message["content"]:
+        if not isinstance(part, dict) or part.get("type") != "tool_use":
+            continue
+        if not first_time(seen, ("tool", part.get("id"))):
+            continue
+        name, args = part.get("name", ""), part.get("input") or {}
+        session["tools"][name] = session["tools"].get(name, 0) + 1
+        target = args.get("file_path") or args.get("notebook_path")
+        if name in EDIT_TOOLS and target:
+            session["edited"].add(target)
+        kind = classify(name, args)
+        session["research"] += kind == "research"
+        session["fallback"] += kind == "fallback"
+
+
+def count_errors(message, session, seen):
+    """Adds the failed tool results in one user line that were not counted yet."""
+    for part in message["content"]:
+        if (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("is_error")
+                and first_time(seen, ("result", part.get("tool_use_id")))):
+            session["errors"] += 1
 
 
 def activity_minutes(times):
@@ -344,13 +354,15 @@ def summarize(name, sessions, prs, config):
         print(f"  tool errors per session {sum(s['tool_errors'] for s in sessions) / n:.1f}, "
               f"code-research adherence {adherence}, "
               f"sessions using task lists {sum(1 for s in sessions if s['task_tool_calls'])}/{n}")
-        print(f"  largest session {biggest['output_tokens'] / 1e6:.2f}M tokens, {biggest['activity_minutes']} min with activity,"
-              f" {biggest['files_edited']} files ({biggest['start'][:10]})")
+        print(f"  largest session {biggest['output_tokens'] / 1e6:.2f}M tokens, "
+              f"{biggest['activity_minutes']} min with activity, "
+              f"{biggest['files_edited']} files ({biggest['start'][:10]})")
     if prs:
         print(f"  merged PRs {prs['merged_prs']} {prs['by_type']}, to main {prs['to_main']}, "
               f"cascades {prs['cascades']}, median {prs['median_hours_to_merge']} h to merge")
         print(f"  reviewed PRs {prs['prs_with_verdict']} (median {prs['median_hours_to_merge_reviewed']} h to merge): "
-              f"first verdict green {prs['first_verdict_green_pct']}%, {prs['prs_with_a_red_verdict']} had a red verdict, "
+              f"first verdict green {prs['first_verdict_green_pct']}%, "
+              f"{prs['prs_with_a_red_verdict']} had a red verdict, "
               f"red verdicts {prs['red_verdicts']} across both tiers, "
               f"escalated to deep review {prs['prs_escalated_to_deep']}")
     print(f"  rules {config['rules']}, skills {config['skills']}, memory entries {config['memory_entries']}")
