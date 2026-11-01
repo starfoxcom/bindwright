@@ -89,5 +89,7 @@ export default {
   "copy.done": "Copied",
   "copy.manual": "Select and copy",
   "status.updated": "What you get is updated.",
+  "command.refused": "These answers didn't pass the setup's own checks, so there's no command to copy. "
+    + "Start over and answer the questions again.",
   "failure": "This part of the page couldn't load ({error}), so reload the page to try again.",
 };

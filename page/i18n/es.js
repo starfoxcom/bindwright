@@ -167,6 +167,8 @@ export default {
   "copy.done": "Copiado",
   "copy.manual": "Selecciona y copia",
   "status.updated": "Lo que obtienes está actualizado.",
+  "command.refused": "Estas respuestas no pasaron las revisiones de la configuración, así que no hay comando "
+    + "que copiar. Empieza de nuevo y responde las preguntas otra vez.",
   "failure": "Esta parte de la página no pudo cargar ({error}), así que recarga la página para intentarlo "
     + "de nuevo.",
 };
