@@ -1,0 +1,17 @@
+{
+  "about": "Each scenario is one prompt run on a fresh copy of demo/, once without Bindwright and once with it bound from these answers. tools/record.mjs records them; engine/test/recordings.test.js fails when a recording no longer matches its inputs.",
+  "scenarios": [
+    { "id": "lost-cent", "model": "sonnet",
+      "prompt": "The shares for examples/dinner.json add up to $53.70, but the bill total is $53.69. Fix the rounding so the shares always add up to the total.",
+      "exercises": ["lost-cent", "copied-test", "long-function"] },
+    { "id": "shared-item", "model": "sonnet",
+      "prompt": "Add a way to mark an item as shared by only some of the people at the table, and show it in the printed split.",
+      "exercises": ["long-function", "domain-reads-files", "duplicate-formatter"] },
+    { "id": "tidy-and-commit", "model": "sonnet",
+      "prompt": "Remove code nobody uses anymore, update the README so it says plainly what splitbill does, and commit the change.",
+      "exercises": ["dead-code", "filler-copy"] }
+  ],
+  "answers": { "team": false, "client": false, "private": false,
+    "project": { "name": "splitbill" },
+    "advanced": { "architecture": "clean", "uiRule": true, "plainWriting": true, "tracker": "file" } }
+}
