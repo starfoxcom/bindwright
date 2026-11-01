@@ -345,12 +345,17 @@ h1 {
   position: relative; display: block; width: 100%; padding: 3px 8px 3px calc(10px + var(--d) * 14px);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tree .dir { color: var(--text-2); }
-.tree .file {
+.tree .dir, .tree .file {
   min-height: 26px; font: inherit; text-align: left; color: var(--text); cursor: pointer;
   background: none; border: 0; border-radius: 0 12px 12px 0;
 }
-.tree .file:hover { background: var(--key); }
+.tree .dir { color: var(--text-2); }
+.tree .dir::before {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 9px 2px 0;
+  border-right: 1.5px solid; border-bottom: 1.5px solid; transform: rotate(45deg); transition: transform 150ms ease;
+}
+.tree .dir[aria-expanded="false"]::before { transform: rotate(-45deg); }
+.tree .dir:hover, .tree .file:hover { background: var(--key); }
 .tree .file[aria-current="true"] { background: var(--key); box-shadow: inset 2px 0 0 var(--accent); }
 
 .view { display: flex; flex-direction: column; min-width: 0; }
@@ -360,7 +365,12 @@ h1 {
   font: 400 13px/1.6 "Fragment Mono", ui-monospace, monospace; color: var(--text); white-space: pre-wrap;
   overflow-wrap: anywhere; tab-size: 4;
 }
-.view.swap { animation: swap-in 160ms ease both; }
+.view.swap, .tree.swap { animation: swap-in 160ms ease both; }
+.back-files {
+  display: none; align-self: flex-start; min-height: 40px; margin: 8px 0 0; padding: 0 16px;
+  font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2); background: none; border: 0; cursor: pointer;
+}
+.back-files:hover { color: var(--text); }
 @keyframes swap-in { from { opacity: 0; } }
 
 
@@ -381,8 +391,12 @@ footer {
   .hero { grid-template-columns: minmax(0, 1fr); gap: 32px; min-height: 0; padding-top: 16px; }
   .changes li { padding: 24px; }
   .changes, .setup { margin-top: 64px; }
-  .out-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 220px 420px; height: auto; }
-  .tree { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .out-body { display: block; height: auto; }
+  .tree { overflow: visible; padding: 6px 0; border-right: 0; }
+  .tree .dir, .tree .file { min-height: 40px; padding-top: 10px; padding-bottom: 10px; }
+  .out-body:not(.reading) .view, .out-body.reading .tree { display: none; }
+  .back-files { display: inline-flex; align-items: center; }
+  .view pre { overflow: visible; }
   footer { padding: 20px 16px 32px; }
 }
 

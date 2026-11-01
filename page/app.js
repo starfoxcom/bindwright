@@ -23,6 +23,8 @@ const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const mix = (from, to, t) => Math.round(from + (to - from) * t);
 const ruleCount = (groups) => groups.reduce((sum, group) => sum + (group.rules?.length ?? 0), 0);
 const filesOpen = () => !$("files").classList.contains("away");
+// Where the file list and the open file share the width, side by side.
+const sideBySide = matchMedia("(min-width: 901px)");
 
 // Restarts the one-shot CSS animation that the named class sets on the node.
 function restart(node, name) {
@@ -38,6 +40,8 @@ const answered = new Set();
 // The files the answers build, as [path, text] pairs.
 let files = [];
 let selected = "CLAUDE.md";
+// The folders closed in the file list, by path.
+let closed = new Set();
 // The question index on screen.
 let step = 0;
 // The stage view on screen: "questions", "composing" or "result".
@@ -278,6 +282,7 @@ function showResults() {
   drawGroups();
   drawTree();
   drawFile();
+  $("files").classList.remove("reading");
   $("cmd-text").textContent = commandLine();
   showView("result");
   $("status").textContent = "What you get is updated.";
@@ -356,6 +361,7 @@ function rulesList(rules) {
 }
 
 // Folder rows wherever a path enters a new folder, then the file itself.
+// Side by side every folder starts open; on a narrow screen every one starts closed.
 function drawTree() {
   const rows = [];
   let open = [];
@@ -365,25 +371,32 @@ function drawTree() {
     const dirs = parts.slice(0, -1);
     let same = 0;
     while (same < dirs.length && open[same] === dirs[same]) same++;
-    for (let d = same; d < dirs.length; d++) rows.push(row("div", "dir", d, `${dirs[d]}/`));
+    for (let d = same; d < dirs.length; d++) rows.push(row("dir", dirs.slice(0, d + 1).join("/"), `${dirs[d]}/`));
     open = dirs;
-    rows.push(fileRow(path, dirs.length, parts.at(-1)));
+    const file = row("file", path, parts.at(-1));
+    if (path === selected) file.setAttribute("aria-current", "true");
+    rows.push(file);
   }
+  closed = new Set(sideBySide.matches ? [] : rows.filter((r) => r.classList.contains("dir")).map((r) => r.dataset.path));
   $("tree").replaceChildren(...rows);
+  paintFolders();
 }
 
-function fileRow(path, depth, name) {
-  const file = row("button", "file", depth, name);
-  file.type = "button";
-  file.dataset.path = path;
-  if (path === selected) file.setAttribute("aria-current", "true");
-  return file;
-}
-
-function row(tag, kind, depth, text) {
-  const node = el(tag, { className: kind, textContent: text });
-  node.style.setProperty("--d", depth);
+// A folder or file row, indented by its depth.
+function row(kind, path, text) {
+  const node = el("button", { type: "button", className: kind, textContent: text });
+  node.dataset.path = path;
+  node.style.setProperty("--d", path.split("/").length - 1);
   return node;
+}
+
+// Hides the rows inside closed folders and marks each folder open or closed.
+function paintFolders() {
+  for (const node of $("tree").children) {
+    const folders = node.dataset.path.split("/").slice(0, -1);
+    node.hidden = folders.some((_, i) => closed.has(folders.slice(0, i + 1).join("/")));
+    if (node.classList.contains("dir")) node.setAttribute("aria-expanded", String(!closed.has(node.dataset.path)));
+  }
 }
 
 function drawFile() {
@@ -394,8 +407,20 @@ function drawFile() {
 }
 
 $("tree").addEventListener("click", (event) => {
+  const folder = event.target.closest(".dir");
+  if (folder) {
+    const path = folder.dataset.path;
+    if (!closed.delete(path)) closed.add(path);
+    paintFolders();
+    return;
+  }
   const file = event.target.closest(".file");
-  if (!file || file.dataset.path === selected) return;
+  if (!file) return;
+  if (file.dataset.path !== selected) selectFile(file);
+  if (!sideBySide.matches) setReading(true);
+});
+
+function selectFile(file) {
   selected = file.dataset.path;
   for (const node of $("tree").querySelectorAll(".file")) {
     if (node === file) node.setAttribute("aria-current", "true");
@@ -403,7 +428,20 @@ $("tree").addEventListener("click", (event) => {
   }
   drawFile();
   restart($("code").parentElement, "swap");
-});
+}
+
+// On a narrow screen the list and the open file take turns: tapping a file
+// opens it full width, and "All files" returns to the list at that file.
+function setReading(reading) {
+  const panel = $("files");
+  if (panel.classList.contains("reading") === reading) return;
+  panel.classList.toggle("reading", reading);
+  const shown = reading ? $("code").parentElement : $("tree");
+  restart(shown, "swap");
+  const target = reading ? panel : $("tree").querySelector('.file[aria-current="true"]');
+  target?.scrollIntoView({ block: reading ? "start" : "center", behavior: still() ? "auto" : "smooth" });
+  (reading ? $("back-files") : target)?.focus({ preventScroll: true });
+}
 
 // The summary and the file tree take turns in the same panel. The view that
 // leaves fades and slides out, the one that comes in fades up. Neither is
@@ -419,6 +457,7 @@ function setFilesView(open) {
     arriving.classList.remove("away", "leave");
     arriving.classList.add("arrive");
   }
+  if (open) panel.classList.remove("reading");
   $("switch").dataset.view = mode;
   for (const opt of $("switch").querySelectorAll(".seg-opt")) {
     opt.setAttribute("aria-pressed", String(opt.dataset.view === mode));
@@ -468,6 +507,7 @@ $("switch").addEventListener("click", (event) => {
 $("back").addEventListener("click", goBack);
 $("edit").addEventListener("click", editAnswers);
 $("restart").addEventListener("click", startOver);
+$("back-files").addEventListener("click", () => setReading(false));
 // Each install command has its own icon copy button inside its box.
 function copyInstallLine(event) {
   const button = event.target.closest("[data-copy]");
