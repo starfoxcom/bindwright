@@ -11,7 +11,7 @@ import { python, runPython } from "./python.js";
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const noPython = !python && "needs Python 3.8+";
 const REFUSED = "Invalid answers: ";
-const REPO_MSG = "repoUrl must be empty or an https:// address of plain ASCII without spaces, quotes or angle brackets";
+const REPO_MSG = "repoUrl must be empty or an https:// address of letters, digits and . _ ~ : / ? # @ % + = , -";
 const HOLDER_MSG = "licenseHolder must be empty or up to 100 letters, digits, spaces and . , ' & ( ) -";
 const PY_VALIDATE = `
 import json, sys
@@ -54,6 +54,11 @@ const ROWS = [
   ["repoUrl with a backtick is refused", "repoUrl", "https://x.io/a`b", REPO_MSG],
   ["repoUrl with an angle bracket is refused", "repoUrl", "https://x.io/<a>", REPO_MSG],
   ["repoUrl javascript: scheme is refused", "repoUrl", "javascript:alert(1)", REPO_MSG],
+  ["repoUrl with a single quote is refused", "repoUrl", "https://x.io/a'b", REPO_MSG],
+  ["repoUrl with a semicolon is refused", "repoUrl", "https://x.io/r;curl", REPO_MSG],
+  ["repoUrl with a command substitution is refused", "repoUrl", "https://x.io/$(id)", REPO_MSG],
+  ["repoUrl with a pipe is refused", "repoUrl", "https://x.io/a|sh", REPO_MSG],
+  ["repoUrl with an ampersand is refused", "repoUrl", "https://x.io/a&b", REPO_MSG],
   ["repoUrl http address is refused", "repoUrl", "http://x.io/a", REPO_MSG],
   ["licenseHolder empty is accepted", "licenseHolder", "", null],
   ["licenseHolder of 100 characters is accepted", "licenseHolder", repeat("a", 100), null],
@@ -64,6 +69,8 @@ const ROWS = [
   ["licenseHolder with an angle bracket is refused", "licenseHolder", "Ana <ana@x.io>", HOLDER_MSG],
   ["licenseHolder with an emoji is refused", "licenseHolder", "Ana 😀", HOLDER_MSG],
   ["licenseHolder José Pérez & Co. is accepted", "licenseHolder", "José Pérez & Co.", null],
+  ["licenseHolder in Devanagari, with combining marks, is accepted", "licenseHolder", "अनुराग", null],
+  ["licenseHolder in decomposed Latin is accepted", "licenseHolder", "Núñez", null],
 ];
 
 for (const [name, field, value, message] of ROWS) {

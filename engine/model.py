@@ -72,8 +72,8 @@ TRACKERS = ["github", "file"]
 # command lines, so it is held to GitHub's own name rule.
 TRACKER_PROJECT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[1-9][0-9]{0,5}")
 PUBLIC_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.+$)[A-Za-z0-9._-]{1,100}")
-# The same printable-ASCII set as model.js REPO_URL.
-REPO_URL = re.compile(r"https://[!#-;=?-\[\]^_a-z{|}~]{1,192}")
+# The same URL characters as model.js REPO_URL: none with a shell meaning.
+REPO_URL = re.compile(r"https://[A-Za-z0-9._~:/?#@%+=,-]{1,192}")
 LICENSES = {
     "MIT": "MIT.txt",
     "Apache-2.0": "Apache-2.0.txt",
@@ -180,10 +180,10 @@ def _own(obj, key):
 
 
 def _holder_ok(text):
-    """The same set as model.js LICENSE_HOLDER: a letter or number by Unicode
+    """The same set as model.js LICENSE_HOLDER: a letter, mark or number by Unicode
     category, or one of the listed marks. Length counts code points."""
     return 1 <= len(text) <= 100 and all(
-        unicodedata.category(c)[0] in "LN" or c in " .,'&()-" for c in text)
+        unicodedata.category(c)[0] in "LMN" or c in " .,'&()-" for c in text)
 
 
 def _glob_ok(g):
@@ -230,7 +230,7 @@ def validate(saved):
     _check(isinstance(get(project, "repoUrl"), str) and isinstance(get(project, "licenseHolder"), str),
            "repoUrl and licenseHolder must be text")
     _check(get(project, "repoUrl") == "" or REPO_URL.fullmatch(get(project, "repoUrl")) is not None,
-           "repoUrl must be empty or an https:// address of plain ASCII without spaces, quotes or angle brackets")
+           "repoUrl must be empty or an https:// address of letters, digits and . _ ~ : / ? # @ % + = , -")
     _check(get(project, "licenseHolder") == "" or _holder_ok(get(project, "licenseHolder")),
            "licenseHolder must be empty or up to 100 letters, digits, spaces and . , ' & ( ) -")
     _check(_own(LICENSES, get(project, "license")), 'unknown license "%s"' % js_str(get(project, "license")))

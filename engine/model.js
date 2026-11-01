@@ -43,9 +43,10 @@ export const CODE_RESEARCH_TOOLS = {
 const CUSTOM_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9 ._+-]{0,38}[A-Za-z0-9._+-])?$/;
 const CUSTOM_URL = /^https:\/\/[^\x00-\x20\x7f-￿"'`<>\\]{1,200}$/;
 // The repo URL and the license holder land in Markdown and YAML. The URL is
-// printable ASCII without space, quote, angle bracket, backslash or backtick.
-const REPO_URL = /^https:\/\/[!#-;=?-\[\]^_a-z{|}~]{1,192}$/;
-const LICENSE_HOLDER = /^[\p{L}\p{N} .,'&()-]{1,100}$/u;
+// plain URL characters only, none with a meaning to a shell or to Markdown;
+// the holder is letters (accents included), digits, spaces and . , ' & ( ) -
+const REPO_URL = /^https:\/\/[A-Za-z0-9._~:\/?#@%+=,-]{1,192}$/;
+const LICENSE_HOLDER = /^[\p{L}\p{M}\p{N} .,'&()-]{1,100}$/u;
 
 export const PRECOMMIT_MANAGERS = ["lefthook", "husky", "pre-commit", "simple-git-hooks"];
 // Merge commits by default: every branch stays visible in the history graph.
@@ -155,7 +156,7 @@ export function validate(saved) {
   check(typeof a.project.repoUrl === "string" && typeof a.project.licenseHolder === "string",
     "repoUrl and licenseHolder must be text");
   check(a.project.repoUrl === "" || REPO_URL.test(a.project.repoUrl),
-    "repoUrl must be empty or an https:// address of plain ASCII without spaces, quotes or angle brackets");
+    "repoUrl must be empty or an https:// address of letters, digits and . _ ~ : / ? # @ % + = , -");
   check(a.project.licenseHolder === "" || LICENSE_HOLDER.test(a.project.licenseHolder),
     "licenseHolder must be empty or up to 100 letters, digits, spaces and . , ' & ( ) -");
   check(own(LICENSES, a.project.license), `unknown license "${a.project.license}"`);
