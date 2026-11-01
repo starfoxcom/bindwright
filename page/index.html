@@ -141,13 +141,17 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           </div>
         </div>
         <div class="command" id="command" aria-labelledby="command-title">
-          <p class="command-step" data-t="command.step">Last step</p>
-          <h3 class="command-title" id="command-title" data-t="command.title">Paste this into Claude Code</h3>
-          <p class="command-how" data-t="command.how">Open Claude Code in your project folder, paste each command and press Enter, and setup writes the files above without ever overwriting one of yours before asking.</p>
+          <p class="command-step" data-t="command.step">Almost done</p>
+          <h3 class="command-title" id="command-title" data-t="command.title">Set it up in Claude Code</h3>
+          <p class="command-how" data-t="command.how">One command per step, in this order, so paste each one into Claude Code, press Enter and wait for it to finish before the next one.</p>
           <ol class="command-steps">
             <li>
-              <p class="command-sub"><b data-t="command.install.title">First time? Install Bindwright.</b>
-                <span data-t="command.install.text">Once per computer, so if you already have it, skip to step 2.</span></p>
+              <p class="command-sub"><b data-t="command.open.title">Open Claude Code in your project's folder.</b>
+                <span data-t="command.open.text">Setup writes into the folder Claude Code is open in, so start there.</span></p>
+            </li>
+            <li>
+              <p class="command-sub"><b data-t="command.market.title">Add Bindwright's marketplace.</b>
+                <span data-t="command.market.text">Once per computer, so if Bindwright is already installed, skip to step 4.</span></p>
               <div class="install-line"><code>/plugin marketplace add starfoxcom/claude-code-templates</code>
                 <button class="icon-copy" type="button" aria-label="Copy command" data-copy
                   data-t-attr="aria-label:command.copy">
@@ -163,6 +167,10 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
                     <path d="M20 6 9 17l-5-5"/>
                   </svg>
                 </button></div>
+            </li>
+            <li>
+              <p class="command-sub"><b data-t="command.install.title">Install Bindwright.</b>
+                <span data-t="command.install.text">Once per computer, right after step 2, and wait until it finishes.</span></p>
               <div class="install-line"><code>/plugin install bindwright@bindwright</code>
                 <button class="icon-copy" type="button" aria-label="Copy command" data-copy
                   data-t-attr="aria-label:command.copy">
@@ -180,7 +188,8 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
                 </button></div>
             </li>
             <li>
-              <p class="command-sub"><b data-t="command.setup">Set up this project.</b></p>
+              <p class="command-sub"><b data-t="command.setup.title">Set up this project.</b>
+                <span data-t="command.setup.text">Paste it and press Enter, and setup asks before it touches any file you already have.</span></p>
               <div class="command-line">
                 <code class="cmd" id="cmd-text"></code>
                 <button class="icon-copy" id="copy" type="button" aria-label="Copy command"

@@ -59,14 +59,22 @@ export default {
   "files.back": "&larr; Todos los archivos",
   "answers.edit": "Editar mis respuestas",
   "answers.restart": "Empezar de nuevo",
-  "command.step": "Último paso",
-  "command.title": "Pega esto en Claude Code",
-  "command.how": "Abre Claude Code en la carpeta de tu proyecto, pega cada comando y presiona Enter, y la "
-    + "configuración escribe los archivos de arriba, en inglés, sin reemplazar nunca uno tuyo antes de "
-    + "preguntarte.",
-  "command.install.title": "¿Primera vez? Instala Bindwright.",
-  "command.install.text": "Una vez por computadora, así que si ya lo tienes, pasa al paso 2.",
-  "command.setup": "Configura este proyecto.",
+  "command.step": "Ya casi",
+  "command.title": "Configúralo en Claude Code",
+  "command.how": "Un comando por paso, en este orden, así que pega cada uno en Claude Code, presiona Enter "
+    + "y espera a que termine antes de pasar al siguiente.",
+  "command.install.title": "Instala Bindwright.",
+  "command.install.text": "Una vez por computadora, justo después del paso 2, y espera a que termine.",
+  "command.open.title": "Abre Claude Code en la carpeta de tu proyecto.",
+  "command.open.text": "La configuración escribe en la carpeta donde está abierto Claude Code, así que "
+    + "empieza ahí.",
+  "command.market.title": "Agrega el marketplace de Bindwright.",
+  "command.market.text": "Una vez por computadora, así que si ya tienes Bindwright instalado, pasa al paso "
+    + "4.",
+  "command.setup.title": "Configura este proyecto.",
+  "command.setup.text": "Pégalo y presiona Enter, y la configuración te pregunta antes de tocar cualquier "
+    + "archivo que ya tengas. Los archivos que escribe están en inglés, y Claude te sigue respondiendo en "
+    + "español.",
   "command.copy": "Copiar comando",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
 
