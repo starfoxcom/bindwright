@@ -96,9 +96,10 @@ and no `python3`/`python`/`py` guess is involved. Shipped in a repo's
 which cannot know an absolute interpreter path: it takes the first of
 `python3`, `python` and `py` that is Python 3.8+ outside a virtual
 environment, and skips this file when `~/.claude/hooks/push-guard.py`
-exists and `~/.claude/settings.json` names it outside a permission rule. A project that ships it this way must keep tokensave's
-hook global: tokensave copies the launcher of a project's existing hooks
-into its own project entries, and `sh run-hook.sh` is no launcher for it.
+exists and `~/.claude/settings.json` names it outside a permission
+rule. A project that ships it this way must keep tokensave's hook global:
+tokensave copies the launcher of a project's existing hooks into its own
+project entries, and `sh run-hook.sh` is no launcher for it.
 Either way it runs through a `runpy` one-liner instead of
 `python <path>` because Python exits 2 when it cannot open a script, which
 would block every call; through `runpy` a missing file is an ordinary error
@@ -136,7 +137,8 @@ CONTINUATION = {"Bash": re.compile(r"\\\n"), "PowerShell": re.compile(r"`(?:\r\n
 ANSI_QUOTE = re.compile(r"\\.|\"(?:[^\"\\\n]|\\.)*\"|'[^'\n]*'|\$'((?:[^'\\\n]|\\[^\n])*)'", re.S)
 # Bash's `$'...'` escapes: hex, `\u` and `\U` with as few digits as Bash
 # takes, octal, control characters, and single letters.
-ANSI_ESCAPE = re.compile(r"\\(?:x([0-9A-Fa-f]{1,2})|u([0-9A-Fa-f]{1,4})|U([0-9A-Fa-f]{1,8})|([0-7]{1,3})|c(.)|(.))", re.S)
+ANSI_ESCAPE = re.compile(
+    r"\\(?:x([0-9A-Fa-f]{1,2})|u([0-9A-Fa-f]{1,4})|U([0-9A-Fa-f]{1,8})|([0-7]{1,3})|c(.)|(.))", re.S)
 ANSI_LETTERS = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
                 "t": "\t", "v": "\v", "\\": "\\", "'": "'", "\"": "\"", "?": "?"}
 # What a decoded `$'...'` holds is one word to the shell around it, so its
@@ -189,7 +191,8 @@ LONG_FORCE = re.compile(r"--force(?:=.*)?|--m(?:i(?:r(?:r(?:o(?:r)?)?)?)?)?")
 FORCING_CONFIG = re.compile(
     r"remote\..+\.push=\+.*|remote\..+\.mirror(?:=(?!(?:false|no|off|[-+]?(?:0x)?0+[kmg]?)$).*)?", re.I)
 # A `!` alias may run the dashed program, by name or path (`!git-push -f`).
-PUSH_ALIAS = re.compile(r"alias\.[^=]+=(?:push|send-pack|http-push|!(?:\S*/)?(?:git-)?(?:push|send-pack|http-push))", re.I)
+PUSH_ALIAS = re.compile(
+    r"alias\.[^=]+=(?:push|send-pack|http-push|!(?:\S*/)?(?:git-)?(?:push|send-pack|http-push))", re.I)
 
 
 def ansi_char(match):
