@@ -43,10 +43,15 @@ class _R:
     def __init__(self, fns): self.function_list = fns
 def get_reader_for(path):
     return None if path.endswith(".dart") else object()
-def analyze_file(path):
+def _table(path):
     table = json.loads(os.environ.get("LIZARD_STUB", "{}"))
-    key = os.path.relpath(path, os.getcwd()).replace(os.sep, "/")
-    return _R([_F(d) for d in table.get(key, [])])
+    return table.get(os.path.relpath(path, os.getcwd()).replace(os.sep, "/"), [])
+class _Analyzer:
+    def __call__(self, path): return _R([_F(d) for d in _table(path)])
+    # TypeScript is read one top-level piece at a time; the first piece holds the table.
+    def analyze_source_code(self, path, code):
+        return _R([] if code.startswith("\\n") else [_F(d) for d in _table(path)])
+analyze_file = _Analyzer()
 `;
 
 const lines = (n, width = 1) => `${Array.from({ length: n }, () => "x".repeat(width)).join("\n")}\n`;
@@ -218,3 +223,48 @@ test("the shipped rule's tables parse: named rows, Other, and spaced thousands",
   assert.match(r.out, /c\.h: file - = 1501 \(hard limit 1500\)/);
   assert.doesNotMatch(r.out, /d\.ts/);
 });
+
+test("a TypeScript file that is not UTF-8 is measured, not a crash", { skip }, () => {
+  const { root } = makeRepo({ "a.ts": Buffer.from("// caf\xe9\nconst a = 1\n", "latin1") },
+    readFileSync(RULE, "utf8"));
+  const r = check(root, [], { stub: { "a.ts": [{ name: "big", length: 101 }] } });
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /a\.ts: function big = 101 \(hard limit 100\)/);
+});
+
+// Calls one function of the shipped script with a JSON argument and returns its JSON result.
+function scriptCall(expr, arg) {
+  const code = `import json, sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n`
+    + `arg = json.loads(sys.stdin.read())\nprint(json.dumps(${expr}))\n`;
+  // -B: no bytecode left in the shipped scripts folder.
+  const r = spawnSync(python, ["-B", "-S", "-c", code, dirname(SCRIPT)],
+    { input: JSON.stringify(arg), encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout);
+}
+
+test("TypeScript is cut before each top-level statement, line numbers kept", { skip }, () => {
+  const text = "const a = {\n  x: 1,\n}\n\nfunction f() {\n  return 1\n}\n// note\nexport type T = { a: string }\n";
+  const chunks = scriptCall("size_check.top_level_chunks(arg)", text);
+  assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 7, 8]);
+  assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
+});
+
+// Where a statement may start: [name, source, the line indexes that start one].
+const STARTS = [
+  ["column-0 text inside a template literal", "function f() {\n  return `\nx {\n`\n}\nconst b = 1\n", [0, 5]],
+  ["a template's ${} with braces inside", "const t = `${ {a: 1}.a }\n{`\nconst u = 2\n", [0, 2]],
+  ["column-0 text inside a block comment", "/*\nx {\n*/\nconst b = 1\n", [0, 3]],
+  ["brackets inside strings and comments", "const s = '{' // {\nconst t = \"}\"\n", [0, 1]],
+  ["an escaped quote keeps the string open", "const s = '\\'{'\nconst t = 1\n", [0, 1]],
+  ["brackets inside a regex literal", "const r = s.replace(/\\[[^\\]]*\\]$/, '')\nconst t = 1\n", [0, 1]],
+  ["a slash after a value divides", "const h = (a / 2) / (b)\nconst t = 1\n", [0, 1]],
+  ["a line still inside brackets", "foo(\nbar)\nbaz()\n", [0, 2]],
+  ["brackets that do not add up read the file whole", "}\nconst a = 1\n", null],
+];
+
+for (const [name, text, starts] of STARTS) {
+  test(`top-level starts: ${name}`, { skip }, () => {
+    assert.deepEqual(scriptCall("size_check.top_level_starts(arg)", text), starts);
+  });
+}

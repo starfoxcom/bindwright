@@ -129,8 +129,107 @@ def functions(path):
         return None
     if lizard.get_reader_for(path) is None:
         return False
-    found = lizard.analyze_file(os.path.join(ROOT, path)).function_list
+    full = os.path.join(ROOT, path)
+    if path.endswith((".ts", ".tsx")):
+        found = typescript_functions(lizard, full)
+    else:
+        found = lizard.analyze_file(full).function_list
     return [(f.name, f.end_line - f.start_line + 1, f.cyclomatic_complexity, param_count(path, f)) for f in found]
+
+
+OPENERS, CLOSERS = "([{", ")]}"
+# A slash after one of these, or at the start of a line, opens a regex literal.
+# Not after "}" or "<": in JSX those come before the slash of a closing tag.
+REGEX_AFTER = "(,=:[!&|?{;+-*%~^"
+# Modes that end with their line: strings, and regex literals ("/", "/[" in a class).
+LINE_MODES = ("'", '"', "/", "/[")
+
+
+def _scan_code(line, at):
+    """One step through code from index `at`: (next index, the mode that
+    starts there: "block", a quote, "/" for a regex literal, or None)."""
+    pair = line[at:at + 2]
+    if pair == "//":
+        return len(line), None
+    if pair == "/*":
+        return at + 2, "block"
+    if line[at] in "'\"`":
+        return at + 1, line[at]
+    before = line[:at].rstrip()
+    if line[at] == "/" and (not before or before[-1] in REGEX_AFTER or before.endswith("return")):
+        return at + 1, "/"
+    return at + 1, None
+
+
+def _scan_literal(line, at, mode):
+    """One step inside a comment, string or regex literal: (next index, mode)."""
+    c = line[at]
+    if mode == "block":
+        return (at + 2, "code") if line[at:at + 2] == "*/" else (at + 1, mode)
+    if c == "\\":
+        return at + 2, mode
+    if mode in ("/", "/["):
+        if c == "[" or c == "]":
+            return at + 1, "/[" if c == "[" else "/"
+        return at + 1, "code" if mode == "/" and c == "/" else mode
+    return at + 1, "code" if c == mode else mode
+
+
+def _scan_line(line, state):
+    """Carries the scan through one line. `state` is [depth, mode, templates]:
+    bracket depth in code, the mode the line ends in ("code", "block" or "`")
+    and the depths where each open template's `${` returns."""
+    depth, mode, templates = state
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if mode == "`" and line[i:i + 2] == "${":
+            templates.append(depth)
+            depth, mode, i = depth + 1, "code", i + 2
+        elif mode != "code":
+            i, mode = _scan_literal(line, i, mode)
+        elif c == "}" and templates and depth - 1 == templates[-1]:
+            depth, mode, i = templates.pop(), "`", i + 1
+        else:
+            depth += (c in OPENERS) - (c in CLOSERS)
+            i, opened = _scan_code(line, i)
+            mode = opened or mode
+    state[:] = [depth, "code" if mode in LINE_MODES else mode, templates]
+
+
+def top_level_starts(text):
+    """Lines that begin a top-level statement: column 0, not a closing
+    bracket, at bracket depth 0 and outside strings, templates and comments.
+    None when the brackets do not add up, so the file is read whole."""
+    state, starts = [0, "code", []], []
+    for i, line in enumerate(text.splitlines(keepends=True)):
+        if state[:2] == [0, "code"] and line[:1] not in ("", " ", "\t", "\r", "\n", *CLOSERS):
+            starts.append(i)
+        _scan_line(line, state)
+        if state[0] < 0:
+            return None
+    return starts
+
+
+def top_level_chunks(text):
+    """The text cut before every top-level statement. Blank lines stand in for
+    the lines before each piece, so line numbers hold."""
+    lines = text.splitlines(keepends=True)
+    starts = top_level_starts(text) or []
+    bounds = [0] + [i for i in starts if i > 0] + [len(lines)]
+    return ["\n" * a + "".join(lines[a:b]) for a, b in zip(bounds, bounds[1:]) if b > a]
+
+
+def typescript_functions(lizard, full):
+    # lizard loses its place in TypeScript after some type shapes, such as an
+    # object type inside a generic (Promise<{ a: string }>), and folds the
+    # functions after it into one. Reading each top-level statement on its own
+    # keeps a misread inside that statement.
+    # As lizard reads a file: a byte that is not UTF-8 never stops the check, and a BOM is dropped.
+    with open(full, encoding="utf-8-sig", errors="replace") as f:
+        text = f.read()
+    return [fn for chunk in top_level_chunks(text)
+            for fn in lizard.analyze_file.analyze_source_code(full, chunk).function_list]
 
 
 def param_count(path, f):
