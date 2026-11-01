@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
-import type { Mirror } from '../hooks/register'
+import type { Mirror } from '../hooks/mirror'
 import { HELP, MKDIR_SCRIPT, SWEEP_SCRIPT } from '../hooks/register'
 
 const MIRROR_FILE = 'C:/Users/me/.claude/mods-data/tasks/sess-a.json'

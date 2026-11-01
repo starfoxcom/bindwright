@@ -10,7 +10,7 @@ import {
   PUSH_RESTART_MS,
   workable,
 } from '../hooks/keepgoing'
-import type { Mirror, MirrorTask } from '../hooks/register'
+import type { Mirror, MirrorTask } from '../hooks/mirror'
 
 // Keep going: a turn that ends with work nobody waits for gets a prompt to carry on.
 

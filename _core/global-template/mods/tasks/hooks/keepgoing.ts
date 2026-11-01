@@ -1,4 +1,4 @@
-import type { Mirror, MirrorTask } from './register'
+import type { Mirror, MirrorTask } from './mirror'
 
 // Keep going: a turn that ends while a task on the list needs no one gets a prompt to carry on, so an
 // unattended run never sits idle with work left that nobody has to wait for. Pure, no engine access:
