@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-t="meta.title">Bindwright</title>
 <meta name="description" data-t-attr="content:meta.description"
-  content="Bindwright writes the files that tell Claude Code how your project works.">
+  content="Bindwright writes the files Claude Code reads about your project, so it knows how you work from the first message.">
 <!-- alternates -->
 <link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/">
 <link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/">
@@ -35,8 +35,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
   <section class="hero">
     <div class="pitch">
       <h1 data-t="hero.title">Stop re&#8209;explaining your project to Claude.</h1>
-      <p class="lede" data-t="hero.lede">Bindwright gives Claude Code your house rules, safety guards and
-        automatic pull request reviews, so every session starts out knowing how you work. Set up in one command.</p>
+      <p class="lede" data-t="hero.lede">Bindwright writes the rules Claude Code reads at the start of every session and sets up an AI review on every pull request, so each session already knows how you work, and the whole setup is just one command.</p>
       <div class="actions">
         <a class="go" href="#setup" data-t="hero.go">Set up my project</a>
         <a class="source" href="https://github.com/starfoxcom/claude-code-templates"
@@ -44,8 +43,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       </div>
     </div>
     <figure class="panel clip" aria-label="A recorded session" data-t-attr="aria-label:hero.figure">
-      <p class="empty" data-t="hero.empty">A real session plays here: Claude fixing the same bug
-        with and without Bindwright.</p>
+      <p class="empty" data-t="hero.empty">A real session plays here, Claude fixing the same bug with and without Bindwright.</p>
     </figure>
   </section>
 
@@ -54,17 +52,16 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <ul>
       <li><span class="was" data-t="changes.1.was">Claude forgets how you work every session</span>
         <b data-t="changes.1.title">Claude stops repeating mistakes</b>
-        <span data-t="changes.1.text">It reads your rules at the start of every session: small functions,
-          real tests, clear commits.</span></li>
+        <span data-t="changes.1.text">It reads your rules at the start of every session, so small functions and real tests stop being something you have to ask for every time.</span></li>
       <li><span class="was" data-t="changes.2.was">Changes merge without anyone checking them</span>
         <b data-t="changes.2.title">Every pull request gets reviewed</b>
-        <span data-t="changes.2.text">An AI review checks each change, and nothing merges until it passes.</span></li>
+        <span data-t="changes.2.text">An AI reviews every change before it merges, and if the review doesn't pass, nothing goes in.</span></li>
       <li><span class="was" data-t="changes.3.was">Each session starts from scratch</span>
         <b data-t="changes.3.title">Sessions pick up where they stopped</b>
-        <span data-t="changes.3.text">Each one starts with a plan and ends with a hand-off for the next.</span></li>
+        <span data-t="changes.3.text">Each session starts with a plan and ends with a note for the next one, so the work picks up right where it stopped.</span></li>
       <li><span class="was" data-t="changes.4.was">One wrong command can wipe your main branch</span>
         <b data-t="changes.4.title">Risky commands get blocked</b>
-        <span data-t="changes.4.text">Force pushes to your main branch are stopped before they run.</span></li>
+        <span data-t="changes.4.text">Force pushes to your main branch get stopped before they run, since one wrong command there can cost you days of work.</span></li>
     </ul>
   </section>
 
@@ -146,12 +143,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <div class="command" id="command" aria-labelledby="command-title">
           <p class="command-step" data-t="command.step">Last step</p>
           <h3 class="command-title" id="command-title" data-t="command.title">Paste this into Claude Code</h3>
-          <p class="command-how" data-t="command.how">Open Claude Code in your project folder, then paste each
-            command and press Enter. Setup writes the files above and never overwrites one of yours without asking.</p>
+          <p class="command-how" data-t="command.how">Open Claude Code in your project folder, paste each command and press Enter, and setup writes the files above without ever overwriting one of yours before asking.</p>
           <ol class="command-steps">
             <li>
               <p class="command-sub"><b data-t="command.install.title">First time? Install Bindwright.</b>
-                <span data-t="command.install.text">Once per computer. Already have it? Skip to step 2.</span></p>
+                <span data-t="command.install.text">Once per computer, so if you already have it, skip to step 2.</span></p>
               <div class="install-line"><code>/plugin marketplace add starfoxcom/claude-code-templates</code>
                 <button class="icon-copy" type="button" aria-label="Copy command" data-copy
                   data-t-attr="aria-label:command.copy">

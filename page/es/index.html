@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-t="meta.title">Bindwright</title>
 <meta name="description" data-t-attr="content:meta.description"
-  content="Bindwright escribe los archivos que le dicen a Claude Code cómo funciona tu proyecto.">
+  content="Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo trabajas desde el primer mensaje.">
 <!-- alternates -->
 <link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/">
 <link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/">
@@ -35,7 +35,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
   <section class="hero">
     <div class="pitch">
       <h1 data-t="hero.title">Deja de explicarle tu proyecto a Claude cada vez.</h1>
-      <p class="lede" data-t="hero.lede">Bindwright le da a Claude Code tus reglas de la casa, protecciones contra errores graves y revisiones automáticas de cada pull request, para que cada sesión empiece sabiendo cómo trabajas. Se configura con un comando.</p>
+      <p class="lede" data-t="hero.lede">Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la configuración es un solo comando.</p>
       <div class="actions">
         <a class="go" href="#setup" data-t="hero.go">Configurar mi proyecto</a>
         <a class="source" href="https://github.com/starfoxcom/claude-code-templates"
@@ -43,7 +43,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       </div>
     </div>
     <figure class="panel clip" aria-label="Una sesión grabada" data-t-attr="aria-label:hero.figure">
-      <p class="empty" data-t="hero.empty">Aquí se reproduce una sesión real: Claude arreglando el mismo error con y sin Bindwright.</p>
+      <p class="empty" data-t="hero.empty">Aquí se reproduce una sesión real, Claude arreglando el mismo error con y sin Bindwright.</p>
     </figure>
   </section>
 
@@ -52,16 +52,16 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <ul>
       <li><span class="was" data-t="changes.1.was">Claude olvida cómo trabajas en cada sesión</span>
         <b data-t="changes.1.title">Claude deja de repetir errores</b>
-        <span data-t="changes.1.text">Lee tus reglas al inicio de cada sesión: funciones pequeñas, pruebas reales, commits claros.</span></li>
+        <span data-t="changes.1.text">Lee tus reglas al inicio de cada sesión, así las funciones pequeñas y las pruebas reales dejan de ser algo que tienes que pedir cada vez.</span></li>
       <li><span class="was" data-t="changes.2.was">Los cambios se integran sin que nadie los revise</span>
         <b data-t="changes.2.title">Cada pull request se revisa</b>
-        <span data-t="changes.2.text">Una revisión con IA revisa cada cambio, y nada se integra hasta que la pasa.</span></li>
+        <span data-t="changes.2.text">Una IA revisa cada cambio antes de integrarlo, y si la revisión no pasa, nada entra.</span></li>
       <li><span class="was" data-t="changes.3.was">Cada sesión empieza desde cero</span>
         <b data-t="changes.3.title">Las sesiones siguen donde se quedaron</b>
-        <span data-t="changes.3.text">Cada una empieza con un plan y termina con notas para la siguiente.</span></li>
+        <span data-t="changes.3.text">Cada sesión empieza con un plan y termina con una nota para la siguiente, así el trabajo sigue justo donde se quedó.</span></li>
       <li><span class="was" data-t="changes.4.was">Un comando equivocado puede borrar tu rama principal</span>
         <b data-t="changes.4.title">Los comandos peligrosos se bloquean</b>
-        <span data-t="changes.4.text">Los push forzados a tu rama principal se detienen antes de ejecutarse.</span></li>
+        <span data-t="changes.4.text">Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un comando equivocado ahí te puede costar días de trabajo.</span></li>
     </ul>
   </section>
 
@@ -142,11 +142,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <div class="command" id="command" aria-labelledby="command-title">
           <p class="command-step" data-t="command.step">Último paso</p>
           <h3 class="command-title" id="command-title" data-t="command.title">Pega esto en Claude Code</h3>
-          <p class="command-how" data-t="command.how">Abre Claude Code en la carpeta de tu proyecto, pega cada comando y presiona Enter. La configuración escribe los archivos de arriba, en inglés, y nunca reemplaza uno tuyo sin preguntar.</p>
+          <p class="command-how" data-t="command.how">Abre Claude Code en la carpeta de tu proyecto, pega cada comando y presiona Enter, y la configuración escribe los archivos de arriba, en inglés, sin reemplazar nunca uno tuyo antes de preguntarte.</p>
           <ol class="command-steps">
             <li>
               <p class="command-sub"><b data-t="command.install.title">¿Primera vez? Instala Bindwright.</b>
-                <span data-t="command.install.text">Una vez por computadora. ¿Ya lo tienes? Pasa al paso 2.</span></p>
+                <span data-t="command.install.text">Una vez por computadora, así que si ya lo tienes, pasa al paso 2.</span></p>
               <div class="install-line"><code>/plugin marketplace add starfoxcom/claude-code-templates</code>
                 <button class="icon-copy" type="button" aria-label="Copiar comando" data-copy
                   data-t-attr="aria-label:command.copy">

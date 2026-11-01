@@ -2,21 +2,22 @@
 // index.html with data-t and listed in es.js; it is not repeated here.
 export default {
   "group.rules.title": "Rules Claude follows",
-  "group.rules.say": "Claude reads these at the start of every session, so it works your way without being told again.",
+  "group.rules.say": "Claude reads these at the start of every session, so it works your way without you "
+    + "telling it again.",
   "group.reviews.title": "Pull request reviews",
   "group.reviews.say": "An AI reviews every pull request, and nothing merges until the review passes.",
   "group.guards.title": "Safety guards",
-  "group.guards.say": "Risky commands, like a force push to your main branch, are stopped before they run.",
+  "group.guards.say": "Risky commands, like a force push to your main branch, get stopped before they run.",
   "group.sessions.title": "Session routines",
-  "group.sessions.say": "/session-start plans the work with you. /session-close checks what is really done "
-    + "and leaves a note for next time.",
+  "group.sessions.say": "/session-start plans the work with you, and /session-close checks what's really "
+    + "done and leaves a note for next time.",
   "group.checks.title": "Code checks",
   "group.checks.say": "Checks that run before each commit or on every pull request.",
   "group.issues.title": "Issue forms",
   "group.issues.say": "Ready-made forms for bug reports, feature requests and planned work.",
   "group.project.title": "Project files",
-  "group.project.say": "The main file Claude reads about your project, plus a readme and changelog. "
-    + "Setup merges them with yours.",
+  "group.project.say": "The main file Claude reads about your project, plus a readme and a changelog, and "
+    + "setup merges them with yours instead of replacing them.",
   "group.notes.title": "Bindwright's notes",
   "group.notes.say": "Your answers, so a later update keeps your own edits.",
   "group.other.title": "Other files",
@@ -25,7 +26,7 @@ export default {
   "rule.architecture.name": "Your code structure",
   "rule.architecture.line": "New code goes into the layers of the structure you picked.",
   "rule.clean-code.name": "Code a newcomer reads",
-  "rule.clean-code.line": "Clear names, short comments, no copies of the same code.",
+  "rule.clean-code.line": "Clear names and short comments, and no copies of the same code.",
   "rule.clean-room.name": "Clean room",
   "rule.clean-room.line": "Code inspired by another product never copies it.",
   "rule.code-size.name": "Small, readable code",
@@ -88,5 +89,5 @@ export default {
   "copy.done": "Copied",
   "copy.manual": "Select and copy",
   "status.updated": "What you get is updated.",
-  "failure": "This part of the page could not load ({error}). Reload the page to try again.",
+  "failure": "This part of the page couldn't load ({error}), so reload the page to try again.",
 };

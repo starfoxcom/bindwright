@@ -3,32 +3,36 @@
 // developers use as they are (pull request, commit, push) stay in English.
 export default {
   "meta.title": "Bindwright",
-  "meta.description": "Bindwright escribe los archivos que le dicen a Claude Code cómo funciona tu proyecto.",
+  "meta.description": "Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo "
+    + "trabajas desde el primer mensaje.",
   "skip.link": "Ir a la configuración",
   "nav.site": "Sitio",
   "nav.github": "GitHub",
   "nav.language": "Idioma",
   "hero.title": "Deja de explicarle tu proyecto a Claude cada vez.",
-  "hero.lede": "Bindwright le da a Claude Code tus reglas de la casa, protecciones contra errores graves y "
-    + "revisiones automáticas de cada pull request, para que cada sesión empiece sabiendo cómo trabajas. "
-    + "Se configura con un comando.",
+  "hero.lede": "Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una "
+    + "revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la "
+    + "configuración es un solo comando.",
   "hero.go": "Configurar mi proyecto",
   "hero.source": "Ver en GitHub",
   "hero.figure": "Una sesión grabada",
-  "hero.empty": "Aquí se reproduce una sesión real: Claude arreglando el mismo error con y sin Bindwright.",
+  "hero.empty": "Aquí se reproduce una sesión real, Claude arreglando el mismo error con y sin Bindwright.",
   "changes.title": "Qué cambia",
   "changes.1.was": "Claude olvida cómo trabajas en cada sesión",
   "changes.1.title": "Claude deja de repetir errores",
-  "changes.1.text": "Lee tus reglas al inicio de cada sesión: funciones pequeñas, pruebas reales, commits claros.",
+  "changes.1.text": "Lee tus reglas al inicio de cada sesión, así las funciones pequeñas y las pruebas "
+    + "reales dejan de ser algo que tienes que pedir cada vez.",
   "changes.2.was": "Los cambios se integran sin que nadie los revise",
   "changes.2.title": "Cada pull request se revisa",
-  "changes.2.text": "Una revisión con IA revisa cada cambio, y nada se integra hasta que la pasa.",
+  "changes.2.text": "Una IA revisa cada cambio antes de integrarlo, y si la revisión no pasa, nada entra.",
   "changes.3.was": "Cada sesión empieza desde cero",
   "changes.3.title": "Las sesiones siguen donde se quedaron",
-  "changes.3.text": "Cada una empieza con un plan y termina con notas para la siguiente.",
+  "changes.3.text": "Cada sesión empieza con un plan y termina con una nota para la siguiente, así el "
+    + "trabajo sigue justo donde se quedó.",
   "changes.4.was": "Un comando equivocado puede borrar tu rama principal",
   "changes.4.title": "Los comandos peligrosos se bloquean",
-  "changes.4.text": "Los push forzados a tu rama principal se detienen antes de ejecutarse.",
+  "changes.4.text": "Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un "
+    + "comando equivocado ahí te puede costar días de trabajo.",
   "setup.title": "Configura tu proyecto",
   "steps.label": "Pasos de la configuración",
   "q.team.title": "¿Quién trabaja en el proyecto?",
@@ -57,31 +61,33 @@ export default {
   "answers.restart": "Empezar de nuevo",
   "command.step": "Último paso",
   "command.title": "Pega esto en Claude Code",
-  "command.how": "Abre Claude Code en la carpeta de tu proyecto, pega cada comando y presiona Enter. "
-    + "La configuración escribe los archivos de arriba, en inglés, y nunca reemplaza uno tuyo sin preguntar.",
+  "command.how": "Abre Claude Code en la carpeta de tu proyecto, pega cada comando y presiona Enter, y la "
+    + "configuración escribe los archivos de arriba, en inglés, sin reemplazar nunca uno tuyo antes de "
+    + "preguntarte.",
   "command.install.title": "¿Primera vez? Instala Bindwright.",
-  "command.install.text": "Una vez por computadora. ¿Ya lo tienes? Pasa al paso 2.",
+  "command.install.text": "Una vez por computadora, así que si ya lo tienes, pasa al paso 2.",
   "command.setup": "Configura este proyecto.",
   "command.copy": "Copiar comando",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
 
   "group.rules.title": "Reglas que Claude sigue",
-  "group.rules.say": "Claude las lee al inicio de cada sesión, así trabaja a tu manera sin que se lo repitas.",
+  "group.rules.say": "Claude las lee al inicio de cada sesión, así trabaja a tu manera sin que se lo tengas "
+    + "que repetir.",
   "group.reviews.title": "Revisión de pull requests",
   "group.reviews.say": "Una IA revisa cada pull request, y nada se integra hasta que la revisión pasa.",
   "group.guards.title": "Protecciones",
-  "group.guards.say": "Los comandos peligrosos, como un push forzado a tu rama principal, se detienen "
-    + "antes de ejecutarse.",
+  "group.guards.say": "Los comandos peligrosos, como un push forzado a tu rama principal, se detienen antes "
+    + "de ejecutarse.",
   "group.sessions.title": "Rutinas de sesión",
-  "group.sessions.say": "/session-start planea el trabajo contigo. /session-close revisa qué está terminado "
-    + "de verdad y deja una nota para la próxima vez.",
+  "group.sessions.say": "/session-start planea el trabajo contigo, y /session-close revisa qué está "
+    + "terminado de verdad y deja una nota para la próxima vez.",
   "group.checks.title": "Revisiones de código",
   "group.checks.say": "Revisiones que corren antes de cada commit o en cada pull request.",
   "group.issues.title": "Formularios de issues",
   "group.issues.say": "Formularios listos para reportar errores, pedir funciones y planear trabajo.",
   "group.project.title": "Archivos del proyecto",
-  "group.project.say": "El archivo principal que Claude lee sobre tu proyecto, más un readme y un changelog. "
-    + "La configuración los combina con los tuyos.",
+  "group.project.say": "El archivo principal que Claude lee sobre tu proyecto, más un readme y un "
+    + "changelog, y la configuración los combina con los tuyos en vez de reemplazarlos.",
   "group.notes.title": "Notas de Bindwright",
   "group.notes.say": "Tus respuestas, para que una actualización futura respete tus cambios.",
   "group.other.title": "Otros archivos",
@@ -90,7 +96,7 @@ export default {
   "rule.architecture.name": "La estructura de tu código",
   "rule.architecture.line": "El código nuevo va en las capas de la estructura que elegiste.",
   "rule.clean-code.name": "Código que un recién llegado entiende",
-  "rule.clean-code.line": "Nombres claros, comentarios breves, sin copias del mismo código.",
+  "rule.clean-code.line": "Nombres claros y comentarios breves, y sin copias del mismo código.",
   "rule.clean-room.name": "Sala limpia",
   "rule.clean-room.line": "El código inspirado en otro producto nunca lo copia.",
   "rule.code-size.name": "Código pequeño y legible",
@@ -153,5 +159,6 @@ export default {
   "copy.done": "Copiado",
   "copy.manual": "Selecciona y copia",
   "status.updated": "Lo que obtienes está actualizado.",
-  "failure": "Esta parte de la página no pudo cargar ({error}). Recarga la página para intentarlo de nuevo.",
+  "failure": "Esta parte de la página no pudo cargar ({error}), así que recarga la página para intentarlo "
+    + "de nuevo.",
 };
