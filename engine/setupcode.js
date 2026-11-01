@@ -77,15 +77,31 @@ export function encodeSetupCode(answers, { full = false } = {}) {
 // A page-made answer set holds the same keys at every team, client and private
 // combination, so any other key is refused: a code cannot carry text the setup
 // did not choose. Checked here, not in validate, so saved project.json files
-// that hold keys since dropped still load.
+// that hold keys since dropped still load. The alphabetically first unknown key
+// is named, so the Python twin names the same one.
 function refuseUnknownKeys(answers) {
   const known = defaults();
   const levels = [["answer", answers, known], ["project answer", answers.project, known.project],
     ["advanced answer", answers.advanced, known.advanced]];
   for (const [label, part, dflt] of levels) {
     if (!isObjectLike(part) || Array.isArray(part)) continue;
-    const unknown = Object.keys(part).find((key) => !Object.hasOwn(dflt, key));
+    const unknown = Object.keys(part).filter((key) => !Object.hasOwn(dflt, key)).sort()[0];
     if (unknown !== undefined) fail(`unknown ${label} "${unknown}"`);
+  }
+}
+
+// Free text is set inside the session, never carried in a code: the project
+// strings must be empty and the custom tool and path values must be null.
+function refuseFreeText(answers) {
+  const isPlainObject = (x) => isObjectLike(x) && !Array.isArray(x);
+  const { project, advanced } = answers;
+  const carriesFreeText = (key) => key in project && project[key] !== "";
+  if (isPlainObject(project) && ["repoUrl", "licenseHolder"].some(carriesFreeText)) {
+    fail("the setup code carries a repoUrl or licenseHolder; setup asks for those in the session");
+  }
+  const carriesCustomText = (key) => advanced[key] !== undefined && advanced[key] !== null;
+  if (isPlainObject(advanced) && ["codeResearchCustom", "shippedTextPaths"].some(carriesCustomText)) {
+    fail("the setup code carries custom tool or path text; setup asks for those in the session");
   }
 }
 
@@ -110,5 +126,6 @@ export function decodeSetupCode(code) {
   }
   if (answers === null || typeof answers !== "object" || Array.isArray(answers)) fail("the answers must be an object");
   refuseUnknownKeys(answers);
+  refuseFreeText(answers);
   return answers;
 }

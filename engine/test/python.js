@@ -7,7 +7,6 @@
 // The test processes start interpreters by full path only.
 
 import { spawnSync } from "node:child_process";
-import assert from "node:assert/strict";
 
 export const python = spawnSync(process.execPath, ["-e", `
   const { spawnSync } = require("node:child_process");
@@ -16,10 +15,3 @@ export const python = spawnSync(process.execPath, ["-e", `
     const r = spawnSync(cmd, ["-c", check], { encoding: "utf8" });
     if (r.status === 0 && r.stdout.trim()) { process.stdout.write(r.stdout.trim()); break; }
   }`], { encoding: "utf8" }).stdout || undefined;
-
-// Runs a Python snippet with the engine folder (argv[1]) importable; JSON in, JSON out.
-export function runPython(script, input, engine) {
-  const out = spawnSync(python, ["-I", "-c", script, engine], { input: JSON.stringify(input), encoding: "utf8" });
-  assert.equal(out.status, 0, out.stderr);
-  return JSON.parse(out.stdout);
-}

@@ -13,7 +13,7 @@ import { bind, STAGING as BIND_STAGING } from "../bind.js";
 import { defaults, expandAnswers } from "../model.js";
 import { PREFIX, encodeSetupCode, decodeSetupCode } from "../setupcode.js";
 import { applyFiles, STAGING } from "../apply.js";
-import { python, runPython } from "./python.js";
+import { python } from "./python.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = join(engine, "..");
@@ -22,7 +22,7 @@ const noPython = !python && "needs Python 3.8+";
 const codeOf = (text) => PREFIX + Buffer.from(text).toString("base64url");
 const named = () => {
   const a = defaults({ team: true, client: true });
-  a.project = { ...a.project, name: "Ember.holm_2-x", licenseHolder: "Ana Núñez (Ltd.)" };
+  a.project = { ...a.project, name: "Ember.holm_2-x" };
   return a;
 };
 const ANSWERS = [defaults(), defaults({ team: true }), named()];
@@ -73,18 +73,41 @@ const ODD = [
 ];
 // One code per level that carries a key a page-made answer set never holds.
 const withExtra = (extra) => codeOf(JSON.stringify({ ...defaults(), ...extra }));
+const withProject = (project) => withExtra({ project: { ...defaults().project, ...project } });
+const withAdvanced = (advanced) => withExtra({ advanced: { ...defaults().advanced, ...advanced } });
 const UNKNOWN_KEYS = [
   ["an unknown top-level answer is refused", withExtra({ extra: 1 }),
     'Invalid setup code: unknown answer "extra"'],
-  ["an unknown project answer is refused", withExtra({ project: { ...defaults().project, extra: 1 } }),
+  ["an unknown project answer is refused", withProject({ extra: 1 }),
     'Invalid setup code: unknown project answer "extra"'],
-  ["an unknown advanced answer is refused", withExtra({ advanced: { ...defaults().advanced, extra: 1 } }),
+  ["an unknown advanced answer is refused", withAdvanced({ extra: 1 }),
     'Invalid setup code: unknown advanced answer "extra"'],
   ["the top level is checked before project", withExtra({ project: { ...defaults().project, p: 1 }, extra: 1 }),
     'Invalid setup code: unknown answer "extra"'],
-  ["the first unknown advanced key in JSON order is named", withExtra({
-    advanced: { ...defaults().advanced, zeta: 1, alpha: 2 } }),
-    'Invalid setup code: unknown advanced answer "zeta"'],
+  ["the alphabetically first unknown advanced key is named", withAdvanced({ zeta: 1, alpha: 2 }),
+    'Invalid setup code: unknown advanced answer "alpha"'],
+  ["an integer-like unknown key is named as the JS sort names it", withExtra({ zeta: 1, 5: 2 }),
+    'Invalid setup code: unknown answer "5"'],
+  ["an integer-like unknown project key is named the same way", withProject({ zeta: 1, 5: 2 }),
+    'Invalid setup code: unknown project answer "5"'],
+];
+// Free text is set in the session, so a code may carry it only at its default.
+const REPO_OR_HOLDER = "Invalid setup code: the setup code carries a repoUrl or licenseHolder; "
+  + "setup asks for those in the session";
+const CUSTOM_TEXT = "Invalid setup code: the setup code carries custom tool or path text; "
+  + "setup asks for those in the session";
+const FREE_TEXT = [
+  ["a repoUrl is refused", withProject({ repoUrl: "https://example.com/r" }), REPO_OR_HOLDER],
+  ["a licenseHolder is refused", withProject({ licenseHolder: "Ana Núñez" }), REPO_OR_HOLDER],
+  ["codeResearchCustom is refused", withAdvanced({ codeResearchCustom: { name: "x", url: "https://x.io" } }),
+    CUSTOM_TEXT],
+  ["shippedTextPaths is refused", withAdvanced({ shippedTextPaths: ["**/*.gd"] }), CUSTOM_TEXT],
+];
+const DEFAULT_FREE_TEXT = [
+  ["repoUrl at its default is accepted", withProject({ repoUrl: "" })],
+  ["licenseHolder at its default is accepted", withProject({ licenseHolder: "" })],
+  ["codeResearchCustom at its default is accepted", withAdvanced({ codeResearchCustom: null })],
+  ["shippedTextPaths at its default is accepted", withAdvanced({ shippedTextPaths: null })],
 ];
 
 function decodeJs(code) {
@@ -93,6 +116,13 @@ function decodeJs(code) {
   } catch (err) {
     return { error: err.message };
   }
+}
+
+// Runs a Python snippet with the engine folder importable; JSON in, JSON out.
+function runPython(script, input) {
+  const out = spawnSync(python, ["-I", "-c", script, engine], { input: JSON.stringify(input), encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  return JSON.parse(out.stdout);
 }
 
 const PY_DECODE = `
@@ -174,14 +204,19 @@ test("bad setup codes are refused with a message that says why", () => {
   for (const code of ODD) assert.ok(decodeJs(code).answers, code);
 });
 
-for (const [name, code, message] of UNKNOWN_KEYS) {
+for (const [name, code, message] of [...UNKNOWN_KEYS, ...FREE_TEXT]) {
   test(name, () => assert.deepEqual(decodeJs(code), { error: message }));
+}
+
+for (const [name, code] of DEFAULT_FREE_TEXT) {
+  test(name, () => assert.ok(decodeJs(code).answers));
 }
 
 test("the Python decoder reads every code as the JS decoder does", { skip: noPython }, () => {
   const codes = [...ANSWERS.map(encodeSetupCode), ...BAD.map(([code]) => code), ...ODD,
-    ...UNKNOWN_KEYS.map(([, code]) => code)];
-  const py = runPython(PY_DECODE, codes, engine);
+    ...UNKNOWN_KEYS.map(([, code]) => code), ...FREE_TEXT.map(([, code]) => code),
+    ...DEFAULT_FREE_TEXT.map(([, code]) => code)];
+  const py = runPython(PY_DECODE, codes);
   for (const [i, code] of codes.entries()) assert.deepEqual(py[i], decodeJs(code), String(code).slice(0, 80));
 });
 
@@ -189,7 +224,7 @@ test("the Python twin expands short and old codes as JS does", { skip: noPython 
   const shortCodes = COMBOS.map((combo) => encodeSetupCode(defaults(combo)));
   const changed = [changedOne(), advancedOnly()].map(encodeSetupCode);
   const codes = [...shortCodes, ...changed, codeOf(JSON.stringify(named()))];
-  const py = runPython(PY_EXPAND, codes, engine);
+  const py = runPython(PY_EXPAND, codes);
   for (const [i, code] of codes.entries()) sameBytes(py[i], expandAnswers(decodeSetupCode(code)), code);
 });
 
@@ -217,7 +252,7 @@ test("both writers refuse paths outside the repo and write nothing", { skip: noP
     const files = [["ok.txt", "x"], ...UNSAFE.map((p) => [p, "x"])];
     const message = `Refusing to write outside the repo: ${UNSAFE.join(", ")}`;
     assert.throws(() => applyFiles(files, join(root, "js")), { message });
-    assert.deepEqual(runPython(PY_APPLY, { files, root: join(root, "py") }, engine), { error: message });
+    assert.deepEqual(runPython(PY_APPLY, { files, root: join(root, "py") }), { error: message });
     assert.deepEqual(readdirSync(root), []);
   });
 });
@@ -246,7 +281,7 @@ test("both writers write new files, stage what exists and skip what is staged", 
       skipped: ["both.md", `${STAGING}CLAUDE.md`, ".bindwright/global/hooks/a.py"],
     };
     assert.deepEqual(applyFiles(files, join(root, "js")), expected);
-    assert.deepEqual(runPython(PY_APPLY, { files, root: join(root, "py") }, engine), expected);
+    assert.deepEqual(runPython(PY_APPLY, { files, root: join(root, "py") }), expected);
     assert.deepEqual(tree(join(root, "py")), tree(join(root, "js")));
     const read = (p) => readFileSync(join(root, "js", p), "utf8");
     assert.equal(read("a/b/c.txt"), "x\r\ny\n");
