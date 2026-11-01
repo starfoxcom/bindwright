@@ -77,8 +77,8 @@ export function encodeSetupCode(answers, { full = false } = {}) {
 // A page-made answer set holds the same keys at every team, client and private
 // combination, so any other key is refused: a code cannot carry text the setup
 // did not choose. Checked here, not in validate, so saved project.json files
-// that hold keys since dropped still load. The alphabetically first unknown key
-// is named, so the Python twin names the same one.
+// that hold keys since dropped still load. The first unknown key in UTF-16
+// order is named, so the Python twin names the same one.
 function refuseUnknownKeys(answers) {
   const known = defaults();
   const levels = [["answer", answers, known], ["project answer", answers.project, known.project],
@@ -90,18 +90,18 @@ function refuseUnknownKeys(answers) {
   }
 }
 
-// Free text is set inside the session, never carried in a code: the project
+// The page never sets free text, so a code that carries any was edited: the project
 // strings must be empty and the custom tool and path values must be null.
 function refuseFreeText(answers) {
   const isPlainObject = (x) => isObjectLike(x) && !Array.isArray(x);
   const { project, advanced } = answers;
   const carriesFreeText = (key) => key in project && project[key] !== "";
   if (isPlainObject(project) && ["repoUrl", "licenseHolder"].some(carriesFreeText)) {
-    fail("the setup code carries a repoUrl or licenseHolder; setup asks for those in the session");
+    fail("the setup code carries a repoUrl or licenseHolder, which the page never sets");
   }
   const carriesCustomText = (key) => advanced[key] !== undefined && advanced[key] !== null;
   if (isPlainObject(advanced) && ["codeResearchCustom", "shippedTextPaths"].some(carriesCustomText)) {
-    fail("the setup code carries custom tool or path text; setup asks for those in the session");
+    fail("the setup code carries custom tool or path text, which the page never sets");
   }
 }
 

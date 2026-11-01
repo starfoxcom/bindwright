@@ -54,28 +54,29 @@ def _refuse_unknown_keys(answers):
     """A page-made answer set holds the same keys at every team, client and
     private combination; any other key is refused. Checked on decode only, so
     saved project.json files that hold keys since dropped still load. The
-    alphabetically first unknown key is named, so the JS twin names the same one."""
+    first unknown key in UTF-16 order is named, so the JS twin names the same one."""
     known = defaults()
     levels = [("answer", answers, known), ("project answer", answers.get("project"), known["project"]),
               ("advanced answer", answers.get("advanced"), known["advanced"])]
     for label, part, dflt in levels:
         if not isinstance(part, dict):
             continue
-        unknown = sorted(key for key in part if key not in dflt)
+        unknown = sorted((key for key in part if key not in dflt),
+                         key=lambda key: key.encode("utf-16-be", "surrogatepass"))
         if unknown:
             _fail('unknown %s "%s"' % (label, unknown[0]))
 
 
 def _refuse_free_text(answers):
-    """Free text is set inside the session, never carried in a code: the project
+    """The page never sets free text, so a code that carries any was edited: the project
     strings must be empty and the custom tool and path values must be None."""
     project = answers.get("project")
     if isinstance(project, dict) and any(key in project and project[key] != "" for key in ("repoUrl", "licenseHolder")):
-        _fail("the setup code carries a repoUrl or licenseHolder; setup asks for those in the session")
+        _fail("the setup code carries a repoUrl or licenseHolder, which the page never sets")
     advanced = answers.get("advanced")
     if isinstance(advanced, dict) and any(
             advanced.get(key) is not None for key in ("codeResearchCustom", "shippedTextPaths")):
-        _fail("the setup code carries custom tool or path text; setup asks for those in the session")
+        _fail("the setup code carries custom tool or path text, which the page never sets")
 
 
 def decode_setup_code(code):

@@ -90,12 +90,14 @@ const UNKNOWN_KEYS = [
     'Invalid setup code: unknown answer "5"'],
   ["an integer-like unknown project key is named the same way", withProject({ zeta: 1, 5: 2 }),
     'Invalid setup code: unknown project answer "5"'],
+  ["a key past U+FFFF sorts by UTF-16 unit, before U+FFFF itself", withExtra({ "\uffff": 1, "\u{1F600}": 2 }),
+    'Invalid setup code: unknown answer "\u{1F600}"'],
 ];
-// Free text is set in the session, so a code may carry it only at its default.
-const REPO_OR_HOLDER = "Invalid setup code: the setup code carries a repoUrl or licenseHolder; "
-  + "setup asks for those in the session";
-const CUSTOM_TEXT = "Invalid setup code: the setup code carries custom tool or path text; "
-  + "setup asks for those in the session";
+// The page never sets free text, so a code may carry it only at its default.
+const REPO_OR_HOLDER = "Invalid setup code: the setup code carries a repoUrl or licenseHolder, "
+  + "which the page never sets";
+const CUSTOM_TEXT = "Invalid setup code: the setup code carries custom tool or path text, "
+  + "which the page never sets";
 const FREE_TEXT = [
   ["a repoUrl is refused", withProject({ repoUrl: "https://example.com/r" }), REPO_OR_HOLDER],
   ["a licenseHolder is refused", withProject({ licenseHolder: "Ana Núñez" }), REPO_OR_HOLDER],
