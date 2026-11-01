@@ -1,0 +1,24 @@
+# Size breaches this project accepts for good, each under one of the
+# exceptions in .claude/rules/code-size.md, with the reason. One per line:
+#   path|construct|name|reason
+# construct is file, line_length, function, ccn or params; name is the
+# function's name, "-" for the file rows, or "*" for every name in that file.
+# The reason may hold "|"; a name that holds one needs "*".
+
+# Test batteries of many small cases (exception 3: file limit only). Their long
+# lines are case rows, and the long functions are one table of cases each.
+engine/test/bind.test.js|line_length|-|test battery: case rows (exception 3)
+engine/test/bind.test.js|function|(anonymous)|test battery: the push guard's table of command cases (exception 3)
+engine/test/gate.test.js|line_length|-|test battery: case rows (exception 3)
+engine/test/golden.test.js|line_length|-|test battery: case rows (exception 3)
+engine/test/keep.test.js|line_length|-|test battery: case rows (exception 3)
+engine/test/profiles.test.js|line_length|-|test battery: case rows (exception 3)
+engine/test/render.test.js|line_length|-|test battery: case rows (exception 3)
+tools/test_review_gate.py|line_length|-|test battery: case rows (exception 3)
+tools/test_review_gate.py|function|test_the_last_glyph_line_decides_and_a_glyphless_blocking_blocks|test battery: one table of verdict cases (exception 3)
+
+# lizard reads these TypeScript functions longer than they are (#516).
+_core/global-template/mods/shared-pc/hooks/register.tsx|function|settleTasks|3 lines; lizard misreads it (#516)
+_core/global-template/mods/shared-pc/hooks/register.tsx|ccn|settleTasks|3 lines; lizard misreads it (#516)
+_core/global-template/mods/session-info/hooks/register.tsx|function|register|73 lines; lizard misreads it (#516)
+_core/global-template/mods/session-facts/tests/cache.test.tsx|function|world|59 lines; lizard misreads it (#516)
