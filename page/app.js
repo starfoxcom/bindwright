@@ -377,7 +377,8 @@ function drawTree() {
     if (path === selected) file.setAttribute("aria-current", "true");
     rows.push(file);
   }
-  closed = new Set(sideBySide.matches ? [] : rows.filter((r) => r.classList.contains("dir")).map((r) => r.dataset.path));
+  const folders = rows.filter((r) => r.classList.contains("dir")).map((r) => r.dataset.path);
+  closed = new Set(sideBySide.matches ? [] : folders);
   $("tree").replaceChildren(...rows);
   paintFolders();
 }

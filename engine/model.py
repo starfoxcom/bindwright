@@ -98,7 +98,10 @@ def defaults(team=False, client=False, private=None):
         private = client
     return {
         "team": team, "client": client, "private": private,
-        "project": {"name": "my-project", "repoUrl": "", "licenseHolder": "", "license": "Proprietary" if client or private else "MIT"},
+        "project": {
+            "name": "my-project", "repoUrl": "", "licenseHolder": "",
+            "license": "Proprietary" if client or private else "MIT",
+        },
         "advanced": {
             "aiReview": True,
             "deepEscalation": team,
@@ -170,8 +173,9 @@ def _check_custom_tool(tool, custom):
 
 def validate(saved):
     # Setup codes carry answers from outside the page, so the shape comes first.
-    _check(isinstance(saved, dict) and isinstance(saved.get("project"), dict) and isinstance(saved.get("advanced"), dict),
-           "the answers must hold project and advanced objects")
+    has_parts = (isinstance(saved, dict) and isinstance(saved.get("project"), dict)
+                 and isinstance(saved.get("advanced"), dict))
+    _check(has_parts, "the answers must hold project and advanced objects")
     # Answers saved before the private question existed count as private = client.
     a = dict(saved)
     if "private" not in a:

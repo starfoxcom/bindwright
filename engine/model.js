@@ -61,7 +61,10 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
   return {
     team, client,
     private: isPrivate,
-    project: { name: "my-project", repoUrl: "", licenseHolder: "", license: client || isPrivate ? "Proprietary" : "MIT" },
+    project: {
+      name: "my-project", repoUrl: "", licenseHolder: "",
+      license: client || isPrivate ? "Proprietary" : "MIT",
+    },
     advanced: {
       aiReview: true,
       deepEscalation: team,
@@ -110,7 +113,8 @@ const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x)
 
 export function validate(saved) {
   // Setup codes carry answers from outside the page, so the shape comes first.
-  check(isObject(saved) && isObject(saved.project) && isObject(saved.advanced), "the answers must hold project and advanced objects");
+  check(isObject(saved) && isObject(saved.project) && isObject(saved.advanced),
+    "the answers must hold project and advanced objects");
   // Answers saved before the private question existed count as private = client.
   const a = { ...saved, private: own(saved, "private") ? saved.private : saved.client };
   const adv = a.advanced;
