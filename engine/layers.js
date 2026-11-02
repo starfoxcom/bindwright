@@ -18,13 +18,23 @@ export const SCHEMA = 1;
 export const LOCAL = ".bindwright/local.json";
 export const PERSONAL = "bindwright/settings.json";
 
-// The extras setup offers for ~/.claude, by the file that shows each is there.
-const GUARD_FILES = { "attribution-guard": "hooks/no-ai-attribution.py", "push-guard": "hooks/push-guard.py" };
+// The extras setup offers for ~/.claude, each with the file under the config
+// folder that shows it is installed. A mod's file is its folder under mods/.
+const EXTRA_FILES = {
+  "attribution-guard": "hooks/no-ai-attribution.py",
+  "global-instructions": "CLAUDE.md",
+  "push-guard": "hooks/push-guard.py",
+};
+// An extra whose file is the person's own (CLAUDE.md) counts as installed only
+// when that file holds its marker on a line of its own, spaces and tabs aside.
+export const MARKERS = {
+  "global-instructions": "<!-- bindwright:global-instructions -->",
+};
 export const MODS = [
   "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
   "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ];
-export const EXTRAS = [...Object.keys(GUARD_FILES), ...MODS].sort();
+export const EXTRAS = [...Object.keys(EXTRA_FILES), ...MODS].sort();
 const LEVELS = ["required", "recommended"];
 
 const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
@@ -166,10 +176,26 @@ export function resolveLayers({ personal = null, project = null, local = null })
   return { settings, extras, ignored };
 }
 
+// Whether the file holds the marker on a line of its own. A file that cannot be
+// read as UTF-8, or cannot be read at all, does not hold it.
+function hasMarker(path, marker) {
+  let text;
+  try {
+    text = decode(readFileSync(path), path);
+  } catch {
+    return false;
+  }
+  return text.split("\n").some((line) => line.replace(/^[ \t\r]+|[ \t\r]+$/g, "") === marker);
+}
+
 // The extras present under the config folder (~/.claude), by name.
 export function installedExtras(config) {
-  const at = (extra) => (own(GUARD_FILES, extra) ? GUARD_FILES[extra] : `mods/${extra}`);
-  return Object.fromEntries(EXTRAS.map((extra) => [extra, existsSync(join(config, ...at(extra).split("/")))]));
+  const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
+  const present = (extra) => {
+    const path = join(config, ...at(extra).split("/"));
+    return own(MARKERS, extra) ? hasMarker(path, MARKERS[extra]) : existsSync(path);
+  };
+  return Object.fromEntries(EXTRAS.map((extra) => [extra, present(extra)]));
 }
 
 // A settings file's JSON, or null when it is missing.

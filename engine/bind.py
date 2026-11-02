@@ -4,6 +4,7 @@
 #
 # As a command, it binds from the repo this file sits in:
 #   python engine/bind.py [--year N] < answers.json      -> {"files": [[dest, text], ...]}
+#     (stdin may hold only the choices that differ from the defaults)
 #   python engine/bind.py --batch < jobs.json            -> one result per {"answers", "year", "version"} job
 #   python engine/bind.py --code bw1-...                 -> the answers come from a setup code
 #   python engine/bind.py --code bw1-... --write DIR     -> {"written": [...], "staged": [...], "skipped": [...]}
@@ -273,7 +274,7 @@ def _single(argv, run):
         adopt = "--adopt" in argv
         if adopt and folder is None:
             raise ValueError("--adopt needs --write")
-        answers = _stdin_json() if code is None else expand_answers(decode_setup_code(code))
+        answers = expand_answers(_stdin_json() if code is None else decode_setup_code(code))
         if year is not None and not re.fullmatch("[0-9]+", year):
             raise ValueError("--year needs a whole number")
         year = None if year is None else int(year)

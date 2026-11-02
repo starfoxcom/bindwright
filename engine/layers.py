@@ -12,12 +12,23 @@ SCHEMA = 1
 LOCAL = ".bindwright/local.json"
 PERSONAL = "bindwright/settings.json"
 
-GUARD_FILES = {"attribution-guard": "hooks/no-ai-attribution.py", "push-guard": "hooks/push-guard.py"}
+# The extras setup offers for ~/.claude, each with the file under the config
+# folder that shows it is installed. A mod's file is its folder under mods/.
+EXTRA_FILES = {
+    "attribution-guard": "hooks/no-ai-attribution.py",
+    "global-instructions": "CLAUDE.md",
+    "push-guard": "hooks/push-guard.py",
+}
+# An extra whose file is the person's own (CLAUDE.md) counts as installed only
+# when that file holds its marker on a line of its own, spaces and tabs aside.
+MARKERS = {
+    "global-instructions": "<!-- bindwright:global-instructions -->",
+}
 MODS = [
     "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
     "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ]
-EXTRAS = sorted(list(GUARD_FILES) + MODS, key=_code_units)
+EXTRAS = sorted(list(EXTRA_FILES) + MODS, key=_code_units)
 LEVELS = ["required", "recommended"]
 
 
@@ -172,10 +183,27 @@ def resolve_layers(personal=None, project=None, local=None):
     return {"settings": settings, "extras": extras, "ignored": ignored}
 
 
+def _has_marker(path, marker):
+    # Whether the file holds the marker on a line of its own. A file that cannot
+    # be read as UTF-8, or cannot be read at all, does not hold it.
+    try:
+        with open(path, "rb") as f:
+            text = f.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return any(line.strip(" \t\r") == marker for line in text.split("\n"))
+
+
 def installed_extras(config):
     def at(extra):
-        return GUARD_FILES.get(extra, "mods/" + extra)
-    return {extra: os.path.exists(os.path.join(config, *at(extra).split("/"))) for extra in EXTRAS}
+        return EXTRA_FILES.get(extra, "mods/" + extra)
+
+    def present(extra):
+        path = os.path.join(config, *at(extra).split("/"))
+        if extra in MARKERS:
+            return _has_marker(path, MARKERS[extra])
+        return os.path.exists(path)
+    return {extra: present(extra) for extra in EXTRAS}
 
 
 def _read_layer_file(path, file, keep_ints=False):
