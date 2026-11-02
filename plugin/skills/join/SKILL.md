@@ -23,14 +23,14 @@ This skill compares the team's setup in `.bindwright/project.json` with this mac
 
 ## 3. The code-research tool
 
-`settings.codeResearch` names the tool the project uses. If it is not `none` and the tool is not set up on this machine, offer to set it up the way `/bindwright:setup` step 6 does, from `${CLAUDE_PLUGIN_ROOT}/_core/global-template/hooks/code-research-profiles.json`: show each command and run it only on a yes. When the setting is not `required`, the user may keep their own tool instead; record that with `--remember <repo root> --layer local` and `{"codeResearch": "<their tool>"}`.
+`settings.codeResearch` names the tool the project uses. If it is not `none` and the tool is not set up on this machine, offer to set it up the way `/bindwright:setup` step 7 does, from `${CLAUDE_PLUGIN_ROOT}/_core/global-template/hooks/code-research-profiles.json`: show each command and run it only on a yes. When the setting is not `required`, the user may keep their own tool instead; record that with `--remember <repo root> --layer local` and `{"codeResearch": "<their tool>"}`.
 
 ## 4. The extras
 
 For each extra in `extras` whose `want` is not `false` and that `installed` says is missing, in the order listed:
 
 - Say in one line what it does, and whether the project rates it `required` or `recommended`.
-- On a yes, install it the way `/bindwright:setup` step 6 does: a mod with `python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" add-mod "${CLAUDE_PLUGIN_ROOT}/_core/global-template/mods/<name>"` (mods need CLI 2.1.287 or later; check the version this session runs as setup does, from `AI_AGENT`), a guard with `home.py install-hook`. Then remember `{"extras": {"<name>": true}}` with `--layer personal`.
+- On a yes, install it the way `/bindwright:setup` step 7 does: a mod with `python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" add-mod "${CLAUDE_PLUGIN_ROOT}/_core/global-template/mods/<name>"` (mods need CLI 2.1.287 or later; check the version this session runs as setup does, from `AI_AGENT`), a guard with `home.py install-hook`. Then remember `{"extras": {"<name>": true}}` with `--layer personal`.
 - On a no to a `recommended` extra, remember `{"extras": {"<name>": false}}` with `--layer personal`, so nothing asks again.
 - A `required` extra cannot be declined in the settings. On a no, leave it out, and tell the user the project expects it and the daily notice will keep saying so.
 

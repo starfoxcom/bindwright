@@ -36,4 +36,4 @@ Then show the change with `git diff -- .bindwright/project.json`, and say that t
 
 ## 5. Elsewhere
 
-To start another repo with the same setup, that repo runs `/bindwright:setup` with a setup code from the Bindwright page, then the user runs this skill there with the same choices.
+To start another repo with the same setup, that repo runs `/bindwright:setup` with the same answers, then the user runs this skill there with the same choices.
