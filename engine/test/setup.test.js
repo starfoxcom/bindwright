@@ -363,6 +363,20 @@ test("both commands bind a setup code to the same output", { skip: noPython }, a
   }
 });
 
+test("stdin answers that hold only the changed choices bind as the full defaults do", { skip: noPython }, () => {
+  const piped = (args, input) => [
+    spawnSync(process.execPath, [join(engine, "cli.js"), ...args], { cwd: repo, encoding: "utf8", input }),
+    spawnSync(python, [join(engine, "bind.py"), ...args], { cwd: repo, encoding: "utf8", input }),
+  ];
+  const [jsFull] = piped([], JSON.stringify(defaults()));
+  assert.equal(jsFull.status, 0, jsFull.stderr);
+  const expected = JSON.parse(jsFull.stdout).files;
+  const [jsPartial, pyPartial] = piped([], JSON.stringify({ team: false, client: false }));
+  assert.equal(jsPartial.status, 0, jsPartial.stderr);
+  assert.equal(pyPartial.stdout, jsPartial.stdout);
+  assert.deepEqual(JSON.parse(jsPartial.stdout).files, expected);
+});
+
 test("both commands write the same files and never overwrite", { skip: noPython }, () => {
   withTemp((root) => {
     const code = encodeSetupCode(named());

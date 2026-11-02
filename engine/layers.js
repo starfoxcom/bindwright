@@ -18,13 +18,18 @@ export const SCHEMA = 1;
 export const LOCAL = ".bindwright/local.json";
 export const PERSONAL = "bindwright/settings.json";
 
-// The extras setup offers for ~/.claude, by the file that shows each is there.
-const GUARD_FILES = { "attribution-guard": "hooks/no-ai-attribution.py", "push-guard": "hooks/push-guard.py" };
+// The extras setup offers for ~/.claude, each with the file under the config
+// folder that shows it is installed. A mod's file is its folder under mods/.
+const EXTRA_FILES = {
+  "attribution-guard": "hooks/no-ai-attribution.py",
+  "global-instructions": "CLAUDE.md",
+  "push-guard": "hooks/push-guard.py",
+};
 export const MODS = [
   "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
   "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ];
-export const EXTRAS = [...Object.keys(GUARD_FILES), ...MODS].sort();
+export const EXTRAS = [...Object.keys(EXTRA_FILES), ...MODS].sort();
 const LEVELS = ["required", "recommended"];
 
 const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
@@ -168,7 +173,7 @@ export function resolveLayers({ personal = null, project = null, local = null })
 
 // The extras present under the config folder (~/.claude), by name.
 export function installedExtras(config) {
-  const at = (extra) => (own(GUARD_FILES, extra) ? GUARD_FILES[extra] : `mods/${extra}`);
+  const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
   return Object.fromEntries(EXTRAS.map((extra) => [extra, existsSync(join(config, ...at(extra).split("/")))]));
 }
 

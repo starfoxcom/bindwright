@@ -1,6 +1,7 @@
 // The engine as a command, for machines with Node and no Python. Same flags,
 // output and exit status as bind.py's command (without --batch):
 //   node engine/cli.js [--year N] < answers.json     -> {"files": [[dest, text], ...]}
+//     (stdin may hold only the choices that differ from the defaults)
 //   node engine/cli.js --code bw1-...                -> the answers come from a setup code
 //   node engine/cli.js --code bw1-... --write DIR    -> {"written": [...], "staged": [...], "skipped": [...]}
 //   ... --write DIR --adopt                          -> the same, with every file outside .bindwright/ staged
@@ -56,9 +57,9 @@ async function run(argv) {
   const adopt = argv.includes("--adopt");
   if (adopt && folder === undefined) throw new Error("--adopt needs --write");
   if (year !== undefined && !/^[0-9]+$/.test(year)) throw new Error("--year needs a whole number");
-  const answers = code === undefined
+  const answers = expandAnswers(code === undefined
     ? JSON.parse(readFileSync(0, "utf8"))
-    : expandAnswers(decodeSetupCode(code));
+    : decodeSetupCode(code));
   const coreFiles = JSON.parse(readFileSync(join(root, "engine", "core-files.json"), "utf8"));
   const readFile = async (p) => readFileSync(join(root, p), "utf8");
   // The template version the pristine render records: VERSION without its "v".

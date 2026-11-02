@@ -12,12 +12,18 @@ SCHEMA = 1
 LOCAL = ".bindwright/local.json"
 PERSONAL = "bindwright/settings.json"
 
-GUARD_FILES = {"attribution-guard": "hooks/no-ai-attribution.py", "push-guard": "hooks/push-guard.py"}
+# The extras setup offers for ~/.claude, each with the file under the config
+# folder that shows it is installed. A mod's file is its folder under mods/.
+EXTRA_FILES = {
+    "attribution-guard": "hooks/no-ai-attribution.py",
+    "global-instructions": "CLAUDE.md",
+    "push-guard": "hooks/push-guard.py",
+}
 MODS = [
     "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
     "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ]
-EXTRAS = sorted(list(GUARD_FILES) + MODS, key=_code_units)
+EXTRAS = sorted(list(EXTRA_FILES) + MODS, key=_code_units)
 LEVELS = ["required", "recommended"]
 
 
@@ -174,7 +180,7 @@ def resolve_layers(personal=None, project=None, local=None):
 
 def installed_extras(config):
     def at(extra):
-        return GUARD_FILES.get(extra, "mods/" + extra)
+        return EXTRA_FILES.get(extra, "mods/" + extra)
     return {extra: os.path.exists(os.path.join(config, *at(extra).split("/"))) for extra in EXTRAS}
 
 

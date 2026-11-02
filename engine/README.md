@@ -2,7 +2,7 @@
 
 Turns a user's answers into the finished files for their repo. The page runs it in the browser; tests run it in Node. No dependencies and no build step.
 
-A Python twin (`model.py`, `render.py`, `bind.py`, standard library only, Python 3.8+) produces the same files byte for byte, so setup runs wherever Node or Python exists. `python engine/bind.py < answers.json` prints `{"files": [[path, text], ...]}`, or `{"error": message}` with exit status 1. `node engine/cli.js` takes the same flags and prints the same bytes:
+A Python twin (`model.py`, `render.py`, `bind.py`, standard library only, Python 3.8+) produces the same files byte for byte, so setup runs wherever Node or Python exists. `python engine/bind.py < answers.json` prints `{"files": [[path, text], ...]}`, or `{"error": message}` with exit status 1. `node engine/cli.js` takes the same flags and prints the same bytes. Answers on stdin may hold only the choices that differ from the defaults; the rest are filled in.
 
 - `--code bw1-...` reads the answers from a setup code instead of stdin.
 - `--write DIR` writes the files into `DIR` and prints `{"written", "staged", "skipped"}` instead. `/bindwright:setup` runs this.
