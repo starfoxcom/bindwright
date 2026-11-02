@@ -4,7 +4,7 @@
 import os
 import re
 
-from model import JS_WHITESPACE, validate
+from model import JS_WHITESPACE, expand_answers, validate
 from layers import MODS, _read_layer_file, run_settings
 from update import ANSWERS, PRISTINE, STAGING, _code_units
 
@@ -136,7 +136,7 @@ def _state_checks(root):
         say = "This repo is not set up with Bindwright."
         return {"checks": [_check("state", False, say, "Run /bindwright:setup.")]}
     try:
-        validate(answers)
+        validate(expand_answers(answers))
     except Exception as e:
         return {"checks": [_check("state", False, "The saved answers in %s are broken: %s." % (ANSWERS, e),
                                   "Restore the file from git with `git checkout -- %s`." % ANSWERS)]}

@@ -329,6 +329,16 @@ test("a saved path outside the repo is refused before anything is written", need
   assert.equal(JSON.parse(repo.read(PRISTINE)).version, "0.0.1");
 });
 
+test("answers saved before a key was added still update cleanly", needsPython, async () => {
+  const { out, status } = await update((r) => {
+    const answers = JSON.parse(r.read(".bindwright/project.json"));
+    delete answers.advanced.trackerRepo;
+    r.write(".bindwright/project.json", `${JSON.stringify(answers, null, 2)}\n`);
+  });
+  assert.equal(status, 0, out.error);
+  assert.equal(out.error, undefined);
+});
+
 test("a merge that drops a kept section counts as a conflict", () => {
   const kept = "a\n# bindwright:keep\nmine\n# bindwright:end-keep\n";
   const rendered = new Map([["x.py", "b\n"]]);

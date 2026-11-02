@@ -80,7 +80,13 @@ GitHub works here when the repo's remote is on GitHub and `gh auth status` works
   - GitHub issues only, with the project's status in a pinned issue: `"tracker": "github"`, `"handoffFile": true`, no board.
   - A detailed hand-off file and a roadmap in the repo, no GitHub: `"tracker": "file"`.
 
-**The board.** Board commands need the `project` scope: when `gh project list --owner <owner>` fails on it, ask the user to run `! gh auth refresh -s project` and wait. If the user named a board of their own (`<owner>/<number>`), use it. Otherwise, on a yes, create one named after the repo with `gh project create --owner <owner> --title "<repo name>" --format json` and link it with `gh project link <number> --owner <owner> --repo <owner>/<repo>`. Put `"trackerProject": "<owner>/<number>"` in the answers.
+**Public code.** With either GitHub choice, read the repo's visibility (`gh repo view --json visibility -q .visibility`). When it is `PUBLIC`, its issues are public too, whatever the board's setting, so ask:
+
+- **Your code is public, so its issues are public too. Keep the full-detail work items in a private repo of their own?**
+  - Yes, a private repo for the work items (recommended): suggest `<owner>/<repo>-tracker`, create it on a yes with `gh repo create <owner>/<name> --private`, and put `"trackerRepo": "<owner>/<name>"` in the answers. The board, when there is one, links that repo instead of this one.
+  - No, keep the issues in this public repo: say they are then readable by anyone, so they should be written for outsiders, with no engineering data.
+
+**The board.** Board commands need the `project` scope: when `gh project list --owner <owner>` fails on it, ask the user to run `! gh auth refresh -s project` and wait. If the user named a board of their own (`<owner>/<number>`), use it. Otherwise, on a yes, create one named after the repo with `gh project create --owner <owner> --title "<repo name>" --format json` and link it with `gh project link <number> --owner <owner> --repo <the repo that holds the issues>`. Put `"trackerProject": "<owner>/<number>"` in the answers.
 
 Then read its visibility (`gh project view <number> --owner <owner> --format json --jq .public`) and ask:
 
@@ -89,15 +95,13 @@ Then read its visibility (`gh project view <number> --owner <owner> --format jso
   - Keep it private, and add a clean public copy for outsiders: only a short summary per item, with no engineering data.
   - Make this board public, details and all.
 
-**A clean public copy** goes in its own public repo, which must start with no issues, pull requests or discussions, since the copy keeps the same item numbers. Suggest `<owner>/<repo>-roadmap`, create it on a yes with `gh repo create <name> --public`, and put `"publicRoadmap": "<owner>/<name>"` in the answers. Say that an item goes public only once its issue has a `### Public summary` section, and that `tracker.md` explains how the copy is written and checked.
+**A clean public copy** goes in its own public repo, which must start with no issues, pull requests or discussions, since the copy keeps the same item numbers. Suggest `<owner>/<repo>-roadmap`, create it on a yes with `gh repo create <owner>/<name> --public`, and put `"publicRoadmap": "<owner>/<name>"` in the answers. Say that an item goes public only once its issue has a `### Public summary` section, and that `tracker.md` explains how the copy is written and checked.
 
 **Making the full board public** gets a warning first, in these words or close to them, set apart so it cannot be skimmed:
 
 > ⚠️ **This publishes the project's engineering record.** Everyone, including AI crawlers and anyone building a copy of the product, could read the board's fields, status updates and every note on its items: measurements, file and function names, tuning values, dead ends, what is planned next. Once public, it can be scraped and cached within hours, and making it private again does not take back what was copied. The safer way is the clean public copy: outsiders see what is planned and done, and the details stay private.
 
 Then ask once more: keep it private (recommended), add the clean public copy instead, or make it public anyway. On "make it public anyway", run `gh project edit <number> --owner <owner> --visibility PUBLIC` and say once that the session checks warn about it from now on. It is the user's call; do not ask a third time.
-
-When the repo itself is public (`gh repo view --json visibility`), say in one line that its issues are public whatever the board's setting: the board's privacy covers only the board's own fields and status updates.
 
 ## 4. Write the files
 
@@ -120,6 +124,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "codeResearch": "<the computer's code-search tool>",
     "tracker": "github",
     "trackerProject": "<owner>/<number> or null",
+    "trackerRepo": "<owner>/<name> or null",
     "publicRoadmap": "<owner>/<name> or null"
   }
 }

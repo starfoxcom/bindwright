@@ -4,9 +4,11 @@ The work state lives in GitHub issues, not in the repo. The repo holds the rules
 
 The board is `advanced.trackerProject` in `.bindwright/project.json`, written `"<owner>/<number>"`. `null` means the project has no board: issues alone, with project status in a pinned issue (see Project status updates).
 
+The issues live in this repo unless `advanced.trackerRepo` names another, written `"<owner>/<repo>"`: a private repo that keeps the work items apart from code that is public. Then every `gh issue` command below takes `--repo <that repo>`.
+
 ## Board visibility
 
-The board holds the project's full engineering details, so it stays private. Before every board read (the open items, the newest status update), check its visibility: `gh project view <number> --owner <owner> --format json --jq .public`. When it prints `true`, open the reply with a plain warning, before anything else: the board is public, so anyone, crawlers included, can read its fields, status updates and item notes. The fix is `gh project edit <number> --owner <owner> --visibility PRIVATE`; a clean public copy (`advanced.publicRoadmap`) is the safe way to show outsiders the plan. Warn on every read, since the board can be made public on GitHub at any time. A public repo's issues are public whatever the board's setting.
+The board holds the project's full engineering details, so it stays private. Before every board read (the open items, the newest status update), check its visibility: `gh project view <number> --owner <owner> --format json --jq .public`. When it prints `true`, open the reply with a plain warning, before anything else: the board is public, so anyone, crawlers included, can read its fields, status updates and item notes. The fix is `gh project edit <number> --owner <owner> --visibility PRIVATE`; a clean public copy (`advanced.publicRoadmap`) is the safe way to show outsiders the plan. Warn on every read, since the board can be made public on GitHub at any time. A public repo's issues are public whatever the board's setting, so a project with public code keeps its full-detail issues in a private `trackerRepo`.
 
 ## Work items
 
@@ -18,7 +20,7 @@ The issue body, not a comment thread, carries the state, so the latest state sit
 - When it grows long, older detail moves into the `Full history` block at the end of the body.
 - An item on hold says so in a `Waits on:` line under its current state.
 
-A PR body carries only its `Resolves #N` or `Part of #N` line and the usual What and Why. It never holds hand-off state.
+A PR body carries only its `Resolves #N` or `Part of #N` line (`Resolves <owner>/<repo>#N` when the issues live in a `trackerRepo`) and the usual What and Why. It never holds hand-off state.
 
 ## Project status updates
 
@@ -44,7 +46,7 @@ Board commands need the `project` scope: `gh auth refresh -s project` adds it. W
 
 | Job | With a board | Without one |
 |---|---|---|
-| Open items | `gh project item-list <number> --owner <owner> --format json --limit 200`, in board order; when its `totalCount` is larger than the items it returned, run it again with a `--limit` above that count. Skip items whose `status` is `Done`, those whose `content.type` is not `Issue` (pull requests, drafts), those whose `content.repository` is not this repo (`gh repo view --json nameWithOwner -q .nameWithOwner`; a board can span repos, and the commands below act on this one), and issues the read below shows closed | `gh issue list --state open --assignee @me --limit 1000` (without `--limit` it stops at 30); when it returns exactly 1000, run it again with a higher `--limit` |
+| Open items | `gh project item-list <number> --owner <owner> --format json --limit 200`, in board order; when its `totalCount` is larger than the items it returned, run it again with a `--limit` above that count. Skip items whose `status` is `Done`, those whose `content.type` is not `Issue` (pull requests, drafts), those whose `content.repository` is not the tracker repo (`advanced.trackerRepo`, or this one when it is `null`: `gh repo view --json nameWithOwner -q .nameWithOwner`; a board can span repos, and the commands below act on that one), and issues the read below shows closed | `gh issue list --state open --assignee @me --limit 1000` (without `--limit` it stops at 30); when it returns exactly 1000, run it again with a higher `--limit` |
 | Read an item | `gh issue view <n> --json title,state,body,labels` | Same |
 | Update its state | `gh issue edit <n> --body-file <file>` | Same |
 | New item | `gh issue create --assignee @me --title <title> --body-file <file>`, then `gh project item-add <number> --owner <owner> --url <issue url>` | The same `gh issue create`; the `--assignee @me` is what lets the open-items list find it |

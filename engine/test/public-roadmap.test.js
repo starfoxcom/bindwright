@@ -122,17 +122,18 @@ const under = (number, repo = "me/private") => ({ number, repository: { nameWith
 const words = (body) => body.split("\n\n<!-- public-roadmap -->")[0].trim();
 const summary = (text) => `## What\nInternal notes.\n\n### Public summary\n${text}\n\n### Current state\nWorking.\n`;
 
-function scene(privateIssues, settings = {}, publicRepo = "me/public") {
+function scene(privateIssues, settings = {}, publicRepo = "me/public", trackerRepo = null) {
   const root = mkdtempSync(join(tmpdir(), "bw-public-"));
   mkdirSync(join(root, ".bindwright"));
   mkdirSync(join(root, ".github"));
-  const answers = { advanced: { tracker: "github", trackerProject: null, publicRoadmap: publicRepo } };
+  const answers = { advanced: { tracker: "github", trackerProject: null, trackerRepo, publicRoadmap: publicRepo } };
   writeFileSync(join(root, ".bindwright", "project.json"), JSON.stringify(answers));
   const config = { rename: {}, hidden: [], project: null, fields: ["Status"], ...settings };
   writeFileSync(join(root, ".github", "public-roadmap.json"), JSON.stringify(config));
   writeFileSync(join(root, "harness.py"), HARNESS);
   const issues = Object.fromEntries(privateIssues.map((i) => [String(i.number), i]));
-  const state = { repos: { "me/private": { next: 0, issues }, "me/public": { next: 0, issues: {} } } };
+  const privateRepo = trackerRepo ?? "me/private";
+  const state = { repos: { [privateRepo]: { next: 0, issues }, "me/public": { next: 0, issues: {} } } };
   writeFileSync(join(root, "state.json"), JSON.stringify(state));
   const run = (command) => {
     const r = spawnSync(python, [join(root, "harness.py"), SCRIPTS, join(root, "state.json"), command],
@@ -342,6 +343,14 @@ test("a number GitHub hands out elsewhere never carries an item's text", { skip 
   assert.equal(pub["4"].title, "placeholder");
   assert.ok(Object.values(pub).every((i) => i.title !== "C"));
   assert.match(s.run("check").lines.join("\n"), /#3 cannot go public/);
+});
+
+test("the issues are read from advanced.trackerRepo when it is set", { skip }, () => {
+  // The fake gh reports "me/private", which holds no issues here: a read from it would miss the breach.
+  const s = scene([issue(1, "Falcon", summary("Waits on #12."))], {}, "me/public", "me/tracker");
+  const out = s.run("check");
+  assert.equal(out.status, 1);
+  assert.match(out.lines.join("\n"), /points at #12, which stays private/);
 });
 
 test("a public roadmap that names the private repo itself is refused", { skip }, () => {

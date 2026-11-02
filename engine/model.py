@@ -70,7 +70,9 @@ TRACKERS = ["github", "file"]
 # "<owner>/<number>" of a GitHub Projects board. The owner lands in gh
 # command lines, so it is held to GitHub's own name rule.
 TRACKER_PROJECT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[1-9][0-9]{0,5}")
-PUBLIC_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.+$)[A-Za-z0-9._-]{1,100}")
+# "<owner>/<repo>" of a GitHub repo, such as the public roadmap or the private
+# tracker repo; the repo part follows GitHub's rule.
+GITHUB_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.+$)[A-Za-z0-9._-]{1,100}")
 LICENSES = {
     "MIT": "MIT.txt",
     "Apache-2.0": "Apache-2.0.txt",
@@ -171,6 +173,9 @@ def defaults(team=False, client=False, private=None):
             # "<owner>/<number>" when tracker is "github" and the project has a
             # board; None keeps project status in a pinned issue instead.
             "trackerProject": None,
+            # "<owner>/<repo>" of a private repo that holds the issues when they should not
+            # live in the code repo (github tracker only); None keeps them in this repo.
+            "trackerRepo": None,
             "publicRoadmap": None,
             "handoffFile": True,
         },
@@ -263,13 +268,24 @@ def validate(saved):
            "shippedTextPaths must be null or a non-empty list of globs "
            "without quotes, backslashes, line breaks or outer spaces")
     _check_tracker(get(adv, "tracker"), get(adv, "trackerProject"))
-    public = get(adv, "publicRoadmap")
-    if get(adv, "tracker") == "github":
-        _check(public is None or (isinstance(public, str) and PUBLIC_REPO.fullmatch(public) is not None),
-               'publicRoadmap must be null or "<owner>/<repo>": the public repo that mirrors the roadmap')
-    else:
-        _check(public is None or public is UNDEFINED, 'publicRoadmap is only for tracker "github"')
+    _check_repos(get(adv, "tracker"), get(adv, "publicRoadmap"), get(adv, "trackerRepo"))
     return a
+
+
+def _check_repos(tracker, public, tracker_repo):
+    if tracker != "github":
+        _check(public is None or public is UNDEFINED, 'publicRoadmap is only for tracker "github"')
+        _check(tracker_repo is None or tracker_repo is UNDEFINED, 'trackerRepo is only for tracker "github"')
+        return
+    _check(public is None or (isinstance(public, str) and GITHUB_REPO.fullmatch(public) is not None),
+           'publicRoadmap must be null or "<owner>/<repo>": the public repo that mirrors the roadmap')
+    _check(tracker_repo is None
+           or (isinstance(tracker_repo, str) and GITHUB_REPO.fullmatch(tracker_repo) is not None),
+           'trackerRepo must be null or "<owner>/<repo>": the private repo that holds the issues')
+    same_as_public = (isinstance(tracker_repo, str) and isinstance(public, str)
+                      and tracker_repo.lower() == public.lower())
+    _check(not same_as_public,
+           "trackerRepo must not name the publicRoadmap repo: private items would reach the public mirror")
 
 
 def _check_tracker(tracker, board):
