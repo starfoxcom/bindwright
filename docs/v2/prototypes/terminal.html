@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terminal Motion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap">
+<style>
+:root {
+  --canvas: oklch(0.20 0.006 240);
+  --panel: oklch(0.245 0.007 240);
+  --term: oklch(0.165 0.006 240);
+  --rule: oklch(0.34 0.008 240);
+  --text: oklch(0.97 0 0);
+  --text-2: oklch(0.80 0.01 240);
+  --dim: oklch(0.62 0.01 240);
+  --accent: oklch(0.80 0.13 150);
+  --ok: oklch(0.76 0.15 150);
+  --bad: oklch(0.70 0.17 25);
+  --spin: oklch(0.72 0.14 45);
+  --spin-hi: oklch(0.90 0.08 60);
+  --add-bg: oklch(0.32 0.06 150);
+  --del-bg: oklch(0.32 0.07 25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  min-height: 100svh; display: grid; place-items: center; padding: 24px 16px;
+  background: var(--canvas); color: var(--text);
+  font: 400 16px/1.5 "Hubot Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Stage: grid paper plus two soft glows, like a desk the scene sits on. */
+.stage {
+  position: relative; width: min(1120px, 100%); aspect-ratio: 16 / 10;
+  border-radius: 28px; overflow: hidden; isolation: isolate;
+  background:
+    radial-gradient(60% 70% at 18% 20%, oklch(0.42 0.09 150 / .55), transparent 70%),
+    radial-gradient(50% 60% at 90% 90%, oklch(0.40 0.08 45 / .40), transparent 70%),
+    var(--panel);
+  container-type: inline-size;
+}
+.stage::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; opacity: .35;
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(80% 80% at 50% 50%, #000, transparent);
+}
+
+.caption {
+  position: absolute; left: 5cqi; top: 4.2cqi; z-index: 3;
+  font-size: clamp(18px, 3.1cqi, 34px); font-weight: 750; font-stretch: 110%; letter-spacing: -0.015em;
+}
+.caption b { color: var(--accent); font-weight: 750; margin-right: .3em; }
+.caption.in { animation: cap 520ms cubic-bezier(.2,.8,.2,1) both; }
+@keyframes cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
+
+/* Terminal window */
+.term {
+  position: absolute; left: 5cqi; top: 11.5cqi; width: 58cqi; bottom: 4.5cqi;
+  display: flex; flex-direction: column;
+  background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
+  box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
+  font: 400 clamp(10px, 1.32cqi, 15px)/1.55 "Fragment Mono", ui-monospace, monospace;
+  overflow: hidden;
+}
+.bar {
+  display: flex; align-items: center; gap: 7px; padding: .8em 1em;
+  border-bottom: 1px solid var(--rule); color: var(--dim); font-size: .9em;
+}
+.bar i { width: .85em; height: .85em; border-radius: 50%; background: var(--rule); }
+.bar span { margin: 0 auto; transform: translateX(-2.2em); }
+.pane { position: relative; flex: 1; overflow: hidden; padding: 0 1.2em; }
+.lines { position: absolute; left: 1.2em; right: 1.2em; top: 1em; transition: transform 420ms cubic-bezier(.2,.8,.2,1); }
+.line { white-space: pre-wrap; min-height: 1.55em; animation: rise 260ms cubic-bezier(.2,.8,.2,1) both; transition: opacity 300ms, filter 300ms; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.gap { height: .7em; }
+.pane.spot .line:not(.focus) { opacity: .22; filter: blur(1.2px); }
+/* Focused lines read as one block: one tint, rounded only at its outer corners. */
+.line.focus { background: oklch(0.70 0.17 25 / .12); margin: 0 -.5em; padding: 0 .5em; }
+.line.focus:not(.focus + .focus) { border-radius: 6px 6px 0 0; padding-top: .3em; }
+.line.focus:not(:has(+ .focus)) { border-radius: 0 0 6px 6px; padding-bottom: .3em; }
+
+.echo { color: var(--text-2); background: oklch(1 0 0 / .05); border-radius: 4px; padding: 0 .4em; }
+.dot { display: inline-block; width: 1.4em; color: var(--text); }
+/* Drawn, not the ⏺ character, which phones render as an emoji. */
+.dot::before { content: ""; display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: currentColor; vertical-align: .08em; }
+.dot.run { color: var(--dim); animation: blink 900ms steps(2, jump-none) infinite; }
+.dot.ok { color: var(--ok); }
+.dot.bad { color: var(--bad); }
+@keyframes blink { 50% { opacity: .25; } }
+.name { font-weight: 700; color: var(--text); }
+.arg { color: var(--text-2); }
+.elbow { color: var(--dim); display: inline-block; width: 1.4em; margin-left: 1.4em; }
+.mute { color: var(--dim); }
+.okt { color: var(--ok); }
+.badt { color: var(--bad); }
+.diff { margin-left: 2.8em; padding: 0 .5em; border-radius: 3px; }
+.diff.add { background: var(--add-bg); }
+.diff.del { background: var(--del-bg); }
+.diff .n { color: var(--dim); margin-right: 1em; }
+.todo .box { display: inline-block; width: 1.5em; }
+.todo.done { color: var(--dim); }
+.todo.done .txt { text-decoration: line-through; }
+.thought { color: var(--dim); font-style: italic; }
+
+/* The live spinner row and the input box sit under the transcript. */
+.spinrow { padding: .2em 1.2em .5em; min-height: 2em; display: flex; gap: .6em; align-items: baseline; }
+.spinrow[hidden] { visibility: hidden; display: flex; }
+.glyph { color: var(--spin); width: 1em; text-align: center; }
+.verb {
+  background: linear-gradient(90deg, var(--spin) 0 35%, var(--spin-hi) 50%, var(--spin) 65% 100%);
+  background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.meta { color: var(--dim); }
+.input {
+  margin: 0 1.2em 1.1em; padding: .55em .8em; border: 1px solid var(--rule); border-radius: 8px;
+  display: flex; gap: .7em; color: var(--text);
+}
+.input .p { color: var(--dim); }
+.caret { display: inline-block; width: .55em; height: 1.15em; vertical-align: -.2em; background: var(--text-2); animation: blink 1s steps(2, jump-none) infinite; }
+.hint { padding: 0 2.4em .9em; color: var(--dim); font-size: .85em; margin-top: -.6em; }
+
+/* Pop-out cards beside the terminal */
+.cards { position: absolute; right: 5cqi; top: 11.5cqi; bottom: 4.5cqi; width: 28cqi; display: flex; flex-direction: column; justify-content: center; gap: 2cqi; }
+.card {
+  padding: 1.1em 1.2em; border-radius: 18px; background: oklch(0.27 0.008 240 / .92);
+  border: 1px solid var(--rule); box-shadow: 0 24px 60px -24px oklch(0 0 0 / .7);
+  font-size: clamp(12px, 1.45cqi, 16px);
+  opacity: 0; transform: translateY(18px) scale(.96); filter: blur(6px);
+  transition: opacity 420ms, transform 520ms cubic-bezier(.2,.9,.25,1.2), filter 420ms;
+}
+.card.on { opacity: 1; transform: none; filter: none; }
+.card h3 { display: flex; align-items: center; gap: .6em; font-size: 1.05em; font-weight: 700; font-stretch: 108%; }
+.card p { color: var(--text-2); margin-top: .4em; font-size: .92em; }
+.ico { width: 2.1em; height: 2.1em; border-radius: 10px; display: grid; place-items: center; flex: none; }
+.ico svg { width: 1.3em; height: 1.3em; }
+.ico.g { background: oklch(0.70 0.17 25 / .18); color: var(--bad); }
+.ico.r { background: oklch(0.76 0.15 150 / .16); color: var(--ok); }
+.ico.h { background: oklch(0.72 0.14 45 / .18); color: var(--spin); }
+.chip { display: inline-block; margin-top: .7em; padding: .2em .65em; border-radius: 99px; font-size: .78em; background: oklch(1 0 0 / .06); color: var(--text-2); }
+.status { display: flex; align-items: center; gap: .55em; margin-top: .6em; font-size: .92em; }
+.status .s { width: .7em; height: .7em; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 .3em oklch(0.70 0.17 25 / .18); transition: background 300ms, box-shadow 300ms; }
+.card.green .status .s { background: var(--ok); box-shadow: 0 0 0 .3em oklch(0.76 0.15 150 / .18); }
+.status .t2 { display: none; }
+.card.green .status .t1 { display: none; }
+.card.green .status .t2 { display: inline; }
+.note { margin-top: .6em; font: .85em/1.6 "Fragment Mono", monospace; color: var(--text-2); }
+.note div { opacity: 0; transform: translateX(-6px); transition: opacity 300ms, transform 300ms; }
+.card.on .note div { opacity: 1; transform: none; }
+.card.on .note div:nth-child(2) { transition-delay: 250ms; }
+.card.on .note div:nth-child(3) { transition-delay: 500ms; }
+.note b { color: var(--accent); font-weight: 400; }
+
+.controls { position: absolute; right: 2cqi; top: 2cqi; z-index: 4; display: flex; gap: 8px; }
+.controls button {
+  font: 600 13px "Hubot Sans", sans-serif; color: var(--text-2); background: oklch(1 0 0 / .06);
+  border: 1px solid var(--rule); border-radius: 99px; padding: 6px 12px; cursor: pointer;
+}
+.controls button:hover { color: var(--text); }
+
+/* Phones: everything stacks. Title, terminal, then a band of its own for the cards,
+   so a card never covers the newest lines. The buttons sit under the cards. */
+@container (max-width: 640px) {
+  .caption, .term, .cards { position: static; width: auto; }
+  .caption { margin: 6cqi 5cqi 0; font-size: 6cqi; line-height: 1.15; min-height: 2.3em; display: flex; align-items: flex-end; }
+  .term { margin: 4cqi 4cqi 0; height: 112cqi; font-size: 3.1cqi; }
+  .cards { margin: 4cqi 4cqi 0; display: grid; min-height: 40cqi; }
+  .cards::before {
+    content: "What Bindwright does shows up here"; grid-area: 1 / 1;
+    display: grid; place-items: center; border: 1px dashed var(--rule); border-radius: 18px;
+    color: var(--dim); font-size: 3.4cqi; transition: opacity 300ms;
+  }
+  .cards:has(.card.on)::before { opacity: 0; }
+  .card { grid-area: 1 / 1; font-size: 3.8cqi; }
+  .controls { position: static; justify-content: flex-end; margin: 3cqi 4cqi 4cqi; }
+}
+@media (max-width: 640px) { .stage { aspect-ratio: auto; } }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <h2 class="caption" id="caption"><b>1.</b>Starts from your board</h2>
+
+  <div class="term" role="img" aria-label="A coding session in the terminal with Bindwright set up">
+    <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+    <div class="pane" id="pane"><div class="lines" id="lines"></div></div>
+    <div class="spinrow" id="spinrow" hidden><span class="glyph" id="glyph">✻&#xFE0E;</span><span class="verb" id="verb">Thinking…</span><span class="meta" id="meta"></span></div>
+    <div class="input"><span class="p">&gt;</span><span><span id="typed"></span><span class="caret"></span></span></div>
+    <div class="hint">? for shortcuts</div>
+  </div>
+
+  <div class="cards">
+    <div class="card" data-card="guard">
+      <h3><span class="ico g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9.5 9.5 5 5m0-5-5 5"/></svg></span>Push guard</h3>
+      <p>Stopped a force push to main before it reached GitHub.</p>
+      <span class="chip">Every project on this computer</span>
+    </div>
+    <div class="card" data-card="review">
+      <h3><span class="ico r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/><path d="m8.5 11 1.8 1.8 3.4-3.6"/></svg></span>Review gate</h3>
+      <div class="status"><span class="s"></span><span class="t1">1 finding: qty can be missing</span><span class="t2">Clean. Merged into develop</span></div>
+      <span class="chip">AI review on every PR</span>
+    </div>
+    <div class="card" data-card="handoff">
+      <h3><span class="ico h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M14 3.5V8h4M10 12h5M10 15.5h5"/></svg></span>Hand-off note</h3>
+      <div class="note"><div><b>Done</b> #12 cart total</div><div><b>Next</b> #14 coupon codes</div><div><b>Watch</b> tax rounding</div></div>
+    </div>
+  </div>
+  <div class="controls"><button id="pause" type="button">Pause</button><button id="replay" type="button">Replay</button></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const STOP = Symbol("stop");
+// U+FE0E asks for the text form, so phones do not swap in emoji.
+const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"].map((g) => g + "︎");
+let run = 0, paused = false, instant = reduce;
+
+// A clock that stops while paused, so every wait and loop pauses with it.
+const STEP = 40;
+function every(ms, fn) {
+  const id = run; let acc = 0, last = performance.now();
+  (function tick() {
+    if (id !== run) return;
+    const now = performance.now();
+    if (!paused) acc += now - last;
+    last = now;
+    while (acc >= ms) { acc -= ms; if (fn() === false) return; }
+    setTimeout(tick, STEP);
+  })();
+}
+function wait(ms) {
+  if (instant) return Promise.resolve();
+  const id = run;
+  return new Promise((res, rej) => {
+    let left = ms, last = performance.now();
+    (function tick() {
+      if (id !== run) return rej(STOP);
+      const now = performance.now();
+      if (!paused) left -= now - last;
+      last = now;
+      left <= 0 ? res() : setTimeout(tick, Math.min(STEP, left));
+    })();
+  });
+}
+
+function follow() {
+  const over = $("lines").scrollHeight - $("pane").clientHeight + 24;
+  $("lines").style.transform = `translateY(${-Math.max(0, over)}px)`;
+}
+function add(html, cls = "") {
+  const el = document.createElement("div");
+  el.className = "line " + cls; el.innerHTML = html;
+  $("lines").append(el); follow();
+  return el;
+}
+const gap = () => add("", "gap");
+const out = (html, cls = "") => add(`<span class="elbow">⎿</span>${html}`, cls);
+const say = (html) => add(`<span class="dot"></span>${html}`);
+
+async function type(text) {
+  for (const ch of text) { $("typed").textContent += ch; await wait(45 + Math.random() * 70); }
+  await wait(350);
+  $("typed").textContent = "";
+  add(`<span class="echo">&gt; ${text}</span>`); gap();
+}
+
+// The spinner row: cycling glyph, shimmering verb, a live seconds and token count.
+async function think(verb, ms, tokens) {
+  const row = $("spinrow"); row.hidden = false;
+  $("verb").textContent = verb + "…";
+  let i = 0, t = 0; const id = run;
+  every(110, () => { if (row.hidden || id !== run) return false; $("glyph").textContent = GLYPHS[i++ % GLYPHS.length]; });
+  every(100, () => {
+    if (row.hidden || id !== run) return false;
+    t += 100;
+    const k = (tokens * Math.min(1, t / ms)).toFixed(1);
+    $("meta").textContent = `(${Math.ceil(t / 1000)}s · ↓ ${k}k tokens · esc to interrupt)`;
+  });
+  await wait(ms);
+  row.hidden = true;
+}
+
+async function tool(name, arg, ms, result = "ok") {
+  const el = add(`<span class="dot run"></span><span class="name">${name}</span><span class="arg">(${arg})</span>`);
+  await wait(ms);
+  el.firstChild.className = "dot " + result;
+  return el;
+}
+
+function todos(items) {
+  say(`<span class="name">Update Todos</span>`);
+  return items.map((txt, i) => add(`<span class="elbow">${i ? " " : "⎿"}</span><span class="box">☐</span><span class="txt">${txt}</span>`, "todo"));
+}
+async function tick(el) { el.classList.add("done"); el.querySelector(".box").textContent = "☒"; await wait(350); }
+
+async function caption(n, text) {
+  const c = $("caption");
+  c.innerHTML = `<b>${n}.</b>${text}`;
+  c.classList.remove("in"); void c.offsetWidth; c.classList.add("in");
+  await wait(500);
+}
+const card = (name) => document.querySelector(`[data-card="${name}"]`);
+// On a phone the cards share one spot, so a new card replaces the last one.
+function show(name) {
+  if ($("stage").clientWidth <= 640) document.querySelectorAll(".card.on").forEach((c) => c.classList.remove("on"));
+  card(name).classList.add("on");
+}
+
+function reset() {
+  run++; const ls = $("lines"); ls.innerHTML = "";
+  ls.style.transition = "none"; ls.style.transform = ""; void ls.offsetWidth; ls.style.transition = "";
+  $("typed").textContent = ""; $("spinrow").hidden = true; $("pane").classList.remove("spot");
+  document.querySelectorAll(".card").forEach((c) => c.classList.remove("on", "green"));
+}
+
+async function story() {
+  reset();
+  await caption(1, "Starts from your board");
+  await type("/session-start");
+  await think("Reading the board", 1900, 1.2);
+  say("Two open items on the board. Next up: <b>#12 Fix the cart total</b>.");
+  await wait(500);
+  const [t1, t2, t3] = todos(["Write a failing test", "Fix the total", "Open the PR"]);
+  gap(); await wait(1500);
+
+  await caption(2, "Writes the code, runs the tests");
+  await think("Thinking", 1700, 2.6);
+  add(`<span class="thought">∴ Thought for 2s</span>`);
+  await tool("Write", "test/cart.test.js", 500); out(`<span class="mute">Wrote 14 lines</span>`); await tick(t1);
+  await tool("Update", "src/cart.js", 600);
+  out(`<span class="mute">Updated src/cart.js with 1 addition and 1 removal</span>`);
+  add(`<span class="n">18</span>-  total += item.price`, "diff del"); await wait(250);
+  add(`<span class="n">18</span>+  total += item.price * item.qty`, "diff add");
+  await tick(t2);
+  await tool("Bash", "npm test", 1300);
+  out(`<span class="okt">✓ 43 passing</span> <span class="mute">(1.2s)</span>`); gap();
+  await wait(1200);
+
+  await caption(3, "Guards stop the risky moves");
+  const push = await tool("Bash", "git push --force origin main", 900, "bad");
+  const why = out(`<span class="badt">Blocked by Bindwright: no force push to main.</span>`);
+  const fix = out(`<span class="mute">Push the branch and open a PR instead.</span>`);
+  [push, why, fix].forEach((l) => l.classList.add("focus"));
+  $("pane").classList.add("spot"); show("guard");
+  await wait(2600);
+  $("pane").classList.remove("spot"); [push, why, fix].forEach((l) => l.classList.remove("focus")); gap();
+
+  await caption(4, "Every PR gets an AI review");
+  await tool("Bash", "gh pr create --base develop", 900);
+  out(`<span class="mute">github.com/you/shop/pull/13</span>`);
+  show("review");
+  await wait(1700);
+  await tool("Update", "src/cart.js", 600);
+  add(`<span class="n">18</span>+  total += item.price * (item.qty ?? 1)`, "diff add");
+  await wait(1100);
+  card("review").classList.add("green"); await tick(t3); gap();
+  await wait(1500);
+
+  await caption(5, "Leaves a note for next time");
+  await type("/session-close");
+  await think("Writing the hand-off", 1500, 0.8);
+  await tool("Write", ".bindwright/handoff.md", 500);
+  out(`<span class="mute">Next: #14 coupon codes</span>`);
+  show("handoff");
+  await wait(4200);
+}
+
+async function loop() {
+  try { do { await story(); } while (!instant); } catch (e) { if (e !== STOP) throw e; }
+}
+$("replay").onclick = () => { $("pause").textContent = "Pause"; $("replay").textContent = "Replay"; sync(); instant = false; loop(); };
+$("pause").onclick = () => { $("pause").textContent = $("pause").textContent === "Pause" ? "Play" : "Pause"; sync(); };
+// Off screen or in a hidden tab, the scene waits instead of playing to nobody.
+let seen = true;
+const sync = () => { paused = !seen || document.hidden || $("pause").textContent === "Play"; };
+new IntersectionObserver(([e]) => { seen = e.isIntersecting; sync(); }).observe($("stage"));
+document.addEventListener("visibilitychange", sync);
+// With animations turned off the scene shows its last frame, and Replay plays it on request.
+if (reduce) $("replay").textContent = "Play";
+loop();
+</script>
+</body>
+</html>
