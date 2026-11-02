@@ -28,6 +28,7 @@
     "codeSizeCheck": true,
     "tracker": "github",
     "trackerProject": "starfoxcom/6",
+    "trackerRepo": null,
     "handoffFile": true,
     "publicRoadmap": null
   }
