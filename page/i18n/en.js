@@ -70,26 +70,12 @@ export default {
   "fact.precommit": "Checks run before every commit",
   "fact.ai-commits": "Commits record which work had AI help",
 
-  "compose.rules": "Writing your rules",
-  "compose.reviews": "Setting up pull request reviews",
-  "compose.guards": "Adding safety guards",
-  "compose.sessions": "Adding session routines",
-  "compose.checks": "Adding code checks",
-  "compose.issues": "Adding issue forms",
-  "compose.project": "Preparing your project files",
-  "compose.notes": "Saving your answers",
-  "compose.other": "Adding other files",
-
   "tally": "· {parts}, {rules}",
   "tally.parts": { one: "{count} part", other: "{count} parts" },
   "tally.rules": { one: "{count} rule", other: "{count} rules" },
   "files.count": "Files · {count}",
-  "step.question": "Question {number}",
   "copy.command": "Copy command",
   "copy.done": "Copied",
   "copy.manual": "Select and copy",
-  "status.updated": "What you get is updated.",
-  "command.refused": "These answers didn't pass the setup's own checks, so there's no command to copy. "
-    + "Start over and answer the questions again.",
   "failure": "This part of the page couldn't load ({error}), so reload the page to try again.",
 };
