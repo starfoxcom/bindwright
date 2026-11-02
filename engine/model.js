@@ -87,12 +87,12 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
     },
     advanced: {
       aiReview: true,
-      deepEscalation: team,
+      deepEscalation: true,
       precommit: team ? "lefthook" : "none",
-      uiRule: false,
+      uiRule: true,
       confidentiality: client && isPrivate,
       cleanRoom: false,
-      plainWriting: false,
+      plainWriting: true,
       codeResearch: "none",
       // { name, url } when codeResearch is "custom"; null otherwise.
       codeResearchCustom: null,
@@ -106,7 +106,7 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       // Files the writing rule checks. null keeps the rule's own list.
       shippedTextPaths: null,
       // Add-on: a CI check that fails on any new code-size breach.
-      codeSizeCheck: false,
+      codeSizeCheck: true,
       tracker: "github",
       // "<owner>/<number>" when tracker is "github" and the project has a
       // board; null keeps project status in a pinned issue instead.

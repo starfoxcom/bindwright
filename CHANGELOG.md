@@ -62,6 +62,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
+- **Every extra starts on.** The deeper review for risky changes, the visual-steps rule, the plain-writing rule and the code size check are now on by default for every setup, solo projects included. Each one can still be turned off.
+
 - **Setup codes refuse anything the page does not offer.** A code with a key the engine does not know, at any level, is refused, and so is one that carries `repoUrl`, `licenseHolder`, `codeResearchCustom` or `shippedTextPaths`, which the page never sets, so a tampered code cannot put text into the files the assistant reads. Saved answer files are unaffected. The page shows its setup command only when the code passes the same checks.
 - **Error messages quote bad values safely.** When a setup code or saved answer file holds a value the engine refuses, the message quotes at most 40 characters of it and escapes quotes, line breaks and other control characters, so a tampered value cannot add lines to the message the assistant reads.
 - **A third setup answer: is the project private?** The second question becomes "Mine" or "Someone else's" (open source, a client, or a team the person joined), and every project is asked whether it is private. For your own project it picks the default license: Proprietary when private, MIT when public. For someone else's project it turns on the `confidentiality` rule and `audit_trail_commits` when private and leaves them off when public. Answers saved before this question read `private` as equal to `client`, so they bind as before.
