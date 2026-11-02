@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EXTRAS, resolveLayers, runSettings } from "../layers.js";
+import { EXTRAS, MARKERS, resolveLayers, runSettings } from "../layers.js";
 import { python } from "./python.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -86,7 +86,7 @@ test("the extras list matches the mods setup ships, plus the three file extras",
 });
 
 // A repo and a config folder with the given files; missing ones are left out.
-function scene({ personal, project, local, installed = [] }) {
+function scene({ personal, project, local, claudeMd, installed = [] }) {
   const root = mkdtempSync(join(tmpdir(), "bw-layers-"));
   const repo = join(root, "repo");
   const config = join(root, "config");
@@ -98,6 +98,7 @@ function scene({ personal, project, local, installed = [] }) {
   if (personal !== undefined) put(join(config, "bindwright", "settings.json"), personal);
   if (project !== undefined) put(join(repo, ".bindwright", "project.json"), project);
   if (local !== undefined) put(join(repo, ".bindwright", "local.json"), local);
+  if (claudeMd !== undefined) put(join(config, "CLAUDE.md"), claudeMd);
   for (const path of installed) mkdirSync(join(config, ...path.split("/")), { recursive: true });
   return { root, repo, config };
 }
@@ -156,6 +157,21 @@ test("broken files fail alike in both engines", needsPython, () => {
   assert.equal(huge.error, "bindwright/settings.json has no valid schema number");
   assert.deepEqual(both({ local: `{"tracker": ${"1".repeat(5000)}}` }).ignored, ["local: tracker"]);
   assert.deepEqual(both({}).settings, {});
+});
+
+test("global-instructions needs its marker on a line of CLAUDE.md", needsPython, () => {
+  const marker = MARKERS["global-instructions"];
+  const rows = [
+    ["no CLAUDE.md", undefined, false],
+    ["CLAUDE.md without the marker", "# My rules\n", false],
+    ["the marker on its own line", `# My rules\n\n${marker}\n`, true],
+    ["the marker with spaces, a tab and a CRLF ending", `# My rules\r\n \t${marker} \r\n`, true],
+    ["the marker inside another line", `Keep ${marker} out\n`, false],
+    ["a CLAUDE.md that is not UTF-8", Buffer.from([0x3c, 0xff, 0x3e]), false],
+  ];
+  for (const [name, claudeMd, want] of rows) {
+    assert.equal(both({ claudeMd }).installed["global-instructions"], want, name);
+  }
 });
 
 // Seeded, so a failure names a case that replays.

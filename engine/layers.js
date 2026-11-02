@@ -25,6 +25,11 @@ const EXTRA_FILES = {
   "global-instructions": "CLAUDE.md",
   "push-guard": "hooks/push-guard.py",
 };
+// An extra whose file is the person's own (CLAUDE.md) counts as installed only
+// when that file holds its marker on a line of its own, spaces and tabs aside.
+export const MARKERS = {
+  "global-instructions": "<!-- bindwright:global-instructions -->",
+};
 export const MODS = [
   "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
   "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
@@ -171,10 +176,26 @@ export function resolveLayers({ personal = null, project = null, local = null })
   return { settings, extras, ignored };
 }
 
+// Whether the file holds the marker on a line of its own. A file that cannot be
+// read as UTF-8, or cannot be read at all, does not hold it.
+function hasMarker(path, marker) {
+  let text;
+  try {
+    text = decode(readFileSync(path), path);
+  } catch {
+    return false;
+  }
+  return text.split("\n").some((line) => line.replace(/^[ \t\r]+|[ \t\r]+$/g, "") === marker);
+}
+
 // The extras present under the config folder (~/.claude), by name.
 export function installedExtras(config) {
   const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
-  return Object.fromEntries(EXTRAS.map((extra) => [extra, existsSync(join(config, ...at(extra).split("/")))]));
+  const present = (extra) => {
+    const path = join(config, ...at(extra).split("/"));
+    return own(MARKERS, extra) ? hasMarker(path, MARKERS[extra]) : existsSync(path);
+  };
+  return Object.fromEntries(EXTRAS.map((extra) => [extra, present(extra)]));
 }
 
 // A settings file's JSON, or null when it is missing.
