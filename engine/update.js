@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
 import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe } from "./apply.js";
+import { expandAnswers } from "./model.js";
 
 // The rendered repo files under the paths they belong at, as the pristine
 // render records them: staged ones without the staging prefix, and none of
@@ -162,7 +163,7 @@ export async function runUpdate(root, { bindWith, version }) {
   const pristine = JSON.parse(saved);
   const bad = Object.keys(pristine.files).filter((p) => !safe(p));
   if (bad.length) throw new Error(`Refusing paths outside the repo in ${PRISTINE}: ${bad.join(", ")}`);
-  const rendered = await bindWith(JSON.parse(answers), { year: pristine.year, version });
+  const rendered = await bindWith(expandAnswers(JSON.parse(answers)), { year: pristine.year, version });
   const owned = ownedPatterns(read(OWNED) ?? "");
   const plan = planUpdate(rendered, pristine, { readRepo: read, owned, merge: gitMerge, version });
   // Every check before the first write, so a refusal leaves the repo as it was.

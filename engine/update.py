@@ -9,6 +9,7 @@ import tempfile
 
 from apply import _safe
 from keep import OWNED, is_owned, kept_sections, owned_patterns
+from model import expand_answers
 
 STAGING = ".bindwright/incoming/"
 ANSWERS = ".bindwright/project.json"
@@ -138,7 +139,7 @@ def run_update(root, bind_with, version, state_json):
     bad = [p for p in pristine["files"] if not _safe(p)]
     if bad:
         raise ValueError("Refusing paths outside the repo in %s: %s" % (PRISTINE, ", ".join(bad)))
-    rendered = bind_with(json.loads(answers), pristine["year"])
+    rendered = bind_with(expand_answers(json.loads(answers)), pristine["year"])
     owned = owned_patterns(read(OWNED) or "")
     plan = plan_update(rendered, pristine, read, owned, git_merge, version)
 

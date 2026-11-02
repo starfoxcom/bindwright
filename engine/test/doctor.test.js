@@ -153,6 +153,15 @@ test("a staging folder that is a file is named, not a crash", needsPython, async
   assert.match(report.checks.find((c) => c.id === "staged").say, /cannot be read as a folder/);
 });
 
+test("answers saved before a key was added still pass the doctor", needsPython, async () => {
+  const report = await doctor(({ at }) => {
+    const answers = JSON.parse(readFileSync(at(".bindwright/project.json"), "utf8"));
+    delete answers.advanced.trackerRepo;
+    writeFileSync(at(".bindwright/project.json"), `${JSON.stringify(answers, null, 2)}\n`);
+  });
+  assert.equal(report.problems, 0, JSON.stringify(failing(report)));
+});
+
 test("an old CLI is named only with mods installed and the session's version known", needsPython, async () => {
   const withMods = ({ config }) => mkdirSync(join(config, "mods", "session-facts"), { recursive: true });
   const old = await doctor(withMods, "claude-code_2-1-286_agent");

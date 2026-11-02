@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
-import { validate } from "./model.js";
+import { expandAnswers, validate } from "./model.js";
 import { MODS, readLayerFile, runSettings } from "./layers.js";
 import { decode } from "./update.js";
 
@@ -78,7 +78,7 @@ function stateChecks(root) {
     return { checks: [check("state", false, "This repo is not set up with Bindwright.", "Run /bindwright:setup.")] };
   }
   try {
-    validate(answers);
+    validate(expandAnswers(answers));
   } catch (err) {
     return { checks: [check("state", false, `The saved answers in ${ANSWERS} are broken: ${err.message}.`,
       `Restore the file from git with \`git checkout -- ${ANSWERS}\`.`)] };
