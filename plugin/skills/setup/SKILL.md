@@ -67,11 +67,37 @@ Ask with the question tool, in two rounds. Round one:
 Round two, each with "All of them (recommended)" first and "Let me pick" second:
 
 - **Checks on every change:** an AI review on every pull request, a deeper review when a change is risky, and a check that fails when code grows past the size limits.
-- **How the assistant works here:** writing in plain language, changes to anything people see made in small steps checked one at a time, and a short hand-off note between sessions.
+- **How the assistant works here:** writing in plain language, and changes to anything people see made in small steps checked one at a time.
 
-For a "Let me pick", ask one multiple-choice question with that group's three items; what is not picked is off. A deeper review needs the AI review: if only the deeper review is picked, say it needs the AI review and turn both on.
+For a "Let me pick", ask one multiple-choice question with that group's items; what is not picked is off. A deeper review needs the AI review: if only the deeper review is picked, say it needs the AI review and turn both on.
 
-The work state lives in GitHub issues when the repo's remote is on GitHub and `gh auth status` works; otherwise it lives in files in the repo (`"tracker": "file"`). Say which, in one line.
+### Where the work state lives
+
+GitHub works here when the repo's remote is on GitHub and `gh auth status` works. When it does not, say why in one line and use the detailed hand-off file (`"tracker": "file"`). Otherwise ask:
+
+- **Where should the plan and the work state live?**
+  - A GitHub board with the issues, plus a short hand-off note between sessions (recommended): `"tracker": "github"`, `"handoffFile": true`, and a board as below.
+  - GitHub issues only, with the project's status in a pinned issue: `"tracker": "github"`, `"handoffFile": true`, no board.
+  - A detailed hand-off file and a roadmap in the repo, no GitHub: `"tracker": "file"`.
+
+**The board.** Board commands need the `project` scope: when `gh project list --owner <owner>` fails on it, ask the user to run `! gh auth refresh -s project` and wait. If the user named a board of their own (`<owner>/<number>`), use it. Otherwise, on a yes, create one named after the repo with `gh project create --owner <owner> --title "<repo name>" --format json` and link it with `gh project link <number> --owner <owner> --repo <owner>/<repo>`. Put `"trackerProject": "<owner>/<number>"` in the answers.
+
+Then read its visibility (`gh project view <number> --owner <owner> --format json --jq .public`) and ask:
+
+- **The board is private, and it holds the project's full engineering details: numbers, file names, dead ends. Keep it that way?**
+  - Keep it private (recommended).
+  - Keep it private, and add a clean public copy for outsiders: only a short summary per item, with no engineering data.
+  - Make this board public, details and all.
+
+**A clean public copy** goes in its own public repo, which must start with no issues, pull requests or discussions, since the copy keeps the same item numbers. Suggest `<owner>/<repo>-roadmap`, create it on a yes with `gh repo create <name> --public`, and put `"publicRoadmap": "<owner>/<name>"` in the answers. Say that an item goes public only once its issue has a `### Public summary` section, and that `tracker.md` explains how the copy is written and checked.
+
+**Making the full board public** gets a warning first, in these words or close to them, set apart so it cannot be skimmed:
+
+> ⚠️ **This publishes the project's engineering record.** Everyone, including AI crawlers and anyone building a copy of the product, could read the board's fields, status updates and every note on its items: measurements, file and function names, tuning values, dead ends, what is planned next. Once public, it can be scraped and cached within hours, and making it private again does not take back what was copied. The safer way is the clean public copy: outsiders see what is planned and done, and the details stay private.
+
+Then ask once more: keep it private (recommended), add the clean public copy instead, or make it public anyway. On "make it public anyway", run `gh project edit <number> --owner <owner> --visibility PUBLIC` and say once that the session checks warn about it from now on. It is the user's call; do not ask a third time.
+
+When the repo itself is public (`gh repo view --json visibility`), say in one line that its issues are public whatever the board's setting: the board's privacy covers only the board's own fields and status updates.
 
 ## 4. Write the files
 
@@ -92,7 +118,9 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "uiRule": true,
     "handoffFile": true,
     "codeResearch": "<the computer's code-search tool>",
-    "tracker": "github"
+    "tracker": "github",
+    "trackerProject": "<owner>/<number> or null",
+    "publicRoadmap": "<owner>/<name> or null"
   }
 }
 ```
@@ -181,6 +209,7 @@ Tell the user, in plain words, in two parts.
 **This project:**
 
 - What was written, merged and left out, grouped by kind (rules, skills, hooks, workflows, docs), not file by file.
+- Where the work state lives: the board's link and whether it is private, the clean public copy's repo when there is one, or the hand-off file.
 - What still needs them: for a repo with AI review workflows, the repository secret and branch rules those workflows describe.
 - That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive.
 - That nothing is committed yet: they can read the changes with `git diff` and `git status`, and commit when happy.
