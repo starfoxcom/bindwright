@@ -42,14 +42,14 @@ export default {
   "files.back": "&larr; Todos los archivos",
   "command.copy": "Copiar comando",
   "install.title": "Instalar",
-  "install.how": "Dos comandos una vez por computadora, y luego uno en cada proyecto. Pega cada uno en "
+  "install.how": "Dos comandos una vez en tu computadora, y luego uno en cada proyecto. Pega cada uno en "
     + "Claude Code, presiona Enter y espera a que termine antes del siguiente.",
-  "install.computer": "En esta computadora, una vez",
+  "install.computer": "En tu computadora, una vez",
   "install.market.title": "Dile a Claude Code de dónde viene Bindwright.",
   "install.market.text": "Esto agrega el marketplace de Bindwright, una lista desde la que Claude Code puede "
     + "instalar. Todavía no instala nada.",
   "install.plugin.title": "Instala Bindwright.",
-  "install.plugin.text": "Esto agrega los comandos /bindwright a todos los proyectos de esta computadora, más "
+  "install.plugin.text": "Esto agrega los comandos /bindwright a todos los proyectos de tu computadora, más "
     + "un aviso una vez al día cuando algo esté desactualizado. Todavía no cambia ningún proyecto.",
   "install.project": "En cada proyecto",
   "install.open.title": "Abre Claude Code en la carpeta del proyecto.",
@@ -57,7 +57,7 @@ export default {
   "install.setup.title": "Ejecuta la configuración.",
   "install.setup.text": "Hace unas preguntas y luego escribe los archivos que encajan. Nada de lo que ya tienes "
     + "cambia sin tu sí.",
-  "asks.computer.title": "Se pregunta una vez por computadora",
+  "asks.computer.title": "Se pregunta una vez en tu computadora",
   "asks.computer.text": "Qué herramienta de búsqueda de código usar, si agregar las reglas de trabajo de "
     + "Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos y qué mods "
     + "agregar. Cámbialas después con /bindwright:setup global.",
