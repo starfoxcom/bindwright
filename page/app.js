@@ -120,7 +120,7 @@ function countTally(groups) {
   frame(start);
 }
 
-// "· 6 parts, 23 rules" after the heading.
+// "6 parts, 23 rules" on its own line under the heading.
 function paintTally() {
   const { parts, rules } = tally;
   $("tally").textContent = t("tally", {

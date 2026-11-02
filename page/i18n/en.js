@@ -70,7 +70,7 @@ export default {
   "fact.precommit": "Checks run before every commit",
   "fact.ai-commits": "Commits record which work had AI help",
 
-  "tally": "· {parts}, {rules}",
+  "tally": "{parts}, {rules}",
   "tally.parts": { one: "{count} part", other: "{count} parts" },
   "tally.rules": { one: "{count} rule", other: "{count} rules" },
   "files.count": "Files · {count}",

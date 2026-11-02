@@ -128,7 +128,8 @@ h1 {
   font-weight: 700; font-stretch: 112%; letter-spacing: -0.03em;
 }
 .out-head h2:focus { outline: none; }
-.out-head .tally { font-size: 17px; letter-spacing: 0; font-stretch: 100%; }
+/* The tally sits on its own line under the heading. */
+.out-head .tally { display: block; margin: 8px 0 0; font-size: 17px; letter-spacing: 0; font-stretch: 100%; }
 .preview-note { max-width: 640px; margin: -4px 0 18px; font-size: 15px; color: var(--text-2); }
 
 /* Steps count on across both groups: 1-2 on this computer, 3-4 in each project. */
@@ -156,7 +157,7 @@ h1 {
   margin-bottom: 14px;
 }
 .out-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.tally { margin-left: 6px; font-weight: 400; color: var(--text-2); }
+.tally { font-weight: 400; color: var(--text-2); }
 .seg {
   position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: none; padding: 3px; border-radius: 12px; background: var(--key);
@@ -187,16 +188,17 @@ h1 {
 .icon-copy.copied { color: var(--accent); }
 .icon-copy.copied .ico-copy { display: none; }
 .icon-copy.copied .ico-check { display: block; }
-/* Two numbered steps: install once, then set up this project. */
+/* Each step: the number and its bold title on one row, the text below from the left edge. */
 .command-steps { display: grid; gap: 24px; margin: 20px 0 0; padding: 0; list-style: none; counter-reset: step; }
-.command-steps > li { position: relative; padding-left: 40px; counter-increment: step; }
+.command-steps > li { position: relative; counter-increment: step; }
 .command-steps > li::before {
   content: counter(step); position: absolute; left: 0; top: 0; display: grid; place-items: center;
   width: 28px; height: 28px; border-radius: 50%; font-weight: 700; font-size: 14px;
   color: var(--on-accent); background: var(--accent);
 }
-.command-sub { min-height: 28px; padding-top: 4px; font-size: 15px; color: var(--text-2); }
-.command-sub b { color: var(--text); }
+.command-sub { font-size: 15px; color: var(--text-2); }
+.command-sub b { display: block; min-height: 28px; padding: 3px 0 0 40px; color: var(--text); }
+.command-sub span { display: block; margin-top: 8px; }
 /* Min height fits the 36px icon button with its 8px inset top and bottom. */
 .install-line {
   position: relative; display: flex; align-items: center; min-height: 52px; margin-top: 8px;
@@ -313,7 +315,6 @@ footer {
   .changes ul, .groups { grid-template-columns: minmax(0, 1fr); }
   .out-tools { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
   .out-tools .seg { grid-column: 1 / -1; }
-  .command-steps > li { padding-left: 0; padding-top: 36px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

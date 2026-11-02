@@ -137,7 +137,7 @@ export default {
   "fact.precommit": "Revisiones antes de cada commit",
   "fact.ai-commits": "Los commits registran qué trabajo tuvo ayuda de IA",
 
-  "tally": "· {parts}, {rules}",
+  "tally": "{parts}, {rules}",
   "tally.parts": { one: "{count} parte", other: "{count} partes" },
   "tally.rules": { one: "{count} regla", other: "{count} reglas" },
   "files.count": "Archivos · {count}",
