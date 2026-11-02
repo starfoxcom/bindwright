@@ -171,23 +171,21 @@ test("every flag is read by a template or by bind.js", () => {
   }
 });
 
-test("always-on rules ship to every setup, the writing rule only on request", async () => {
+test("always-on rules ship to every setup, the writing rule unless turned off", async () => {
   const a = defaults();
   let files = await run(a);
-  for (const rule of ["task-tracking.md", "testing.md", "code-size.md", "security.md"]) {
+  for (const rule of ["task-tracking.md", "testing.md", "code-size.md", "security.md", "shipped-text.md"]) {
     assert.ok(files.has(`.claude/rules/${rule}`), `${rule} missing`);
   }
   assert.match(files.get("docs/security-posture.md"), /^# Security posture: \S/);
-  assert.ok(!files.has(".claude/rules/shipped-text.md"));
-  a.advanced.plainWriting = true;
+  a.advanced.plainWriting = false;
   files = await run(a);
-  assert.ok(files.has(".claude/rules/shipped-text.md"));
+  assert.ok(!files.has(".claude/rules/shipped-text.md"));
 });
 
 test("a project list of globs replaces the writing rule's paths, and only them", async () => {
   const rule = ".claude/rules/shipped-text.md";
   const a = defaults();
-  a.advanced.plainWriting = true;
   const stock = (await run(a)).get(rule);
   assert.match(stock, /^---\npaths:\n {2}- "README\*"\n(?: {2}- .*\n)*---\n/, "the default list stays in the rule");
   const body = stock.slice(stock.indexOf("\n---\n") + 5);
@@ -197,6 +195,7 @@ test("a project list of globs replaces the writing rule's paths, and only them",
   assert.equal(custom, `---\npaths:\n  - "**/*.gd"\n  - "addons/*/plugin.cfg"\n  - "**/*.{arb,po}"\n  - "docs/#public/**"\n  - "i18n/$&-$1.json"\n---\n${body}`);
 
   const off = defaults();
+  off.advanced.plainWriting = false;
   off.advanced.shippedTextPaths = ["src/**"];
   assert.ok(!(await run(off)).has(rule), "the list alone does not turn the rule on");
 

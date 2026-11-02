@@ -147,12 +147,12 @@ def defaults(team=False, client=False, private=None):
         },
         "advanced": {
             "aiReview": True,
-            "deepEscalation": team,
+            "deepEscalation": True,
             "precommit": "lefthook" if team else "none",
-            "uiRule": False,
+            "uiRule": True,
             "confidentiality": client and private,
             "cleanRoom": False,
-            "plainWriting": False,
+            "plainWriting": True,
             "codeResearch": "none",
             # {"name", "url"} when codeResearch is "custom"; None otherwise.
             "codeResearchCustom": None,
@@ -166,7 +166,7 @@ def defaults(team=False, client=False, private=None):
             # Files the writing rule checks. None keeps the rule's own list.
             "shippedTextPaths": None,
             # Add-on: a CI check that fails on any new code-size breach.
-            "codeSizeCheck": False,
+            "codeSizeCheck": True,
             "tracker": "github",
             # "<owner>/<number>" when tracker is "github" and the project has a
             # board; None keeps project status in a pinned issue instead.
