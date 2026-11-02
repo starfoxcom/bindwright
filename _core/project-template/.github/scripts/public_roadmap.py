@@ -180,6 +180,8 @@ class Settings:
         answers = json.loads((root / ANSWERS).read_text(encoding="utf-8"))["advanced"]
         raw = json.loads((root / SETTINGS).read_text(encoding="utf-8"))
         self.public_repo = answers.get("publicRoadmap")
+        tracker_repo = answers.get("trackerRepo")
+        self.tracker_repo = tracker_repo if isinstance(tracker_repo, str) and tracker_repo else None
         if not self.public_repo:
             raise SystemExit(f"advanced.publicRoadmap in {ANSWERS} names no public repo")
         board = answers.get("trackerProject")
@@ -232,7 +234,9 @@ class PublicSync:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.repo = run_gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).strip()
+        # The private issues live in advanced.trackerRepo when set, else in the repo gh sees here.
+        self.repo = settings.tracker_repo or run_gh(
+            ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).strip()
         if settings.public_repo.lower() == self.repo.lower():
             raise SystemExit("advanced.publicRoadmap names this repo itself; it must name a separate public repo")
         self.private = fetch_issues(self.repo)

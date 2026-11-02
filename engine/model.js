@@ -61,8 +61,9 @@ export const TRACKERS = ["github", "file"];
 // "<owner>/<number>" of a GitHub Projects board. The owner lands in gh
 // command lines, so it is held to GitHub's own name rule.
 const TRACKER_PROJECT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[1-9][0-9]{0,5}$/;
-// "<owner>/<repo>" of the public roadmap repo; the repo part follows GitHub's rule.
-const PUBLIC_REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/(?!\.+$)[A-Za-z0-9._-]{1,100}$/;
+// "<owner>/<repo>" of a GitHub repo, such as the public roadmap or the private
+// tracker repo; the repo part follows GitHub's rule.
+const GITHUB_REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/(?!\.+$)[A-Za-z0-9._-]{1,100}$/;
 export const LICENSES = {
   MIT: "MIT.txt",
   "Apache-2.0": "Apache-2.0.txt",
@@ -111,6 +112,9 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       // "<owner>/<number>" when tracker is "github" and the project has a
       // board; null keeps project status in a pinned issue instead.
       trackerProject: null,
+      // "<owner>/<repo>" of a private repo that holds the issues when they should not
+      // live in the code repo (github tracker only); null keeps them in this repo.
+      trackerRepo: null,
       // "<owner>/<repo>" of a public roadmap mirrored from the private tracker
       // at session close (github tracker only); null keeps everything private.
       publicRoadmap: null,
@@ -204,12 +208,19 @@ export function validate(saved) {
       (typeof adv.trackerProject === "string" && TRACKER_PROJECT.test(adv.trackerProject)),
       'trackerProject must be null or "<owner>/<number>": '
       + 'a GitHub user or organization name and the board\'s number');
-    check(adv.publicRoadmap === null || (typeof adv.publicRoadmap === "string" && PUBLIC_REPO.test(adv.publicRoadmap)),
+    check(adv.publicRoadmap === null || (typeof adv.publicRoadmap === "string" && GITHUB_REPO.test(adv.publicRoadmap)),
       'publicRoadmap must be null or "<owner>/<repo>": the public repo that mirrors the roadmap');
+    check(adv.trackerRepo === null || (typeof adv.trackerRepo === "string" && GITHUB_REPO.test(adv.trackerRepo)),
+      'trackerRepo must be null or "<owner>/<repo>": the private repo that holds the issues');
+    const sameAsPublic = typeof adv.trackerRepo === "string" && typeof adv.publicRoadmap === "string"
+      && adv.trackerRepo.toLowerCase() === adv.publicRoadmap.toLowerCase();
+    check(!sameAsPublic,
+      "trackerRepo must not name the publicRoadmap repo: private items would reach the public mirror");
   } else {
     check(adv.trackerProject === null || adv.trackerProject === undefined,
       'trackerProject is only for tracker "github"');
     check(adv.publicRoadmap === null || adv.publicRoadmap === undefined, 'publicRoadmap is only for tracker "github"');
+    check(adv.trackerRepo === null || adv.trackerRepo === undefined, 'trackerRepo is only for tracker "github"');
   }
   return a;
 }

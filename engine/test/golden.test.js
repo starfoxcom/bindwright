@@ -63,6 +63,7 @@ function oneAtATime() {
       named.advanced.shippedTextPaths = ["**/*.gd", "i18n/$&-$1.json", "docs/#public/**", "notes\u0085"];
       named.advanced.trackerProject = "My-Org9/123456";
       named.advanced.publicRoadmap = "My-Org9/road.map_1";
+      named.advanced.trackerRepo = "My-Org9/tracker.repo_1";
       cases.push(named);
       // The saved answers in .bindwright/project.json: both engines escape
       // quotes, backslashes and control characters alike, and nothing else.
@@ -104,6 +105,7 @@ function seeded(count) {
     });
     a.advanced.trackerProject = a.advanced.tracker === "github" && bool() ? "starfoxcom/6" : null;
     a.advanced.publicRoadmap = a.advanced.tracker === "github" && bool() ? "starfoxcom/roadmap" : null;
+    a.advanced.trackerRepo = a.advanced.tracker === "github" && bool() ? "starfoxcom/tracker" : null;
     a.advanced = withTool(a.advanced, a.advanced.codeResearch);
     return a;
   });
@@ -178,6 +180,12 @@ function refused() {
     (a) => { a.advanced.publicRoadmap = `owner/${"r".repeat(101)}`; },
     (a) => { a.advanced.publicRoadmap = 6; },
     (a) => { a.advanced.tracker = "file"; a.advanced.publicRoadmap = "owner/roadmap"; },
+    (a) => { delete a.advanced.trackerRepo; },
+    (a) => { a.advanced.trackerRepo = "owner"; },
+    (a) => { a.advanced.trackerRepo = "owner/.."; },
+    (a) => { a.advanced.trackerRepo = 6; },
+    (a) => { a.advanced.trackerRepo = "owner/tracker"; a.advanced.publicRoadmap = "Owner/Tracker"; },
+    (a) => { a.advanced.tracker = "file"; a.advanced.trackerRepo = "owner/tracker"; },
   ];
   // An edit that returns a value replaces the answers outright.
   return edits.map((edit) => { const a = defaults(); const whole = edit(a); return whole === undefined ? a : whole; });
