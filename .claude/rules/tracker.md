@@ -4,6 +4,10 @@ The work state lives in GitHub issues, not in the repo. The repo holds the rules
 
 The board is `advanced.trackerProject` in `.bindwright/project.json`, written `"<owner>/<number>"`. `null` means the project has no board: issues alone, with project status in a pinned issue (see Project status updates).
 
+## Board visibility
+
+The board holds the project's full engineering details, so it stays private. Before every board read (the open items, the newest status update), check its visibility: `gh project view <number> --owner <owner> --format json --jq .public`. When it prints `true`, open the reply with a plain warning, before anything else: the board is public, so anyone, crawlers included, can read its fields, status updates and item notes. The fix is `gh project edit <number> --owner <owner> --visibility PRIVATE`; a clean public copy (`advanced.publicRoadmap`) is the safe way to show outsiders the plan. Warn on every read, since the board can be made public on GitHub at any time. A public repo's issues are public whatever the board's setting.
+
 ## Work items
 
 Every piece of work has an issue. Work found during a session gets a new one at once, from `.github/ISSUE_TEMPLATE/work-item.md`, linked to its parent with a `Part of #N` line.
