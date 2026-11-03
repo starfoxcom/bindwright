@@ -29,8 +29,12 @@ const useTool = (tool) => (a) => {
 
 test("every setup offers the global additions, the memory index and the push guard", async () => {
   const files = await globalFiles((a) => { a.project.name = "shop-app"; });
-  assert.deepEqual([...files.keys()], ["CLAUDE.md.additions", "hooks/push-guard.py", "memory/MEMORY.md"]);
+  assert.deepEqual(
+    [...files.keys()],
+    ["CLAUDE.md.additions", "agents/builder.md", "hooks/push-guard.py", "memory/MEMORY.md"],
+  );
   assert.equal(files.get("hooks/push-guard.py"), canonical("hooks/push-guard.py"));
+  assert.equal(files.get("agents/builder.md"), canonical("agents/builder.md"));
   assert.match(files.get("memory/MEMORY.md"), /^# shop-app /);
 });
 

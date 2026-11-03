@@ -57,8 +57,9 @@ export default {
     + "cambia sin tu sí.",
   "asks.computer.title": "Se pregunta una vez en tu computadora",
   "asks.computer.text": "Qué herramienta de búsqueda de código usar, si agregar las reglas de trabajo de "
-    + "Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos y qué mods "
-    + "agregar. Cámbialas después con /bindwright:setup global.",
+    + "Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos, si un "
+    + "modelo ayudante barato escribe el código que planea el modelo principal y qué mods agregar. "
+    + "Cámbialas después con /bindwright:setup global.",
   "asks.project.title": "Se pregunta en cada proyecto",
   "asks.project.text": "Quién trabaja en él, de quién es, si es privado o público, si el crédito de la IA "
     + "queda fuera de los commits, qué revisiones corren, cómo escribe y trabaja el asistente, y dónde vive "
@@ -113,6 +114,7 @@ export default {
   "lands.item.global-rules": "Reglas de trabajo para cada proyecto",
   "lands.item.memory": "Índice de memoria",
   "lands.item.guard": "Guardia de push",
+  "lands.item.builder": "Ayudante que escribe código",
   "lands.item.mods": "Mods que elegiste",
   "lands.item.brief": "Guía del proyecto",
   "lands.item.rules": "Reglas",

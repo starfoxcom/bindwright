@@ -10,6 +10,7 @@ Standard library, Python 3.8+.
     python engine/home.py allow RULE          /  disallow RULE
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
+    python engine/home.py add-agent FILE
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -238,6 +239,19 @@ def add_mod(home, folder):
     return {"installed": target, "kept_existing": kept}
 
 
+def add_agent(home, file):
+    name = os.path.basename(file)
+    if not (name.endswith(".md") and os.path.isfile(file)):
+        raise HomeError("Not an agent file (an existing .md file): " + file)
+    target = os.path.normpath(os.path.join(_claude(home), "agents", name))
+    # An installed agent may carry the user's own edits, so it stays.
+    kept = os.path.exists(target)
+    if not kept:
+        with open(file, encoding="utf-8") as fh:
+            _atomic_write(target, fh.read())
+    return {"installed": target, "kept_existing": kept}
+
+
 def _option(argv, name):
     if name not in argv:
         return None
@@ -269,6 +283,8 @@ def run(argv):
         return attribution_off(home)
     if cmd == "add-mod" and one:
         return add_mod(home, one)
+    if cmd == "add-agent" and one:
+        return add_agent(home, one)
     raise HomeError("Usage: see the top of engine/home.py")
 
 
