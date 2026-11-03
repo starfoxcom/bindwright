@@ -87,8 +87,8 @@ Changed 2026-11-02 (maintainer): the page becomes a landing page and install gui
 - [x] Demo project (`demo/`): a small TypeScript app with one planted problem per rule that has a visible effect. The list of planted problems lives in `recordings/planted.json`, outside `demo/`, so a recorded session cannot read it; `engine/test/demo.test.js` fails when one is no longer there.
 - [x] Recording harness: headless Claude Code runs per scenario, with and without Bindwright, saved as sanitized replay data with the staleness hash test (#527). The recordings themselves are dropped.
 - [ ] Setup in the plugin: global questions once per computer, project questions every run (#534).
-- [ ] Landing page and install guide: the questionnaire, Share link and link answers go; the default setup's file preview stays; the install steps say what each command does and what lands on the computer versus in each project (#488).
-- [ ] Hero scene: a drawn terminal session (typing, the thinking spinner, tool calls, a diff, a blocked force push, the review gate going red to green, the hand-off note) with pop-out cards, built from `prototypes/terminal.html`.
+- [x] Landing page and install guide: the questionnaire, Share link and link answers go; the default setup's file preview stays; the install steps say what each command does and what lands on the computer versus in each project (#488).
+- [x] Hero scene: a drawn terminal session (typing, the thinking spinner, tool calls, a diff, a blocked force push, the review gate going red to green, the hand-off note) with pop-out cards, built from `prototypes/terminal.html`; it loops while on screen and plays as a slideshow when animations are off (#535).
 - [ ] "What goes where": an animated diagram of what lands on the computer and what lands in each project.
 - [ ] Install scene: a drawn terminal of `/bindwright:setup` asking its global and project questions.
 - [ ] Evidence section: numbers from `tools/receipts.py` (session logs and PR history) plus the incident stories from GameProject and BusinessApp, each with the rule it produced.

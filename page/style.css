@@ -62,9 +62,12 @@ header nav:first-of-type { margin-left: auto; }
 
 main { max-width: 1360px; margin: 0 auto; padding: 36px 40px 64px; }
 
-.hero {
-  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 48px; align-items: center;
-  min-height: min(680px, calc(100svh - 160px));
+/* Wide screens: the pitch beside the scene. The scene's column stays past 640px,
+   the width its side-by-side layout needs. */
+@media (min-width: 1340px) {
+  .hero { display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr); gap: 48px; align-items: center; }
+  .hero .stage { margin-top: 0; }
+  .hero h1 { font-size: clamp(40px, 3.8vw, 64px); }
 }
 
 h1 {
@@ -87,8 +90,6 @@ h1 {
 }
 .go:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 var(--accent-deep); }
 
-
-.clip { margin: 0; aspect-ratio: 16 / 11; display: grid; place-items: center; text-align: center; }
 
 .changes { margin-top: 88px; }
 .changes h2 {
@@ -117,7 +118,6 @@ h1 {
   background: var(--panel); border-radius: 18px; padding: 22px;
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
 }
-.clip { box-shadow: inset 0 1px 0 oklch(1 0 0 / .06); }
 .out-body { margin-top: 4px; }
 
 /* The frame holds the result view. */
@@ -296,7 +296,13 @@ footer {
   header { padding: 16px; }
   header nav { gap: 20px; }
   main { padding: 16px 16px 48px; }
-  .hero { grid-template-columns: minmax(0, 1fr); gap: 32px; min-height: 0; padding-top: 16px; }
+  /* The scene comes right after the headline, so a phone shows it before the button. */
+  .hero { display: flex; flex-direction: column; padding-top: 16px; }
+  .pitch { display: contents; }
+  .hero h1 { font-size: clamp(32px, 9vw, 40px); }
+  .hero .stage { margin-top: 24px; }
+  .hero .lede, .hero .actions { order: 1; }
+  .hero .lede { margin-top: 28px; }
   .changes li { padding: 24px; }
   .changes { margin-top: 64px; }
   .preview, .install { margin-top: 72px; }

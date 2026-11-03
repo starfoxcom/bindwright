@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DICTIONARIES, t } from "../../page/i18n/index.js";
@@ -57,4 +57,12 @@ test("a script text fills its values, and a missing key is an error", () => {
     assert.equal(t(key, { count: 2 }), other.replace(/\{count\}/g, "2"));
   }
   assert.throws(() => t("no.such.key"), /no page text/);
+});
+
+test("every t() key literal in the page scripts exists in the English dictionary", () => {
+  const scripts = readdirSync(page).filter((file) => file.endsWith(".js"));
+  const keyCalls = (file) => [...read(file).matchAll(/\bt\("([^"]+)"/g)].map((m) => m[1]);
+  const keys = scripts.flatMap(keyCalls);
+  assert.ok(keys.length > 0);
+  assert.deepEqual(keys.filter((key) => !(key in DICTIONARIES.en)), []);
 });
