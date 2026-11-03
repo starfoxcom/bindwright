@@ -128,8 +128,6 @@ h1 {
   font-weight: 700; font-stretch: 112%; letter-spacing: -0.03em;
 }
 .out-head h2:focus { outline: none; }
-/* The tally sits on its own line under the heading. */
-.out-head .tally { display: block; margin: 8px 0 0; font-size: 17px; letter-spacing: 0; font-stretch: 100%; }
 .preview-note { max-width: 640px; margin: -4px 0 18px; font-size: 15px; color: var(--text-2); }
 
 /* Steps count on across both groups: 1-2 on your computer, 3-4 in each project. */
@@ -156,24 +154,18 @@ h1 {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
   margin-bottom: 14px;
 }
-.out-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 24px 0 18px; }
-.tally { font-weight: 400; color: var(--text-2); }
-.seg {
-  position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  flex: none; padding: 3px; border-radius: 12px; background: var(--key);
-  box-shadow: inset 0 -2px 0 oklch(0 0 0 / .3);
+/* The quiet button under the scene; its chevron turns when the files are open. */
+.browse {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 40px; margin-top: 18px; padding: 0;
+  font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2); background: none; border: 0; cursor: pointer;
 }
-.seg-pill {
-  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 2);
-  border-radius: 9px; background: var(--accent); transition: transform 220ms ease;
+.browse:hover { color: var(--text); }
+.browse:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.browse::after {
+  content: ""; width: 6px; height: 6px; border-right: 1.5px solid; border-bottom: 1.5px solid;
+  transform: rotate(45deg); transition: transform 150ms ease;
 }
-.seg[data-view="files"] .seg-pill { transform: translateX(100%); }
-.seg-opt {
-  position: relative; min-height: 36px; padding: 0 14px; font: 600 14px/1 "Hubot Sans", sans-serif;
-  color: var(--text-2); white-space: nowrap; cursor: pointer;
-  background: none; border: 0; border-radius: 9px;
-}
-.seg-opt[aria-pressed="true"] { color: var(--on-accent); }
+.browse[aria-expanded="true"]::after { transform: rotate(-135deg); }
 .icon-copy.pulse { animation: pulse 240ms ease; }
 @keyframes pulse { 50% { transform: scale(1.06); } }
 
@@ -209,48 +201,14 @@ h1 {
   overflow-wrap: anywhere; user-select: all;
 }
 
-.groups {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px;
-  padding: 0; list-style: none;
-}
-/* The summary and the files share one cell, so the box keeps the taller view's
-   height and switching moves nothing below it. The view switched out stays laid
-   out, so its cards never rise again; it fades and slides out, and the one
-   coming in fades up. */
-.views { display: grid; }
-.views > * { grid-area: 1 / 1; min-width: 0; }
-.views > .away { visibility: hidden; pointer-events: none; }
-.views > .leave { animation: view-out 220ms ease both; }
-.views > .arrive { animation: view-in 220ms ease both; }
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
-@keyframes view-out {
-  from { visibility: visible; }
-  to { opacity: 0; transform: translateY(-8px); visibility: hidden; }
-}
-@keyframes lift { from { opacity: 0; transform: translateY(10px); } }
-.groups > li.enter { animation: lift 420ms ease both; }
-.groups > li { padding: 20px; border-radius: 14px; background: var(--key); }
-.groups > li > b { font-size: 18px; font-weight: 700; }
-.groups > li > p { margin-top: 2px; font-size: 15px; color: var(--text-2); }
-.facts {
-  display: grid; gap: 8px; margin-top: 12px; padding: 0; list-style: none; font-size: 14px; color: var(--text-2);
-}
-/* The rules card always shows its rules, takes a row of its own and sits a
-   shade apart from the other cards. Its rules fade in one after another as it rises. */
-.groups > li.has-rules {
-  grid-column: 1 / -1;
-  background: color-mix(in oklch, var(--key), var(--accent) 6%);
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 18%, transparent);
-}
-@keyframes rule-in { from { opacity: 0; } }
-.groups > li.enter .rules li { animation: rule-in 200ms calc(300ms + var(--i, 0) * 30ms) ease both; }
-.rules { display: grid; gap: 6px; margin-top: 10px; padding-left: 18px; font-size: 15px; color: var(--text-2); }
-.rules b { font-weight: 600; color: var(--text); }
 
 .out-body {
   display: grid; grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   height: 560px; border-top: 1px solid var(--rule);
 }
+.out-body[hidden] { display: none; }
+.out-body.arrive { animation: view-in 220ms ease both; }
 .out-body > * { min-height: 0; }
 
 .tree { overflow: auto; padding: 10px 10px 10px 0; border-right: 1px solid var(--rule); font-size: 14px; }
@@ -318,20 +276,10 @@ footer {
 }
 
 @media (max-width: 560px) {
-  .changes ul, .groups { grid-template-columns: minmax(0, 1fr); }
-  .out-tools { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-  .out-tools .seg { grid-column: 1 / -1; }
+  .changes ul { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root { transition: none; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
-
-/* The rules flow in columns. */
-.groups .rules {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px 28px;
-  margin-top: 12px; padding: 0; list-style: none;
-}
-.groups .rules li { border: 0; box-shadow: none; padding: 0; }
-.groups .rules li b { display: block; margin-bottom: 2px; }

@@ -1,20 +1,14 @@
-// The result view: the setup the engine writes for the default answers, with its
-// summary, file tree and file preview. /bindwright:setup asks the real questions;
-// the page shows one person's own public project with every extra on.
+// The file browser: the setup the engine writes for the default answers, as a
+// file tree and a file preview behind one button. /bindwright:setup asks the
+// real questions; the page shows one person's own public project with every extra on.
 import { defaults } from "../engine/model.js";
 import { repoFiles, byFolder } from "./files.js";
-import { summarize } from "./summary.js";
 import { t } from "./i18n/index.js";
 
 const $ = (id) => document.getElementById(id);
 const answers = defaults();
-const RISE_STEP_MS = 90;
-const TALLY_MS = 500;
 const COPY_FEEDBACK_MS = 1500;
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-const mix = (from, to, share) => Math.round(from + (to - from) * share);
-const ruleCount = (groups) => groups.reduce((sum, group) => sum + (group.rules?.length ?? 0), 0);
-const filesOpen = () => !$("files").classList.contains("away");
 // Where the file list and the open file share the width, side by side.
 const sideBySide = matchMedia("(min-width: 901px)");
 
@@ -31,9 +25,6 @@ let files = [];
 let selected = "CLAUDE.md";
 // The folders closed in the file list, by path.
 let closed = new Set();
-// The tally on screen, counting toward the summary's numbers.
-let tally = { parts: 0, rules: 0 };
-let tallyFrame = 0;
 
 const copyResetTimers = new WeakMap();
 
@@ -82,66 +73,6 @@ function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props);
   node.append(...children);
   return node;
-}
-
-// Draws the summary cards, the tally and the view switch from the files.
-function drawGroups() {
-  const groups = summarize(files, answers);
-  $("groups").replaceChildren(...groups.map((group, i) => groupCard(group, i)));
-  countTally(groups);
-  setFilesView(filesOpen());
-}
-
-// The summary card. Each card rises in turn, and its rules always show.
-function groupCard(group, index) {
-  const item = el("li", { className: "enter" },
-    el("b", { textContent: group.title }), el("p", { textContent: group.say }));
-  item.style.animationDelay = `${index * RISE_STEP_MS}ms`;
-  if (group.facts.length) item.append(factsList(group));
-  if (group.rules) {
-    item.classList.add("has-rules");
-    item.append(rulesList(group.rules));
-  }
-  return item;
-}
-
-// The tally counts from its old numbers to the new ones over TALLY_MS.
-function countTally(groups) {
-  const to = { parts: groups.length, rules: ruleCount(groups) };
-  const from = tally;
-  const start = performance.now();
-  cancelAnimationFrame(tallyFrame);
-  const frame = (now) => {
-    const share = still() ? 1 : Math.min(Math.max(now - start, 0) / TALLY_MS, 1);
-    tally = { parts: mix(from.parts, to.parts, share), rules: mix(from.rules, to.rules, share) };
-    paintTally();
-    if (share < 1) tallyFrame = requestAnimationFrame(frame);
-  };
-  frame(start);
-}
-
-// "6 parts, 23 rules" on its own line under the heading.
-function paintTally() {
-  const { parts, rules } = tally;
-  $("tally").textContent = t("tally", {
-    parts: t("tally.parts", { count: parts }),
-    rules: t("tally.rules", { count: rules }),
-  });
-}
-
-// The card's detail lines.
-function factsList(group) {
-  return el("ul", { className: "facts" },
-    ...group.facts.map((fact) => el("li", { textContent: fact.text })));
-}
-
-// The rules card's rows, one per rule file.
-function rulesList(rules) {
-  return el("ul", { className: "rules" }, ...rules.map(([name, line], i) => {
-    const row = el("li", {}, el("b", { textContent: name }), ` ${line}`);
-    row.style.setProperty("--i", i);
-    return row;
-  }));
 }
 
 // Folder rows wherever a path enters a new folder, then the file itself.
@@ -214,41 +145,37 @@ function setReading(reading) {
   (reading ? $("back-files") : target)?.focus({ preventScroll: true });
 }
 
-// The summary and the file tree take turns in the same panel. The view that
-// leaves fades and slides out, the one that comes in fades up. Neither is
-// rebuilt, so the summary's cards keep their place and do not rise again.
-function setFilesView(open) {
-  const mode = open ? "files" : "overview";
-  const panel = $("files");
-  const groups = $("groups");
-  if (panel.classList.contains("away") === open) {
-    const [leaving, arriving] = open ? [groups, panel] : [panel, groups];
-    leaving.classList.remove("arrive");
-    leaving.classList.add("away", "leave");
-    arriving.classList.remove("away", "leave");
-    arriving.classList.add("arrive");
-  }
-  if (open) panel.classList.remove("reading");
-  $("switch").dataset.view = mode;
-  for (const opt of $("switch").querySelectorAll(".seg-opt")) {
-    opt.setAttribute("aria-pressed", String(opt.dataset.view === mode));
-  }
-  $("files-opt").textContent = t("files.count", { count: files.length });
+// The button names what a press does: the file count while closed, hiding while open.
+function paintBrowse(open) {
+  $("browse").setAttribute("aria-expanded", String(open));
+  $("browse").textContent = open ? t("files.hide") : t("files.browse", { count: files.length });
 }
 
-// Fetches the files for the default answers, then draws the results. A failed
-// fetch shows its message in place of the summary.
+// Shows or hides the file browser under the scene. Opening plays its arrival
+// and brings it into view.
+function setBrowse(open) {
+  const panel = $("files");
+  panel.hidden = !open;
+  paintBrowse(open);
+  if (!open) return;
+  restart(panel, "arrive");
+  panel.scrollIntoView({ block: "start", behavior: still() ? "auto" : "smooth" });
+}
+
+// Fetches the files for the default answers, then draws the browser. A failed
+// fetch replaces the button with its message.
 async function loadResults() {
   try {
     files = await repoFiles(answers);
   } catch (err) {
-    $("groups").replaceChildren(el("li", { textContent: t("failure", { error: err.message || err }) }));
+    const message = t("failure", { error: err.message || err });
+    $("browse").replaceWith(el("p", { className: "preview-note", textContent: message }));
     return;
   }
   if (!files.some(([path]) => path === selected)) selected = files[0]?.[0];
-  drawGroups();
   drawTree();
   drawFile();
+  paintBrowse(!$("files").hidden);
 }
 
 $("tree").addEventListener("click", (event) => {
@@ -264,10 +191,7 @@ $("tree").addEventListener("click", (event) => {
   if (file.dataset.path !== selected) selectFile(file);
   if (!sideBySide.matches) setReading(true);
 });
-$("switch").addEventListener("click", (event) => {
-  const opt = event.target.closest(".seg-opt");
-  if (opt) setFilesView(opt.dataset.view === "files");
-});
+$("browse").addEventListener("click", () => setBrowse($("files").hidden));
 $("back-files").addEventListener("click", () => setReading(false));
 $("install").addEventListener("click", copyInstallLine);
 loadResults();
