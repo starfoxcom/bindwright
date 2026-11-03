@@ -125,4 +125,16 @@ export default {
     + "computadora, una sola vez, y luego las del proyecto.",
   "lands.say.done": "Listo. Cambia las opciones de la computadora cuando quieras con "
     + "/bindwright:setup global.",
+  "evidence.title": "Pruebas de proyectos reales",
+  "evidence.note": "Dos proyectos que usan Bindwright, de septiembre a noviembre de 2026.",
+  "evidence.reviewed": "pull requests revisados con IA antes de integrarse",
+  "evidence.stopped": "detenidos por una revisión en rojo hasta corregir el problema",
+  "evidence.deep": "cambios riesgosos enviados a una segunda revisión a fondo",
+  "evidence.bar": "De 716 revisados: 511 pasaron a la primera, 205 se corrigieron antes de integrarse.",
+  "evidence.story1.where": "GameProject",
+  "evidence.story1.was": "Su tablero de proyecto se hizo público con cada nota de ingeniería en él.",
+  "evidence.story1.now": "Cada lectura del tablero revisa la visibilidad y avisa si es público.",
+  "evidence.story2.where": "Este proyecto",
+  "evidence.story2.was": "Un cambio subió funciones de 273 líneas porque la regla de tamaño nunca se cargó.",
+  "evidence.story2.now": "Una revisión de tamaño corre en cada pull request y falla cualquier nuevo incumplimiento.",
 };

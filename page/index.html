@@ -22,6 +22,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="app.js"></script>
 <script type="module" src="scene.js"></script>
 <script type="module" src="lands.js"></script>
+<script type="module" src="evidence.js"></script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Skip to install</a>
@@ -135,6 +136,41 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="evidence" id="evidence" aria-labelledby="evidence-title">
+    <h2 id="evidence-title" data-t="evidence.title">Proof from real projects</h2>
+    <p class="preview-note" data-t="evidence.note">Two projects that run Bindwright, September to November 2026.</p>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-num" data-count="716">716</span>
+        <p class="stat-label" data-t="evidence.reviewed">pull requests reviewed by AI before they merged</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-count="205">205</span>
+        <p class="stat-label" data-t="evidence.stopped">stopped by a red review until the problem was fixed</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-accent" data-count="351">351</span>
+        <p class="stat-label" data-t="evidence.deep">risky changes sent to a deeper second review</p>
+      </div>
+    </div>
+    <div class="split" aria-hidden="true"><i class="split-ok" style="width: 71.4%"></i><i class="split-bad" style="width: 28.6%"></i></div>
+    <p class="bar-note" data-t="evidence.bar">Of 716 reviewed: 511 passed the first time, 205 were fixed before they merged.</p>
+    <ul class="stories">
+      <li class="story">
+        <span class="chip" data-t="evidence.story1.where">GameProject</span>
+        <span class="was" data-t="evidence.story1.was">Its project board went public with every engineering note on it.</span>
+        <span class="arrow" aria-hidden="true">&darr;</span>
+        <b data-t="evidence.story1.now">Every board read checks visibility and warns when it's public.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story2.where">This project</span>
+        <span class="was" data-t="evidence.story2.was">A change shipped 273-line functions because the size rule never loaded.</span>
+        <span class="arrow" aria-hidden="true">&darr;</span>
+        <b data-t="evidence.story2.now">A size check runs on every pull request and fails any new breach.</b>
+      </li>
+    </ul>
   </section>
 
   <section class="install" id="install" aria-labelledby="install-title">
