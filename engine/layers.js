@@ -23,6 +23,7 @@ export const PERSONAL = "bindwright/settings.json";
 const EXTRA_FILES = {
   "attribution-guard": "hooks/no-ai-attribution.py",
   "builder": "agents/builder.md",
+  "code-style": "rules/code-style.md",
   "global-instructions": "CLAUDE.md",
   "push-guard": "hooks/push-guard.py",
 };

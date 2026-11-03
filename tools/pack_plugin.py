@@ -34,7 +34,7 @@ ENGINE_FILES = [
     "layers.js", "share.js", "doctor.js", "report.js", "audit.js",
     "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py",
     "layers.py", "share.py", "doctor.py", "report.py", "audit.py",
-    "home.py",
+    "home.py", "authored.py",
 ]
 # The ~/.claude templates bind.js and bind.py read (globalFiles).
 GLOBAL_FILES = [
