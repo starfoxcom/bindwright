@@ -6,6 +6,7 @@ export const computer = [
   { key: "global-rules", path: "~/.claude/CLAUDE.md" },
   { key: "memory", path: "~/.claude/memory/MEMORY.md" },
   { key: "guard", path: "~/.claude/hooks/push-guard.py" },
+  { key: "builder", path: "~/.claude/agents/builder.md" },
   { key: "mods", path: "~/.claude/mods/" },
 ];
 
