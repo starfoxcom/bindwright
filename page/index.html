@@ -99,8 +99,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <div class="frame">
       <div class="result" id="result">
         <div class="out-head">
-          <h2 id="out-title" tabindex="-1"><span data-t="result.title">What a setup writes</span
-            ><span class="tally" id="tally"></span></h2>
+          <h2 id="out-title" tabindex="-1"><span data-t="result.title">What a setup writes</span></h2>
         </div>
         <p class="preview-note" data-t="result.note">Shown for one person's own public project with everything on. Setup fits it to yours from your answers.</p>
         <div class="stage lands" id="lands-stage">
@@ -125,25 +124,13 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
             </div>
           </div>
         </div>
-        <div class="out-tools">
-          <div class="seg" id="switch" data-view="overview" role="group" aria-label="Show"
-            data-t-attr="aria-label:view.label">
-            <span class="seg-pill" aria-hidden="true"></span>
-            <button class="seg-opt" type="button" data-view="overview" aria-pressed="true"
-              aria-controls="groups" data-t="view.overview">Overview</button>
-            <button class="seg-opt" id="files-opt" type="button" data-view="files" aria-pressed="false"
-              aria-controls="files">Files · 0</button>
-          </div>
-        </div>
-        <div class="views">
-          <ul class="groups" id="groups"></ul>
-          <div class="out-body away" id="files">
-            <nav class="tree" id="tree" aria-label="Files" data-t-attr="aria-label:files.label"></nav>
-            <div class="view">
-              <button class="back-files" id="back-files" type="button" data-t="files.back">&larr; All files</button>
-              <p class="path" id="path"></p>
-              <pre id="code" tabindex="0" aria-labelledby="path"></pre>
-            </div>
+        <button class="browse" id="browse" type="button" aria-expanded="false" aria-controls="files"></button>
+        <div class="out-body" id="files" hidden>
+          <nav class="tree" id="tree" aria-label="Files" data-t-attr="aria-label:files.label"></nav>
+          <div class="view">
+            <button class="back-files" id="back-files" type="button" data-t="files.back">&larr; All files</button>
+            <p class="path" id="path"></p>
+            <pre id="code" tabindex="0" aria-labelledby="path"></pre>
           </div>
         </div>
       </div>
