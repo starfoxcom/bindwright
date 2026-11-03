@@ -10,7 +10,6 @@ const legend = document.getElementById("legend");
 const DURATION_MS = 1200;
 const STEP_MS = 30;
 const steps = DURATION_MS / STEP_MS;
-const locale = document.documentElement.lang;
 
 // The parts of a project's bar, left to right: the colour class, the legend text and
 // how many of the project's reviewed pull requests the part covers.
@@ -29,7 +28,7 @@ function countUp(node) {
   let step = 0;
   const tick = () => {
     step += 1;
-    node.textContent = Math.round(target * easeOut(step / steps)).toLocaleString(locale);
+    node.textContent = String(Math.round(target * easeOut(step / steps)));
     if (step < steps) setTimeout(tick, STEP_MS);
   };
   node.textContent = "0";

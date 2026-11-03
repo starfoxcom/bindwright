@@ -45,13 +45,13 @@ for (const { name } of projects) {
   }
 }
 
-// Every language's page shows each counted number in that language's digit grouping,
-// so it reads right before the counter runs, without JavaScript and under reduced motion.
+// Every language's page shows each counted number as plain digits, with no thousands
+// separator, since the same comma reads as a decimal point in some languages.
 for (const code of Object.keys(DICTIONARIES)) {
-  test(`${code}: the counted numbers use the language's digit grouping`, () => {
+  test(`${code}: the counted numbers show plain digits`, () => {
     const shown = code === "en" ? html : renderLanguage(html, code, DICTIONARIES[code]);
     const counts = [...shown.matchAll(/data-count="(\d+)"[^>]*>([^<]*)</g)];
     assert.ok(counts.length > 0, "no counted numbers on the page");
-    for (const [, count, text] of counts) assert.equal(text, Number(count).toLocaleString(code));
+    for (const [, count, text] of counts) assert.equal(text, count);
   });
 }
