@@ -101,9 +101,9 @@
 }
 .stage .hint { padding: 0 2.4em .9em; color: var(--dim); font-size: .85em; margin-top: -.6em; }
 
-/* Pop-out cards, one slot each, so the row keeps its height while they appear. */
+/* Pop-out cards: one slot each, all as tall as the row, so nothing moves as they appear. */
 .stage .cards {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2cqi; margin-top: 2cqi;
 }
 .stage .placeholder { display: none; }
