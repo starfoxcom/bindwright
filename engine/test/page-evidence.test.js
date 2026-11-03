@@ -9,6 +9,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { projects } from "../../page/evidence-data.js";
 import { DICTIONARIES } from "../../page/i18n/index.js";
+import { renderLanguage } from "../../page/i18n/render.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
 const html = readFileSync(join(page, "index.html"), "utf8");
@@ -42,4 +43,15 @@ for (const { name } of projects) {
       assert.ok(`evidence.project.${name}` in words, `missing evidence.project.${name}`);
     });
   }
+}
+
+// Every language's page shows each counted number in that language's digit grouping,
+// so it reads right before the counter runs, without JavaScript and under reduced motion.
+for (const code of Object.keys(DICTIONARIES)) {
+  test(`${code}: the counted numbers use the language's digit grouping`, () => {
+    const shown = code === "en" ? html : renderLanguage(html, code, DICTIONARIES[code]);
+    const counts = [...shown.matchAll(/data-count="(\d+)"[^>]*>([^<]*)</g)];
+    assert.ok(counts.length > 0, "no counted numbers on the page");
+    for (const [, count, text] of counts) assert.equal(text, Number(count).toLocaleString(code));
+  });
 }

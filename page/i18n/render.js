@@ -2,7 +2,8 @@
 // language's dictionary. The English page marks its text for translation:
 //   data-t="key"                 the element's content is the key's text,
 //                                which may hold inline markup such as <b>;
-//   data-t-attr="name:key ..."   each named attribute is the key's text.
+//   data-t-attr="name:key ..."   each named attribute is the key's text;
+//   data-count="N"               the element's text is N in the language's digit grouping.
 // An element with data-t holds no element of its own tag name.
 import { LANGUAGES, SITE } from "./languages.js";
 
@@ -55,5 +56,7 @@ export function renderLanguage(html, code, words) {
       }
       return out;
     })
+    .replace(/(<(\w+)[^>]*\sdata-count="(\d+)"[^>]*>)[^<]*(<\/\2>)/g,
+      (m, open, tag, count, close) => `${open}${Number(count).toLocaleString(code)}${close}`)
     .replace(/(\s(?:href|src)=")([\w.-]+\.(?:css|js)")/g, `$1${up}$2`);
 }
