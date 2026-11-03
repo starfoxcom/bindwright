@@ -18,7 +18,9 @@
 href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
   rel="stylesheet">
 <link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../scene.css">
 <script type="module" src="../app.js"></script>
+<script type="module" src="../scene.js"></script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Ir a la instalación</a>
@@ -42,9 +44,37 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           data-t="hero.source">Ver en GitHub</a>
       </div>
     </div>
-    <figure class="panel clip" aria-label="Una sesión grabada" data-t-attr="aria-label:hero.figure">
-      <p class="empty" data-t="hero.empty">Aquí se reproduce una sesión real, Claude arreglando el mismo error con y sin Bindwright.</p>
-    </figure>
+    <div class="stage" id="scene-stage">
+      <h2 class="caption" id="scene-caption"><b>1.</b><span data-t="scene.caption.1">Arranca desde tu tablero</span></h2>
+
+      <div class="term" role="img" aria-label="Una sesión de programación en la terminal con Bindwright configurado"
+        data-t-attr="aria-label:scene.aria">
+        <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+        <div class="pane" id="scene-pane"><div class="lines" id="scene-lines"></div></div>
+        <div class="spinrow" id="scene-spinrow" hidden><span class="glyph" id="scene-glyph">✻&#xFE0E;</span><span class="verb" id="scene-verb">Thinking…</span><span class="meta" id="scene-meta"></span></div>
+        <div class="input"><span class="p">&gt;</span><span><span id="scene-typed"></span><span class="caret"></span></span></div>
+        <div class="hint">? for shortcuts</div>
+      </div>
+
+      <div class="cards">
+        <p class="placeholder" data-t="scene.placeholder">Lo que hace Bindwright aparece aquí</p>
+        <div class="card" data-card="guard">
+          <h3><span class="ico g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9.5 9.5 5 5m0-5-5 5"/></svg></span><span data-t="scene.guard.title">Guardia de push</span></h3>
+          <p data-t="scene.guard.text">Detuvo un push forzado a main antes de que llegara a GitHub.</p>
+          <span class="chip" data-t="scene.guard.chip">Cada proyecto en tu computadora</span>
+        </div>
+        <div class="card" data-card="review">
+          <h3><span class="ico r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/><path d="m8.5 11 1.8 1.8 3.4-3.6"/></svg></span><span data-t="scene.review.title">Control de revisión</span></h3>
+          <div class="status"><span class="s"></span><span class="t1" data-t="scene.review.open">1 hallazgo: la cantidad puede faltar</span><span class="t2" data-t="scene.review.done">Limpio. Integrado en develop</span></div>
+          <span class="chip" data-t="scene.review.chip">Revisión con IA en cada PR</span>
+        </div>
+        <div class="card" data-card="handoff">
+          <h3><span class="ico h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M14 3.5V8h4M10 12h5M10 15.5h5"/></svg></span><span data-t="scene.handoff.title">Nota de traspaso</span></h3>
+          <div class="note"><div><b data-t="scene.handoff.done">Hecho</b> <span data-t="scene.handoff.done.item">#12 total del carrito</span></div><div><b data-t="scene.handoff.next">Sigue</b> <span data-t="scene.handoff.next.item">#14 códigos de descuento</span></div><div><b data-t="scene.handoff.watch">Vigilar</b> <span data-t="scene.handoff.watch.item">redondeo de impuestos</span></div></div>
+        </div>
+      </div>
+      <div class="controls"><button id="scene-pause" type="button" data-t="scene.pause">Pausar</button><button id="scene-replay" type="button" data-t="scene.replay">Repetir</button></div>
+    </div>
   </section>
 
   <section class="changes" id="changes" aria-labelledby="changes-title">
