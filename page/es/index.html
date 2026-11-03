@@ -22,6 +22,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="../app.js"></script>
 <script type="module" src="../scene.js"></script>
 <script type="module" src="../lands.js"></script>
+<script type="module" src="../evidence.js"></script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Ir a la instalación</a>
@@ -135,6 +136,45 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="evidence" id="evidence" aria-labelledby="evidence-title">
+    <h2 id="evidence-title" data-t="evidence.title">Lo que detectó en proyectos reales</h2>
+    <p class="preview-note" data-t="evidence.note">Bindwright pone un revisor de IA en cada pull request. Estos son sus resultados en cinco proyectos, de septiembre a noviembre de 2026.</p>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-num" data-total="reviewed" data-count="1010">1010</span>
+        <p class="stat-label" data-t="evidence.reviewed">pull requests que la IA revisó antes de integrarse</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="fixed" data-count="328">328</span>
+        <p class="stat-label" data-t="evidence.stopped">tenían un problema que la IA detectó y se detuvieron hasta corregirlo</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-accent" data-count="590">590</span>
+        <p class="stat-label" data-t="evidence.deep">tocaban código riesgoso, como seguridad o datos guardados, y recibieron una segunda revisión más a fondo</p>
+      </div>
+    </div>
+    <p class="chart-title" data-t="evidence.chart">Por proyecto: pull requests revisados y cuántos tenían un problema detectado</p>
+    <ul class="projects" id="projects"></ul>
+    <ul class="legend" id="legend"></ul>
+    <p class="chart-title" data-t="evidence.stories">Errores que se volvieron reglas</p>
+    <ul class="stories">
+      <li class="story">
+        <span class="chip" data-t="evidence.story1.where">GameProject</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story1.was">El tablero de tareas del proyecto quedó público, con cada nota interna de ingeniería.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story1.now">Revisa la visibilidad del tablero en cada lectura y te avisa si es público.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story2.where">Este proyecto</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story2.was">Un cambio subió funciones de 273 líneas porque la regla que limita su tamaño nunca se cargó.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story2.now">Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.</b>
+      </li>
+    </ul>
   </section>
 
   <section class="install" id="install" aria-labelledby="install-title">

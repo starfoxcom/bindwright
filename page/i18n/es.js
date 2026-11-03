@@ -125,4 +125,31 @@ export default {
     + "computadora, una sola vez, y luego las del proyecto.",
   "lands.say.done": "Listo. Cambia las opciones de la computadora cuando quieras con "
     + "/bindwright:setup global.",
+  "evidence.title": "Lo que detectó en proyectos reales",
+  "evidence.note": "Bindwright pone un revisor de IA en cada pull request. "
+    + "Estos son sus resultados en cinco proyectos, de septiembre a noviembre de 2026.",
+  "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
+  "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
+  "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "
+    + "y recibieron una segunda revisión más a fondo",
+  "evidence.chart": "Por proyecto: pull requests revisados y cuántos tenían un problema detectado",
+  "evidence.stories": "Errores que se volvieron reglas",
+  "evidence.wrong": "Qué salió mal",
+  "evidence.now": "Qué hace Bindwright ahora",
+  "evidence.project.game": "GameProject",
+  "evidence.project.this": "Este proyecto",
+  "evidence.project.business": "BusinessApp",
+  "evidence.project.language": "LanguageApp",
+  "evidence.project.community": "CommunityApp",
+  "evidence.checked": { one: "{count} revisado", other: "{count} revisados" },
+  "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
+  "evidence.legend.passed": "pasaron la revisión",
+  "evidence.legend.fixed": "tenían un problema, corregido antes de integrarse",
+  "evidence.story1.where": "GameProject",
+  "evidence.story1.was": "El tablero de tareas del proyecto quedó público, con cada nota interna de ingeniería.",
+  "evidence.story1.now": "Revisa la visibilidad del tablero en cada lectura y te avisa si es público.",
+  "evidence.story2.where": "Este proyecto",
+  "evidence.story2.was": "Un cambio subió funciones de 273 líneas porque la regla "
+    + "que limita su tamaño nunca se cargó.",
+  "evidence.story2.now": "Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.",
 };

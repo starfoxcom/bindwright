@@ -22,6 +22,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="app.js"></script>
 <script type="module" src="scene.js"></script>
 <script type="module" src="lands.js"></script>
+<script type="module" src="evidence.js"></script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Skip to install</a>
@@ -135,6 +136,45 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="evidence" id="evidence" aria-labelledby="evidence-title">
+    <h2 id="evidence-title" data-t="evidence.title">What it caught in real projects</h2>
+    <p class="preview-note" data-t="evidence.note">Bindwright puts an AI reviewer on every pull request. These are its results in five projects, September to November 2026.</p>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-num" data-total="reviewed" data-count="1010">1010</span>
+        <p class="stat-label" data-t="evidence.reviewed">pull requests checked by the AI reviewer before they merged</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="fixed" data-count="328">328</span>
+        <p class="stat-label" data-t="evidence.stopped">had a problem the reviewer caught and were held back until it was fixed</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-accent" data-count="590">590</span>
+        <p class="stat-label" data-t="evidence.deep">touched risky code, like security or saved data, and got a second, deeper review</p>
+      </div>
+    </div>
+    <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many had a problem caught</p>
+    <ul class="projects" id="projects"></ul>
+    <ul class="legend" id="legend"></ul>
+    <p class="chart-title" data-t="evidence.stories">Mistakes that became rules</p>
+    <ul class="stories">
+      <li class="story">
+        <span class="chip" data-t="evidence.story1.where">GameProject</span>
+        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
+        <span class="was" data-t="evidence.story1.was">The project's task board was made public, with every internal engineering note on it.</span>
+        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
+        <b data-t="evidence.story1.now">It checks the board's visibility on every read and warns you when it's public.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story2.where">This project</span>
+        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
+        <span class="was" data-t="evidence.story2.was">A change shipped functions 273 lines long, because the rule that limits function size never loaded.</span>
+        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
+        <b data-t="evidence.story2.now">A size check runs on every pull request and fails any function that grows too long.</b>
+      </li>
+    </ul>
   </section>
 
   <section class="install" id="install" aria-labelledby="install-title">
