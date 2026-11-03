@@ -91,7 +91,7 @@ Changed 2026-11-02 (maintainer): the page becomes a landing page and install gui
 - [x] Hero scene: a drawn terminal session (typing, the thinking spinner, tool calls, a diff, a blocked force push, the review gate going red to green, the hand-off note) with pop-out cards, built from `prototypes/terminal.html`; it loops while on screen and plays as a slideshow when animations are off (#535).
 - [x] "What goes where": an animated diagram of what lands on the computer and what lands in each project, inside "What a setup writes" (#536).
 - [x] Install scene: dropped 2026-11-02 (maintainer), since "What goes where" already shows what setup installs (#537).
-- [ ] Evidence section: numbers from `tools/receipts.py` (session logs and PR history) plus the incident stories from GameProject and BusinessApp, each with the rule it produced.
+- [x] Evidence section: numbers from `tools/receipts.py` (PR history) for the five projects that run the AI reviewer, a checked-vs-caught bar per project, and two incident stories (GameProject and this project), each with the rule it produced. Opt-in counts from users follow in #551.
 - [ ] Secondary pages: compare, all settings, how it works.
 
 ### Phase 4: rename and release
