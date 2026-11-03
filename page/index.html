@@ -21,6 +21,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <link rel="stylesheet" href="scene.css">
 <script type="module" src="app.js"></script>
 <script type="module" src="scene.js"></script>
+<script type="module" src="lands.js"></script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Skip to install</a>
@@ -50,9 +51,9 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       <div class="term" role="img" aria-label="A coding session in the terminal with Bindwright set up"
         data-t-attr="aria-label:scene.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
-        <div class="pane" id="scene-pane"><div class="lines" id="scene-lines"></div></div>
-        <div class="spinrow" id="scene-spinrow" hidden><span class="glyph" id="scene-glyph">✻&#xFE0E;</span><span class="verb" id="scene-verb">Thinking…</span><span class="meta" id="scene-meta"></span></div>
-        <div class="input"><span class="p">&gt;</span><span><span id="scene-typed"></span><span class="caret"></span></span></div>
+        <div class="pane"><div class="lines"></div></div>
+        <div class="spinrow" hidden><span class="glyph">✻&#xFE0E;</span><span class="verb">Thinking…</span><span class="meta"></span></div>
+        <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
         <div class="hint">? for shortcuts</div>
       </div>
 
@@ -100,18 +101,40 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <div class="out-head">
           <h2 id="out-title" tabindex="-1"><span data-t="result.title">What a setup writes</span
             ><span class="tally" id="tally"></span></h2>
-          <div class="out-tools">
-            <div class="seg" id="switch" data-view="overview" role="group" aria-label="Show"
-              data-t-attr="aria-label:view.label">
-              <span class="seg-pill" aria-hidden="true"></span>
-              <button class="seg-opt" type="button" data-view="overview" aria-pressed="true"
-                aria-controls="groups" data-t="view.overview">Overview</button>
-              <button class="seg-opt" id="files-opt" type="button" data-view="files" aria-pressed="false"
-                aria-controls="files">Files · 0</button>
+        </div>
+        <p class="preview-note" data-t="result.note">Shown for one person's own public project with everything on. Setup fits it to yours from your answers.</p>
+        <div class="stage lands" id="lands-stage">
+          <div class="term" role="img" aria-label="A terminal running /bindwright:setup, with each file it writes flying into one of two boxes"
+            data-t-attr="aria-label:lands.aria">
+            <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+            <div class="pane"><div class="lines"></div></div>
+            <div class="spinrow" hidden><span class="glyph">✻&#xFE0E;</span><span class="verb">Thinking…</span><span class="meta"></span></div>
+            <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
+            <div class="hint">? for shortcuts</div>
+          </div>
+          <div class="boxes">
+            <div class="box">
+              <h3><span class="ico h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><span data-t="lands.computer.title">Your computer</span></h3>
+              <p class="where"><code>~/.claude</code><span class="chip" data-t="lands.computer.tag">Asked once</span></p>
+              <ul class="rows" id="lands-computer"></ul>
+            </div>
+            <div class="box">
+              <h3><span class="ico r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.5h8.5A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg></span><span data-t="lands.project.title">This project</span></h3>
+              <p class="where"><code>~/shop</code><span class="chip" data-t="lands.project.tag">Asked in every project</span></p>
+              <ul class="rows" id="lands-project"></ul>
             </div>
           </div>
         </div>
-        <p class="preview-note" data-t="result.note">Shown for one person's own public project with everything on. Setup fits it to yours from your answers.</p>
+        <div class="out-tools">
+          <div class="seg" id="switch" data-view="overview" role="group" aria-label="Show"
+            data-t-attr="aria-label:view.label">
+            <span class="seg-pill" aria-hidden="true"></span>
+            <button class="seg-opt" type="button" data-view="overview" aria-pressed="true"
+              aria-controls="groups" data-t="view.overview">Overview</button>
+            <button class="seg-opt" id="files-opt" type="button" data-view="files" aria-pressed="false"
+              aria-controls="files">Files · 0</button>
+          </div>
+        </div>
         <div class="views">
           <ul class="groups" id="groups"></ul>
           <div class="out-body away" id="files">

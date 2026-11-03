@@ -146,6 +146,51 @@
 .stage .card.on .note div:nth-child(3) { transition-delay: 500ms; }
 .stage .note b { color: var(--accent); font-weight: 400; }
 
+/* What lands where: the terminal on the left, the two boxes side by side on the right,
+   all as tall as the terminal. The rows fly in from the left as they arrive. */
+.stage.lands {
+  display: grid; grid-template-columns: minmax(0, 40fr) minmax(0, 60fr); gap: 2cqi;
+  width: 100%; margin: 20px 0 0;
+}
+.stage.lands .term { margin: 0; height: auto; min-height: 30cqi; }
+.stage.lands .boxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2cqi; }
+.stage.lands .box {
+  display: flex; flex-direction: column; min-width: 0;
+  padding: 1.1em 1.2em; border-radius: 18px; background: oklch(0.27 0.008 240 / .92);
+  border: 1px solid var(--rule); box-shadow: 0 24px 60px -24px oklch(0 0 0 / .7);
+  font-size: clamp(12px, 1.45cqi, 16px);
+}
+.stage.lands .box h3 {
+  display: flex; align-items: center; gap: .6em; font-size: 1.05em; font-weight: 700; font-stretch: 108%;
+}
+.stage.lands .where { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-top: .6em; }
+.stage.lands .where code { font: .92em "Fragment Mono", monospace; color: var(--text-2); }
+.stage.lands .where .chip { margin-top: 0; }
+/* A row is a label line and a path line; the list reserves --rows of them. */
+.stage.lands .rows {
+  list-style: none; margin-top: .9em; padding: 0; display: grid; gap: .35em; align-content: start;
+  min-height: calc(var(--rows, 6) * 3.1em + (var(--rows, 6) - 1) * .35em);
+}
+.stage.lands .row {
+  display: grid; padding: .35em .6em; border-radius: 10px; background: oklch(1 0 0 / .04);
+  line-height: 1.3;
+  animation: lands-fly 420ms cubic-bezier(.2,.8,.2,1) both;
+}
+.stage.lands .row-label { font-weight: 700; }
+.stage.lands .row-path { font: .82em/1.3 "Fragment Mono", monospace; color: var(--text-2); overflow-wrap: anywhere; }
+@keyframes lands-fly { from { opacity: 0; transform: translateX(-24px); filter: blur(4px); } }
+
+/* The stage is its own container, so its columns follow the viewport: below 900px the
+   terminal goes full width above the boxes. */
+@media (max-width: 900px) {
+  .stage.lands { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .stage.lands .term { min-height: 50cqi; }
+}
+@container (max-width: 640px) {
+  .stage.lands .term { height: 80cqi; min-height: 0; font-size: 3.1cqi; }
+  .stage.lands .boxes { grid-template-columns: minmax(0, 1fr); height: auto; }
+}
+
 
 /* Phones: everything stacks. Title, terminal, then a band of its own for the cards,
    so a card never covers the newest lines. */
