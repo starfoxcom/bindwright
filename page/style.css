@@ -296,7 +296,13 @@ footer {
   header { padding: 16px; }
   header nav { gap: 20px; }
   main { padding: 16px 16px 48px; }
-  .hero { padding-top: 16px; }
+  /* The scene comes right after the headline, so a phone shows it before the button. */
+  .hero { display: flex; flex-direction: column; padding-top: 16px; }
+  .pitch { display: contents; }
+  .hero h1 { font-size: clamp(32px, 9vw, 40px); }
+  .hero .stage { margin-top: 24px; }
+  .hero .lede, .hero .actions { order: 1; }
+  .hero .lede { margin-top: 28px; }
   .changes li { padding: 24px; }
   .changes { margin-top: 64px; }
   .preview, .install { margin-top: 72px; }

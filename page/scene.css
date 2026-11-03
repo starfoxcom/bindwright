@@ -154,7 +154,7 @@
     margin: 0; font-size: 6cqi; line-height: 1.15; min-height: 2.3em;
     display: flex; align-items: flex-end;
   }
-  .stage .term { margin: 4cqi 0 0; height: 112cqi; font-size: 3.1cqi; }
+  .stage .term { margin: 4cqi 0 0; height: 92cqi; font-size: 3.1cqi; }
   .stage .cards { margin-top: 4cqi; grid-template-columns: minmax(0, 1fr); min-height: 40cqi; }
   .stage .placeholder {
     display: grid; grid-area: 1 / 1; place-items: center; border: 1px dashed var(--rule);
