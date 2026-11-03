@@ -10,25 +10,24 @@
   --spin-hi: oklch(0.90 0.08 60);
   --add-bg: oklch(0.32 0.06 150);
   --del-bg: oklch(0.32 0.07 25);
-  position: relative; width: min(1120px, 100%); aspect-ratio: 16 / 9; margin: 48px auto 0;
+  position: relative; width: min(1120px, 100%); margin: 48px auto 0;
   container-type: inline-size;
 }
 
 .stage .caption {
-  position: absolute; left: 0; top: 0; z-index: 3;
   font-size: clamp(18px, 3.1cqi, 34px); font-weight: 750; font-stretch: 110%; letter-spacing: -0.015em;
 }
 .stage .caption b { color: var(--accent); font-weight: 750; margin-right: .3em; }
 .stage .caption.in { animation: scene-cap 520ms cubic-bezier(.2,.8,.2,1) both; }
 @keyframes scene-cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
 
-/* Terminal window */
+/* Terminal window: the scene's full width, with the cards in a row under it. */
 .stage .term {
-  position: absolute; left: 0; top: 6.5cqi; width: 62cqi; bottom: 0;
+  margin-top: 2cqi; height: 50cqi;
   display: flex; flex-direction: column;
   background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
   box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
-  font: 400 clamp(10px, 1.32cqi, 15px)/1.55 "Fragment Mono", ui-monospace, monospace;
+  font: 400 clamp(11px, 1.6cqi, 15px)/1.55 "Fragment Mono", ui-monospace, monospace;
   overflow: hidden;
 }
 .stage .bar {
@@ -102,10 +101,10 @@
 }
 .stage .hint { padding: 0 2.4em .9em; color: var(--dim); font-size: .85em; margin-top: -.6em; }
 
-/* Pop-out cards beside the terminal */
+/* Pop-out cards, one slot each, so the row keeps its height while they appear. */
 .stage .cards {
-  position: absolute; right: 0; top: 6.5cqi; bottom: 0; width: 35cqi;
-  display: flex; flex-direction: column; justify-content: center; gap: 2cqi;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start;
+  gap: 2cqi; margin-top: 2cqi;
 }
 .stage .placeholder { display: none; }
 .stage .card {
@@ -151,13 +150,12 @@
 /* Phones: everything stacks. Title, terminal, then a band of its own for the cards,
    so a card never covers the newest lines. */
 @container (max-width: 640px) {
-  .stage .caption, .stage .term, .stage .cards { position: static; width: auto; }
   .stage .caption {
     margin: 0; font-size: 6cqi; line-height: 1.15; min-height: 2.3em;
     display: flex; align-items: flex-end;
   }
   .stage .term { margin: 4cqi 0 0; height: 112cqi; font-size: 3.1cqi; }
-  .stage .cards { margin: 4cqi 0 0; display: grid; min-height: 40cqi; }
+  .stage .cards { margin-top: 4cqi; grid-template-columns: minmax(0, 1fr); min-height: 40cqi; }
   .stage .placeholder {
     display: grid; grid-area: 1 / 1; place-items: center; border: 1px dashed var(--rule);
     border-radius: 18px; color: var(--dim); font-size: 3.4cqi; transition: opacity 300ms;
@@ -165,5 +163,3 @@
   .stage .cards:has(.card.on) .placeholder { opacity: 0; }
   .stage .card { grid-area: 1 / 1; font-size: 3.8cqi; }
 }
-/* The stage is the viewport less 32px of gutter, so it stacks from 672px down. */
-@media (max-width: 672px) { .stage { aspect-ratio: auto; } }
