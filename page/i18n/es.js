@@ -176,4 +176,27 @@ export default {
   "scene.verb.reading": "Leyendo el tablero",
   "scene.verb.thinking": "Pensando",
   "scene.verb.handoff": "Escribiendo el traspaso",
+
+  "lands.aria": "Una terminal con /bindwright:setup, donde cada archivo que escribe vuela a una de "
+    + "dos cajas",
+  "lands.computer.title": "Tu computadora",
+  "lands.computer.tag": "Se pregunta una vez",
+  "lands.project.title": "Este proyecto",
+  "lands.project.tag": "Se pregunta en cada proyecto",
+  "lands.item.plugin": "Plugin de Bindwright",
+  "lands.item.global-rules": "Reglas de trabajo para cada proyecto",
+  "lands.item.memory": "Índice de memoria",
+  "lands.item.guard": "Guardia de push",
+  "lands.item.mods": "Mods que elegiste",
+  "lands.item.brief": "Guía del proyecto",
+  "lands.item.rules": "Reglas",
+  "lands.item.routines": "Rutinas de sesión",
+  "lands.item.guards": "Guardias",
+  "lands.item.review": "Revisión con IA en cada PR",
+  "lands.item.board": "Ajustes del tablero de trabajo",
+  "lands.verb": "Haciendo las preguntas",
+  "lands.say.first": "Primera vez en esta computadora: primero hace las preguntas de la "
+    + "computadora, una sola vez, y luego las del proyecto.",
+  "lands.say.done": "Listo. Cambia las opciones de la computadora cuando quieras con "
+    + "/bindwright:setup global.",
 };

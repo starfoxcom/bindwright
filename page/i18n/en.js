@@ -94,4 +94,20 @@ export default {
   "scene.verb.reading": "Reading the board",
   "scene.verb.thinking": "Thinking",
   "scene.verb.handoff": "Writing the hand-off",
+
+  "lands.item.plugin": "Bindwright plugin",
+  "lands.item.global-rules": "Working rules for every project",
+  "lands.item.memory": "Memory index",
+  "lands.item.guard": "Push guard",
+  "lands.item.mods": "Mods you picked",
+  "lands.item.brief": "Project brief",
+  "lands.item.rules": "Rules",
+  "lands.item.routines": "Session routines",
+  "lands.item.guards": "Guards",
+  "lands.item.review": "AI review on every PR",
+  "lands.item.board": "Work board settings",
+  "lands.verb": "Asking the questions",
+  "lands.say.first": "First run on this computer, so it asks the computer questions once, then the "
+    + "project's.",
+  "lands.say.done": "Done. Change the computer choices any time with /bindwright:setup global.",
 };
