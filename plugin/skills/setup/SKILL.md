@@ -13,7 +13,7 @@ This skill asks the user how they want to work, writes the files that fit into t
 
 Two kinds of choices, and the user always hears which is which:
 
-- **Computer choices** apply to every project on this computer and are asked only once: the code-search tool, global instructions, the push guard for every project, and the mods. They are saved in `<config>/bindwright/settings.json`, where `<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`.
+- **Computer choices** apply to every project on this computer and are asked only once: the code-search tool, global instructions, the push guard for every project, the builder agent, and the mods. They are saved in `<config>/bindwright/settings.json`, where `<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`.
 - **Project choices** apply to this repo only and are asked on every run, never copied from an earlier project, since a lot can change between two projects.
 
 ## 0. Pick the engine and read the saved choices
@@ -27,7 +27,7 @@ With neither, tell the user setup needs Node or Python 3.8+, and stop.
 
 ## 1. Check the argument and the repo
 
-- **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on, and for each one that turned off, say what stays installed and how to remove it (`python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" remove-hook <name>` for a guard; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod). Then stop.
+- **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on, and for each one that turned off, say what stays installed and how to remove it (`python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" remove-hook <name>` for a guard; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent). Then stop.
 - **A code starting with `bw1-`:** a setup code from an older Bindwright page. It holds every project answer, so skip step 3 and run the engine with `--code <the code>` in step 4. Step 2 still asks the computer questions that have no saved answer.
 - **Anything else that is not empty:** say this skill takes no argument, `global`, or a `bw1-` code, and stop.
 - Find the repo root with `git rev-parse --show-toplevel`. If this is not a git repo, ask whether to run `git init` here or stop.
@@ -47,9 +47,10 @@ Ask with the question tool, recommended option first:
 - **Code-search tool** (setting `codeResearch`): how the assistant finds code. Offer `tokensave` (recommended), `lsp-plugins`, `codegraph`, `serena`, `codebase-memory` and `none`, each with its one-line purpose from `${CLAUDE_PLUGIN_ROOT}/_core/global-template/hooks/code-research-profiles.json`.
 - **Global instructions** (extra `global-instructions`): a short set of working rules every project on this computer reads. Yes (recommended) or no.
 - **Push guard for every project** (extra `push-guard`): blocks force pushes in every repo on this computer, including ones Bindwright never set up. Yes (recommended) or no. Each Bindwright project also gets its own copy in the repo, so this only adds the others.
+- **Builder agent** (extra `builder`): a helper that runs on the small, cheap Haiku model and writes the code for a short brief the main session gives it, while the main session designs, runs the tests, reads the diff and commits. It costs a fraction of the main model doing the same work. Yes (recommended) or no; say that "no" keeps all work in the main session.
 - **Mods** (one extra per mod): small add-ons for the CLI, which need CLI 2.1.287 or later and Node. Take the version this session runs from the `AI_AGENT` environment variable (`claude-code_2-1-316_agent` is 2.1.316), not from `claude --version`: the desktop app runs its own copy of the CLI, which can be older than the one on the PATH. Only when `AI_AGENT` is unset, use `claude --version`. When the version is older or Node is missing, skip this question and say why in one line, saving nothing for the mods, so a later run asks again. Otherwise ask one multiple-choice question listing only the mods with no saved answer, from the table in `${CLAUDE_PLUGIN_ROOT}/_core/global-template/mods/README.md`, one line each, `session-facts` first and marked recommended. Every mod listed and not picked is saved as a no.
 
-Save the answers in one call: the engine with `--remember <repo root> --layer personal`, passing on standard input `{"codeResearch": "<tool>", "extras": {"global-instructions": true, "push-guard": true, "session-facts": true, "ci-watch": false, ...}}` with only the keys just asked. On `{"error": ...}`, show it and go on: the choices still apply to this run.
+Save the answers in one call: the engine with `--remember <repo root> --layer personal`, passing on standard input `{"codeResearch": "<tool>", "extras": {"global-instructions": true, "push-guard": true, "builder": true, "session-facts": true, "ci-watch": false, ...}}` with only the keys just asked. On `{"error": ...}`, show it and go on: the choices still apply to this run.
 
 ## 3. Project choices, asked every run
 
@@ -202,6 +203,7 @@ The hooks need a system Python: run `home.py find-python` once. On an error, ski
 - **Code-search hook:** when `hooks/` holds a `*-first.py` and `home.py list-hooks` does not show it yet, install it with `home.py install-hook <that file> --python <found> --matcher "Grep|Glob|Bash"`. If `~/.claude/hooks/` already has a different copy, show the difference first. Offer to remove any other `*-first.py` with `home.py remove-hook <name>`, since two of them would fight over every search. Say that the hook blocks searches only while the tool is available.
 - **Attribution guard in `~/.claude`:** only when `hooks/` holds `no-ai-attribution.py`, which happens when the project keeps its guards in each person's `~/.claude` instead of the repo. Install it with `--matcher "Bash|PowerShell"`, then run `home.py attribution-off`, which stops the CLI adding its own credit lines. Save `{"extras": {"attribution-guard": true}}` with `--remember <repo root> --layer personal`.
 - **Push guard:** `home.py install-hook hooks/push-guard.py --python <found> --matcher "Bash|PowerShell"`. It only ever blocks, so it needs no other change. The first time it goes in, ask separately: "Let every `git push` run without a prompt in every project on this computer? The guard blocks force pushes written the ordinary way; it cannot see one built at run time, set in git config, or run by another program." On a yes, `home.py allow "Bash(git push:*)"`.
+- **Builder agent:** `home.py add-agent agents/builder.md`. A copy already in `~/.claude/agents/` stays (`"kept_existing": true`), since it may hold the user's edits. Agents load at start-up, so the user restarts the CLI after.
 - **Mods:** install each chosen one with `home.py add-mod "${CLAUDE_PLUGIN_ROOT}/_core/global-template/mods/<name>"`. A mod already installed keeps its copy (`"kept_existing": true`), since it may hold the user's edits. Mods load at start-up, so the user restarts the CLI after. The CLI's built-in "You should know" mod stays off: say in one line that it reviews each session with an extra model call and needs telemetry, and that the user can turn it on later.
 
 After a hook install, check it works: pipe `{"tool_name": "Bash", "tool_input": {"command": "git push -qf origin main"}}` into the registered command and arguments on standard input, writing no file (`home.py` printed the settings path; the entry is the last one under `hooks.PreToolUse`). The push guard must exit 2.
@@ -222,7 +224,7 @@ Tell the user, in plain words, in two parts.
 
 **This computer:**
 
-- Each computer choice and its answer, one line each (code-search tool, global instructions, push guard, mods), and what was installed this run.
+- Each computer choice and its answer, one line each (code-search tool, global instructions, push guard, builder agent, mods), and what was installed this run.
 - Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The next project on this computer will not ask them.
 - That `~/.claude/settings.json.bak` holds the settings from before the last change, when one was made.
 

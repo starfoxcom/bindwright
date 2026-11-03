@@ -28,6 +28,7 @@ export default {
   "lands.item.global-rules": "Working rules for every project",
   "lands.item.memory": "Memory index",
   "lands.item.guard": "Push guard",
+  "lands.item.builder": "Helper that writes code",
   "lands.item.mods": "Mods you picked",
   "lands.item.brief": "Project brief",
   "lands.item.rules": "Rules",

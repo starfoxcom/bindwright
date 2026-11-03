@@ -15,6 +15,8 @@ Enable an MCP server only while the work needs it. Every enabled server adds its
 
 Leave `model` and `effort` out of `Workflow` and agent calls, so they run on the session's model and effort. A pinned value overrides the person's choice.
 
+When the `builder` agent is installed (`~/.claude/agents/builder.md`), hand it each feature or fix of about 20 lines or more that a test can prove: a brief with the goal, the files and the test command. It runs on a small, cheap model at the model and effort its own file pins, in this folder, so the project's rules still apply. Keep design, debugging an unknown cause and edits of a few lines in the main session. When it reports back, run the tests yourself, read the whole diff and check the result where it shows (the browser, the running app) before trusting it; the main session does every commit and push.
+
 ## Watching CI
 
 After every push, watch the PR's checks; never use `gh run watch`. When the `ci-watch` mod is loaded, it watches the PR after `git push` or `gh pr create` and wakes the session once all checks settle; follow the mod and start no second watcher. Otherwise use the **Monitor tool** where it exists:
