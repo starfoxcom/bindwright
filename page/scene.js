@@ -1,5 +1,6 @@
 // The hero's drawn terminal scene: a scripted coding session that loops while it is on
-// screen. Reduced motion shows its last frame, with a Play button.
+// screen. With reduced motion it plays as a slideshow: short beats happen at once and
+// every longer pause holds its frame as a slide.
 import { t } from "./i18n/index.js";
 
 const $ = (name) => document.getElementById(`scene-${name}`);
@@ -9,11 +10,10 @@ const STOP = Symbol("stop");
 const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"].map((g) => `${g}︎`);
 // The clock ticks in steps and stops while paused, so every wait and loop pauses with it.
 const STEP = 40;
+// Under reduced motion, a wait this long or longer holds as a slide; shorter ones skip.
+const SLIDE_MS = 1000;
 let run = 0;
 let paused = false;
-let instant = reduce;
-// The reader's own pause, from the button.
-let held = false;
 // Whether the scene is on screen.
 let seen = true;
 
@@ -37,7 +37,7 @@ function every(ms, fn) {
 
 // Resolves after ms of unpaused time. Rejects with STOP when a replay starts.
 function wait(ms) {
-  if (instant) return Promise.resolve();
+  if (reduce && ms < SLIDE_MS) return Promise.resolve();
   const id = run;
   return new Promise((resolve, reject) => {
     let left = ms;
@@ -84,6 +84,10 @@ async function type(text) {
   gap();
 }
 
+// The spinner's status text: seconds so far and thousands of tokens received.
+const meta = (ms, tokens) =>
+  `(${Math.ceil(ms / 1000)}s · ↓ ${tokens.toFixed(1)}k tokens · esc to interrupt)`;
+
 // The spinner row: a cycling glyph, a shimmering verb, and a live seconds and token count.
 async function think(verb, ms, tokens) {
   const row = $("spinrow");
@@ -92,6 +96,12 @@ async function think(verb, ms, tokens) {
   let frame = 0;
   let elapsed = 0;
   const id = run;
+  if (reduce) {
+    $("meta").textContent = meta(ms, tokens);
+    await wait(ms);
+    row.hidden = true;
+    return;
+  }
   every(110, () => {
     if (row.hidden || id !== run) return false;
     $("glyph").textContent = GLYPHS[frame++ % GLYPHS.length];
@@ -99,8 +109,7 @@ async function think(verb, ms, tokens) {
   every(100, () => {
     if (row.hidden || id !== run) return false;
     elapsed += 100;
-    const k = (tokens * Math.min(1, elapsed / ms)).toFixed(1);
-    $("meta").textContent = `(${Math.ceil(elapsed / 1000)}s · ↓ ${k}k tokens · esc to interrupt)`;
+    $("meta").textContent = meta(elapsed, tokens * Math.min(1, elapsed / ms));
   });
   await wait(ms);
   row.hidden = true;
@@ -119,7 +128,8 @@ async function tool(name, arg, ms, result = "ok") {
 function todos(items) {
   say(`<span class="name">Update Todos</span>`);
   return items.map((txt, i) => add(
-    `<span class="elbow">${i ? " " : "⎿"}</span><span class="box">☐</span><span class="txt">${txt}</span>`,
+    `<span class="elbow">${i ? " " : "⎿"}</span><span class="box">☐</span>`
+      + `<span class="txt">${txt}</span>`,
     "todo",
   ));
 }
@@ -134,7 +144,11 @@ async function checkOff(el) {
 // The caption line at the top of the scene, numbered, with its own rise.
 async function caption(n, text) {
   const c = $("caption");
-  c.replaceChildren(Object.assign(document.createElement("b"), { textContent: `${n}.` }), text);
+  const number = Object.assign(document.createElement("b"), { textContent: `${n}.` });
+  // One wrapper, so the number flows with the text when the caption wraps.
+  const line = document.createElement("span");
+  line.append(number, text);
+  c.replaceChildren(line);
   c.classList.remove("in");
   void c.offsetWidth;
   c.classList.add("in");
@@ -253,41 +267,20 @@ async function story() {
 
 async function loop() {
   try {
-    do {
-      await story();
-    } while (!instant);
+    for (;;) await story();
   } catch (err) {
     if (err !== STOP) throw err;
   }
 }
 
-// The scene plays only while it is on screen, the tab is open and the reader has not paused it.
+// The scene plays only while it is on screen and the tab is open.
 function sync() {
-  paused = !seen || document.hidden || held;
+  paused = !seen || document.hidden;
 }
 
-function togglePause() {
-  held = !held;
-  $("pause").textContent = held ? t("scene.play") : t("scene.pause");
-  sync();
-}
-
-function replay() {
-  held = false;
-  $("pause").textContent = t("scene.pause");
-  $("replay").textContent = t("scene.replay");
-  sync();
-  instant = false;
-  loop();
-}
-
-$("pause").onclick = togglePause;
-$("replay").onclick = replay;
 new IntersectionObserver(([entry]) => {
   seen = entry.isIntersecting;
   sync();
 }).observe($("stage"));
 document.addEventListener("visibilitychange", sync);
-// With animations turned off the scene shows its last frame, and Replay plays it on request.
-if (reduce) $("replay").textContent = t("scene.play");
 loop();

@@ -61,7 +61,8 @@ test("a script text fills its values, and a missing key is an error", () => {
 
 test("every t() key literal in the page scripts exists in the English dictionary", () => {
   const scripts = readdirSync(page).filter((file) => file.endsWith(".js"));
-  const keys = scripts.flatMap((file) => [...read(file).matchAll(/\bt\("([^"]+)"/g)].map((m) => m[1]));
+  const keyCalls = (file) => [...read(file).matchAll(/\bt\("([^"]+)"/g)].map((m) => m[1]);
+  const keys = scripts.flatMap(keyCalls);
   assert.ok(keys.length > 0);
   assert.deepEqual(keys.filter((key) => !(key in DICTIONARIES.en)), []);
 });

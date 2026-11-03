@@ -176,7 +176,4 @@ export default {
   "scene.verb.reading": "Leyendo el tablero",
   "scene.verb.thinking": "Pensando",
   "scene.verb.handoff": "Escribiendo el traspaso",
-  "scene.pause": "Pausar",
-  "scene.play": "Reproducir",
-  "scene.replay": "Repetir",
 };

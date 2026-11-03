@@ -62,6 +62,14 @@ header nav:first-of-type { margin-left: auto; }
 
 main { max-width: 1360px; margin: 0 auto; padding: 36px 40px 64px; }
 
+/* Wide screens: the pitch beside the scene. The scene's column stays past 640px,
+   the width its side-by-side layout needs. */
+@media (min-width: 1340px) {
+  .hero { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 48px; align-items: center; }
+  .hero .stage { margin-top: 0; }
+  .hero h1 { font-size: clamp(40px, 3.8vw, 64px); }
+}
+
 h1 {
   max-width: 15ch;
   font-size: clamp(40px, 5vw, 76px); line-height: 1;

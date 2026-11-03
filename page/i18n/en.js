@@ -94,7 +94,4 @@ export default {
   "scene.verb.reading": "Reading the board",
   "scene.verb.thinking": "Thinking",
   "scene.verb.handoff": "Writing the hand-off",
-  "scene.pause": "Pause",
-  "scene.play": "Play",
-  "scene.replay": "Replay",
 };
