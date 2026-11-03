@@ -39,4 +39,16 @@ export default {
   "lands.say.first": "First run on this computer, so it asks the computer questions once, then the "
     + "project's.",
   "lands.say.done": "Done. Change the computer choices any time with /bindwright:setup global.",
+
+  "evidence.project.game": "GameProject",
+  "evidence.project.this": "This project",
+  "evidence.project.business": "BusinessApp",
+  "evidence.project.language": "LanguageApp",
+  "evidence.project.community": "CommunityApp",
+  "evidence.project.trading": "TradingBot",
+  "evidence.project.card": "CardApp",
+  "evidence.prs": { one: "{count} PR", other: "{count} PRs" },
+  "evidence.legend.passed": "passed the first time",
+  "evidence.legend.fixed": "fixed after a red review",
+  "evidence.legend.none": "merged without an AI review",
 };

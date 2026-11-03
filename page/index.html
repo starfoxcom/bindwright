@@ -140,23 +140,23 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">Proof from real projects</h2>
-    <p class="preview-note" data-t="evidence.note">Two projects that run Bindwright, September to November 2026.</p>
+    <p class="preview-note" data-t="evidence.note">Seven projects that run Bindwright, September to November 2026.</p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-count="716">716</span>
+        <span class="stat-num" data-total="reviewed" data-count="1010">1,010</span>
         <p class="stat-label" data-t="evidence.reviewed">pull requests reviewed by AI before they merged</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-count="205">205</span>
+        <span class="stat-num stat-red" data-total="fixed" data-count="328">328</span>
         <p class="stat-label" data-t="evidence.stopped">stopped by a red review until the problem was fixed</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-count="351">351</span>
+        <span class="stat-num stat-accent" data-count="590">590</span>
         <p class="stat-label" data-t="evidence.deep">risky changes sent to a deeper second review</p>
       </div>
     </div>
-    <div class="split" aria-hidden="true"><i class="split-ok" style="width: 71.4%"></i><i class="split-bad" style="width: 28.6%"></i></div>
-    <p class="bar-note" data-t="evidence.bar">Of 716 reviewed: 511 passed the first time, 205 were fixed before they merged.</p>
+    <ul class="projects" id="projects"></ul>
+    <ul class="legend" id="legend"></ul>
     <ul class="stories">
       <li class="story">
         <span class="chip" data-t="evidence.story1.where">GameProject</span>

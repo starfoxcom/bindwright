@@ -140,23 +140,23 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">Pruebas de proyectos reales</h2>
-    <p class="preview-note" data-t="evidence.note">Dos proyectos que usan Bindwright, de septiembre a noviembre de 2026.</p>
+    <p class="preview-note" data-t="evidence.note">Siete proyectos que usan Bindwright, de septiembre a noviembre de 2026.</p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-count="716">716</span>
+        <span class="stat-num" data-total="reviewed" data-count="1010">1,010</span>
         <p class="stat-label" data-t="evidence.reviewed">pull requests revisados con IA antes de integrarse</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-count="205">205</span>
+        <span class="stat-num stat-red" data-total="fixed" data-count="328">328</span>
         <p class="stat-label" data-t="evidence.stopped">detenidos por una revisión en rojo hasta corregir el problema</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-count="351">351</span>
+        <span class="stat-num stat-accent" data-count="590">590</span>
         <p class="stat-label" data-t="evidence.deep">cambios riesgosos enviados a una segunda revisión a fondo</p>
       </div>
     </div>
-    <div class="split" aria-hidden="true"><i class="split-ok" style="width: 71.4%"></i><i class="split-bad" style="width: 28.6%"></i></div>
-    <p class="bar-note" data-t="evidence.bar">De 716 revisados: 511 pasaron a la primera, 205 se corrigieron antes de integrarse.</p>
+    <ul class="projects" id="projects"></ul>
+    <ul class="legend" id="legend"></ul>
     <ul class="stories">
       <li class="story">
         <span class="chip" data-t="evidence.story1.where">GameProject</span>
