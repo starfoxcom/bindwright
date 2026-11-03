@@ -154,7 +154,7 @@ h1 {
   transform: scaleX(0); transform-origin: left;
   transition: transform 900ms ease-out calc(var(--row) * 80ms);
 }
-.evidence.counted .project-bar { transform: scaleX(1); }
+.projects.counted .project-bar { transform: scaleX(1); }
 .project-bar i { flex: none; height: 100%; }
 .seg-ok { background: var(--accent); }
 .seg-fixed { background: var(--del); }
@@ -352,6 +352,16 @@ footer {
   .project-count { grid-area: count; }
   .project-track { grid-area: track; }
 }
+
+/* Each block below the hero fades in as it enters the view (reveal.js). If that script
+   never runs, the fallback animation shows every block after two seconds. */
+.reveal main > section:not(.hero) > * {
+  opacity: 0; transform: translateY(16px);
+  transition: opacity 600ms ease-out, transform 600ms ease-out;
+}
+.reveal:not(.reveal-ready) main > section:not(.hero) > * { animation: reveal-fallback 0s 2s forwards; }
+.reveal main > section:not(.hero) > .shown { opacity: 1; transform: none; }
+@keyframes reveal-fallback { to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
   :root { transition: none; }
