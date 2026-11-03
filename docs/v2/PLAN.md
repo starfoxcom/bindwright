@@ -80,17 +80,17 @@ Until Phase 3 lands, the current page (`index.html`, `redesign/*.jsx`) and `SETU
 
 ### Phase 3: the page
 Built in visual slices of about 150 lines each, checked locally by the maintainer before any push.
-Changed 2026-11-02 (maintainer): the page becomes a landing page and install guide. The plugin asks the setup questions (#534), so the page drops its questionnaire, Share link and link answers, and every scene is drawn by hand rather than recorded. The recording slices, the per-setting previews and the setup-code slice are dropped; the recording harness (#527) and `demo/` lose their use, and whether to remove them is the maintainer's call.
+Changed 2026-11-02 (maintainer): the page becomes a landing page and install guide. The plugin asks the setup questions (#534), so the page drops its questionnaire, Share link and link answers, and every scene is drawn by hand rather than recorded. The recording slices, the per-setting previews and the setup-code slice are dropped; the recording harness (#527) and `demo/` lost their use and were removed (#541).
 - [x] Shell, tokens, fonts, header, theme, and the landing screen: a plain promise, one button, the clip slot and what changes (decided 2026-10-31: the page is a landing page that has to hook a visitor in 3 to 5 seconds; see `DESIGN.md`). (#480)
 - [x] Three-question setup, one question at a time, with key controls and the hue accent (#481). Removed by the page rework below.
 - [x] "What you get": the renderer's files as a few plain groups (what each does for the project), with the file tree and preview behind an Overview / Files switch (#482).
-- [x] Demo project (`demo/`): a small TypeScript app with one planted problem per rule that has a visible effect. The list of planted problems lives in `recordings/planted.json`, outside `demo/`, so a recorded session cannot read it; `engine/test/demo.test.js` fails when one is no longer there.
-- [x] Recording harness: headless Claude Code runs per scenario, with and without Bindwright, saved as sanitized replay data with the staleness hash test (#527). The recordings themselves are dropped.
+- [x] Demo project: a small TypeScript app with one planted problem per rule, for the recordings. Removed with the harness (#541).
+- [x] Recording harness: headless Claude Code runs per scenario, with and without Bindwright (#527). The recordings were dropped and the harness removed (#541).
 - [x] Setup in the plugin: global questions once per computer, project questions every run (#534).
 - [x] Landing page and install guide: the questionnaire, Share link and link answers go; the default setup's file preview stays; the install steps say what each command does and what lands on the computer versus in each project (#488).
 - [x] Hero scene: a drawn terminal session (typing, the thinking spinner, tool calls, a diff, a blocked force push, the review gate going red to green, the hand-off note) with pop-out cards, built from `prototypes/terminal.html`; it loops while on screen and plays as a slideshow when animations are off (#535).
 - [x] "What goes where": an animated diagram of what lands on the computer and what lands in each project, inside "What a setup writes" (#536).
-- [ ] Install scene: a drawn terminal of `/bindwright:setup` asking its global and project questions.
+- [x] Install scene: dropped 2026-11-02 (maintainer), since "What goes where" already shows what setup installs (#537).
 - [ ] Evidence section: numbers from `tools/receipts.py` (session logs and PR history) plus the incident stories from GameProject and BusinessApp, each with the rule it produced.
 - [ ] Secondary pages: compare, all settings, how it works.
 
