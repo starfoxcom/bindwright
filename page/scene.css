@@ -166,16 +166,18 @@
 .stage.lands .where { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-top: .6em; }
 .stage.lands .where code { font: .92em "Fragment Mono", monospace; color: var(--text-2); }
 .stage.lands .where .chip { margin-top: 0; }
-/* A row is a label line and a path line; the list reserves --rows of them. */
+/* A row is a label line and a path line. Every row is there from the start as a faint
+   dashed outline, so the box keeps its size, and it fills in as setup writes it. */
 .stage.lands .rows {
   list-style: none; margin-top: .9em; padding: 0; display: grid; gap: .35em; align-content: start;
-  min-height: calc(var(--rows, 6) * 3.1em + (var(--rows, 6) - 1) * .35em);
 }
 .stage.lands .row {
   display: grid; padding: .35em .6em; border-radius: 10px; background: oklch(1 0 0 / .04);
   line-height: 1.3;
-  animation: lands-fly 420ms cubic-bezier(.2,.8,.2,1) both;
 }
+.stage.lands .row.ghost { background: none; box-shadow: inset 0 0 0 1px var(--rule); opacity: .5; }
+.stage.lands .row.ghost > * { visibility: hidden; }
+.stage.lands .row.landed { animation: lands-fly 420ms cubic-bezier(.2,.8,.2,1) both; }
 .stage.lands .row-label { font-weight: 700; }
 .stage.lands .row-path { font: .82em/1.3 "Fragment Mono", monospace; color: var(--text-2); overflow-wrap: anywhere; }
 @keyframes lands-fly { from { opacity: 0; transform: translateX(-24px); filter: blur(4px); } }
@@ -187,8 +189,12 @@
   .stage.lands .term { min-height: 50cqi; }
 }
 @container (max-width: 640px) {
-  .stage.lands .term { height: 80cqi; min-height: 0; font-size: 3.1cqi; }
+  .stage.lands .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
   .stage.lands .boxes { grid-template-columns: minmax(0, 1fr); height: auto; }
+  /* Phones: each row is a label pill; the paths wait behind the files button. */
+  .stage.lands .rows { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .7em; }
+  .stage.lands .row { padding: .3em .75em; border-radius: 99px; }
+  .stage.lands .row-path { display: none; }
 }
 
 

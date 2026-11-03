@@ -11,34 +11,31 @@ const ROW_PAUSE_MS = 250;
 const term = createTerminal(document.getElementById("lands-stage"));
 const computerList = document.getElementById("lands-computer");
 const projectList = document.getElementById("lands-project");
-// Each list keeps room for all its rows, so the boxes do not grow as rows land.
-computerList.style.setProperty("--rows", computer.length);
-projectList.style.setProperty("--rows", project.length);
 
 function el(tag, cls, text = "") {
   return Object.assign(document.createElement(tag), { className: cls, textContent: text });
 }
 
-// One row in a box: what the item is, and the path it writes.
+// One row in a box: what the item is, and the path it writes. It starts as a faint outline.
 function row({ key, path }) {
-  const item = el("li", "row");
+  const item = el("li", "row ghost");
   item.append(el("b", "row-label", t(`lands.item.${key}`)), el("code", "row-path", path));
   return item;
 }
 
-// Each file gets its Write line, then its row flies into the box.
+// Each file gets its Write line, then its row fills in and flies into place.
 async function land(list, entries) {
-  for (const entry of entries) {
+  for (const [i, entry] of entries.entries()) {
     await term.tool("Write", entry.path, TOOL_MS);
-    list.append(row(entry));
+    list.children[i].classList.replace("ghost", "landed");
     await term.wait(ROW_PAUSE_MS);
   }
 }
 
 async function story() {
   term.reset();
-  computerList.replaceChildren();
-  projectList.replaceChildren();
+  computerList.replaceChildren(...computer.map(row));
+  projectList.replaceChildren(...project.map(row));
   await term.type("/bindwright:setup");
   await term.think(t("lands.verb"), 1600, 1.4);
   term.say(t("lands.say.first"));
