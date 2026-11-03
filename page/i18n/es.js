@@ -58,7 +58,8 @@ export default {
   "asks.computer.title": "Se pregunta una vez en tu computadora",
   "asks.computer.text": "Qué herramienta de búsqueda de código usar, si agregar las reglas de trabajo de "
     + "Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos, si un "
-    + "modelo ayudante barato escribe el código que planea el modelo principal y qué mods agregar. "
+    + "modelo ayudante barato escribe el código que planea el modelo principal, si aprender tu estilo de "
+    + "código del código que escribiste a mano y qué mods agregar. "
     + "Cámbialas después con /bindwright:setup global.",
   "asks.project.title": "Se pregunta en cada proyecto",
   "asks.project.text": "Quién trabaja en él, de quién es, si es privado o público, si el crédito de la IA "
