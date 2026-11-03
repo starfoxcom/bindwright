@@ -5,7 +5,7 @@ export default {
   "meta.title": "Bindwright",
   "meta.description": "Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo "
     + "trabajas desde el primer mensaje.",
-  "skip.link": "Ir a la configuración",
+  "skip.link": "Ir a la instalación",
   "nav.site": "Sitio",
   "nav.github": "GitHub",
   "nav.language": "Idioma",
@@ -13,7 +13,7 @@ export default {
   "hero.lede": "Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una "
     + "revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la "
     + "configuración es un solo comando.",
-  "hero.go": "Configurar mi proyecto",
+  "hero.go": "Instalar Bindwright",
   "hero.source": "Ver en GitHub",
   "hero.figure": "Una sesión grabada",
   "hero.empty": "Aquí se reproduce una sesión real, Claude arreglando el mismo error con y sin Bindwright.",
@@ -33,49 +33,38 @@ export default {
   "changes.4.title": "Los comandos peligrosos se bloquean",
   "changes.4.text": "Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un "
     + "comando equivocado ahí te puede costar días de trabajo.",
-  "setup.title": "Configura tu proyecto",
-  "steps.label": "Pasos de la configuración",
-  "q.team.title": "¿Quién trabaja en el proyecto?",
-  "q.team.no.label": "Solo yo",
-  "q.team.no.hint": "Una persona, una computadora",
-  "q.team.yes.label": "Un equipo",
-  "q.team.yes.hint": "Ramas y revisiones compartidas",
-  "q.client.title": "¿De quién es el proyecto?",
-  "q.client.no.label": "Mío",
-  "q.client.no.hint": "Un proyecto que es mío",
-  "q.client.yes.label": "De alguien más",
-  "q.client.yes.hint": "Código abierto, un cliente o un equipo al que me uní",
-  "q.private.title": "¿Es privado?",
-  "q.private.yes.label": "Privado",
-  "q.private.yes.hint": "Solo quien tiene acceso puede verlo",
-  "q.private.no.label": "Público",
-  "q.private.no.hint": "Cualquiera puede ver el código",
-  "step.back": "Atrás",
-  "composing.title": "Armando tu configuración",
-  "result.title": "Lo que obtienes",
+  "result.title": "Lo que escribe una configuración",
+  "result.note": "Se muestra para el proyecto público de una sola persona con todo activado. La configuración "
+    + "lo ajusta al tuyo según tus respuestas.",
   "view.label": "Mostrar",
   "view.overview": "Resumen",
   "files.label": "Archivos",
   "files.back": "&larr; Todos los archivos",
-  "answers.edit": "Editar mis respuestas",
-  "answers.restart": "Empezar de nuevo",
-  "command.step": "Ya casi",
-  "command.title": "Configúralo en Claude Code",
-  "command.how": "Un comando por paso, en este orden, así que pega cada uno en Claude Code, presiona Enter "
-    + "y espera a que termine antes de pasar al siguiente.",
-  "command.install.title": "Instala Bindwright.",
-  "command.install.text": "Una vez por computadora, justo después del paso 2, y espera a que termine.",
-  "command.open.title": "Abre Claude Code en la carpeta de tu proyecto.",
-  "command.open.text": "La configuración escribe en la carpeta donde está abierto Claude Code, así que "
-    + "empieza ahí.",
-  "command.market.title": "Agrega el marketplace de Bindwright.",
-  "command.market.text": "Una vez por computadora, así que si ya tienes Bindwright instalado, pasa al paso "
-    + "4.",
-  "command.setup.title": "Configura este proyecto.",
-  "command.setup.text": "Pega el comando de abajo y presiona Enter. La configuración te pregunta antes de "
-    + "cambiar cualquier archivo que ya tengas, y aunque los archivos que escribe están en inglés, Claude "
-    + "te sigue respondiendo en español.",
   "command.copy": "Copiar comando",
+  "install.title": "Instalar",
+  "install.how": "Dos comandos una vez en tu computadora, y luego uno en cada proyecto. Pega cada uno en "
+    + "Claude Code, presiona Enter y espera a que termine antes del siguiente.",
+  "install.computer": "En tu computadora, una vez",
+  "install.market.title": "Dile a Claude Code de dónde viene Bindwright.",
+  "install.market.text": "Esto agrega el marketplace de Bindwright, una lista desde la que Claude Code puede "
+    + "instalar. Todavía no instala nada.",
+  "install.plugin.title": "Instala Bindwright.",
+  "install.plugin.text": "Esto agrega los comandos /bindwright a todos los proyectos de tu computadora, más "
+    + "un aviso una vez al día cuando algo esté desactualizado. Todavía no cambia ningún proyecto.",
+  "install.project": "En cada proyecto",
+  "install.open.title": "Abre Claude Code en la carpeta del proyecto.",
+  "install.open.text": "La configuración escribe en la carpeta donde está abierto Claude Code.",
+  "install.setup.title": "Ejecuta la configuración.",
+  "install.setup.text": "Hace unas preguntas y luego escribe los archivos que encajan. Nada de lo que ya tienes "
+    + "cambia sin tu sí.",
+  "asks.computer.title": "Se pregunta una vez en tu computadora",
+  "asks.computer.text": "Qué herramienta de búsqueda de código usar, si agregar las reglas de trabajo de "
+    + "Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos y qué mods "
+    + "agregar. Cámbialas después con /bindwright:setup global.",
+  "asks.project.title": "Se pregunta en cada proyecto",
+  "asks.project.text": "Quién trabaja en él, de quién es, si es privado o público, si el crédito de la IA "
+    + "queda fuera de los commits, qué revisiones corren, cómo escribe y trabaja el asistente, y dónde vive "
+    + "el plan: un tablero de GitHub, issues o un archivo de traspaso.",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
 
   "group.rules.title": "Reglas que Claude sigue",
@@ -148,27 +137,13 @@ export default {
   "fact.precommit": "Revisiones antes de cada commit",
   "fact.ai-commits": "Los commits registran qué trabajo tuvo ayuda de IA",
 
-  "compose.rules": "Escribiendo tus reglas",
-  "compose.reviews": "Preparando la revisión de pull requests",
-  "compose.guards": "Agregando protecciones",
-  "compose.sessions": "Agregando rutinas de sesión",
-  "compose.checks": "Agregando revisiones de código",
-  "compose.issues": "Agregando formularios de issues",
-  "compose.project": "Preparando los archivos de tu proyecto",
-  "compose.notes": "Guardando tus respuestas",
-  "compose.other": "Agregando otros archivos",
-
-  "tally": "· {parts}, {rules}",
+  "tally": "{parts}, {rules}",
   "tally.parts": { one: "{count} parte", other: "{count} partes" },
   "tally.rules": { one: "{count} regla", other: "{count} reglas" },
   "files.count": "Archivos · {count}",
-  "step.question": "Pregunta {number}",
   "copy.command": "Copiar comando",
   "copy.done": "Copiado",
   "copy.manual": "Selecciona y copia",
-  "status.updated": "Lo que obtienes está actualizado.",
-  "command.refused": "Estas respuestas no pasaron las revisiones de la configuración, así que no hay comando "
-    + "que copiar. Empieza de nuevo y responde las preguntas otra vez.",
   "failure": "Esta parte de la página no pudo cargar ({error}), así que recarga la página para intentarlo "
     + "de nuevo.",
 };
