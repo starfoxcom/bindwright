@@ -1,10 +1,12 @@
 // The evidence section: the three totals count up once, and a bar per project grows
 // with its reviewed pull requests, split by whether the review passed or caught a
-// problem, when the section first scrolls into view. Reduced motion shows the final state.
+// problem. Each starts as its own block enters the view, while it fades in. Reduced motion
+// shows the final state.
 import { t } from "./i18n/index.js";
 import { projects } from "./evidence-data.js";
+import { ENTER_MARGIN } from "./reveal.js";
 
-const section = document.getElementById("evidence");
+const stats = document.querySelector("#evidence .stats");
 const chart = document.getElementById("projects");
 const legend = document.getElementById("legend");
 const DURATION_MS = 1200;
@@ -80,19 +82,20 @@ function draw() {
   legend.replaceChildren(...PARTS.map(legendItem));
 }
 
-function reveal() {
-  section.classList.add("counted");
-  section.querySelectorAll("[data-count]").forEach(countUp);
+// Runs `start` once, when `node` enters the view: the moment reveal.js fades it in.
+function onEnter(node, start) {
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    start();
+  }, { rootMargin: ENTER_MARGIN });
+  observer.observe(node);
 }
 
 draw();
 if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  section.classList.add("counted");
+  chart.classList.add("counted");
 } else {
-  const observer = new IntersectionObserver((entries) => {
-    if (!entries.some((entry) => entry.isIntersecting)) return;
-    observer.disconnect();
-    reveal();
-  }, { threshold: 0.35 });
-  observer.observe(section);
+  onEnter(stats, () => stats.querySelectorAll("[data-count]").forEach(countUp));
+  onEnter(chart, () => chart.classList.add("counted"));
 }
