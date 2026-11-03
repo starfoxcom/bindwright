@@ -16,10 +16,10 @@ function el(tag, cls, text = "") {
   return Object.assign(document.createElement(tag), { className: cls, textContent: text });
 }
 
-// One row in a box: what the item is, and the path it writes. It starts as a faint outline.
-function row({ key, path }) {
+// One row in a box: what the item is. It starts as a faint outline.
+function row({ key }) {
   const item = el("li", "row ghost");
-  item.append(el("b", "row-label", t(`lands.item.${key}`)), el("code", "row-path", path));
+  item.append(el("b", "row-label", t(`lands.item.${key}`)));
   return item;
 }
 
