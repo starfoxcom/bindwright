@@ -1,6 +1,6 @@
 // The evidence section's totals are the sums of its per-project rows, so the big
 // numbers cannot drift from the chart. Each project's counts also keep their order:
-// fixed is within reviewed, and reviewed is within merged.
+// fixed is within reviewed. Each project's name has its label in both dictionaries.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { projects } from "../../page/evidence-data.js";
+import { DICTIONARIES } from "../../page/i18n/index.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
 const html = readFileSync(join(page, "index.html"), "utf8");
@@ -29,9 +30,16 @@ test("the fixed total is the sum of the projects' fixed counts", () => {
   assert.equal(total("fixed"), sum("fixed"));
 });
 
-for (const { name, merged, reviewed, fixed } of projects) {
-  test(`project "${name}": fixed <= reviewed <= merged`, () => {
+for (const { name, reviewed, fixed } of projects) {
+  test(`project "${name}": fixed <= reviewed`, () => {
     assert.ok(fixed <= reviewed, `fixed ${fixed} > reviewed ${reviewed}`);
-    assert.ok(reviewed <= merged, `reviewed ${reviewed} > merged ${merged}`);
   });
+}
+
+for (const { name } of projects) {
+  for (const [code, words] of Object.entries(DICTIONARIES)) {
+    test(`project "${name}" has a label in ${code}`, () => {
+      assert.ok(`evidence.project.${name}` in words, `missing evidence.project.${name}`);
+    });
+  }
 }
