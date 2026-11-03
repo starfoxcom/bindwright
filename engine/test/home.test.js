@@ -143,6 +143,34 @@ test("a mod is copied once, listed once, and an installed copy keeps its edits",
   });
 });
 
+test("an agent file is copied once, and an installed copy keeps its edits", { skip }, () => {
+  withHome((dir) => {
+    const agent = join(dir, "pack", "builder.md");
+    mkdirSync(dirname(agent), { recursive: true });
+    writeFileSync(agent, "# builder\n");
+    const target = join(dir, ".claude", "agents", "builder.md");
+    const first = home(dir, "add-agent", agent);
+    assert.equal(first.status, 0, first.stderr);
+    assert.deepEqual(first.out, { installed: target, kept_existing: false });
+    assert.equal(readFileSync(target, "utf8"), "# builder\n");
+    writeFileSync(target, "mine");
+    assert.deepEqual(home(dir, "add-agent", agent).out, { installed: target, kept_existing: true });
+    assert.equal(readFileSync(target, "utf8"), "mine");
+  });
+});
+
+test("add-agent refuses a file that is missing or is not markdown, and writes nothing", { skip }, () => {
+  withHome((dir) => {
+    const missing = home(dir, "add-agent", join(dir, "nope.md"));
+    assert.equal(missing.status, 1);
+    assert.match(missing.out.error, /Not an agent file/);
+    const notMarkdown = home(dir, "add-agent", hookFile(dir, "builder.txt"));
+    assert.equal(notMarkdown.status, 1);
+    assert.match(notMarkdown.out.error, /Not an agent file/);
+    assert.ok(!existsSync(join(dir, ".claude")));
+  });
+});
+
 test("a settings file that is not valid JSON is never written", { skip }, () => {
   withHome((dir) => {
     writeSettings(dir, "{ broken");

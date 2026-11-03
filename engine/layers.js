@@ -22,6 +22,7 @@ export const PERSONAL = "bindwright/settings.json";
 // folder that shows it is installed. A mod's file is its folder under mods/.
 const EXTRA_FILES = {
   "attribution-guard": "hooks/no-ai-attribution.py",
+  "builder": "agents/builder.md",
   "global-instructions": "CLAUDE.md",
   "push-guard": "hooks/push-guard.py",
 };
