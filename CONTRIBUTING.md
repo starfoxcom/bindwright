@@ -51,12 +51,12 @@ The page lives in `page/`: plain HTML, CSS and JavaScript modules, no build step
 Maintainer-only. Follows Gitflow:
 
 1. Branch `release/vX.Y.Z` from `develop`.
-2. Bump `VERSION` (e.g. `v1.2.0`) — SemVer from v1.0.0 onward.
-3. Add a section to `CHANGELOG.md` under `[Unreleased]`, then promote it to a dated entry.
-4. Open PR `release/vX.Y.Z → main`. After AI + maintainer review pass: merge with `--merge` (true merge commit).
-5. Tag `vX.Y.Z` on the merge commit, push the tag.
-6. Open PR `release/vX.Y.Z → develop` (or cherry-pick the merge commit back to `develop`) so `develop` stays ahead of `main`.
-7. The Pages workflow rebuilds automatically on push to `main`. Build the release zip with `git archive --format=zip --prefix=bindwright/ --output=../bindwright-vX.Y.Z.zip vX.Y.Z` and attach to a GitHub Release via `gh release create`.
+2. Bump `VERSION` (e.g. `v2.1.0`).
+3. Promote the `[Unreleased]` entries in `CHANGELOG.md` to a dated `[vX.Y.Z]` section, and run `node engine/cli.js --update .` so this repo's own bind record (`.bindwright/pristine.json`) carries the new version; otherwise `/bindwright:doctor` reports the repo as behind.
+4. Commit, then run `python tools/pack_plugin.py --marketplace` and commit `.claude-plugin/marketplace.json` on its own: it pins the SHA-256 of the plugin zip built from that commit, so it comes last.
+5. Open PR `release/vX.Y.Z → main` and merge on a green gate with `--merge` (a true merge commit, so the tag's files match the pin).
+6. Tag `vX.Y.Z` on the merge commit, push the tag, and publish a GitHub release from it (`gh release create vX.Y.Z --notes-file <file>`). `release-plugin.yml` rebuilds the zip from the tag, refuses it if its SHA-256 differs from the pin, and attaches `bindwright-X.Y.Z.zip`. Never build or attach a zip by hand.
+7. Cascade `main` into `develop` (`.claude/rules/git.md` § Cascade). Pages redeploys from `main` on its own.
 
 ## Code of conduct
 
