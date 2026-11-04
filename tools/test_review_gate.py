@@ -32,7 +32,7 @@ class Triage(unittest.TestCase):
     def test_reviewable_and_not(self):
         self.assertTrue(triage(["engine/bind.js"]))
         self.assertTrue(triage(["_core/project-template/CLAUDE.md"]))
-        self.assertTrue(triage(["bundles/2-multi-dev-oss/bundle.toggles.md"]))
+        self.assertTrue(triage(["plugin/skills/setup/SKILL.md"]))
         self.assertFalse(triage(["README.md", "docs/v2/PLAN.md"]))
         self.assertFalse(triage(["assets/logo.PNG", "fonts/geist.woff2", "docs/a.jpeg"]))
         self.assertFalse(triage([]))
@@ -54,11 +54,11 @@ class Triage(unittest.TestCase):
 
     def test_always_reviewed_paths_count_whatever_the_file_type(self):
         for path in (".github/scripts/json.pyc", ".github/scripts/run.sh", "_core/notes.md",
-                     "_core/project-template/README.md", ".github/review-gate.yml", "SETUP.md",
+                     "_core/project-template/README.md", ".github/review-gate.yml", "plugin/README.md",
                      "CLAUDE.md", "engine/CLAUDE.md", ".claude/rules/git.md", ".claude/skills/find/SKILL.md",
-                     "bundles/1-solo-personal/bundle.toggles.md", "_core/x/logo.png",
-                     "_Core/project-template/.claude/rules/zz.md", "Bundles/x/bundle.toggles.md", "setup.MD",
-                     "TOGGLES.md", "COMPARISON.md", "CLAUDE.local.md", "engine/claude.LOCAL.md",
+                     "plugin/skills/setup/SKILL.md", "_core/x/logo.png",
+                     "_Core/project-template/.claude/rules/zz.md", "Plugin/x/notes.md", "plugin/x.MD",
+                     "CLAUDE.local.md", "engine/claude.LOCAL.md",
                      "engine/.claude/skills/x/SKILL.md", "a/b/.Claude/rules/r.md"):
             with self.subTest(path=path):
                 self.assertTrue(triage([path]))

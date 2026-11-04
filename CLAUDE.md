@@ -27,11 +27,10 @@ Bypass for Bash `grep`/`rg`: include `# TOKENSAVE_BYPASS: <reason>` in the comma
 
 ## Project overview
 
-**claude-code-templates** is an open-source toolkit for setting up Claude Code in any project. It ships four opinionated bundles (Solo, OSS, Client-solo, Client-team) and a configurable web UI hosted on GitHub Pages.
+**claude-code-templates** is an open-source toolkit for setting up Claude Code in any project. It ships as Bindwright, a Claude Code plugin whose `/bindwright:setup` asks a few questions and writes the setup that fits the project, plus a landing page on GitHub Pages.
 
 - **Live page:** `page/`, deployed at https://starfoxcom.github.io/claude-code-templates/ (the root `index.html` redirects there)
 - **Source of truth for templates:** `_core/`
-- **Bundle-specific overrides:** `bundles/<n>/bundle.toggles.md`
 - **Bind engine:** `engine/`, run by the plugin (`plugin/`, `/bindwright:setup`) and by the page's file preview
 - **Versioning:** SemVer (`v1.0.0 → v1.1.0 → v2.0.0 …`). Earlier conversational `v17 / v18` mentions consolidated into the v1.0.0 release. See `VERSION` file and `CHANGELOG.md`.
 
@@ -124,16 +123,10 @@ claude-code-templates/
 ├── CONTRIBUTING.md         # how to PR
 ├── LICENSE                 # MIT
 ├── VERSION                 # current edition
-├── COMPARISON.md, TOGGLES.md, SETUP.md
 ├── _core/
 │   ├── project-template/   # lands in user's repo on bind
 │   ├── global-template/    # lands in user's ~/.claude on bind
 │   └── licenses/           # LICENSE variants per type
-├── bundles/                # four bundle defaults
-│   ├── 1-solo-personal/
-│   ├── 2-multi-dev-oss/
-│   ├── 3-client-solo/
-│   └── 4-client-team/
 └── .github/
     └── workflows/
         └── pages.yml       # GitHub Pages deployment
