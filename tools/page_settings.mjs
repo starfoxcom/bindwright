@@ -10,11 +10,17 @@ import { COMPUTER, FIXED, MODS_ROWS, PROJECT } from "../page/settings-data.js";
 const PAGE_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "page", "settings", "index.html");
 const MODS_HEADING = "mods-group";
 
+// The text with the first mention of each linked tool wrapped in a link to its project.
+function linked(entry) {
+  return Object.entries(entry.links ?? {}).reduce(
+    (text, [name, url]) => text.replace(name, `<a href="${url}">${name}</a>`), entry.text);
+}
+
 function listItem(prefix, entry, title) {
   return [
     `      <li class="setting" id="s-${entry.id}">`,
     `        <h3 data-t="${prefix}.${entry.id}.title">${title}</h3>`,
-    `        <p data-t="${prefix}.${entry.id}.text">${entry.text}</p>`,
+    `        <p data-t="${prefix}.${entry.id}.text">${linked(entry)}</p>`,
     `        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span>`
       + ` <b data-t="${prefix}.${entry.id}.value">${entry.value}</b></span>`,
     "      </li>",

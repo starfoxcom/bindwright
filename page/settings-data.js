@@ -6,6 +6,7 @@
 // default setup picks), keys (the engine answers it covers: "team", "project.name",
 // "extra:<name>" for a file setup adds, and "mods" for the mods entry).
 // An optional engine list holds { flags, key, value } checks against defaults(flags).
+// An optional links map turns each named tool in the text into a link to its project.
 // Plain text only: no "&" and no "<" in any string.
 
 export const COMPUTER = [
@@ -16,6 +17,13 @@ export const COMPUTER = [
     value: "tokensave",
     keys: ["advanced.codeResearch", "advanced.codeResearchCustom"],
     options: ["tokensave", "lsp-plugins", "codegraph", "serena", "codebase-memory", "none"],
+    links: {
+      tokensave: "https://github.com/aovestdipaperino/tokensave",
+      "lsp-plugins": "https://code.claude.com/docs/en/discover-plugins",
+      codegraph: "https://github.com/colbymchenry/codegraph",
+      serena: "https://github.com/oraios/serena",
+      "codebase-memory": "https://github.com/DeusData/codebase-memory-mcp",
+    },
   },
   {
     id: "global-instructions",
@@ -190,6 +198,7 @@ export const FIXED = [
     title: "Pre-commit hook",
     text: "A team gets lefthook, which runs checks before each commit.",
     value: "Team only",
+    links: { lefthook: "https://github.com/evilmartians/lefthook" },
     keys: ["advanced.precommit"],
     engine: [
       { flags: {}, key: "advanced.precommit", value: "none" },

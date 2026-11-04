@@ -177,8 +177,12 @@ export default {
     + "2.1.287 o más reciente y Node.",
 
   "settings.code-research.title": "Búsqueda de código",
-  "settings.code-research.text": "Cómo encuentra el código el asistente: tokensave, lsp-plugins, codegraph, "
-    + "serena, codebase-memory o none.",
+  "settings.code-research.text": "Cómo encuentra el código el asistente: "
+    + "<a href=\"https://github.com/aovestdipaperino/tokensave\">tokensave</a>, "
+    + "<a href=\"https://code.claude.com/docs/en/discover-plugins\">lsp-plugins</a>, "
+    + "<a href=\"https://github.com/colbymchenry/codegraph\">codegraph</a>, "
+    + "<a href=\"https://github.com/oraios/serena\">serena</a>, "
+    + "<a href=\"https://github.com/DeusData/codebase-memory-mcp\">codebase-memory</a> o none.",
   "settings.code-research.value": "tokensave",
   "settings.global-instructions.title": "Instrucciones globales",
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
@@ -245,7 +249,8 @@ export default {
   "settings.merge-style.text": "Cada rama sigue visible en el historial.",
   "settings.merge-style.value": "Commits de merge",
   "settings.pre-commit.title": "Hook de pre-commit",
-  "settings.pre-commit.text": "Un equipo recibe lefthook, que corre revisiones antes de cada commit.",
+  "settings.pre-commit.text": "Un equipo recibe <a href=\"https://github.com/evilmartians/lefthook\">lefthook</a>, "
+    + "que corre revisiones antes de cada commit.",
   "settings.pre-commit.value": "Solo en equipo",
   "settings.guard-location.title": "Dónde viven las guardias",
   "settings.guard-location.text": "En el repo, así todo el que lo clone las recibe.",

@@ -75,6 +75,23 @@ test("the code-search options are the code-search tools, each named in the text"
   for (const option of search.options) assert.ok(search.text.includes(option), option);
 });
 
+// The hrefs inside one row of a page, by row id.
+function rowLinks(html, id) {
+  const start = html.indexOf(`<li class="setting" id="s-${id}">`);
+  const row = start < 0 ? "" : html.slice(start, html.indexOf("</li>", start));
+  return [...row.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]);
+}
+
+test("each external tool a row names links to its project, in both languages", () => {
+  const spanish = read("es/settings/index.html");
+  const tools = Object.entries(CODE_RESEARCH_TOOLS).filter(([, tool]) => tool.url?.startsWith("https://"));
+  assert.deepEqual(rowLinks(settings, "code-research"), tools.map(([, tool]) => tool.url));
+  assert.deepEqual(rowLinks(settings, "pre-commit"), ["https://github.com/evilmartians/lefthook"]);
+  for (const entry of entries) {
+    assert.deepEqual(rowLinks(spanish, entry.id), rowLinks(settings, entry.id), entry.id);
+  }
+});
+
 test("every row id is unique", () => {
   const ids = [...entries, ...MODS_ROWS].map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length);
