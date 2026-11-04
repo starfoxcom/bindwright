@@ -197,16 +197,21 @@
 
 /* The stage is its own container, so its columns follow the viewport: below 900px the
    terminal goes full width above the boxes. */
+/* The mods terminal is taller than the others and grows with its band, so the rows never
+   squeeze the transcript below about seven lines. */
+.stage.split.mods-stage .term { min-height: 46cqi; }
+.stage.mods-stage .pane { flex: 1 0 auto; min-height: 10.5em; }
 @media (max-width: 900px) {
   .stage.split, .stage.split.flip { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .stage.split .term { min-height: 50cqi; }
+  .stage.split.mods-stage .term { min-height: 80cqi; }
 }
 @container (max-width: 640px) {
   .stage.split .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
-  .stage.split.mods-stage .term { height: auto; min-height: 58cqi; }
+  .stage.split.mods-stage .term { height: auto; min-height: 96cqi; }
 }
-/* The mods terminal grows with its band, so the transcript always keeps a few lines. */
-.stage.mods-stage .pane { flex: 1 0 auto; min-height: 7.5em; }
+/* The band's collapse mark, which Claude Code draws at the band's top right. */
+.stage .band:not(:empty)::before { content: "[-]"; float: right; color: var(--dim); }
 
 
 /* Phones: everything stacks. Title, terminal, then a band of its own for the cards,

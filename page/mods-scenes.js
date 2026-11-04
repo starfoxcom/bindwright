@@ -11,8 +11,9 @@
 // exists in every language. Band rows are English, as the mods print them, so they are
 // not keys.
 
-// The order the band's rows stack in, top to bottom.
-export const BAND_ORDER = ["session", "ci", "runners", "budgets", "usage", "tasks", "pc"];
+// The order the band's rows stack in, top to bottom: the rows build up from the input box,
+// so the first mod loaded (the session row) sits right above it.
+export const BAND_ORDER = ["usage", "pc", "tasks", "budgets", "runners", "ci", "session"];
 
 // The compaction point, in thousands of tokens. The context left is this, less the share used.
 const COMPACT_POINT_K = 400;
@@ -23,7 +24,7 @@ const WRAP_UP_PLAN = 90;
 
 const row = (kind, html) => ({ kind, html });
 const tone = (cls, text) => (cls ? `<span class="${cls}">${text}</span>` : text);
-const btn = (label) => tone("btn", `[${label}]`);
+const btn = (label) => tone("btn", `[ ${label} ]`);
 
 function contextTone(percent) {
   if (percent >= RED_CONTEXT) return "badt";
@@ -65,14 +66,17 @@ const budgets = (state = {}) => {
 const usage = row("usage", "⏰ resumes 15:10 · after the 5-hour reset · used 5h 94%, week 62%");
 
 // The session row: the model, project and branch. With changes the branch gets a star and
-// a button for the changed files.
-const session = (branch, changed = 0) => row("session", changed
-  ? `Opus 5.5 high · shop · ${branch}* ${btn(`${changed} changed`)}`
-  : `Opus 5.5 high · shop · ${branch}`);
+// a button for the changed files; commits not yet pushed show as a green up arrow.
+function session(branch, changed = 0, ahead = 0) {
+  const star = changed ? "*" : "";
+  const up = ahead ? ` ${tone("okt", `↑${ahead}`)}` : "";
+  const files = changed ? ` ${btn(`${changed} changed`)}` : "";
+  return row("session", `Opus 5.5 high · shop · ${branch}${star}${up}${files}`);
+}
 
-const runners = (online) => row("runners", `runners on · ${online} online`);
+const runners = (online) => row("runners", `⚙ runners on · ${online} online ${btn("Stop")}`);
 
-const CI_BUTTONS = [btn("open"), btn("checks"), btn("stop")].join(" ");
+const CI_BUTTONS = `open ${btn("checks")}${btn("stop")}`;
 const ci = (text, cls) => row("ci", `${tone(cls, text)} ${CI_BUTTONS}`);
 
 // The tasks row: the count done, the task in progress, and how many are still to do.
@@ -91,8 +95,8 @@ const PC_YOURS = row("pc", tone("okt", `PC · yours · npm run test:all · 12s $
 
 // The rows the all-together scene shows at once, in band order.
 function board({ changed, task, facts, pc = PC_FREE, check }) {
-  return [session("main", changed), check, runners(2), budgets(facts), tasks(task), pc]
-    .filter(Boolean);
+  const branch = session("feature/coupons", changed);
+  return [pc, tasks(task), budgets(facts), runners(2), check, branch].filter(Boolean);
 }
 
 // The task list's states, in the order a session works through them.
@@ -102,7 +106,7 @@ const WRITING = { done: 2, total: 3, current: "#3 Writing the tests" };
 const FINISHED = { done: 3, total: 3 };
 
 // The board once the coupon work is pushed: only the CI row changes from step to step.
-const pushed = (check) => board({ changed: 2, task: FINISHED, facts: { percent: 47 }, check });
+const pushed = (check) => board({ changed: 0, task: FINISHED, facts: { percent: 47 }, check });
 
 export const SCENES = {
   "all": [
@@ -200,6 +204,8 @@ export const SCENES = {
     ["wait", 1200],
     ["tool", "Bash", "git switch -c feature/coupons", 600],
     ["band", [session("feature/coupons", 1)]],
+    ["tool", "Bash", "git commit -m \"feat(cart): add coupon codes\"", 600],
+    ["band", [session("feature/coupons", 0, 1)]],
     ["wait", 2000],
   ],
   "shared-pc": [
@@ -233,11 +239,11 @@ export const SCENES = {
     ["wait", 2000],
   ],
   "usage-guard": [
-    ["band", [budgets({ percent: 58, fiveHour: 94, reset: "15:10" }), usage]],
+    ["band", [usage, budgets({ percent: 58, fiveHour: 94, reset: "15:10" })]],
     ["say", "mods.scene.usage-guard.near"],
     ["wait", 1200],
     ["out", "mods.scene.usage-guard.save", "okt"],
-    ["band", [budgets({ percent: 58, fiveHour: 94, pausedUntil: "15:10" }), usage]],
+    ["band", [usage, budgets({ percent: 58, fiveHour: 94, pausedUntil: "15:10" })]],
     ["wait", 1800],
     ["band", [budgets({ percent: 58, fiveHour: 4 })]],
     ["say", "mods.scene.usage-guard.resume"],
