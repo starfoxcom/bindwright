@@ -272,19 +272,15 @@ async function compactAtPause($: EngineInterface, owed: Pause): Promise<void> {
   setStatus($, `Plan limit near: paused until ${localTime(pause.wakeAt)} · ${outcomeMark(outcome)}`)
 }
 
-// Taken before the turn's own wrap-up starts, so a wrap-up started at this turn's end waits for its own.
+// The compactions this turn owed: a pause's, or the arm tool's. Taken before the turn's own wrap-up starts,
+// so a wrap-up started at this turn's end waits for its own.
 function scheduleOwedCompaction($: EngineInterface): void {
   const owed = live.compactAfterTurn
-  if (!owed) return
+  const isArmOwed = live.isArmCompactOwed
   live.compactAfterTurn = undefined
-  $.clock.after(COMPACT_DELAY_MS, () => void compactAtPause($, owed).catch(() => undefined))
-}
-
-// The compaction the arm tool asked for, now that the turn that called it has ended.
-function scheduleArmCompaction($: EngineInterface): void {
-  if (!live.isArmCompactOwed) return
   live.isArmCompactOwed = false
-  $.clock.after(COMPACT_DELAY_MS, () => void compactNow($).catch(() => undefined))
+  const run = owed ? () => compactAtPause($, owed) : isArmOwed ? () => compactNow($) : undefined
+  if (run) $.clock.after(COMPACT_DELAY_MS, () => void run().catch(() => undefined))
 }
 
 async function resume($: EngineInterface, resetsAt: string, isArmed = false): Promise<void> {
@@ -758,7 +754,6 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     // Taken before anything below can start a wrap-up: a compaction owed by one runs after its own turn.
     scheduleOwedCompaction($)
-    scheduleArmCompaction($)
     // A reload in the middle of a turn: the turn's start ran in the module before it, so its end restarts
     // the timers, or a saved arm would wait idle past its wake.
     await startTimers($).catch(() => undefined)
