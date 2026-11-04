@@ -1,18 +1,11 @@
-// The evidence section's community block: anonymous counts from people who chose to
-// share them, read from the counter (counter/ in the repo). Each project shows as its
-// kind only, numbered when a kind repeats. The block stays hidden while the counter is
-// down, slow or has no projects yet.
+// Anonymous counts from people who chose to share them, read from the counter (counter/
+// in the repo) for the evidence chart. Each project shows as its kind only, numbered when
+// a kind repeats. `shared` resolves to null while the counter is down, slow or empty.
 import { t } from "./i18n/index.js";
-import { projectRow } from "./bars.js";
-import { onEnter } from "./evidence.js";
 
 const COUNTER = "https://bindwright-counter.starfoxcom.workers.dev/total";
 const TIMEOUT_MS = 3000;
 const KINDS = ["game", "business-app", "developer-tool", "mobile-app", "website", "other"];
-
-const block = document.getElementById("community");
-const note = document.getElementById("community-note");
-const chart = document.getElementById("community-projects");
 
 // A preview may read sample totals with ?counter=<url>: any address on a local server,
 // otherwise only a file from the page's own site, so a link cannot point the page elsewhere.
@@ -26,7 +19,7 @@ function counterUrl() {
 
 const isCount = (value) => Number.isInteger(value) && value >= 0;
 
-// The counter's answer, or null when it is not the shape the block draws.
+// The counter's answer, or null when it is not the shape the chart draws.
 function checked(total) {
   const fields = ["projects", "checked", "caught", "deep"];
   if (!total || !fields.every((field) => isCount(total[field])) || !Array.isArray(total.top)) return null;
@@ -44,27 +37,23 @@ function labelled(top) {
     seen[project.kind] = (seen[project.kind] ?? 0) + 1;
     const name = t(`evidence.kind.${project.kind}`);
     const label = totals[project.kind] > 1 ? `${name} ${seen[project.kind]}` : name;
-    return { label, reviewed: project.checked, fixed: project.caught };
+    return { label, reviewed: project.checked, fixed: project.caught, isShared: true };
   });
-}
-
-function draw(total) {
-  note.textContent = t("evidence.community.note", {
-    count: total.projects, checked: total.checked, caught: total.caught, deep: total.deep,
-  });
-  const rows = labelled(total.top);
-  const largest = Math.max(...rows.map((row) => row.reviewed));
-  chart.replaceChildren(...rows.map((row, index) => projectRow(row, index, largest)));
-  block.hidden = false;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) chart.classList.add("counted");
-  else onEnter(chart, () => chart.classList.add("counted"));
 }
 
 async function load() {
   const response = await fetch(counterUrl(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (!response.ok) return;
+  if (!response.ok) return null;
   const total = checked(await response.json());
-  if (total && total.projects > 0 && total.top.length > 0) draw(total);
+  if (!total || total.projects === 0 || total.top.length === 0) return null;
+  return {
+    projects: total.projects, reviewed: total.checked, fixed: total.caught, deep: total.deep,
+    rows: labelled(total.top),
+  };
 }
 
-load().catch(() => {});
+/**
+ * The shared totals and top rows, `{ projects, reviewed, fixed, deep, rows }`, or null.
+ * Each row is `{ label, reviewed, fixed, isShared }`, ready for bars.js.
+ */
+export const shared = load().catch(() => null);

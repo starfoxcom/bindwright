@@ -1,6 +1,6 @@
-// The evidence section's project bars, shared by the maintainer's projects and the
-// community block: one row per project, its bar as wide as its reviewed pull requests
-// against the largest, split by whether the review passed or caught a problem.
+// The evidence section's project bars: one row per project, its bar as wide as its
+// reviewed pull requests against the largest, split by whether the review passed or
+// caught a problem.
 import { t } from "./i18n/index.js";
 
 // The parts of a project's bar, left to right: the colour class, the legend text and
@@ -23,8 +23,9 @@ function segment(part, project) {
 }
 
 /**
- * One project's row: `{ label, reviewed, fixed }` drawn against `largest` reviewed
- * count. The bar's CSS grows it from the left once its list gets the `counted` class.
+ * One project's row: `{ label, reviewed, fixed, isShared }` drawn against `largest`
+ * reviewed count; a shared project's name carries a "shared" tag. The bar's CSS grows it
+ * from the left once its list gets the `counted` class.
  */
 export function projectRow(project, index, largest) {
   const item = el("li", "project");
@@ -34,8 +35,10 @@ export function projectRow(project, index, largest) {
   bar.append(...PARTS.map((part) => segment(part, project)));
   const track = el("span", "project-track");
   track.append(bar);
+  const name = el("span", "project-name", project.label);
+  if (project.isShared) name.append(el("small", "project-tag", t("evidence.shared")));
   item.append(
-    el("span", "project-name", project.label),
+    name,
     track,
     el("span", "project-count", [
       t("evidence.checked", { count: project.reviewed }),

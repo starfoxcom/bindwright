@@ -192,13 +192,15 @@ export default {
   "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
   "evidence.legend.passed": "pasaron la revisión",
   "evidence.legend.fixed": "tenían un problema, corregido antes de integrarse",
-  "evidence.community.title": "De quienes usan Bindwright y eligieron compartir conteos anónimos",
-  "evidence.community.note": {
-    one: "{count} proyecto hasta ahora: {checked} pull requests revisados, {caught} detectados, "
-      + "{deep} enviados a una revisión más a fondo.",
-    other: "{count} proyectos hasta ahora: {checked} pull requests revisados, {caught} detectados, "
-      + "{deep} enviados a una revisión más a fondo.",
+  "evidence.note.shared": {
+    one: "Bindwright pone un revisor de IA en cada pull request. "
+      + "Estos son sus resultados hasta ahora en {count} proyecto, "
+      + "{shared} de ellos compartidos de forma anónima por quienes lo usan.",
+    other: "Bindwright pone un revisor de IA en cada pull request. "
+      + "Estos son sus resultados hasta ahora en {count} proyectos, "
+      + "{shared} de ellos compartidos de forma anónima por quienes lo usan.",
   },
+  "evidence.shared": "compartido",
   "evidence.kind.game": "Juego",
   "evidence.kind.business-app": "App de negocio",
   "evidence.kind.developer-tool": "Herramienta para devs",

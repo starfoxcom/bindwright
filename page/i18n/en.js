@@ -72,10 +72,13 @@ export default {
   "evidence.caught": { one: "{count} caught", other: "{count} caught" },
   "evidence.legend.passed": "passed the review",
   "evidence.legend.fixed": "had a problem caught, fixed before merging",
-  "evidence.community.note": {
-    one: "{count} project so far: {checked} pull requests checked, {caught} caught, {deep} sent to a deeper review.",
-    other: "{count} projects so far: {checked} pull requests checked, {caught} caught, {deep} sent to a deeper review.",
+  "evidence.note.shared": {
+    one: "Bindwright puts an AI reviewer on every pull request. These are its results so far in {count} project, "
+      + "{shared} of them shared anonymously by people using it.",
+    other: "Bindwright puts an AI reviewer on every pull request. These are its results so far in {count} projects, "
+      + "{shared} of them shared anonymously by people using it.",
   },
+  "evidence.shared": "shared",
   "evidence.kind.game": "Game project",
   "evidence.kind.business-app": "Business app",
   "evidence.kind.developer-tool": "Developer tool",
