@@ -20,3 +20,18 @@ Update 2026-10-21, from each README: tokensave's installer now adds its own sear
 Offer: tokensave, LSP plugins, CodeGraph, Serena, codebase-memory-mcp, none, custom. Each option is a data profile (install command, MCP config, hook, notes), not setup prose. No head-to-head benchmark exists across these tools; a same-repo, same-queries comparison would settle the ranking.
 
 Sources: github.com/aovestdipaperino/tokensave, code.claude.com/docs/en/discover-plugins, github.com/colbymchenry/codegraph, github.com/oraios/serena, github.com/DeusData/codebase-memory-mcp, arxiv.org/html/2603.27277v1, github.com/semgrep/mcp, sourcegraph.com/mcp, libraries.io/pypi/ctags-mcp.
+
+## Head-to-head results (2026-11-03, #564)
+
+Every tool ran on two repos, this one (JavaScript and Python) and a C++ game project with about 2,500 files, against the same 40 questions (definitions, callers, impact of a change, a concept described without its name) and 6 multi-step tasks (trace a flow end to end, plan a change across files). Each run was a fresh headless session on the same model, with user settings, hooks and mods off, read-only tools, and only the tool under test added. Every question had its right answer written down before any run, and every answer the automatic check marked wrong was read by hand. Each setup ran twice: as the tool comes, and with one line asking the model to prefer the tool.
+
+| Setup | Right answers | Cost, all 46 tasks (best setup) | Notes |
+|---|---|---|---|
+| No tool | all | $5.49 | the cheapest |
+| tokensave | all | $6.88 | about a quarter faster than no tool on the C++ repo when used |
+| CodeGraph | all | $8.52 | as fast as tokensave, the dearest per single question |
+| Serena | all | | slowest by far on C++, its language server starting in every session |
+| codebase-memory-mcp | all | | no faster than no tool; its installer timed out once on Windows; rarely used unless asked |
+| LSP plugins | all but one | | no gain; its incoming-calls once reported no callers for a function that has two |
+
+Plain search answered as correctly as every tool. The tools differed only in speed and cost, and none beat tokensave on either, so setup offers tokensave (recommended), none and custom. Limits: one run per question, one model, two medium-sized repos; a much larger repo or a weaker model may change the picture.
