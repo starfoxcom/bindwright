@@ -77,7 +77,8 @@ function session(branch, changed = 0, ahead = 0) {
 const runners = (online) => row("runners", `⚙ runners on · ${online} online ${btn("Stop")}`);
 
 const CI_BUTTONS = `open ${btn("checks")}${btn("stop")}`;
-const ci = (text, cls) => row("ci", `${tone(cls, text)} ${CI_BUTTONS}`);
+// A watched PR: yellow while checks run, green when all pass, red on a failure.
+const ci = (text, cls = "warnt") => row("ci", `${tone(cls, text)} ${CI_BUTTONS}`);
 
 // The tasks row: the count done, the task in progress, and how many are still to do.
 function tasks({ done, total, current, pending }) {
@@ -146,6 +147,12 @@ export const SCENES = {
     ["band", [ci("⏳ PR 14 · 1/4 done")]],
     ["wait", 900],
     ["band", [ci("⏳ PR 14 · 2/4 done")]],
+    ["wait", 900],
+    ["band", [ci("❌ PR 14 · failed: lint", "badt")]],
+    ["wait", 1200],
+    ["tool", "Bash", "npm run lint -- --fix", 600],
+    ["tool", "Bash", "git push", 500],
+    ["band", [ci("⏳ PR 14 · 1/4 done")]],
     ["wait", 900],
     ["band", [ci("⏳ PR 14 · 3/4 done")]],
     ["wait", 900],
