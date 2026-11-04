@@ -95,8 +95,8 @@ Changed 2026-11-02 (maintainer): the page becomes a landing page and install gui
 - [x] Secondary pages: compare and all settings; "how it works" dropped, since the landing already plays the loop and splits what lands on the computer from what lands in each project. The root `index.html` redirects to `page/`, and the v1 page is gone (#491).
 
 ### Phase 4: rename and release
-- [ ] Rename the repo and Pages site, update every reference, add the non-affiliation notice, `SECURITY.md`, code of conduct, MIT-0 for output.
-- [ ] Release v2.0.0 (release branch, tag, cascade).
+- [x] Rename the repo and Pages site, update every reference, add the non-affiliation notice, `SECURITY.md`, code of conduct, MIT-0 for output (#576, #578, #580).
+- [x] Release v2.0.0 (release branch, tag, cascade).
 
 ## Follow-ups outside this repo
 - GameProject and BusinessApp: the routine-verdict lookup no longer filters on the `claude[bot]` author. Both repos are private, so the risk is low. The maintainer decides when to fix it.

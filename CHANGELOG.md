@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.0.0] — 2026-11-04 — Bindwright
+
+v2.0.0 renames the project to **Bindwright** and replaces the v1 configurator with a Claude Code plugin. `/bindwright:setup` asks a few questions in the session (computer questions once, project questions in every project) and writes the setup through one bind engine with JavaScript and Python twins; `/bindwright:update` keeps it current with a three-way merge that never overwrites hand edits. The site is a landing page with the install steps, every setting and its default, a comparison, and the review results from real projects. The plugin installs from this repo's own marketplace.
+
 ### Added
 
 - **Release project files** (#342). `SECURITY.md` (private reports through GitHub, what is in scope), `CODE_OF_CONDUCT.md` (the Contributor Covenant 2.1), `LICENSE-MIT-0` for the files setup writes into a project, and a notice that Bindwright is not made by, endorsed by or affiliated with Anthropic.
