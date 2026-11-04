@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { DICTIONARIES } from "../../page/i18n/index.js";
 import { pageKeys } from "../../page/i18n/render.js";
 import { fillMods } from "../../tools/page_settings.mjs";
+import { SCENES } from "../../page/mods-scenes.js";
 import { MODS } from "../layers.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
@@ -47,6 +48,26 @@ test("the mods section links to the mods row on the settings page", () => {
 test("every translation key in the mods section has Spanish text", () => {
   for (const key of pageKeys(modsSection(landing))) {
     assert.equal(typeof DICTIONARIES.es[key], "string", key);
+  }
+});
+
+test("the mods section shows a carousel and a terminal, with the mod before the terminal", () => {
+  const section = modsSection(landing);
+  assert.ok(section.includes('id="mods-stage"'));
+  assert.ok(section.includes('class="term"'));
+  assert.ok(section.indexOf('id="mods-carousel"') < section.indexOf('class="term"'));
+});
+
+test("every mod in the engine has a scene, and no scene is for a mod the engine lacks", () => {
+  assert.deepEqual(Object.keys(SCENES).sort(), [...MODS].sort());
+});
+
+test("every text a mod scene shows exists in each language", () => {
+  const source = read("mods-scenes.js");
+  const keys = [...source.matchAll(/"(mods\.scene\.[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(keys.length > 0);
+  for (const [code, words] of Object.entries(DICTIONARIES)) {
+    for (const key of keys) assert.equal(typeof words[key], "string", `${code}: ${key}`);
   }
 });
 

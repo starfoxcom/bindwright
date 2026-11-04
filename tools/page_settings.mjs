@@ -71,19 +71,19 @@ const CARDS = /([ \t]*<!-- mods:cards -->\n)[\s\S]*?([ \t]*<!-- \/mods:cards -->
 
 function modCard(mod) {
   return [
-    `      <li class="mod-card" id="m-${mod.id}">`,
-    `        <h3><code>${mod.id}</code></h3>`,
-    `        <p data-t="mods.${mod.id}.text">${mod.text}</p>`,
-    `        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span>`
+    `          <li class="mod-card" id="m-${mod.id}">`,
+    `            <h3><code>${mod.id}</code></h3>`,
+    `            <p data-t="mods.${mod.id}.text">${mod.text}</p>`,
+    `            <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span>`
       + ` <b data-t="mods.${mod.id}.value">${mod.value}</b></span>`,
-    "      </li>",
+    "          </li>",
   ].join("\n");
 }
 
 // The landing page with its mod cards filled. The markers keep their own lines, so a
 // second run rewrites the same text.
 export function fillMods(html) {
-  const cards = `    <ul class="mod-cards">\n${MODS_ROWS.map(modCard).join("\n")}\n    </ul>\n`;
+  const cards = `        <ul class="mod-cards">\n${MODS_ROWS.map(modCard).join("\n")}\n        </ul>\n`;
   return html.replace(CARDS, (match, open, close) => open + cards + close);
 }
 
