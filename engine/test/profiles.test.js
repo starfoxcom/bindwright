@@ -90,16 +90,3 @@ test("the global CLAUDE.md additions carry one block per engine tool and no reti
     assert.ok(engineValues.has(name), `the engine supplies no ${whole}`);
   }
 });
-
-test("the LSP profile names a plugin and server for every language it lists", () => {
-  assert.equal(file["lsp-plugins"].plugin_install.match(/<plugin>/g).length, 1);
-  const plugins = file["lsp-plugins"].plugins;
-  assert.ok(plugins.length > 0);
-  for (const p of plugins) {
-    assert.match(p.plugin, /^[a-z0-9-]+-lsp$/);
-    assert.ok(isText(p.server), p.plugin);
-    assert.ok(p.extensions.length > 0 && p.extensions.every((e) => /^\.[A-Za-z0-9]+$/.test(e)), p.plugin);
-  }
-  const extensions = plugins.flatMap((p) => p.extensions);
-  assert.equal(new Set(extensions).size, extensions.length, "an extension maps to two plugins");
-});

@@ -60,7 +60,7 @@ test("a setup round-trips: export, then a teammate's settings, choices and drift
     const exported = run(["--export", s.repo], JSON.stringify(choices));
     const before = run(["--settings", s.repo]);
     const declined = run(["--remember", s.repo, "--layer", "personal"], JSON.stringify({ extras: { tasks: false } }));
-    const mine = JSON.stringify({ codeResearch: "serena", tracker: "file" });
+    const mine = JSON.stringify({ codeResearch: "none", tracker: "file" });
     const local = run(["--remember", s.repo, "--layer", "local"], mine);
     const after = run(["--settings", s.repo]);
     return { exported, before, declined, local, after };

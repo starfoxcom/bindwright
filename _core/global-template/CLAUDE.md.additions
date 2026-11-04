@@ -22,22 +22,6 @@ The project's chosen tool is set by `tools.code_research` in the bound configura
 - Only fall back to agents if tokensave is confirmed unavailable (check `tokensave_status` first) or the task is genuinely non-code (web search, external API, etc.).
 - If a code analysis question cannot be fully answered by tokensave MCP tools, try querying the SQLite database directly at `.tokensave/tokensave.db` (tables: `nodes`, `edges`, `files`).
 <!-- TOGGLE:code_research:tokensave END -->
-<!-- TOGGLE:code_research:lsp-plugins START -->
-- Before ANY code research task, use the `LSP` tool per the project's `/find` skill: `workspaceSymbol` to find a definition, `findReferences` and the call hierarchy for usages.
-- The language server must run for the file's language. Only fall back to agents if no language server is running for that language (cloud sessions start none) or the task is genuinely non-code.
-<!-- TOGGLE:code_research:lsp-plugins END -->
-<!-- TOGGLE:code_research:codegraph START -->
-- Before ANY code research task, use `codegraph_explore` per the project's `/find` skill. One call usually returns the relevant symbols, their call paths and what a change would affect.
-- Only fall back to agents if the project has no `.codegraph/` index (run `codegraph init` to build one) or the task is genuinely non-code.
-<!-- TOGGLE:code_research:codegraph END -->
-<!-- TOGGLE:code_research:serena START -->
-- Before ANY code research task, use Serena's symbol tools per the project's `/find` skill: `find_symbol`, `get_symbols_overview`, `find_referencing_symbols`.
-- Only fall back to agents if Serena's MCP server is not connected for this project (check `/mcp`) or the task is genuinely non-code.
-<!-- TOGGLE:code_research:serena END -->
-<!-- TOGGLE:code_research:codebase-memory START -->
-- Before ANY code research task, use codebase-memory-mcp per the project's `/find` skill: `search_graph`, `trace_path`, `get_code_snippet`.
-- If `index_status` shows the project is not indexed, run `index_repository` first. Only fall back to agents if the server is not connected or the task is genuinely non-code.
-<!-- TOGGLE:code_research:codebase-memory END -->
 <!-- TOGGLE:code_research:none START -->
 - This project has `tools.code_research: "none"` — no indexer is configured. The `/find` skill resolves to a Grep → Glob → Read sequence; follow it disciplined even without enforcement.
 - Explore agents remain forbidden even in the no-indexer case. Read the project sources directly with Grep/Glob/Read rather than spawning an exploration agent.

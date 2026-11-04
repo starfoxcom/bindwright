@@ -18,7 +18,7 @@ const answers = (advanced = {}, setup) =>
 
 test("a later layer wins: local over project over personal", () => {
   const { settings } = resolveLayers({
-    personal: { schema: 1, codeResearch: "serena", tracker: "file" },
+    personal: { schema: 1, codeResearch: "none", tracker: "file" },
     project: answers({ codeResearch: "tokensave", tracker: "github" }),
     local: { tracker: "file" },
   });
@@ -30,9 +30,9 @@ test("a later layer wins: local over project over personal", () => {
 
 test("a value the project requires holds, and the overridden ones are noted", () => {
   const { settings, ignored } = resolveLayers({
-    personal: { codeResearch: "serena" },
+    personal: { codeResearch: "none" },
     project: answers({ codeResearch: "tokensave" }, { schema: 1, required: ["codeResearch"] }),
-    local: { codeResearch: "codegraph" },
+    local: { codeResearch: "none" },
   });
   assert.deepEqual(settings.codeResearch, { value: "tokensave", from: "project", required: true });
   const note = "codeResearch (the project requires it)";

@@ -8,8 +8,6 @@
     "index": "{run, marker} or null - per-project commands that build the tool's index, and the path that exists once they ran. null when the tool indexes on its own.",
     "mcp": "{name, command, args} or null - the MCP server entry, for setting it up by hand when the agent step cannot run.",
     "hook": "{source, ...} - who redirects Grep and Glob to the tool. tool: the tool's own installer adds it. bindwright: setup renders code-research-first.py.template with filename_basename, detection_mode (walk_up or cli_available), detection_target and sequence_bullets. none: no hook. A hook value may itself hold {{TOOLS_CODE_RESEARCH_*}} placeholders (the custom profile's do); setup fills them first, with the same engine values (valuesFor in engine/model.js) it fills the template with.",
-    "plugins": "lsp-plugins only: list of {plugin, server, extensions}. setup picks the plugins whose extensions the repo uses; each plugin needs its server binary on PATH first, since the plugin does not bundle it.",
-    "plugin_install": "lsp-plugins only: the command setup runs once per picked plugin, after replacing <plugin> with that plugin's name. It is a template, never run as written.",
     "notes": "string - what setup tells the person before installing."
   },
 
@@ -25,78 +23,6 @@
     "mcp": null,
     "hook": { "source": "tool" },
     "notes": "The agent step registers the MCP server in the user's global config and adds tokensave's own hooks (one redirects symbol-shaped Grep, Glob and Bash searches), prompt rules and tool permissions. Add --local to register it for this project only. Run tokensave sync after large edits."
-  },
-
-  "lsp-plugins": {
-    "license": "per language server",
-    "install": [],
-    "agent": null,
-    "index": null,
-    "mcp": null,
-    "hook": { "source": "none" },
-    "plugin_install": "claude plugin install <plugin>@claude-plugins-official --scope project",
-    "plugins": [
-      { "plugin": "clangd-lsp", "server": "clangd", "extensions": [".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hxx", ".C", ".H"] },
-      { "plugin": "csharp-lsp", "server": "csharp-ls", "extensions": [".cs"] },
-      { "plugin": "gopls-lsp", "server": "gopls", "extensions": [".go"] },
-      { "plugin": "jdtls-lsp", "server": "jdtls", "extensions": [".java"] },
-      { "plugin": "kotlin-lsp", "server": "kotlin-lsp", "extensions": [".kt", ".kts"] },
-      { "plugin": "lua-lsp", "server": "lua-language-server", "extensions": [".lua"] },
-      { "plugin": "php-lsp", "server": "intelephense", "extensions": [".php"] },
-      { "plugin": "pyright-lsp", "server": "pyright-langserver", "extensions": [".py", ".pyi"] },
-      { "plugin": "ruby-lsp", "server": "ruby-lsp", "extensions": [".rb", ".erb", ".gemspec", ".rake", ".ru"] },
-      { "plugin": "rust-analyzer-lsp", "server": "rust-analyzer", "extensions": [".rs"] },
-      { "plugin": "swift-lsp", "server": "sourcekit-lsp", "extensions": [".swift"] },
-      { "plugin": "typescript-lsp", "server": "typescript-language-server", "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"] }
-    ],
-    "notes": "Anthropic's official LSP plugins, one per language. Project scope commits the plugin to .claude/settings.json; each teammate still runs the install command once. Cloud sessions do not start plugin language servers. There is no cross-file impact graph."
-  },
-
-  "codegraph": {
-    "license": "MIT",
-    "install": [
-      { "os": "macos", "run": ["curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh"] },
-      { "os": "linux", "run": ["curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh"] },
-      { "os": "windows", "run": ["irm https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.ps1 | iex"] },
-      { "os": "any", "run": ["npm i -g @colbymchenry/codegraph"] }
-    ],
-    "agent": { "run": ["codegraph install"] },
-    "index": { "run": ["codegraph init"], "marker": ".codegraph/" },
-    "mcp": { "name": "codegraph", "command": "codegraph", "args": ["serve", "--mcp"] },
-    "hook": {
-      "source": "bindwright",
-      "filename_basename": "codegraph-first",
-      "detection_mode": "walk_up",
-      "detection_target": ".codegraph/codegraph.db",
-      "sequence_bullets": "  • Question or symbol name      → codegraph_explore <question or name>\n  • Read a file or symbol        → codegraph_explore <file or symbol name>\n  • Narrower tools               → set CODEGRAPH_MCP_TOOLS to enable codegraph_search, codegraph_callers, codegraph_callees, codegraph_impact"
-    },
-    "notes": "The agent step writes the MCP server config, a marker-fenced section in CLAUDE.md and tool permissions (--no-permissions skips them). A file watcher keeps the index current after codegraph init."
-  },
-
-  "serena": {
-    "license": "GPL-3.0-or-later (application), MIT (SolidLSP)",
-    "install": [
-      { "os": "any", "run": ["uv tool install -p 3.13 serena-agent"] }
-    ],
-    "agent": { "run": ["serena setup claude-code"] },
-    "index": null,
-    "mcp": { "name": "serena", "command": "serena", "args": ["start-mcp-server", "--context", "claude-code", "--project-from-cwd"] },
-    "hook": { "source": "tool" },
-    "notes": "Needs uv. Serena's README warns against installing it from an MCP or plugin marketplace. Its Claude Code hooks (remind, activate, cleanup, auto-approve) are opt-in and marked alpha. If Serena starts slowly, raise MCP_TIMEOUT."
-  },
-
-  "codebase-memory": {
-    "license": "MIT",
-    "install": [
-      { "os": "macos", "run": ["curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash"] },
-      { "os": "linux", "run": ["curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash"] },
-      { "os": "windows", "run": ["Invoke-WebRequest -Uri https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.ps1 -OutFile install.ps1", "Unblock-File .\\install.ps1", ".\\install.ps1"] }
-    ],
-    "agent": null,
-    "index": null,
-    "mcp": null,
-    "hook": { "source": "tool" },
-    "notes": "The install script also configures Claude Code: MCP server, a skill and graph agents, and hooks that only add context and never block a call. Pass --skip-config to install the binary alone. Indexing starts when the agent is asked to index the project (index_repository); the index lives under ~/.cache/codebase-memory-mcp/."
   },
 
   "none": {

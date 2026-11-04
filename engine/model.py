@@ -20,28 +20,17 @@ CODE_RESEARCH_TOOLS = {
         "bypass": "TOKENSAVE_BYPASS:",
         "match": "tokensave",
     },
-    "lsp-plugins": {
-        "name": "Claude Code LSP plugins",
-        "url": "https://code.claude.com/docs/en/discover-plugins",
-        "bypass": None,
-        "match": "^LSP$",
-    },
-    "codegraph": {
-        "name": "CodeGraph",
-        "url": "https://github.com/colbymchenry/codegraph",
-        "bypass": None,
-        "match": "codegraph",
-    },
-    "serena": {"name": "Serena", "url": "https://github.com/oraios/serena", "bypass": None, "match": "serena"},
-    "codebase-memory": {
-        "name": "codebase-memory-mcp",
-        "url": "https://github.com/DeusData/codebase-memory-mcp",
-        "bypass": None,
-        "match": "codebase.memory",
-    },
     "none": {"name": "none", "url": "(no homepage)", "bypass": None, "match": None},
     # A tool the person names: values_for fills all four from codeResearchCustom.
     "custom": {"name": None, "url": None, "bypass": None, "match": None},
+}
+# Tools no longer offered. An answers file saved while one was offered is read
+# as a custom tool with its old name and homepage (expand_answers).
+REMOVED_CODE_RESEARCH_TOOLS = {
+    "lsp-plugins": {"name": "Claude Code LSP plugins", "url": "https://code.claude.com/docs/en/discover-plugins"},
+    "codegraph": {"name": "CodeGraph", "url": "https://github.com/colbymchenry/codegraph"},
+    "serena": {"name": "Serena", "url": "https://github.com/oraios/serena"},
+    "codebase-memory": {"name": "codebase-memory-mcp", "url": "https://github.com/DeusData/codebase-memory-mcp"},
 }
 # How setup installs each tool lives in _core/global-template/hooks/code-research-profiles.json.
 
@@ -326,7 +315,17 @@ def expand_answers(saved):
                     private=_given(a, "private"))
     project, advanced = a.pop("project", UNDEFINED), a.pop("advanced", UNDEFINED)
     return dict(a, project=_fill_keys(project, base["project"]),
-                advanced=_fill_keys(advanced, base["advanced"]))
+                advanced=_map_removed_tool(_fill_keys(advanced, base["advanced"])))
+
+
+def _map_removed_tool(advanced):
+    """An answers file saved while a tool was offered reads as a custom tool
+    with that tool's old name and homepage."""
+    code_research = advanced.get("codeResearch") if isinstance(advanced, dict) else None
+    if not isinstance(code_research, str) or code_research not in REMOVED_CODE_RESEARCH_TOOLS:
+        return advanced
+    return dict(advanced, codeResearch="custom",
+                codeResearchCustom=dict(REMOVED_CODE_RESEARCH_TOOLS[code_research]))
 
 
 # Every toggle name the templates use must resolve here to True or False.

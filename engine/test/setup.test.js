@@ -238,6 +238,24 @@ test("a code made the old way, with every answer, expands to the same answers", 
   }
 });
 
+const SAVED_WITH_CODEGRAPH = {
+  ...named(),
+  advanced: { ...named().advanced, codeResearch: "codegraph", codeResearchCustom: null },
+};
+const CODEGRAPH_AS_CUSTOM = { name: "CodeGraph", url: "https://github.com/colbymchenry/codegraph" };
+
+test("an answers file saved with a removed tool reads as a custom tool with its old name", () => {
+  const { advanced } = expandAnswers(SAVED_WITH_CODEGRAPH);
+  assert.equal(advanced.codeResearch, "custom");
+  assert.deepEqual(advanced.codeResearchCustom, CODEGRAPH_AS_CUSTOM);
+});
+
+test("the Python twin reads a removed tool the same way", { skip: noPython }, () => {
+  const [py] = runPython(PY_EXPAND, [codeOf(JSON.stringify(SAVED_WITH_CODEGRAPH))]);
+  assert.equal(py.advanced.codeResearch, "custom");
+  assert.deepEqual(py.advanced.codeResearchCustom, CODEGRAPH_AS_CUSTOM);
+});
+
 test("bad setup codes are refused with a message that says why", () => {
   for (const [code, message] of BAD) assert.deepEqual(decodeJs(code), { error: message }, String(code).slice(0, 80));
   for (const code of ODD) assert.ok(decodeJs(code).answers, code);
