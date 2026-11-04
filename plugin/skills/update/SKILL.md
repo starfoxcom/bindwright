@@ -59,7 +59,7 @@ For each path in `removed`, say in one line what the file was for and delete it 
 
 ## 6. Review counts
 
-When Node is there and `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) and save the answer the same way, or skip the repo on a no.
+When Node is there and `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and save the answer the same way.
 
 ## 7. Finish
 

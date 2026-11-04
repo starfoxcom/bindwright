@@ -169,6 +169,17 @@ test("a repo with no entry sends nothing", () => inScene(async (s) => {
   assert.deepEqual(counter.posts, []);
 }));
 
+test("a repo left out of the counts sends nothing and stays listed", () => inScene(async (s) => {
+  seedState(s, { projects: {} });
+  setProject(s.stateFile, s.repo, "none");
+  const gh = fakeGh([GREEN_PR]);
+  const counter = fakeCounter(OK);
+  await sendAt(s, noon(3), gh, counter);
+  assert.deepEqual(gh.calls, []);
+  assert.deepEqual(counter.posts, []);
+  assert.deepEqual(statusOf(s.stateFile).projects, [{ root: s.repo, kind: null, lastSendDay: null }]);
+}));
+
 test("a repo that already sent today does not ask gh", () => inScene(async (s) => {
   seedState(s, { projects: { [s.repo]: projectEntry({ lastSendDay: "2026-11-03" }) } });
   const gh = fakeGh([GREEN_PR]);

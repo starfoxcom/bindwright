@@ -22,6 +22,9 @@ export const KINDS = Object.freeze([
   "other",
 ]);
 
+/** The kind answer that leaves a repo out of the counts; it is remembered, so nobody asks again. */
+export const LEFT_OUT = "none";
+
 const DEFAULT_COUNTER_URL = "https://bindwright-counter.starfoxcom.workers.dev";
 const MAX_PER_COUNT = 1000;
 const RETRY_GAP_IN_MILLISECONDS = 60 * 1000;
@@ -76,7 +79,8 @@ function verdictOf(text) {
 
 function verdictsOf(pr) {
   return (pr.comments ?? [])
-    .filter((comment) => BOT_LOGINS.has(comment.author?.login) && !ESCALATION_REQUEST.test(comment.body ?? ""))
+    .filter((comment) => BOT_LOGINS.has(comment.author?.login))
+    .filter((comment) => !ESCALATION_REQUEST.test(comment.body ?? ""))
     .map((comment) => verdictOf(comment.body ?? ""))
     .filter((verdict) => verdict !== null);
 }
@@ -103,7 +107,8 @@ export function countPrs(prs) {
     if (verdicts.includes("red")) counts.caught += 1;
     if (hasDeepLabel(pr)) counts.deep += 1;
   }
-  return Object.fromEntries(Object.entries(counts).map(([name, count]) => [name, Math.min(count, MAX_PER_COUNT)]));
+  const capped = Object.entries(counts).map(([name, n]) => [name, Math.min(n, MAX_PER_COUNT)]);
+  return Object.fromEntries(capped);
 }
 
 function readJson(file) {
@@ -157,10 +162,12 @@ export function setShare(file, value) {
   return { share: state.share };
 }
 
-/** Adds a repo with a new random id, or sets the kind of a repo already added. */
+/** Adds a repo with a new random id, or sets the kind of one added; `none` leaves it out. */
 export function setProject(file, root, kind, now = () => new Date()) {
   if (!root) return fail("project takes a repo root and a kind");
-  if (!KINDS.includes(kind)) return fail(`kind must be one of: ${KINDS.join(", ")}`);
+  if (kind !== LEFT_OUT && !KINDS.includes(kind)) {
+    return fail(`kind must be one of: ${[...KINDS, LEFT_OUT].join(", ")}`);
+  }
   const state = readState(file);
   const key = repoKey(root);
   const entry = state.projects[key] ?? {
@@ -169,13 +176,13 @@ export function setProject(file, root, kind, now = () => new Date()) {
     lastSendDay: null,
     failedAt: null,
   };
-  entry.kind = kind;
+  entry.kind = kind === LEFT_OUT ? null : kind;
   state.projects[key] = entry;
   writeState(file, state);
   return { project: key, kind };
 }
 
-/** Whether the question was answered, the share switch, and each repo's kind and last send day. Never ids. */
+/** Whether the question was answered, the share switch, and each repo's kind and last send. */
 export function statusOf(file) {
   const parsed = readJson(file);
   const state = readState(file);
@@ -254,7 +261,7 @@ export async function send({
   const state = readState(stateFile);
   const entry = state.share ? state.projects[key] : undefined;
   const current = now();
-  if (!entry || !isDue(entry, current)) return;
+  if (!entry?.kind || !isDue(entry, current)) return;
   const today = localDay(current);
   const queryTime = current.toISOString();
   const prs = await ghJson(prListArgs(entry.since), key).catch(() => null);
@@ -266,7 +273,8 @@ export async function send({
   const sendWindow = { from: Date.parse(entry.since), to: current.getTime() };
   const body = { project: entry.id, kind: entry.kind, ...counts, ...sendWindow };
   const outcome = await post(url, body).catch(() => null);
-  return changeProject(stateFile, key, outcomeChange(outcome, { queryTime, today, failedAt: current.getTime() }));
+  const change = outcomeChange(outcome, { queryTime, today, failedAt: current.getTime() });
+  return changeProject(stateFile, key, change);
 }
 
 function command([name, ...args], file) {
