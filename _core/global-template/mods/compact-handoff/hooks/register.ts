@@ -8,15 +8,16 @@ const INDEX_HEAD = 'Older messages, kept only as an index (full text via the rec
 const RECALL_TOOL = 'mcp__compact-handoff__recall'
 
 // The hand-off gets a slice of the compaction window, so small windows pay a
-// small hand-off. The person's words get part of that slice; the rest is the
-// written hand-off.
+// small hand-off. The summarizer is told the whole slice and writes about a
+// third of it; the person's words get their share of the slice on top. At this
+// share, a long session keeps about four in five of its messages word for word.
 const BUDGET_SHARE = 0.025
 const BUDGET_MIN_TOKENS = 2_000
 const BUDGET_MAX_TOKENS = 15_000
-const PERSON_SHARE = 0.4
+const PERSON_SHARE = 0.8
 const CHARS_PER_TOKEN = 4
 const INDEX_LINE_CHARS = 100
-const INDEX_MAX_LINES = 30
+const INDEX_MAX_LINES = 100
 const RECALL_MAX_CHARS = 6_000
 
 // Disk: shadow mode keeps one file per compaction, on mode one per session;
