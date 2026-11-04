@@ -19,6 +19,8 @@ export type Live = {
   pendingWrapUp?: Pause
   /** A wrap-up started: once its turn ends, the session may compact before the pause. */
   compactAfterTurn?: Pause
+  /** The arm tool asked to compact: it runs once the turn that called the tool ends. */
+  isArmCompactOwed?: boolean
   /** How this session's last compaction went, with its time, for /usage-guard to repeat. */
   lastCompaction?: string
   /** A compaction that ran, waiting for the next reply's size: the size before it, and the paused-until text. */

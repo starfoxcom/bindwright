@@ -94,6 +94,25 @@ test('the arm tool is registered and arms like the command', LONG, async ($, on)
   expect(resumes(seen)[0]).toContain(REASON_LINE)
 })
 
+test('the arm tool with compact compacts once, after the turn that set it ends', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  const call = { tool: 'mcp__usage-guard__arm', at: '10:30', compact: true, reason: 'check the build' }
+  const { result } = (await $.tool.call(call as never)) as { result: string }
+  expect(result).toContain('Compacting this session once this turn ends')
+  // A tool runs mid-turn, where the engine refuses a compaction.
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toEqual([])
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toHaveLength(1)
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toHaveLength(1)
+  await seen.clock.advance(HALF_HOUR)
+  expect(resumes(seen)[0]).toContain(REASON_LINE)
+})
+
 test('a session that only set an arm with the tool has no work to wrap up at a pause', async ($, on) => {
   const seen = world(on)
   await start($)

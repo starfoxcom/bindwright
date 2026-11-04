@@ -63,17 +63,17 @@ export function parseArmArgs(rest: string): ArmRequest | string {
 }
 
 /**
- * The `arm` tool's input, read as the command would read it. Never `compact`: a tool runs mid-turn, where
- * the engine refuses a compaction.
+ * The `arm` tool's input, read as the command would read it. `compact` comes as its own flag or as the
+ * word after the time; a tool runs mid-turn, so the caller compacts once the turn ends.
  */
-export function toolRequest(input: { at?: unknown; reason?: unknown }): ArmRequest | string {
+export function toolRequest(input: { at?: unknown; reason?: unknown; compact?: unknown }): ArmRequest | string {
   if (typeof input.at !== 'string') return `Pass "at": 5h, week, or a 24-hour time such as 21:05.`
+  if (input.compact !== undefined && typeof input.compact !== 'boolean') return 'Pass "compact" as true or false.'
   const request = parseArmArgs(input.at.replace(new RegExp(QUOTE, 'g'), ''))
   if (typeof request === 'string') return request
-  if (request.isCompact) return 'The arm tool cannot compact (a tool runs mid-turn): pass the time alone.'
   const reason = typeof input.reason === 'string' ? reasonOf(input.reason) : {}
   if (typeof reason === 'string') return reason
-  return { ...request, ...reason }
+  return { ...request, isCompact: request.isCompact || input.compact === true, ...reason }
 }
 
 /**
@@ -132,6 +132,10 @@ export const ARM_TOOL = {
     properties: {
       at: { type: 'string', description: '"5h", "week", or a 24-hour time "HH:MM" such as "21:05".' },
       reason: { type: 'string', description: `What to do at the wake, up to ${REASON_MAX} characters.` },
+      compact: {
+        type: 'boolean',
+        description: 'true compacts this session once the current turn ends, so the wake starts from the summary.',
+      },
     },
     required: ['at'],
   },
