@@ -257,14 +257,14 @@ export const FIXED = [
 
 // One row per mod in the engine's MODS list, in the same order. The title is the mod's name.
 export const MODS_ROWS = [
-  { id: "ci-watch", text: "Watches pull request checks and wakes the session when they finish.", value: "Off" },
+  { id: "ci-watch", text: "Watches pull request checks and wakes the session when they finish.", value: "On" },
   { id: "compact-handoff", text: "Carries your words and a hand-off across compactions.", value: "On" },
-  { id: "mods", text: "A pane listing your mods and their commands.", value: "Off" },
+  { id: "mods", text: "A pane listing your mods and their commands.", value: "On" },
   { id: "runners", text: "Shows your local CI runners, with start and stop buttons.", value: "Off" },
   { id: "session-facts", text: "Tells the assistant the time, its context fill and your plan usage.", value: "On" },
-  { id: "session-info", text: "A row with the model, project, branch and changed files.", value: "Off" },
+  { id: "session-info", text: "A row with the model, project, branch and changed files.", value: "On" },
   { id: "shared-pc", text: "One session at a time runs heavy work, the rest wait in line.", value: "Off" },
-  { id: "skill-check", text: "Checks a skill ran every step it requires.", value: "Off" },
-  { id: "tasks", text: "Keeps the task list honest and carries it across compactions.", value: "Off" },
-  { id: "usage-guard", text: "Saves work near a plan limit and resumes after it resets.", value: "Off" },
+  { id: "skill-check", text: "Checks a skill ran every step it requires.", value: "On" },
+  { id: "tasks", text: "Keeps the task list honest and carries it across compactions.", value: "On" },
+  { id: "usage-guard", text: "Saves work near a plan limit and resumes after it resets.", value: "On" },
 ];
