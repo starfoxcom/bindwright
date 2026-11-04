@@ -9,7 +9,7 @@ import { FIELDS, dayOf } from "./rules.js";
  * in-memory one.
  */
 export class D1Store {
-  /** @param {D1Database} database the `DB` binding from wrangler.toml */
+  /** @param {D1Database} database the `DB` binding from wrangler.jsonc */
   constructor(database) {
     this._database = database;
   }
