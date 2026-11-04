@@ -16,9 +16,10 @@ const SLIDE_MS = 1000;
 // most people finish reading it. Typing keeps its own speed.
 const PACE = 1.7;
 
-// The spinner's status text: seconds so far and thousands of tokens received.
-const spinnerMeta = (ms, tokens) =>
-  `(${Math.ceil(ms / 1000)}s · ↓ ${tokens.toFixed(1)}k tokens · esc to interrupt)`;
+// The spinner's status text: seconds so far and thousands of tokens received. A compaction
+// cannot be interrupted, so its spinner leaves the escape hint out.
+const spinnerMeta = (ms, tokens, interrupt = true) =>
+  `(${Math.ceil(ms / 1000)}s · ↓ ${tokens.toFixed(1)}k tokens${interrupt ? " · esc to interrupt" : ""})`;
 
 // A terminal drawn inside `stage`. It finds its parts there by class.
 export function createTerminal(stage) {
@@ -150,12 +151,12 @@ class Terminal {
   }
 
   // The spinner row: a cycling glyph, a shimmering verb, and a live seconds and token count.
-  async think(verb, ms, tokens) {
+  async think(verb, ms, tokens, { interrupt = true } = {}) {
     const row = this.spinrow;
     row.hidden = false;
     this.verb.textContent = `${verb}…`;
     if (reduce) {
-      this.meta.textContent = spinnerMeta(ms * PACE, tokens);
+      this.meta.textContent = spinnerMeta(ms * PACE, tokens, interrupt);
       await this.wait(ms);
       row.hidden = true;
       return;
@@ -170,7 +171,7 @@ class Terminal {
     this.every(100, () => {
       if (row.hidden || id !== this.run) return false;
       elapsed += 100;
-      this.meta.textContent = spinnerMeta(elapsed, tokens * Math.min(1, elapsed / (ms * PACE)));
+      this.meta.textContent = spinnerMeta(elapsed, tokens * Math.min(1, elapsed / (ms * PACE)), interrupt);
     });
     await this.wait(ms);
     row.hidden = true;
