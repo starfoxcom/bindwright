@@ -423,7 +423,7 @@ test("the adherence script counts only code searches", { skip: !python && "needs
 
 test("the push guard blocks force pushes in any flag bundle", { skip: !python && "needs Python 3.8+" }, async () => {
   // Hook location "repo" (the default) ships the guard in the project, registered in the
-  // committed settings.json; "home" ships nothing and leaves SETUP.md Phase 7c's global install.
+  // committed settings.json; "home" ships nothing and leaves the global install to engine/home.py.
   const lf = (p) => readFileSync(join(repo, p), "utf8").replace(/\r\n/g, "\n");
   assert.equal((await run(defaults())).get(".claude/hooks/push-guard.py"), lf("_core/global-template/hooks/push-guard.py"));
   const atHome = defaults();
@@ -434,21 +434,21 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
   assert.equal(JSON.parse((await run(defaults())).get(".claude/settings.local.json").replace(/\{\{[A-Z0-9_]+\}\}/g, "")).hooks,
     undefined, "the local settings never register hooks");
 
-  // Register it exactly as SETUP.md Phase 7c documents: its JSON entry, with this
-  // machine's interpreter and a temporary home. Exec form, so no shell is involved.
-  const setup = readFileSync(join(repo, "SETUP.md"), "utf8");
-  // A "git push" stack-command chip must not come back as a project-level `git push:*`.
-  const stackStep = setup.slice(setup.indexOf("5. **Render `{{STACK_COMMANDS_ALLOWLIST}}`**"), setup.indexOf("6.", setup.indexOf("5. **Render `{{STACK_COMMANDS_ALLOWLIST}}`**")));
-  assert.match(stackStep, /Never widen `git push` here\.\*\* Skip any entry that is `git push`/);
-  const step = setup.slice(setup.indexOf("7c. **Install the push guard GLOBALLY**"));
+  // A stack command the setup allows must never be `git push`: it would approve force pushes.
+  assert.match(lf("plugin/skills/setup/SKILL.md"), /Never add a rule for `git push` or a bare `git`/);
+
+  // Register it the way the plugin's setup does, with this machine's interpreter and a
+  // temporary home. Exec form, so no shell is involved.
   const exe = python;
   const home = mkdtempSync(join(tmpdir(), "push-guard-")).split("\\").join("/");
-  const entry = JSON.parse(step.match(/```json\r?\n([\s\S]*?)```/)[1]
-    .replace("<python>", JSON.stringify(exe).slice(1, -1)).replace("<home>", home)).hooks[0];
+  const installed = spawnSync(exe, [join(repo, "engine/home.py"), "--home", home, "install-hook",
+    join(repo, "_core/global-template/hooks/push-guard.py"), "--python", exe, "--matcher", "Bash|PowerShell"],
+  { encoding: "utf8" });
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  const settings = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8"));
+  const entry = settings.hooks.PreToolUse[0].hooks[0];
   assert.equal(entry.command, exe);
   assert.ok(Array.isArray(entry.args), "exec form, so no shell expands the path");
-  mkdirSync(join(home, ".claude", "hooks"), { recursive: true });
-  writeFileSync(join(home, ".claude", "hooks", "push-guard.py"), readFileSync(join(repo, "_core/global-template/hooks/push-guard.py")));
   const runHook = (root, input) => spawnSync(entry.command, entry.args.map((s) => s.split(home).join(root)), { input, encoding: "utf8" });
   // "deny" is exit 2; "ask" is exit 0 with an ask decision on stdout; "allow" is a silent exit 0.
   const decide = (r) => r.status === 2 ? "deny"

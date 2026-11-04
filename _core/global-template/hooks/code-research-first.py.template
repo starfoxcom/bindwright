@@ -21,30 +21,13 @@ Bypass paths:
     inline escape — briefly explain the bypass in chat and re-issue.
 
 Generated from `_core/global-template/hooks/code-research-first.py.template`
-at bind time. Profile source: `code-research-profiles.json` →
-`{{TOOLS_CODE_RESEARCH_NAME}}`. To switch to a different code-research tool,
-re-run the setup with a different `tools.code_research` value — the bind step
-renders a fresh `<tool>-first.py` and updates `~/.claude/settings.json`.
-
-Install (canonical procedure in SETUP.md § Phase 7a):
-  Render this template GLOBALLY at
-  ~/.claude/hooks/{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}-first.py and register in
-  ~/.claude/settings.json under hooks.PreToolUse:
-    {
-      "matcher": "Grep|Glob|Bash",
-      "hooks": [
-        { "type": "command",
-          "command": "py \"~/.claude/hooks/{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}-first.py\"" }
-      ]
-    }
-  On ALL platforms (Windows AND macOS/Linux), expand ~ to the absolute home
-  path before writing the command string into settings.json — e.g.
-  `C:/Users/Alice/.claude/hooks/...` or `/home/alice/.claude/hooks/...`.
-  Claude Code's hook executor does NOT auto-expand ~ in the command string;
-  a literal ~ silently disables the hook. Use `os.path.expanduser('~')` at
-  bind time. On Windows the launcher is `py`; on macOS/Linux swap to
-  `python3`. NEVER install project-local — it can trigger tool-specific
-  template-inheritance bugs that corrupt settings on every Stop event.
+at bind time, from the `{{TOOLS_CODE_RESEARCH_NAME}}` profile in
+`code-research-profiles.json`. `/bindwright:setup` installs it globally at
+~/.claude/hooks/{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}-first.py and registers it in
+~/.claude/settings.json under hooks.PreToolUse (matcher "Grep|Glob|Bash");
+`/bindwright:setup global` with another code-search tool replaces it. Never
+install it project-local: some tools' settings inheritance then corrupts the
+settings on every Stop event.
 """
 import json
 import os

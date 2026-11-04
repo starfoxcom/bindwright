@@ -2,8 +2,8 @@
 
 An unknown `{{NAME}}` under _core/project-template/ would land literally in
 the user's repo on bind. The known set is every placeholder the bind engine
-fills (engine/model.js `valuesFor` and `DEFERRED`) plus the ones SETUP.md
-resolves; add a new placeholder here in the same change that introduces it.
+fills (engine/model.js `valuesFor` and `DEFERRED`, which the plugin's setup
+resolves); add a new placeholder here in the same change that introduces it.
 
 Run by the gate's Project pre-screen job from the base branch:
     template_placeholders.py FILES DIFF   (FILES: one changed path per line)
