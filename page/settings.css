@@ -32,9 +32,7 @@
 
 @media (max-width: 720px) {
   .settings-group { margin-top: 72px; }
-  /* A long default drops under the title instead of squeezing it. */
-  .setting { display: flex; flex-wrap: wrap; gap: 6px 12px; }
-  .setting h3 { flex: 1 1 auto; min-width: 0; }
-  .setting-value { order: 2; max-width: 100%; white-space: normal; }
-  .setting p { order: 3; flex-basis: 100%; }
+  /* One column: title, what it does, then the default, the same on every row. */
+  .setting { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .setting-value { justify-self: start; margin-top: 4px; max-width: 100%; white-space: normal; }
 }
