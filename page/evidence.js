@@ -5,6 +5,7 @@
 import { t } from "./i18n/index.js";
 import { projects } from "./evidence-data.js";
 import { ENTER_MARGIN } from "./reveal.js";
+import { PARTS, el, projectRow } from "./bars.js";
 
 const stats = document.querySelector("#evidence .stats");
 const chart = document.getElementById("projects");
@@ -13,12 +14,6 @@ const DURATION_MS = 1200;
 const STEP_MS = 30;
 const steps = DURATION_MS / STEP_MS;
 
-// The parts of a project's bar, left to right: the colour class, the legend text and
-// how many of the project's reviewed pull requests the part covers.
-const PARTS = [
-  { cls: "seg-ok", key: "evidence.legend.passed", count: (p) => p.reviewed - p.fixed },
-  { cls: "seg-fixed", key: "evidence.legend.fixed", count: (p) => p.fixed },
-];
 const largest = Math.max(...projects.map((project) => project.reviewed));
 
 // Ease-out: quick at first, then slowing into the final number.
@@ -37,39 +32,6 @@ function countUp(node) {
   setTimeout(tick, STEP_MS);
 }
 
-function el(tag, cls, text = "") {
-  return Object.assign(document.createElement(tag), { className: cls, textContent: text });
-}
-
-const percent = (part, whole) => `${((100 * part) / whole).toFixed(3)}%`;
-
-function segment(part, project) {
-  const piece = el("i", part.cls);
-  piece.style.width = percent(part.count(project), project.reviewed);
-  return piece;
-}
-
-// One project: its name, its bar (as wide as its reviewed count against the largest), and
-// its counts. The bar's CSS grows it from the left once the section is counted.
-function row(project, index) {
-  const item = el("li", "project");
-  item.style.setProperty("--row", index);
-  const bar = el("i", "project-bar");
-  bar.style.width = percent(project.reviewed, largest);
-  bar.append(...PARTS.map((part) => segment(part, project)));
-  const track = el("span", "project-track");
-  track.append(bar);
-  item.append(
-    el("span", "project-name", t(`evidence.project.${project.name}`)),
-    track,
-    el("span", "project-count", [
-      t("evidence.checked", { count: project.reviewed }),
-      t("evidence.caught", { count: project.fixed }),
-    ].join(" · ")),
-  );
-  return item;
-}
-
 function legendItem(part) {
   const item = el("li", "legend-item");
   item.append(el("i", `swatch ${part.cls}`), t(part.key));
@@ -78,12 +40,13 @@ function legendItem(part) {
 
 // Drawn on load, so the rows exist before the animation runs.
 function draw() {
-  chart.replaceChildren(...projects.map(row));
+  const labelled = projects.map((project) => ({ ...project, label: t(`evidence.project.${project.name}`) }));
+  chart.replaceChildren(...labelled.map((project, index) => projectRow(project, index, largest)));
   legend.replaceChildren(...PARTS.map(legendItem));
 }
 
-// Runs `start` once, when `node` enters the view: the moment reveal.js fades it in.
-function onEnter(node, start) {
+/** Runs `start` once, when `node` enters the view: the moment reveal.js fades it in. */
+export function onEnter(node, start) {
   const observer = new IntersectionObserver((entries) => {
     if (!entries.some((entry) => entry.isIntersecting)) return;
     observer.disconnect();

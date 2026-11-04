@@ -24,6 +24,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="../lands.js"></script>
 <script type="module" src="../mods.js"></script>
 <script type="module" src="../evidence.js"></script>
+<script type="module" src="../community.js"></script>
 <script type="module" src="../reveal.js"></script>
 <script>if (!matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("reveal");</script>
 </head>
@@ -175,6 +176,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <p class="chart-title" data-t="evidence.chart">Por proyecto: pull requests revisados y cuántos tenían un problema detectado</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
+    <div class="community" id="community" hidden>
+      <p class="chart-title" data-t="evidence.community.title">De quienes usan Bindwright y eligieron compartir conteos anónimos</p>
+      <p class="community-note" id="community-note"></p>
+      <ul class="projects" id="community-projects"></ul>
+    </div>
     <p class="chart-title" data-t="evidence.stories">Errores que se volvieron reglas</p>
     <ul class="stories">
       <li class="story">

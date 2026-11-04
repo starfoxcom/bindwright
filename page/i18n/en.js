@@ -72,4 +72,14 @@ export default {
   "evidence.caught": { one: "{count} caught", other: "{count} caught" },
   "evidence.legend.passed": "passed the review",
   "evidence.legend.fixed": "had a problem caught, fixed before merging",
+  "evidence.community.note": {
+    one: "{count} project so far: {checked} pull requests checked, {caught} caught, {deep} sent to a deeper review.",
+    other: "{count} projects so far: {checked} pull requests checked, {caught} caught, {deep} sent to a deeper review.",
+  },
+  "evidence.kind.game": "Game project",
+  "evidence.kind.business-app": "Business app",
+  "evidence.kind.developer-tool": "Developer tool",
+  "evidence.kind.mobile-app": "Mobile app",
+  "evidence.kind.website": "Website",
+  "evidence.kind.other": "Project",
 };

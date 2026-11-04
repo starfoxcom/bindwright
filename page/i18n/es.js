@@ -192,6 +192,19 @@ export default {
   "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
   "evidence.legend.passed": "pasaron la revisión",
   "evidence.legend.fixed": "tenían un problema, corregido antes de integrarse",
+  "evidence.community.title": "De quienes usan Bindwright y eligieron compartir conteos anónimos",
+  "evidence.community.note": {
+    one: "{count} proyecto hasta ahora: {checked} pull requests revisados, {caught} detectados, "
+      + "{deep} enviados a una revisión más a fondo.",
+    other: "{count} proyectos hasta ahora: {checked} pull requests revisados, {caught} detectados, "
+      + "{deep} enviados a una revisión más a fondo.",
+  },
+  "evidence.kind.game": "Juego",
+  "evidence.kind.business-app": "App de negocio",
+  "evidence.kind.developer-tool": "Herramienta para devs",
+  "evidence.kind.mobile-app": "App móvil",
+  "evidence.kind.website": "Sitio web",
+  "evidence.kind.other": "Proyecto",
   "evidence.story1.where": "GameProject",
   "evidence.story1.was": "El tablero de tareas del proyecto quedó público, con cada nota interna de ingeniería.",
   "evidence.story1.now": "Revisa la visibilidad del tablero en cada lectura y te avisa si es público.",
