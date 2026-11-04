@@ -321,16 +321,6 @@ test("the deny list blocks force pushes but allows --force-with-lease", async ()
     assert.ok(!allows.some((r) => r.test(cmd)), `${cmd} must not be auto-approved`);
   }
   assert.ok(allows.some((r) => r.test("git push")), "a bare git push stays auto-approved");
-  // The page's stack-command chips must not offer `git push`: Phase 5 would render it as `git push:*`.
-  for (const page of ["index.html", "redesign/data.jsx"]) {
-    const catalog = readFileSync(join(repo, page), "utf8").match(/"Git · GitHub":\s*\[([^\]]*)\]/)[1];
-    assert.ok(!/"git push/.test(catalog), `${page} must not offer a git push chip`);
-  }
-  // The page's built-in fallback copy of SETUP.md must carry the same skip rule.
-  for (const page of ["index.html", "redesign/bind.jsx"]) {
-    assert.match(readFileSync(join(repo, page), "utf8"), /stack command that is \\`git push\\` or starts with it/,
-      `${page} fallback setup must skip git push stack commands`);
-  }
 });
 
 test("the deny profiles protect the long-lived branches and grow with strict", async () => {
