@@ -21,9 +21,8 @@ on:
       - ".github/review-gate.yml"
       - ".claude/hooks/**"
       - ".claude/settings.json"
-      - "SETUP.md"
-      - "index.html"
-      - "redesign/**"
+      - "plugin/**"
+      - "page/**"
       - ".github/workflows/tests.yml"
 
 permissions:
