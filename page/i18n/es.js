@@ -37,6 +37,20 @@ export default {
     + "modelo principal lo planea y revisa el resultado. En 24 trabajos medidos en dos proyectos, 23 pasaron "
     + "todas las comprobaciones a la primera, por un costo estimado de un tercio. Puedes apagarlo al "
     + "configurar.",
+  "changes.6.was": "Tienes que vigilar el CI y los límites del plan",
+  "changes.6.title": "Sigue trabajando mientras no estás",
+  "changes.6.text": "Vigila el CI e integra en cuanto pasan todas las comprobaciones, se pausa cerca del límite "
+    + "de tu plan y retoma después del reinicio, y conserva tus palabras cuando el contexto se llena, así el "
+    + "trabajo avanza sin ti.",
+  "changes.7.was": "Claude abre archivo tras archivo para encontrar una función",
+  "changes.7.title": "Encuentra el código antes de leerlo",
+  "changes.7.text": "Una herramienta de búsqueda indexa tu código, así en proyectos grandes encuentra una función "
+    + "y quién la llama cerca de un cuarto más rápido, por unos pocos tokens más. Puedes quedarte con la "
+    + "búsqueda integrada.",
+  "changes.8.was": "Su código no se parece al tuyo",
+  "changes.8.title": "Escribe como tú",
+  "changes.8.text": "Con tu permiso aprende cómo escribes código a partir de tus repos, luego escribe así con los "
+    + "puntos débiles corregidos, y la documentación que escribe usa palabras claras en vez de jerga.",
   "result.title": "Lo que escribe una configuración",
   "result.note": "Se muestra para el proyecto público de una sola persona con todo activado. La configuración "
     + "lo ajusta al tuyo según tus respuestas.",
@@ -160,9 +174,9 @@ export default {
   "mods.scene.usage-guard.near": "Plan al 94% del límite de 5 horas, se reinicia en 40 minutos.",
   "mods.scene.usage-guard.save": "Guardé tu trabajo en curso y hice pausa hasta el reinicio.",
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
-  "evidence.title": "Lo que detectó en proyectos reales",
+  "evidence.title": "Lo que ha detectado en proyectos reales hasta ahora",
   "evidence.note": "Bindwright pone un revisor de IA en cada pull request. "
-    + "Estos son sus resultados en tres proyectos, de septiembre a noviembre de 2026.",
+    + "Estos son sus resultados hasta ahora en tres proyectos, de septiembre a noviembre de 2026.",
   "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
   "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
   "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "

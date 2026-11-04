@@ -101,8 +101,6 @@ h1 {
 .changes ul {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 0; list-style: none;
 }
-/* An odd last card spans the row instead of leaving half of it empty. */
-.changes li:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .changes li {
   padding: 32px; border-radius: 18px; background: var(--panel); font-size: 17px; color: var(--text-2);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / .06);
