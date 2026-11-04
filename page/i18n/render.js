@@ -1,5 +1,5 @@
-// Builds a language's page from the English page/index.html and that
-// language's dictionary. The English page marks its text for translation:
+// Builds a language's page from an English page and that language's
+// dictionary. The English page marks its text for translation:
 //   data-t="key"                 the element's content is the key's text,
 //                                which may hold inline markup such as <b>;
 //   data-t-attr="name:key ..."   each named attribute is the key's text.
@@ -9,18 +9,24 @@ import { LANGUAGES, SITE } from "./languages.js";
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 const escapeAttr = (text) => text.replace(/[&<>"]/g, (c) => ESCAPES[c]);
 
+// The "../" that climbs from a folder under the site root back to the root.
+const climb = (folder) => "../".repeat(folder.split("/").length - 1);
+
 // The <link rel="alternate"> lines between the alternates markers in <head>.
-export function alternates() {
+// `page` is the English page's folder under the site root ("" for index.html).
+export function alternates(page = "") {
   const link = (lang, href) => `<link rel="alternate" hreflang="${lang}" href="${href}">`;
-  return [...LANGUAGES.map((l) => link(l.code, SITE + l.folder)), link("x-default", SITE)].join("\n");
+  return [...LANGUAGES.map((l) => link(l.code, SITE + l.folder + page)), link("x-default", SITE + page)]
+    .join("\n");
 }
 
-// The links in the header's language switch: every language but this one.
-export function switchLinks(code) {
+// The links in the header's language switch: every language but this one, to
+// the same page in that language.
+export function switchLinks(code, page = "") {
   const here = LANGUAGES.find((l) => l.code === code);
-  const up = "../".repeat(here.folder.split("/").length - 1);
+  const back = climb(here.folder + page);
   return LANGUAGES.filter((l) => l.code !== code)
-    .map((l) => `<a href="${up + l.folder || "./"}" hreflang="${l.code}" lang="${l.code}">${l.name}</a>`)
+    .map((l) => `<a href="${back + l.folder + page}" hreflang="${l.code}" lang="${l.code}">${l.name}</a>`)
     .join("\n    ");
 }
 
@@ -34,18 +40,19 @@ export function pageKeys(html) {
 }
 
 // The page for `code`, from the English page and that language's dictionary.
+// `page` is the English page's folder under the site root ("" or "settings/").
 // A key the dictionary lacks is an error, so a page never ships half-translated.
-export function renderLanguage(html, code, words) {
+export function renderLanguage(html, code, words, page = "") {
   const here = LANGUAGES.find((l) => l.code === code);
-  const up = "../".repeat(here.folder.split("/").length - 1);
+  const up = climb(here.folder);
   const text = (key) => {
     if (typeof words[key] !== "string") throw new Error(`${code}: no text for "${key}"`);
     return words[key];
   };
   return html
     .replace(/<html lang="[^"]*"/, `<html lang="${code}"`)
-    .replace(/(<!-- alternates -->\n)[\s\S]*?(\n<!-- \/alternates -->)/, `$1${alternates()}$2`)
-    .replace(/(<nav[^>]*\sdata-langs[^>]*>\s*)[\s\S]*?(\s*<\/nav>)/, `$1${switchLinks(code)}$2`)
+    .replace(/(<!-- alternates -->\n)[\s\S]*?(\n<!-- \/alternates -->)/, `$1${alternates(page)}$2`)
+    .replace(/(<nav[^>]*\sdata-langs[^>]*>\s*)[\s\S]*?(\s*<\/nav>)/, `$1${switchLinks(code, page)}$2`)
     .replace(/<(\w+)([^>]*?)\sdata-t="([\w.-]+)"([^>]*)>[\s\S]*?<\/\1\s*>/g,
       (m, tag, before, key, after) => `<${tag}${before} data-t="${key}"${after}>${text(key)}</${tag}>`)
     .replace(/<[^>]*\sdata-t-attr="([^"]+)"[^>]*>/g, (tag, list) => {
@@ -55,5 +62,5 @@ export function renderLanguage(html, code, words) {
       }
       return out;
     })
-    .replace(/(\s(?:href|src)=")([\w.-]+\.(?:css|js)")/g, `$1${up}$2`);
+    .replace(/(\s(?:href|src)=")((?:\.\.\/)*[\w.-]+\.(?:css|js)")/g, `$1${up}$2`);
 }

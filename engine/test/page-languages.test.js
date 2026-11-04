@@ -1,4 +1,4 @@
-// Every language's page is generated from page/index.html, so a stale page,
+// Every language's page is generated from its English page, so a stale page,
 // a missing translation or a dropped {placeholder} would ship text a visitor
 // cannot read. tools/page_languages.mjs rewrites the pages.
 
@@ -8,34 +8,39 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DICTIONARIES, t } from "../../page/i18n/index.js";
-import { LANGUAGES } from "../../page/i18n/languages.js";
+import { LANGUAGES, PAGES } from "../../page/i18n/languages.js";
 import { alternates, pageKeys, renderLanguage, switchLinks } from "../../page/i18n/render.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
 const read = (path) => readFileSync(join(page, path), "utf8").replace(/\r\n/g, "\n");
-const english = read("index.html");
+const english = Object.fromEntries(PAGES.map(({ file }) => [file, read(file)]));
 const translated = LANGUAGES.filter((l) => l.folder);
 const placeholders = (text) => [...JSON.stringify(text).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
-test("the English page links every language for search engines and visitors", () => {
-  assert.ok(english.includes(`<!-- alternates -->\n${alternates()}\n<!-- /alternates -->`));
-  assert.ok(english.includes(switchLinks("en")));
+test("each English page links every language for search engines and visitors", () => {
+  for (const { file, path } of PAGES) {
+    assert.ok(english[file].includes(`<!-- alternates -->\n${alternates(path)}\n<!-- /alternates -->`), file);
+    assert.ok(english[file].includes(switchLinks("en", path)), file);
+  }
 });
 
 for (const { code, folder } of translated) {
   const words = DICTIONARIES[code];
 
-  test(`${code}: the page on disk is the one the generator writes`, () => {
-    assert.equal(read(`${folder}index.html`), renderLanguage(english, code, words));
-  });
+  for (const { file, path } of PAGES) {
+    test(`${code}: the ${file} page on disk is the one the generator writes`, () => {
+      assert.equal(read(`${folder}${file}`), renderLanguage(english[file], code, words, path));
+    });
 
-  test(`${code}: the page keeps every element the scripts look up`, () => {
-    const ids = (html) => [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(ids(read(`${folder}index.html`)), ids(english));
-  });
+    test(`${code}: the ${file} page keeps every element the scripts look up`, () => {
+      const ids = (html) => [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(ids(read(`${folder}${file}`)), ids(english[file]));
+    });
+  }
 
-  test(`${code}: the dictionary has exactly the page's and the scripts' keys`, () => {
-    const wanted = new Set([...pageKeys(english), ...Object.keys(DICTIONARIES.en)]);
+  test(`${code}: the dictionary has exactly the pages' and the scripts' keys`, () => {
+    const pageText = PAGES.flatMap(({ file }) => pageKeys(english[file]));
+    const wanted = new Set([...pageText, ...Object.keys(DICTIONARIES.en)]);
     assert.deepEqual([...wanted].filter((key) => !(key in words)), [], "missing");
     assert.deepEqual(Object.keys(words).filter((key) => !wanted.has(key)), [], "unused");
   });

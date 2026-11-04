@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-t="settings.meta.title">Plugin settings · Bindwright</title>
+<meta name="description" data-t-attr="content:settings.meta.description"
+  content="Every setting Bindwright's setup asks or fills: the choices made once on your computer, the ones asked in every project, and the defaults it fills in.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/settings/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/settings/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/claude-code-templates/page/settings/">
+<!-- /alternates -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../settings.css">
+</head>
+<body>
+<a class="skip" href="#computer" data-t="settings.skip">Skip to the settings</a>
+<header>
+  <a class="mark" href="../">Bindwright</a>
+  <nav aria-label="Site" data-t-attr="aria-label:nav.site">
+    <a href="./" aria-current="page" data-t="nav.settings">Plugin settings</a>
+    <a href="https://github.com/starfoxcom/claude-code-templates" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Language" data-langs data-t-attr="aria-label:nav.language">
+    <a href="../es/settings/" hreflang="es" lang="es">Español</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="settings-intro">
+    <h1 data-t="settings.title">Every plugin setting</h1>
+    <p class="lede" data-t="settings.lede">What the Bindwright plugin sets up, and the default it picks for each.</p>
+  </section>
+
+  <section id="computer" class="settings-group" aria-labelledby="computer-title">
+    <h2 id="computer-title" data-t="settings.computer.title">Once on your computer</h2>
+    <p class="where" data-t="settings.computer.where">Asked the first time. Change with <code>/bindwright:setup global</code>.</p>
+    <!-- settings:computer -->
+    <ul class="settings-list">
+      <li class="setting" id="s-code-research">
+        <h3 data-t="settings.code-research.title">Code search</h3>
+        <p data-t="settings.code-research.text">How the assistant finds code: <a href="https://github.com/aovestdipaperino/tokensave">tokensave</a>, <a href="https://code.claude.com/docs/en/discover-plugins">lsp-plugins</a>, <a href="https://github.com/colbymchenry/codegraph">codegraph</a>, <a href="https://github.com/oraios/serena">serena</a>, <a href="https://github.com/DeusData/codebase-memory-mcp">codebase-memory</a> or none.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.code-research.value">tokensave</b></span>
+      </li>
+      <li class="setting" id="s-global-instructions">
+        <h3 data-t="settings.global-instructions.title">Global instructions</h3>
+        <p data-t="settings.global-instructions.text">Working rules every project on your computer reads.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.global-instructions.value">Yes</b></span>
+      </li>
+      <li class="setting" id="s-push-guard">
+        <h3 data-t="settings.push-guard.title">Push guard</h3>
+        <p data-t="settings.push-guard.text">Blocks force pushes in every repo on your computer.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.push-guard.value">Yes</b></span>
+      </li>
+      <li class="setting" id="s-builder">
+        <h3 data-t="settings.builder.title">Builder agent</h3>
+        <p data-t="settings.builder.text">A cheap Haiku helper writes the code, and the main model checks it.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.builder.value">Yes</b></span>
+      </li>
+      <li class="setting" id="s-code-style">
+        <h3 data-t="settings.code-style.title">Code-style profile</h3>
+        <p data-t="settings.code-style.text">Learns how you write code from your repos, with your permission.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.code-style.value">Yes</b></span>
+      </li>
+    </ul>
+    <!-- /settings:computer -->
+    <!-- settings:mods -->
+    <h3 id="mods" data-t="settings.mods-group.title">Mods</h3>
+    <p data-t="settings.mods-group.text">Add-ons that show live status in Claude Code. They need CLI 2.1.287 or later and Node.</p>
+    <ul class="settings-list">
+      <li class="setting" id="s-ci-watch">
+        <h3 data-t="mods.ci-watch.title"><code>ci-watch</code></h3>
+        <p data-t="mods.ci-watch.text">Watches pull request checks and wakes the session when they finish.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.ci-watch.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-compact-handoff">
+        <h3 data-t="mods.compact-handoff.title"><code>compact-handoff</code></h3>
+        <p data-t="mods.compact-handoff.text">Carries your words and a hand-off across compactions.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.compact-handoff.value">On</b></span>
+      </li>
+      <li class="setting" id="s-mods">
+        <h3 data-t="mods.mods.title"><code>mods</code></h3>
+        <p data-t="mods.mods.text">A pane listing your mods and their commands.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.mods.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-runners">
+        <h3 data-t="mods.runners.title"><code>runners</code></h3>
+        <p data-t="mods.runners.text">Shows your local CI runners, with start and stop buttons.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.runners.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-session-facts">
+        <h3 data-t="mods.session-facts.title"><code>session-facts</code></h3>
+        <p data-t="mods.session-facts.text">Tells the assistant the time, its context fill and your plan usage.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.session-facts.value">On</b></span>
+      </li>
+      <li class="setting" id="s-session-info">
+        <h3 data-t="mods.session-info.title"><code>session-info</code></h3>
+        <p data-t="mods.session-info.text">A row with the model, project, branch and changed files.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.session-info.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-shared-pc">
+        <h3 data-t="mods.shared-pc.title"><code>shared-pc</code></h3>
+        <p data-t="mods.shared-pc.text">One session at a time runs heavy work, the rest wait in line.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.shared-pc.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-skill-check">
+        <h3 data-t="mods.skill-check.title"><code>skill-check</code></h3>
+        <p data-t="mods.skill-check.text">Checks a skill ran every step it requires.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.skill-check.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-tasks">
+        <h3 data-t="mods.tasks.title"><code>tasks</code></h3>
+        <p data-t="mods.tasks.text">Keeps the task list honest and carries it across compactions.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.tasks.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-usage-guard">
+        <h3 data-t="mods.usage-guard.title"><code>usage-guard</code></h3>
+        <p data-t="mods.usage-guard.text">Saves work near a plan limit and resumes after it resets.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.usage-guard.value">Off</b></span>
+      </li>
+    </ul>
+    <!-- /settings:mods -->
+  </section>
+
+  <section id="project" class="settings-group" aria-labelledby="project-title">
+    <h2 id="project-title" data-t="settings.project.title">In every project</h2>
+    <p class="where" data-t="settings.project.where">Asked in each project. Change with <code>/bindwright:setup</code> there.</p>
+    <!-- settings:project -->
+    <ul class="settings-list">
+      <li class="setting" id="s-who-works">
+        <h3 data-t="settings.who-works.title">Who works on it</h3>
+        <p data-t="settings.who-works.text">A team gets collaboration rules and a pre-commit hook.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.who-works.value">Just me</b></span>
+      </li>
+      <li class="setting" id="s-whose-project">
+        <h3 data-t="settings.whose-project.title">Whose project</h3>
+        <p data-t="settings.whose-project.text">A client's or employer's gets a proprietary license.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.whose-project.value">Mine</b></span>
+      </li>
+      <li class="setting" id="s-visibility">
+        <h3 data-t="settings.visibility.title">Public or private</h3>
+        <p data-t="settings.visibility.text">Whether the code is open to everyone on GitHub.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.visibility.value">Public if it's yours</b></span>
+      </li>
+      <li class="setting" id="s-ai-credit">
+        <h3 data-t="settings.ai-credit.title">AI credit in commits</h3>
+        <p data-t="settings.ai-credit.text">No AI co-author or generated-with lines, and a guard blocks them.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.ai-credit.value">Kept out</b></span>
+      </li>
+      <li class="setting" id="s-ai-review">
+        <h3 data-t="settings.ai-review.title">AI review</h3>
+        <p data-t="settings.ai-review.text">An AI reviews every pull request before it merges.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.ai-review.value">On</b></span>
+      </li>
+      <li class="setting" id="s-deep-review">
+        <h3 data-t="settings.deep-review.title">Deep review</h3>
+        <p data-t="settings.deep-review.text">Risky changes get a second, deeper review.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.deep-review.value">On</b></span>
+      </li>
+      <li class="setting" id="s-code-size">
+        <h3 data-t="settings.code-size.title">Code-size check</h3>
+        <p data-t="settings.code-size.text">Fails when code grows past the size limits.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.code-size.value">On</b></span>
+      </li>
+      <li class="setting" id="s-plain-writing">
+        <h3 data-t="settings.plain-writing.title">Plain-language writing</h3>
+        <p data-t="settings.plain-writing.text">Plain words that try to sound like you (it's still an AI writing them ;V).</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.plain-writing.value">On</b></span>
+      </li>
+      <li class="setting" id="s-visual-steps">
+        <h3 data-t="settings.visual-steps.title">Visual changes in small steps</h3>
+        <p data-t="settings.visual-steps.text">Anything people see changes one checked step at a time.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.visual-steps.value">On</b></span>
+      </li>
+      <li class="setting" id="s-work-state">
+        <h3 data-t="settings.work-state.title">Where work is tracked</h3>
+        <p data-t="settings.work-state.text">A GitHub board, issues only, or a hand-off file in the repo.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.work-state.value">GitHub board</b></span>
+      </li>
+      <li class="setting" id="s-work-items-repo">
+        <h3 data-t="settings.work-items-repo.title">Private repo for work items</h3>
+        <p data-t="settings.work-items-repo.text">Asked for public code, since its issues are public too.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.work-items-repo.value">Yes</b></span>
+      </li>
+      <li class="setting" id="s-board-visibility">
+        <h3 data-t="settings.board-visibility.title">Board visibility</h3>
+        <p data-t="settings.board-visibility.text">The board holds every engineering detail. A clean public copy is optional.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.board-visibility.value">Private</b></span>
+      </li>
+    </ul>
+    <!-- /settings:project -->
+  </section>
+
+  <section id="fixed" class="settings-group" aria-labelledby="fixed-title">
+    <h2 id="fixed-title" data-t="settings.fixed.title">Set for you</h2>
+    <p class="where" data-t="settings.fixed.where">Not asked. Change in <code>.bindwright/project.json</code>, then run <code>/bindwright:update</code>.</p>
+    <!-- settings:fixed -->
+    <ul class="settings-list">
+      <li class="setting" id="s-name-and-repo">
+        <h3 data-t="settings.name-and-repo.title">Name, repo and license holder</h3>
+        <p data-t="settings.name-and-repo.text">Read from the folder, its git remote and your git name.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.name-and-repo.value">From the repo</b></span>
+      </li>
+      <li class="setting" id="s-license">
+        <h3 data-t="settings.license.title">License</h3>
+        <p data-t="settings.license.text">MIT for your own public project, Proprietary otherwise.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.license.value">MIT or Proprietary</b></span>
+      </li>
+      <li class="setting" id="s-branching">
+        <h3 data-t="settings.branching.title">Branching</h3>
+        <p data-t="settings.branching.text">main for releases, develop for work.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.branching.value">Gitflow</b></span>
+      </li>
+      <li class="setting" id="s-merge-style">
+        <h3 data-t="settings.merge-style.title">Merge style</h3>
+        <p data-t="settings.merge-style.text">Each branch stays visible in the history.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.merge-style.value">Merge commits</b></span>
+      </li>
+      <li class="setting" id="s-pre-commit">
+        <h3 data-t="settings.pre-commit.title">Pre-commit hook</h3>
+        <p data-t="settings.pre-commit.text">A team gets <a href="https://github.com/evilmartians/lefthook">lefthook</a>, which runs checks before each commit.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.pre-commit.value">Team only</b></span>
+      </li>
+      <li class="setting" id="s-guard-location">
+        <h3 data-t="settings.guard-location.title">Where the guards live</h3>
+        <p data-t="settings.guard-location.text">In the repo, so everyone who clones it gets them.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.guard-location.value">In the repo</b></span>
+      </li>
+      <li class="setting" id="s-blocked-commands">
+        <h3 data-t="settings.blocked-commands.title">Blocked commands</h3>
+        <p data-t="settings.blocked-commands.text">Commands the assistant may never run.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.blocked-commands.value">Standard</b></span>
+      </li>
+      <li class="setting" id="s-architecture">
+        <h3 data-t="settings.architecture.title">Architecture rule</h3>
+        <p data-t="settings.architecture.text">A folder layout to follow: clean, ddd, ecs, feature-based, hexagonal, layered or mvc.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.architecture.value">None</b></span>
+      </li>
+      <li class="setting" id="s-confidentiality">
+        <h3 data-t="settings.confidentiality.title">Confidentiality rule</h3>
+        <p data-t="settings.confidentiality.text">Added for someone else's private project.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.confidentiality.value">Client work only</b></span>
+      </li>
+      <li class="setting" id="s-clean-room">
+        <h3 data-t="settings.clean-room.title">Clean-room rule</h3>
+        <p data-t="settings.clean-room.text">Keeps copied material out of a project based on an existing work.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.clean-room.value">Off</b></span>
+      </li>
+      <li class="setting" id="s-shipped-text">
+        <h3 data-t="settings.shipped-text.title">Files the writing rule checks</h3>
+        <p data-t="settings.shipped-text.text">Which files the plain-language rule checks.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.shipped-text.value">The rule's list</b></span>
+      </li>
+    </ul>
+    <!-- /settings:fixed -->
+  </section>
+</main>
+<footer>
+  <p data-t="footer.note">Bindwright works with Claude Code. It is not made by, endorsed by or
+    affiliated with Anthropic.</p>
+</footer>
+</body>
+</html>

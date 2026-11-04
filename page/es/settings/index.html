@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-t="settings.meta.title">Ajustes del plugin · Bindwright</title>
+<meta name="description" data-t-attr="content:settings.meta.description"
+  content="Cada ajuste que pregunta o completa la instalación de Bindwright: las opciones de tu computadora, las que se preguntan en cada proyecto y los valores por defecto.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/settings/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/settings/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/claude-code-templates/page/settings/">
+<!-- /alternates -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
+<link rel="stylesheet" href="../../style.css">
+<link rel="stylesheet" href="../../settings.css">
+</head>
+<body>
+<a class="skip" href="#computer" data-t="settings.skip">Ir a los ajustes</a>
+<header>
+  <a class="mark" href="../">Bindwright</a>
+  <nav aria-label="Sitio" data-t-attr="aria-label:nav.site">
+    <a href="./" aria-current="page" data-t="nav.settings">Ajustes del plugin</a>
+    <a href="https://github.com/starfoxcom/claude-code-templates" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Idioma" data-langs data-t-attr="aria-label:nav.language">
+    <a href="../../settings/" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="settings-intro">
+    <h1 data-t="settings.title">Cada ajuste del plugin</h1>
+    <p class="lede" data-t="settings.lede">Lo que instala el plugin Bindwright, y el valor por defecto que elige en cada uno.</p>
+  </section>
+
+  <section id="computer" class="settings-group" aria-labelledby="computer-title">
+    <h2 id="computer-title" data-t="settings.computer.title">Una vez en tu computadora</h2>
+    <p class="where" data-t="settings.computer.where">Se pregunta la primera vez. Cámbialo con <code>/bindwright:setup global</code>.</p>
+    <!-- settings:computer -->
+    <ul class="settings-list">
+      <li class="setting" id="s-code-research">
+        <h3 data-t="settings.code-research.title">Búsqueda de código</h3>
+        <p data-t="settings.code-research.text">Cómo encuentra el código el asistente: <a href="https://github.com/aovestdipaperino/tokensave">tokensave</a>, <a href="https://code.claude.com/docs/en/discover-plugins">lsp-plugins</a>, <a href="https://github.com/colbymchenry/codegraph">codegraph</a>, <a href="https://github.com/oraios/serena">serena</a>, <a href="https://github.com/DeusData/codebase-memory-mcp">codebase-memory</a> o none.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.code-research.value">tokensave</b></span>
+      </li>
+      <li class="setting" id="s-global-instructions">
+        <h3 data-t="settings.global-instructions.title">Instrucciones globales</h3>
+        <p data-t="settings.global-instructions.text">Reglas de trabajo que lee cada proyecto de tu computadora.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.global-instructions.value">Sí</b></span>
+      </li>
+      <li class="setting" id="s-push-guard">
+        <h3 data-t="settings.push-guard.title">Guardia de push</h3>
+        <p data-t="settings.push-guard.text">Bloquea los force push en cada repo de tu computadora.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.push-guard.value">Sí</b></span>
+      </li>
+      <li class="setting" id="s-builder">
+        <h3 data-t="settings.builder.title">Agente constructor</h3>
+        <p data-t="settings.builder.text">Un ayudante barato con Haiku escribe el código, y el modelo principal lo revisa.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.builder.value">Sí</b></span>
+      </li>
+      <li class="setting" id="s-code-style">
+        <h3 data-t="settings.code-style.title">Perfil de estilo de código</h3>
+        <p data-t="settings.code-style.text">Aprende cómo escribes código de tus repos, con tu permiso.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.code-style.value">Sí</b></span>
+      </li>
+    </ul>
+    <!-- /settings:computer -->
+    <!-- settings:mods -->
+    <h3 id="mods" data-t="settings.mods-group.title">Mods</h3>
+    <p data-t="settings.mods-group.text">Complementos que muestran el estado en vivo en Claude Code. Necesitan CLI 2.1.287 o más reciente y Node.</p>
+    <ul class="settings-list">
+      <li class="setting" id="s-ci-watch">
+        <h3 data-t="mods.ci-watch.title"><code>ci-watch</code></h3>
+        <p data-t="mods.ci-watch.text">Vigila las revisiones del pull request y despierta la sesión cuando terminan.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.ci-watch.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-compact-handoff">
+        <h3 data-t="mods.compact-handoff.title"><code>compact-handoff</code></h3>
+        <p data-t="mods.compact-handoff.text">Lleva tus palabras y un traspaso a través de cada compactación.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.compact-handoff.value">Activado</b></span>
+      </li>
+      <li class="setting" id="s-mods">
+        <h3 data-t="mods.mods.title"><code>mods</code></h3>
+        <p data-t="mods.mods.text">Un panel con tus mods y sus comandos.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.mods.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-runners">
+        <h3 data-t="mods.runners.title"><code>runners</code></h3>
+        <p data-t="mods.runners.text">Muestra tus runners de CI locales, con botones de iniciar y detener.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.runners.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-session-facts">
+        <h3 data-t="mods.session-facts.title"><code>session-facts</code></h3>
+        <p data-t="mods.session-facts.text">Le dice al asistente la hora, qué tan lleno está su contexto y el uso de tu plan.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.session-facts.value">Activado</b></span>
+      </li>
+      <li class="setting" id="s-session-info">
+        <h3 data-t="mods.session-info.title"><code>session-info</code></h3>
+        <p data-t="mods.session-info.text">Una fila con el modelo, el proyecto, la rama y los archivos cambiados.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.session-info.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-shared-pc">
+        <h3 data-t="mods.shared-pc.title"><code>shared-pc</code></h3>
+        <p data-t="mods.shared-pc.text">Una sesión a la vez corre el trabajo pesado, las demás esperan en fila.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.shared-pc.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-skill-check">
+        <h3 data-t="mods.skill-check.title"><code>skill-check</code></h3>
+        <p data-t="mods.skill-check.text">Revisa que una habilidad haya corrido cada paso que exige.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.skill-check.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-tasks">
+        <h3 data-t="mods.tasks.title"><code>tasks</code></h3>
+        <p data-t="mods.tasks.text">Mantiene honesta la lista de tareas y la lleva a través de cada compactación.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.tasks.value">Desactivado</b></span>
+      </li>
+      <li class="setting" id="s-usage-guard">
+        <h3 data-t="mods.usage-guard.title"><code>usage-guard</code></h3>
+        <p data-t="mods.usage-guard.text">Guarda el trabajo cerca de un límite del plan y sigue cuando se reinicia.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.usage-guard.value">Desactivado</b></span>
+      </li>
+    </ul>
+    <!-- /settings:mods -->
+  </section>
+
+  <section id="project" class="settings-group" aria-labelledby="project-title">
+    <h2 id="project-title" data-t="settings.project.title">En cada proyecto</h2>
+    <p class="where" data-t="settings.project.where">Se pregunta en cada proyecto. Cámbialo con <code>/bindwright:setup</code> ahí.</p>
+    <!-- settings:project -->
+    <ul class="settings-list">
+      <li class="setting" id="s-who-works">
+        <h3 data-t="settings.who-works.title">Quién trabaja en él</h3>
+        <p data-t="settings.who-works.text">Un equipo recibe reglas de colaboración y un hook de pre-commit.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.who-works.value">Solo yo</b></span>
+      </li>
+      <li class="setting" id="s-whose-project">
+        <h3 data-t="settings.whose-project.title">De quién es</h3>
+        <p data-t="settings.whose-project.text">El de un cliente o empleador recibe una licencia propietaria.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.whose-project.value">Mío</b></span>
+      </li>
+      <li class="setting" id="s-visibility">
+        <h3 data-t="settings.visibility.title">Público o privado</h3>
+        <p data-t="settings.visibility.text">Si el código está abierto a todos en GitHub.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.visibility.value">Público si es tuyo</b></span>
+      </li>
+      <li class="setting" id="s-ai-credit">
+        <h3 data-t="settings.ai-credit.title">Crédito de la IA en los commits</h3>
+        <p data-t="settings.ai-credit.text">Sin coautor de IA ni líneas de generado con, y una guardia las bloquea.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.ai-credit.value">Fuera</b></span>
+      </li>
+      <li class="setting" id="s-ai-review">
+        <h3 data-t="settings.ai-review.title">Revisión con IA</h3>
+        <p data-t="settings.ai-review.text">Una IA revisa cada pull request antes de integrarse.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.ai-review.value">Activada</b></span>
+      </li>
+      <li class="setting" id="s-deep-review">
+        <h3 data-t="settings.deep-review.title">Revisión profunda</h3>
+        <p data-t="settings.deep-review.text">Los cambios riesgosos reciben una segunda revisión más profunda.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.deep-review.value">Activada</b></span>
+      </li>
+      <li class="setting" id="s-code-size">
+        <h3 data-t="settings.code-size.title">Revisión de tamaño del código</h3>
+        <p data-t="settings.code-size.text">Falla cuando el código pasa los límites de tamaño.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.code-size.value">Activada</b></span>
+      </li>
+      <li class="setting" id="s-plain-writing">
+        <h3 data-t="settings.plain-writing.title">Escritura en lenguaje claro</h3>
+        <p data-t="settings.plain-writing.text">Palabras sencillas que intentan sonar como tú (igual es una IA la que escribe ;V).</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.plain-writing.value">Activada</b></span>
+      </li>
+      <li class="setting" id="s-visual-steps">
+        <h3 data-t="settings.visual-steps.title">Cambios visuales en pasos chicos</h3>
+        <p data-t="settings.visual-steps.text">Lo que la gente ve cambia un paso revisado a la vez.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.visual-steps.value">Activada</b></span>
+      </li>
+      <li class="setting" id="s-work-state">
+        <h3 data-t="settings.work-state.title">Dónde se sigue el trabajo</h3>
+        <p data-t="settings.work-state.text">Un tablero de GitHub, solo issues, o un archivo de traspaso en el repo.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.work-state.value">Tablero de GitHub</b></span>
+      </li>
+      <li class="setting" id="s-work-items-repo">
+        <h3 data-t="settings.work-items-repo.title">Repo privado para los pendientes</h3>
+        <p data-t="settings.work-items-repo.text">Se pregunta si el código es público, porque sus issues también lo son.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.work-items-repo.value">Sí</b></span>
+      </li>
+      <li class="setting" id="s-board-visibility">
+        <h3 data-t="settings.board-visibility.title">Visibilidad del tablero</h3>
+        <p data-t="settings.board-visibility.text">El tablero guarda cada detalle de ingeniería. Una copia pública limpia es opcional.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.board-visibility.value">Privado</b></span>
+      </li>
+    </ul>
+    <!-- /settings:project -->
+  </section>
+
+  <section id="fixed" class="settings-group" aria-labelledby="fixed-title">
+    <h2 id="fixed-title" data-t="settings.fixed.title">Ya puestos por ti</h2>
+    <p class="where" data-t="settings.fixed.where">No se preguntan. Cámbialos en <code>.bindwright/project.json</code> y luego corre <code>/bindwright:update</code>.</p>
+    <!-- settings:fixed -->
+    <ul class="settings-list">
+      <li class="setting" id="s-name-and-repo">
+        <h3 data-t="settings.name-and-repo.title">Nombre, repo y titular de la licencia</h3>
+        <p data-t="settings.name-and-repo.text">Se leen de la carpeta, su remoto de git y tu nombre en git.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.name-and-repo.value">Del repo</b></span>
+      </li>
+      <li class="setting" id="s-license">
+        <h3 data-t="settings.license.title">Licencia</h3>
+        <p data-t="settings.license.text">MIT para tu proyecto público, propietaria en otro caso.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.license.value">MIT o propietaria</b></span>
+      </li>
+      <li class="setting" id="s-branching">
+        <h3 data-t="settings.branching.title">Ramas</h3>
+        <p data-t="settings.branching.text">main para las versiones, develop para el trabajo.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.branching.value">Gitflow</b></span>
+      </li>
+      <li class="setting" id="s-merge-style">
+        <h3 data-t="settings.merge-style.title">Estilo de merge</h3>
+        <p data-t="settings.merge-style.text">Cada rama sigue visible en el historial.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.merge-style.value">Commits de merge</b></span>
+      </li>
+      <li class="setting" id="s-pre-commit">
+        <h3 data-t="settings.pre-commit.title">Hook de pre-commit</h3>
+        <p data-t="settings.pre-commit.text">Un equipo recibe <a href="https://github.com/evilmartians/lefthook">lefthook</a>, que corre revisiones antes de cada commit.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.pre-commit.value">Solo en equipo</b></span>
+      </li>
+      <li class="setting" id="s-guard-location">
+        <h3 data-t="settings.guard-location.title">Dónde viven las guardias</h3>
+        <p data-t="settings.guard-location.text">En el repo, así todo el que lo clone las recibe.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.guard-location.value">En el repo</b></span>
+      </li>
+      <li class="setting" id="s-blocked-commands">
+        <h3 data-t="settings.blocked-commands.title">Comandos bloqueados</h3>
+        <p data-t="settings.blocked-commands.text">Comandos que el asistente nunca puede correr.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.blocked-commands.value">Estándar</b></span>
+      </li>
+      <li class="setting" id="s-architecture">
+        <h3 data-t="settings.architecture.title">Regla de arquitectura</h3>
+        <p data-t="settings.architecture.text">Una estructura de carpetas a seguir: clean, ddd, ecs, feature-based, hexagonal, layered o mvc.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.architecture.value">Ninguna</b></span>
+      </li>
+      <li class="setting" id="s-confidentiality">
+        <h3 data-t="settings.confidentiality.title">Regla de confidencialidad</h3>
+        <p data-t="settings.confidentiality.text">Se agrega para un proyecto privado de alguien más.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.confidentiality.value">Solo con clientes</b></span>
+      </li>
+      <li class="setting" id="s-clean-room">
+        <h3 data-t="settings.clean-room.title">Regla de clean room</h3>
+        <p data-t="settings.clean-room.text">Deja fuera el material copiado en un proyecto basado en un trabajo existente.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.clean-room.value">Desactivada</b></span>
+      </li>
+      <li class="setting" id="s-shipped-text">
+        <h3 data-t="settings.shipped-text.title">Archivos que revisa la regla de escritura</h3>
+        <p data-t="settings.shipped-text.text">Qué archivos revisa la regla de lenguaje claro.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.shipped-text.value">La lista de la regla</b></span>
+      </li>
+    </ul>
+    <!-- /settings:fixed -->
+  </section>
+</main>
+<footer>
+  <p data-t="footer.note">Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.</p>
+</footer>
+</body>
+</html>
