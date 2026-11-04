@@ -261,23 +261,26 @@ async function measureCompaction($: EngineInterface): Promise<void> {
     setStatus($, `Plan limit near: paused until ${pending.pausedUntil} · ${outcomeMark(outcome)}`)
 }
 
-// The wrap-up's turn has ended: a session that resumes by itself compacts now, while its cache is warm,
-// so the resume after the reset starts from the summary instead of reading the whole context cold.
-// Only this work session gets here; the setting and the time to the wake decide whether it is worth it.
-async function compactAtPause($: EngineInterface, owed: Pause): Promise<void> {
-  const pause = await readPause($)
-  if (pause?.status !== 'active' || resetKey(pause) !== resetKey(owed)) return
-  if (!shouldCompactAtPause(await readFill($), live.compactAbovePercent, pause.wakeAt, await $.clock.now())) return
-  const outcome = await compactNow($, localTime(pause.wakeAt))
-  setStatus($, `Plan limit near: paused until ${localTime(pause.wakeAt)} · ${outcomeMark(outcome)}`)
+// Compacts while the cache is warm, so the wake starts from the summary. A pause's compaction runs only when
+// the setting and the time to the wake say it is worth it; one the arm tool was asked for always runs.
+async function compactOwed($: EngineInterface, owed: Pause | undefined, isAsked: boolean): Promise<void> {
+  const found = owed && (await readPause($))
+  const pause = owed && found?.status === 'active' && resetKey(found) === resetKey(owed) ? found : undefined
+  const now = await $.clock.now()
+  const isWorth = pause && shouldCompactAtPause(await readFill($), live.compactAbovePercent, pause.wakeAt, now)
+  if (!isAsked && !isWorth) return
+  const outcome = await compactNow($, pause && localTime(pause.wakeAt))
+  if (pause) setStatus($, `Plan limit near: paused until ${localTime(pause.wakeAt)} · ${outcomeMark(outcome)}`)
 }
 
 // Taken before the turn's own wrap-up starts, so a wrap-up started at this turn's end waits for its own.
 function scheduleOwedCompaction($: EngineInterface): void {
   const owed = live.compactAfterTurn
-  if (!owed) return
+  const isArmOwed = live.isArmCompactOwed === true
   live.compactAfterTurn = undefined
-  $.clock.after(COMPACT_DELAY_MS, () => void compactAtPause($, owed).catch(() => undefined))
+  live.isArmCompactOwed = false
+  const run = owed || isArmOwed ? () => compactOwed($, owed, isArmOwed) : undefined
+  if (run) $.clock.after(COMPACT_DELAY_MS, () => void run().catch(() => undefined))
 }
 
 async function resume($: EngineInterface, resetsAt: string, isArmed = false): Promise<void> {
@@ -494,8 +497,9 @@ async function openTasks($: EngineInterface, sessionId?: string): Promise<number
 // An arm with nothing pending and no reason is still set, since the person asked for it, but says so and
 // asks: a card above the prompt where there is one, and the answer itself names the command for a surface
 // without it. The answer gives the full date and how far off it is, so a wrong time shows at once.
-// `compact`: the person asked for it, so it runs whatever the context's size or the time to the wake.
-async function armByHand($: EngineInterface, request: ArmRequest | string): Promise<string> {
+// `compact`: the person asked for it, so it runs whatever the context's size or the time to the wake. From
+// the tool (`isMidTurn`), it waits for the turn to end, since the engine refuses one while a turn runs.
+async function armByHand($: EngineInterface, request: ArmRequest | string, isMidTurn = false): Promise<string> {
   if (typeof request === 'string') return request
   // Read again: the zone may have changed (daylight saving) since this module loaded.
   await readZone($)
@@ -510,7 +514,10 @@ async function armByHand($: EngineInterface, request: ArmRequest | string): Prom
   const lines = [armedText(arm, localTime(arm.wakeAt), untilText(arm.wakeAt, now))]
   if (earlier && earlier.wakeAt !== arm.wakeAt) lines.push(`It replaces the wake set for ${localTime(earlier.wakeAt)}.`)
   if (isEmpty) lines.push(EMPTY_ARM_NOTE)
-  if (request.isCompact) {
+  if (request.isCompact && isMidTurn) {
+    live.isArmCompactOwed = true
+    lines.push('Compacting this session once this turn ends; /usage-guard then says how it went.')
+  } else if (request.isCompact) {
     $.clock.after(COMPACT_DELAY_MS, () => void compactNow($).catch(() => undefined))
     lines.push('Compacting this session in a moment; /usage-guard then says how it went.')
   }
@@ -767,8 +774,8 @@ export const register: Register = (on, options) => {
   // tools already live on the machine that wrote them.
   on('tool.call', { tool: ARM_TOOL_NAME }, async ($, e) => {
     await startTimers($).catch(() => undefined)
-    const input = e as { at?: unknown; reason?: unknown }
-    return { result: await armByHand($, toolRequest(input)) }
+    const input = e as { at?: unknown; reason?: unknown; compact?: unknown }
+    return { result: await armByHand($, toolRequest(input), true) }
   })
 }
 
