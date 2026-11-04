@@ -31,6 +31,12 @@ export default {
   "changes.4.title": "Los comandos peligrosos se bloquean",
   "changes.4.text": "Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un "
     + "comando equivocado ahí te puede costar días de trabajo.",
+  "changes.5.was": "El modelo más caro escribe cada línea",
+  "changes.5.title": "Un ayudante barato escribe el código",
+  "changes.5.text": "Un modelo pequeño y barato escribe el código que tus pruebas pueden comprobar, y el "
+    + "modelo principal lo planea y revisa el resultado. En 24 trabajos medidos en dos proyectos, 23 pasaron "
+    + "todas las comprobaciones a la primera, por un costo estimado de un tercio. Puedes apagarlo al "
+    + "configurar.",
   "result.title": "Lo que escribe una configuración",
   "result.note": "Se muestra para el proyecto público de una sola persona con todo activado. La configuración "
     + "lo ajusta al tuyo según tus respuestas.",
