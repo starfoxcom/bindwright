@@ -68,6 +68,12 @@ The page is static HTML and JavaScript on GitHub Pages: no cookies, no analytics
 
 Solo-maintained as an open-source side project. Issues and pull requests welcome on a best-effort basis. See [CONTRIBUTING.md](CONTRIBUTING.md) for what's in scope and what's not.
 
+## Security and conduct
+
+Report a vulnerability privately as [SECURITY.md](SECURITY.md) describes. Participation follows the [code of conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+The repo is MIT — see [LICENSE](LICENSE). The files setup writes into your project are [MIT-0](LICENSE-MIT-0), so you owe no credit for them.
+
+Bindwright works with Claude Code. It is not made by, endorsed by or affiliated with Anthropic.
