@@ -179,6 +179,20 @@ export default {
   "evidence.story2.was": "Un cambio subió funciones de 273 líneas porque la regla "
     + "que limita su tamaño nunca se cargó.",
   "evidence.story2.now": "Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.",
+  "evidence.story3.where": "Este proyecto",
+  "evidence.story3.was": "Dos pull requests tardaron 22 y 30 rondas de revisión, porque cada arreglo "
+    + "le daba al revisor algo nuevo que señalar.",
+  "evidence.story3.now": "Un hallazgo solo bloquea si el cambio lo causó; los huecos viejos se vuelven issues aparte.",
+  "evidence.story4.where": "Este proyecto",
+  "evidence.story4.was": "Un arreglo que entró a la rama principal nunca regresó a la rama de desarrollo.",
+  "evidence.story4.now": "Un hotfix solo cuenta como terminado cuando ya regresó a la rama de desarrollo.",
+  "evidence.story5.where": "Este proyecto",
+  "evidence.story5.was": "Un pull request se integró con la primera revisión mientras la revisión "
+    + "profunda que había pedido seguía pendiente.",
+  "evidence.story5.now": "Si se pide una revisión profunda, nada se integra hasta que también pase.",
+  "evidence.story6.where": "Este proyecto",
+  "evidence.story6.was": "Un cambio al flujo de revisión, hecho en una rama de feature, reprobó su propia revisión.",
+  "evidence.story6.now": "Los cambios de workflow van primero a la rama principal y luego bajan a desarrollo.",
 
   "nav.settings": "Ajustes del plugin",
   "asks.more": "Ver todos los ajustes",
