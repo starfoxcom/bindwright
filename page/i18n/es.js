@@ -277,7 +277,7 @@ export default {
   "mods.ci-watch.value": "Desactivado",
   "mods.compact-handoff.title": "<code>compact-handoff</code>",
   "mods.compact-handoff.text": "Lleva tus palabras y un traspaso a través de cada compactación.",
-  "mods.compact-handoff.value": "Desactivado",
+  "mods.compact-handoff.value": "Activado",
   "mods.mods.title": "<code>mods</code>",
   "mods.mods.text": "Un panel con tus mods y sus comandos.",
   "mods.mods.value": "Desactivado",

@@ -261,7 +261,7 @@ export const FIXED = [
 // One row per mod in the engine's MODS list, in the same order. The title is the mod's name.
 export const MODS_ROWS = [
   { id: "ci-watch", text: "Watches pull request checks and wakes the session when they finish.", value: "Off" },
-  { id: "compact-handoff", text: "Carries your words and a hand-off across compactions.", value: "Off" },
+  { id: "compact-handoff", text: "Carries your words and a hand-off across compactions.", value: "On" },
   { id: "mods", text: "A pane listing your mods and their commands.", value: "Off" },
   { id: "runners", text: "Shows your local CI runners, with start and stop buttons.", value: "Off" },
   { id: "session-facts", text: "Tells the assistant the time, its context fill and your plan usage.", value: "On" },
