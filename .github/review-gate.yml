@@ -77,10 +77,10 @@ escalate:
 # Paths that always get a review, whatever their file type, on top of the
 # gate's own (.github/scripts/, any .claude/ folder, any CLAUDE.md): globs as
 # for escalate.paths. Without this, a PR of only Markdown, images or fonts
-# passes without a review. This repo: the templates every bind ships, the
-# bundle defaults, and the setup prompt and the files it reads.
+# passes without a review. This repo: the templates every bind ships and the
+# plugin's setup instructions.
 triage:
-  always_review: _core/, bundles/, SETUP.md, TOGGLES.md, COMPARISON.md
+  always_review: _core/, plugin/
 
 # Extra tools both reviewers may use, comma separated: Bash(...) patterns,
 # Read, Grep or Glob. A Bash pattern that runs the PR's code hands that code
