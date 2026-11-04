@@ -4,8 +4,8 @@
 import { FIELDS, dayOf } from "./rules.js";
 
 /**
- * Wraps a D1 database binding with the four calls the handler needs.
- * The handler takes any object with the same methods, so tests pass an
+ * Wraps a D1 database binding with the two calls the handler needs. The
+ * handler takes any object with the same methods, so tests pass an
  * in-memory one.
  */
 export class D1Store {
@@ -14,52 +14,50 @@ export class D1Store {
     this._database = database;
   }
 
-  /** The project's last accepted send time in milliseconds, or null when it is new. */
-  async lastSendOf(projectId) {
-    const row = await this._database
-      .prepare("SELECT last_send FROM projects WHERE id = ?1")
-      .bind(projectId)
+  /**
+   * Adds one checked send to its project's totals and answers `"added"`,
+   * `"too-soon"` (the project sent less than `gapInMilliseconds` ago) or
+   * `"day-full"` (a new project past `maxNewPerDay` today). The limits are
+   * conditions of the writes themselves, run as one D1 batch, which is a
+   * transaction: two sends arriving together cannot both pass a check.
+   */
+  async addSend({ send, country, timeInMilliseconds, gapInMilliseconds, maxNewPerDay }) {
+    const day = dayOf(timeInMilliseconds);
+    const counts = FIELDS.map((field) => send[field]);
+    const [, , upsert] = await this._database.batch([
+      this._database.prepare("DELETE FROM new_projects WHERE day < ?1").bind(day),
+      this._database
+        .prepare(
+          `INSERT OR IGNORE INTO new_projects (day, id)
+           SELECT ?1, ?2
+           WHERE NOT EXISTS (SELECT 1 FROM projects WHERE id = ?2)
+             AND (SELECT COUNT(*) FROM new_projects WHERE day = ?1) < ?3`,
+        )
+        .bind(day, send.project, maxNewPerDay),
+      this._database
+        .prepare(
+          `INSERT INTO projects (id, kind, country, checked, caught, deep, merged, last_send)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+           WHERE EXISTS (SELECT 1 FROM projects WHERE id = ?1)
+              OR EXISTS (SELECT 1 FROM new_projects WHERE day = ?9 AND id = ?1)
+           ON CONFLICT (id) DO UPDATE SET
+             kind = excluded.kind,
+             country = excluded.country,
+             checked = checked + excluded.checked,
+             caught = caught + excluded.caught,
+             deep = deep + excluded.deep,
+             merged = merged + excluded.merged,
+             last_send = excluded.last_send
+           WHERE projects.last_send <= excluded.last_send - ?10`,
+        )
+        .bind(send.project, send.kind, country, ...counts, timeInMilliseconds, day, gapInMilliseconds),
+    ]);
+    if (upsert.meta.changes > 0) return "added";
+    const known = await this._database
+      .prepare("SELECT 1 FROM projects WHERE id = ?1")
+      .bind(send.project)
       .first();
-    return row === null ? null : row.last_send;
-  }
-
-  /** How many new projects were accepted on a UTC day (`YYYY-MM-DD`). */
-  async newProjectsOn(day) {
-    const row = await this._database
-      .prepare("SELECT new_projects FROM days WHERE day = ?1")
-      .bind(day)
-      .first();
-    return row === null ? 0 : row.new_projects;
-  }
-
-  /** Adds one checked send to its project's totals, creating the project when new. */
-  async addSend({ send, country, timeInMilliseconds, isNew }) {
-    const upsert = this._database
-      .prepare(
-        `INSERT INTO projects (id, kind, country, checked, caught, deep, merged, last_send)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-         ON CONFLICT (id) DO UPDATE SET
-           kind = excluded.kind,
-           country = excluded.country,
-           checked = checked + excluded.checked,
-           caught = caught + excluded.caught,
-           deep = deep + excluded.deep,
-           merged = merged + excluded.merged,
-           last_send = excluded.last_send`,
-      )
-      .bind(send.project, send.kind, country, ...FIELDS.map((f) => send[f]), timeInMilliseconds);
-    if (!isNew) {
-      await upsert.run();
-      return;
-    }
-
-    const countDay = this._database
-      .prepare(
-        `INSERT INTO days (day, new_projects) VALUES (?1, 1)
-         ON CONFLICT (day) DO UPDATE SET new_projects = new_projects + 1`,
-      )
-      .bind(dayOf(timeInMilliseconds));
-    await this._database.batch([upsert, countDay]);
+    return known === null ? "day-full" : "too-soon";
   }
 
   /** The overall sums, projects per country and the top projects by `checked`. */

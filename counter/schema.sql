@@ -15,8 +15,10 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE INDEX IF NOT EXISTS projects_by_checked ON projects (checked DESC, merged DESC);
 
--- New projects accepted per UTC day, for the daily cap.
-CREATE TABLE IF NOT EXISTS days (
-  day          TEXT PRIMARY KEY,  -- YYYY-MM-DD
-  new_projects INTEGER NOT NULL DEFAULT 0
+-- The projects first accepted on the current UTC day, for the daily cap.
+-- Earlier days are deleted on the next send.
+CREATE TABLE IF NOT EXISTS new_projects (
+  day TEXT NOT NULL,  -- YYYY-MM-DD
+  id  TEXT NOT NULL,
+  PRIMARY KEY (day, id)
 );

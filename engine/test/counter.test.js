@@ -16,20 +16,19 @@ const PROJECT = "0123456789abcdef0123456789abcdef";
 const OTHER = "fedcba9876543210fedcba9876543210";
 const NOON = Date.UTC(2026, 10, 4, 12);
 
-/** In-memory stand-in for D1Store, with the same four methods. */
+/** In-memory stand-in for D1Store: the same contract, atomic because it never awaits midway. */
 class MemoryStore {
   constructor() {
     this.projects = new Map();
     this.days = new Map();
   }
-  async lastSendOf(id) {
-    return this.projects.get(id)?.lastSend ?? null;
-  }
-  async newProjectsOn(day) {
-    return this.days.get(day) ?? 0;
-  }
-  async addSend({ send, country, timeInMilliseconds, isNew }) {
-    const old = this.projects.get(send.project) ?? { checked: 0, caught: 0, deep: 0, merged: 0 };
+  async addSend({ send, country, timeInMilliseconds, gapInMilliseconds, maxNewPerDay }) {
+    const day = new Date(timeInMilliseconds).toISOString().slice(0, 10);
+    const known = this.projects.get(send.project);
+    if (known && timeInMilliseconds - known.lastSend < gapInMilliseconds) return "too-soon";
+    if (!known && (this.days.get(day) ?? 0) >= maxNewPerDay) return "day-full";
+    if (!known) this.days.set(day, (this.days.get(day) ?? 0) + 1);
+    const old = known ?? { checked: 0, caught: 0, deep: 0, merged: 0 };
     this.projects.set(send.project, {
       kind: send.kind,
       country,
@@ -39,10 +38,7 @@ class MemoryStore {
       merged: old.merged + send.merged,
       lastSend: timeInMilliseconds,
     });
-    if (isNew) {
-      const day = new Date(timeInMilliseconds).toISOString().slice(0, 10);
-      this.days.set(day, (this.days.get(day) ?? 0) + 1);
-    }
+    return "added";
   }
   async totals(limit) {
     const rows = [...this.projects.values()];
@@ -117,6 +113,13 @@ test("a project sends once per gap", async () => {
   const later = await run(post(send()), { store, time: NOON + MIN_SEND_GAP_IN_MILLISECONDS });
   assert.equal(later.status, 200);
   assert.equal(store.projects.get(PROJECT).checked, 8);
+});
+
+test("two sends for one project arriving together count once", async () => {
+  const store = new MemoryStore();
+  const results = await Promise.all([run(post(send()), { store }), run(post(send()), { store })]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 429]);
+  assert.equal(store.projects.get(PROJECT).checked, 4);
 });
 
 test("new projects stop at the daily cap, existing ones keep sending", async () => {

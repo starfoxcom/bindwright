@@ -13,7 +13,6 @@ import {
   TOP_PROJECTS,
   checkSend,
   countryOf,
-  dayOf,
 } from "./rules.js";
 import { D1Store } from "./store.js";
 
@@ -63,17 +62,15 @@ async function increment(request, { store, rateLimiter, timeInMilliseconds }) {
   const checked = checkSend(parsed.body);
   if (!checked.ok) return json({ error: checked.reason }, 400);
 
-  const { send } = checked;
-  const lastSend = await store.lastSendOf(send.project);
-  const isNew = lastSend === null;
-  if (!isNew && timeInMilliseconds - lastSend < MIN_SEND_GAP_IN_MILLISECONDS) {
-    return json({ error: "this project already sent today" }, 429);
-  }
-  if (isNew && (await store.newProjectsOn(dayOf(timeInMilliseconds))) >= MAX_NEW_PROJECTS_PER_DAY) {
-    return json({ error: "too many new projects today" }, 429);
-  }
-
-  await store.addSend({ send, country: countryOf(request), timeInMilliseconds, isNew });
+  const outcome = await store.addSend({
+    send: checked.send,
+    country: countryOf(request),
+    timeInMilliseconds,
+    gapInMilliseconds: MIN_SEND_GAP_IN_MILLISECONDS,
+    maxNewPerDay: MAX_NEW_PROJECTS_PER_DAY,
+  });
+  if (outcome === "too-soon") return json({ error: "this project already sent today" }, 429);
+  if (outcome === "day-full") return json({ error: "too many new projects today" }, 429);
   return json({ ok: true }, 200);
 }
 
