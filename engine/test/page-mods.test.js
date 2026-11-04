@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { DICTIONARIES } from "../../page/i18n/index.js";
 import { pageKeys } from "../../page/i18n/render.js";
 import { fillMods } from "../../tools/page_settings.mjs";
-import { SCENES } from "../../page/mods-scenes.js";
+import { BAND_ORDER, SCENES } from "../../page/mods-scenes.js";
 import { MODS } from "../layers.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
@@ -31,8 +31,8 @@ test("the landing page on disk is the one the generator writes", () => {
   assert.equal(landing, fillMods(landing));
 });
 
-test("the landing's mod cards are the engine's mods, in the engine's order", () => {
-  assert.deepEqual(cardIds(landing), MODS.map((id) => `m-${id}`));
+test("the landing's cards are All together first, then the engine's mods in the engine's order", () => {
+  assert.deepEqual(cardIds(landing), ["m-all", ...MODS.map((id) => `m-${id}`)]);
 });
 
 test("the Spanish landing has the same mod cards", () => {
@@ -59,7 +59,17 @@ test("the mods section shows a carousel and a terminal, with the mod before the 
 });
 
 test("every mod in the engine has a scene, and no scene is for a mod the engine lacks", () => {
-  assert.deepEqual(Object.keys(SCENES).sort(), [...MODS].sort());
+  assert.deepEqual(Object.keys(SCENES).sort(), ["all", ...MODS].sort());
+});
+
+test("every band a scene sets draws its rows in the fixed row order", () => {
+  const bands = Object.values(SCENES).flat().filter(([action]) => action === "band");
+  assert.ok(bands.length > 0);
+  for (const [, rows] of bands) {
+    const positions = rows.map((row) => BAND_ORDER.indexOf(row.kind));
+    assert.ok(positions.every((position) => position >= 0), JSON.stringify(rows.map((r) => r.kind)));
+    assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+  }
 });
 
 test("every text a mod scene shows exists in each language", () => {

@@ -66,8 +66,17 @@ export function fillSettings(html) {
     });
 }
 
-// One card per mod on the landing page, between the mods:cards markers.
+// The mod cards on the landing page, between the mods:cards markers: All together, then one per mod.
 const CARDS = /([ \t]*<!-- mods:cards -->\n)[\s\S]*?([ \t]*<!-- \/mods:cards -->)/;
+
+// The first card: every mod on at once, not a mod of its own.
+const ALL_CARD = [
+  `          <li class="mod-card" id="m-all">`,
+  `            <h3 data-t="mods.all.title">All together</h3>`,
+  `            <p data-t="mods.all.text">Every mod on at once: the setup this project is built with.</p>`,
+  `            <span class="setting-value"><b data-t="mods.all.value">All 10 on</b></span>`,
+  "          </li>",
+].join("\n");
 
 function modCard(mod) {
   return [
@@ -83,7 +92,7 @@ function modCard(mod) {
 // The landing page with its mod cards filled. The markers keep their own lines, so a
 // second run rewrites the same text.
 export function fillMods(html) {
-  const cards = `        <ul class="mod-cards">\n${MODS_ROWS.map(modCard).join("\n")}\n        </ul>\n`;
+  const cards = `        <ul class="mod-cards">\n${[ALL_CARD, ...MODS_ROWS.map(modCard)].join("\n")}\n        </ul>\n`;
   return html.replace(CARDS, (match, open, close) => open + cards + close);
 }
 

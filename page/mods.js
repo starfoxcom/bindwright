@@ -16,6 +16,8 @@ const ACTIONS = {
   out: (key, tone = "mute") => term.out(`<span class="${tone}">${t(key)}</span>`),
   type: (text) => term.type(text),
   tool: (name, arg, ms) => term.tool(name, arg, ms),
+  think: (key, ms, tokens) => term.think(t(key), ms, tokens),
+  band: (rows) => term.band(rows.map((row) => row.html)),
   wait: (ms) => term.wait(ms),
 };
 

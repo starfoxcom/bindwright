@@ -34,6 +34,8 @@ class Terminal {
     this.pane = stage.querySelector(".pane");
     this.lines = stage.querySelector(".lines");
     this.spinrow = stage.querySelector(".spinrow");
+    // The band of status rows above the input box. Only some terminals have one.
+    this.bandBox = stage.querySelector(".band");
     this.glyph = stage.querySelector(".glyph");
     this.verb = stage.querySelector(".verb");
     this.meta = stage.querySelector(".meta");
@@ -114,6 +116,19 @@ class Terminal {
     return this.add("", "gap");
   }
 
+  // Replaces the status rows above the input box with one row per HTML string.
+  band(rows) {
+    if (!this.bandBox) return;
+    this.bandBox.replaceChildren(...rows.map((html) => {
+      const el = document.createElement("div");
+      el.className = "band-row";
+      el.innerHTML = html;
+      return el;
+    }));
+    // The band takes its room from the pane, so the newest line moves back into view.
+    this.follow();
+  }
+
   out(html, cls = "") {
     return this.add(`<span class="elbow">⎿</span>${html}`, cls);
   }
@@ -180,6 +195,7 @@ class Terminal {
     this.lines.style.transition = "";
     this.typed.textContent = "";
     this.spinrow.hidden = true;
+    this.band([]);
     this.pane.classList.remove("spot");
   }
 

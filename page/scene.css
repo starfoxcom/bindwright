@@ -8,6 +8,9 @@
   --bad: oklch(0.70 0.17 25);
   --spin: oklch(0.72 0.14 45);
   --spin-hi: oklch(0.90 0.08 60);
+  --warn: oklch(0.84 0.15 92);
+  --info: oklch(0.79 0.10 215);
+  --magic: oklch(0.75 0.14 320);
   --add-bg: oklch(0.32 0.06 150);
   --del-bg: oklch(0.32 0.07 25);
   position: relative; width: min(1120px, 100%); margin: 48px auto 0;
@@ -70,6 +73,9 @@
 .stage .mute { color: var(--dim); }
 .stage .okt { color: var(--ok); }
 .stage .badt { color: var(--bad); }
+.stage .warnt { color: var(--warn); }
+.stage .cyant { color: var(--info); }
+.stage .magt { color: var(--magic); }
 .stage .diff { margin-left: 2.8em; padding: 0 .5em; border-radius: 3px; }
 .stage .diff.add { background: var(--add-bg); }
 .stage .diff.del { background: var(--del-bg); }
@@ -90,6 +96,12 @@
 }
 @keyframes scene-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 .stage .meta { color: var(--dim); }
+/* The status band: one line per mod that is running, between the spinner and the input. */
+.stage .band { margin: 0 1.2em .5em; font-size: .92em; }
+.stage .band:empty { margin: 0; }
+.stage .band-row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+.stage .band .btn { color: var(--dim); }
+.stage .band .now { color: var(--info); font-weight: 700; }
 .stage .input {
   margin: 0 1.2em 1.1em; padding: .55em .8em; border: 1px solid var(--rule); border-radius: 8px;
   display: flex; gap: .7em; color: var(--text);
@@ -191,7 +203,10 @@
 }
 @container (max-width: 640px) {
   .stage.split .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
+  .stage.split.mods-stage .term { height: auto; min-height: 58cqi; }
 }
+/* The mods terminal grows with its band, so the transcript always keeps a few lines. */
+.stage.mods-stage .pane { flex: 1 0 auto; min-height: 7.5em; }
 
 
 /* Phones: everything stacks. Title, terminal, then a band of its own for the cards,
