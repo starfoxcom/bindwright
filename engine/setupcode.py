@@ -1,4 +1,4 @@
-# Python twin of setupcode.js: decodes the setup code the page hands to
+# Python twin of setupcode.js: decodes a setup code from an older page, passed to
 # /bindwright:setup ("bw1-" + base64url of the answers as UTF-8 JSON, no
 # padding) with the same checks and messages. Standard library only.
 

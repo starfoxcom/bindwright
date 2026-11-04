@@ -1,4 +1,4 @@
-// The setup code the page hands to /bindwright:setup: "bw1-" followed by the
+// A setup code, which /bindwright:setup still accepts from older pages: "bw1-" followed by the
 // answers as UTF-8 JSON in base64url without padding. A code carries the three
 // answers plus only the project and advanced values that differ from the
 // defaults; expandAnswers (model.js) fills the rest. The Python twin
