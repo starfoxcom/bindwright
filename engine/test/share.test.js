@@ -137,6 +137,17 @@ test("remember keeps only what the layers use, and lists what it dropped", needs
   assert.deepEqual(seen.dropped, ["personal: 10", "personal: 2", "personal: extras.ci-watch", "personal: x"]);
 });
 
+test("an export that requires a removed tool is not refused, in both engines", needsPython, () => {
+  const { seen, files } = both((run, s) => {
+    const saved = { ...ANSWERS, advanced: { ...ANSWERS.advanced, codeResearch: "codegraph" } };
+    writeFileSync(join(s.repo, ".bindwright", "project.json"), `${JSON.stringify(saved, null, 2)}\n`);
+    return run(["--export", s.repo], JSON.stringify({ required: ["codeResearch"] }));
+  });
+  assert.equal(seen.status, 0);
+  assert.deepEqual(seen.setup, { schema: 1, extras: {}, required: ["codeResearch"] });
+  assert.match(files[0], /"codeResearch": "codegraph"/);
+});
+
 test("export refuses a project.json that is not an object, and leaves it alone", needsPython, () => {
   const { seen, files } = both((run, s) => {
     writeFileSync(join(s.repo, ".bindwright", "project.json"), "[]");

@@ -107,6 +107,11 @@ const FREE_TEXT = [
     CUSTOM_TEXT],
   ["shippedTextPaths is refused", withAdvanced({ shippedTextPaths: ["**/*.gd"] }), CUSTOM_TEXT],
 ];
+const TOOL = "Invalid setup code: codeResearch names a tool the page does not offer";
+const REMOVED_TOOL = [
+  ["a removed code-research tool is refused in a code", withAdvanced({ codeResearch: "codegraph" }), TOOL],
+  ["a code-research value that is not text is refused", withAdvanced({ codeResearch: ["tokensave"] }), TOOL],
+];
 const DEFAULT_FREE_TEXT = [
   ["repoUrl at its default is accepted", withProject({ repoUrl: "" })],
   ["licenseHolder at its default is accepted", withProject({ licenseHolder: "" })],
@@ -150,6 +155,15 @@ from model import expand_answers
 codes = json.loads(sys.stdin.buffer.read().decode("utf-8"))
 expanded = [expand_answers(decode_setup_code(c)) for c in codes]
 sys.stdout.write(json.dumps(expanded, ensure_ascii=True))
+`;
+
+// Saved answers files, not setup codes: a code may not carry a removed tool.
+const PY_EXPAND_SAVED = `
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from model import expand_answers
+saved = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+sys.stdout.write(json.dumps([expand_answers(answers) for answers in saved], ensure_ascii=True))
 `;
 
 const PY_APPLY = `
@@ -251,7 +265,7 @@ test("an answers file saved with a removed tool reads as a custom tool with its 
 });
 
 test("the Python twin reads a removed tool the same way", { skip: noPython }, () => {
-  const [py] = runPython(PY_EXPAND, [codeOf(JSON.stringify(SAVED_WITH_CODEGRAPH))]);
+  const [py] = runPython(PY_EXPAND_SAVED, [SAVED_WITH_CODEGRAPH]);
   assert.equal(py.advanced.codeResearch, "custom");
   assert.deepEqual(py.advanced.codeResearchCustom, CODEGRAPH_AS_CUSTOM);
 });
@@ -261,7 +275,7 @@ test("bad setup codes are refused with a message that says why", () => {
   for (const code of ODD) assert.ok(decodeJs(code).answers, code);
 });
 
-for (const [name, code, message] of [...UNKNOWN_KEYS, ...FREE_TEXT]) {
+for (const [name, code, message] of [...UNKNOWN_KEYS, ...FREE_TEXT, ...REMOVED_TOOL]) {
   test(name, () => assert.deepEqual(decodeJs(code), { error: message }));
 }
 

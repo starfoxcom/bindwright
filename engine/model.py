@@ -315,10 +315,10 @@ def expand_answers(saved):
                     private=_given(a, "private"))
     project, advanced = a.pop("project", UNDEFINED), a.pop("advanced", UNDEFINED)
     return dict(a, project=_fill_keys(project, base["project"]),
-                advanced=_map_removed_tool(_fill_keys(advanced, base["advanced"])))
+                advanced=map_removed_tool(_fill_keys(advanced, base["advanced"])))
 
 
-def _map_removed_tool(advanced):
+def map_removed_tool(advanced):
     """An answers file saved while a tool was offered reads as a custom tool
     with that tool's old name and homepage."""
     code_research = advanced.get("codeResearch") if isinstance(advanced, dict) else None

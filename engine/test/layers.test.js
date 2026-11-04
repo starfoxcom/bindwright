@@ -147,6 +147,11 @@ test("a personal layer cannot pick the custom tool, which only the project can d
   assert.deepEqual(out.ignored, ["personal: codeResearch", "local: codeResearch"]);
 });
 
+test("a project that saved a removed tool resolves it as custom, in both engines", needsPython, () => {
+  const out = both({ project: answers({ codeResearch: "codegraph" }) });
+  assert.deepEqual(out.settings.codeResearch, { value: "custom", from: "project", required: false });
+});
+
 test("broken files fail alike in both engines", needsPython, () => {
   assert.equal(both({ local: "{not json" }).error, ".bindwright/local.json is not valid JSON");
   assert.equal(both({ personal: '{"schema": NaN}' }).error, "bindwright/settings.json is not valid JSON");

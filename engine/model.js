@@ -240,7 +240,7 @@ export function expandAnswers(saved) {
   return { ...rest, project: fillKeys(project, base.project), advanced: mapRemovedTool(filled) };
 }
 
-function mapRemovedTool(advanced) {
+export function mapRemovedTool(advanced) {
   if (!isObject(advanced) || !own(REMOVED_CODE_RESEARCH_TOOLS, advanced.codeResearch)) return advanced;
   const old = REMOVED_CODE_RESEARCH_TOOLS[advanced.codeResearch];
   return { ...advanced, codeResearch: "custom", codeResearchCustom: { ...old } };

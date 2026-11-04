@@ -6,7 +6,7 @@ import base64
 import json
 import re
 
-from model import defaults, quoted
+from model import CODE_RESEARCH_TOOLS, defaults, quoted
 
 PREFIX = "bw1-"
 # Real answers encode to about 1 KB and nest three levels deep. The caps keep
@@ -67,6 +67,17 @@ def _refuse_unknown_keys(answers):
             _fail('unknown %s %s' % (label, quoted(unknown[0])))
 
 
+def _refuse_unknown_tool(answers):
+    """A code names only a tool the page offers. expand_answers maps a removed
+    tool only in a saved answers file, so one in a code is refused here."""
+    advanced = answers.get("advanced")
+    if not isinstance(advanced, dict) or "codeResearch" not in advanced:
+        return
+    tool = advanced["codeResearch"]
+    if not isinstance(tool, str) or tool not in CODE_RESEARCH_TOOLS:
+        _fail("codeResearch names a tool the page does not offer")
+
+
 def _refuse_free_text(answers):
     """The page never sets free text, so a code that carries any was edited: the project
     strings must be empty and the custom tool and path values must be None."""
@@ -103,5 +114,6 @@ def decode_setup_code(code):
     if not isinstance(answers, dict):
         _fail("the answers must be an object")
     _refuse_unknown_keys(answers)
+    _refuse_unknown_tool(answers)
     _refuse_free_text(answers)
     return answers
