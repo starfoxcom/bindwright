@@ -30,9 +30,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Deploy the repo root verbatim — index.html sits there, and the
-          # bind-volume button fetches _core/, bundles/, VERSION/, etc. via
-          # relative paths from the same origin. No build step needed.
+          # Deploy the repo root verbatim: index.html redirects to page/,
+          # whose file preview fetches engine/ and _core/ by relative paths
+          # from the same origin. No build step needed.
           path: '.'
 
       - name: Deploy to GitHub Pages
