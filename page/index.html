@@ -180,6 +180,66 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     </ul>
   </section>
 
+  <section class="mods" id="mods" aria-labelledby="mods-title">
+    <h2 id="mods-title" data-t="mods.title">Mods</h2>
+    <p class="mods-lede" data-t="mods.lede">Optional add-ons for Claude Code that show live status and keep long sessions on track. Pick the ones you want during setup.</p>
+    <!-- mods:cards -->
+    <ul class="mod-cards">
+      <li class="mod-card" id="m-ci-watch">
+        <h3><code>ci-watch</code></h3>
+        <p data-t="mods.ci-watch.text">Watches pull request checks and wakes the session when they finish.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.ci-watch.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-compact-handoff">
+        <h3><code>compact-handoff</code></h3>
+        <p data-t="mods.compact-handoff.text">Carries your words and a hand-off across compactions.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.compact-handoff.value">On</b></span>
+      </li>
+      <li class="mod-card" id="m-mods">
+        <h3><code>mods</code></h3>
+        <p data-t="mods.mods.text">A pane listing your mods and their commands.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.mods.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-runners">
+        <h3><code>runners</code></h3>
+        <p data-t="mods.runners.text">Shows your local CI runners, with start and stop buttons.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.runners.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-session-facts">
+        <h3><code>session-facts</code></h3>
+        <p data-t="mods.session-facts.text">Tells the assistant the time, its context fill and your plan usage.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.session-facts.value">On</b></span>
+      </li>
+      <li class="mod-card" id="m-session-info">
+        <h3><code>session-info</code></h3>
+        <p data-t="mods.session-info.text">A row with the model, project, branch and changed files.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.session-info.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-shared-pc">
+        <h3><code>shared-pc</code></h3>
+        <p data-t="mods.shared-pc.text">One session at a time runs heavy work, the rest wait in line.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.shared-pc.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-skill-check">
+        <h3><code>skill-check</code></h3>
+        <p data-t="mods.skill-check.text">Checks a skill ran every step it requires.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.skill-check.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-tasks">
+        <h3><code>tasks</code></h3>
+        <p data-t="mods.tasks.text">Keeps the task list honest and carries it across compactions.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.tasks.value">Off</b></span>
+      </li>
+      <li class="mod-card" id="m-usage-guard">
+        <h3><code>usage-guard</code></h3>
+        <p data-t="mods.usage-guard.text">Saves work near a plan limit and resumes after it resets.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="mods.usage-guard.value">Off</b></span>
+      </li>
+    </ul>
+    <!-- /mods:cards -->
+    <p class="mods-more"><a href="settings/#mods" data-t="mods.more">See every mod and its default</a></p>
+  </section>
+
   <section class="install" id="install" aria-labelledby="install-title">
     <h2 id="install-title" data-t="install.title">Install</h2>
     <p class="command-how" data-t="install.how">Two commands once on your computer, then one in each project. Paste each into Claude Code, press Enter and let it finish before the next.</p>

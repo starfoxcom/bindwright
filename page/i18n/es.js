@@ -271,6 +271,10 @@ export default {
   "settings.shipped-text.text": "Qué archivos revisa la regla de lenguaje claro.",
   "settings.shipped-text.value": "La lista de la regla",
 
+  "mods.title": "Mods",
+  "mods.lede": "Complementos opcionales para Claude Code que muestran el estado en vivo "
+    + "y mantienen las sesiones largas en orden. Elige los que quieras durante la configuración.",
+  "mods.more": "Ver todos los mods y su valor por defecto",
   "mods.ci-watch.title": "<code>ci-watch</code>",
   "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan.",
   "mods.ci-watch.value": "Desactivado",
