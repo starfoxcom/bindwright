@@ -1,13 +1,17 @@
-// Fills the rows of the English settings page from page/settings-data.js:
+// Fills the English settings page's rows, and the landing page's mod cards, from
+// page/settings-data.js:
 //   node tools/page_settings.mjs
-// Each group's rows sit between <!-- settings:<group> --> and <!-- /settings:<group> -->.
-// engine/test/page-settings.test.js fails while the written page is stale.
+// Each group's rows sit between <!-- settings:<group> --> and <!-- /settings:<group> -->;
+// the cards sit between <!-- mods:cards --> and <!-- /mods:cards --> on the landing page.
+// engine/test/page-settings.test.js and page-mods.test.js fail while a written page is stale.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { COMPUTER, FIXED, MODS_ROWS, PROJECT } from "../page/settings-data.js";
 
-const PAGE_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "page", "settings", "index.html");
+const PAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "page");
+const PAGE_FILE = join(PAGE_ROOT, "settings", "index.html");
+const LANDING_FILE = join(PAGE_ROOT, "index.html");
 const MODS_HEADING = "mods-group";
 
 // The text with the first mention of each linked tool wrapped in a link to its project.
@@ -62,8 +66,42 @@ export function fillSettings(html) {
     });
 }
 
+// The mod cards on the landing page, between the mods:cards markers: All together, then one per mod.
+const CARDS = /([ \t]*<!-- mods:cards -->\n)[\s\S]*?([ \t]*<!-- \/mods:cards -->)/;
+
+// The first card: every mod on at once, not a mod of its own.
+const ALL_CARD = [
+  `          <li class="mod-card" id="m-all">`,
+  `            <h3 data-t="mods.all.title">All together</h3>`,
+  `            <p data-t="mods.all.text">Every mod on at once: the setup this project is built with.</p>`,
+  `            <span class="setting-value"><b data-t="mods.all.value">All 10 on</b></span>`,
+  "          </li>",
+].join("\n");
+
+function modCard(mod) {
+  return [
+    `          <li class="mod-card" id="m-${mod.id}">`,
+    `            <h3><code>${mod.id}</code></h3>`,
+    `            <p data-t="mods.${mod.id}.text">${mod.text}</p>`,
+    `            <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span>`
+      + ` <b data-t="mods.${mod.id}.value">${mod.value}</b></span>`,
+    "          </li>",
+  ].join("\n");
+}
+
+// The landing page with its mod cards filled. The markers keep their own lines, so a
+// second run rewrites the same text.
+export function fillMods(html) {
+  const cards = `        <ul class="mod-cards">\n${[ALL_CARD, ...MODS_ROWS.map(modCard)].join("\n")}\n        </ul>\n`;
+  return html.replace(CARDS, (match, open, close) => open + cards + close);
+}
+
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const html = readFileSync(PAGE_FILE, "utf8").replace(/\r\n/g, "\n");
-  writeFileSync(PAGE_FILE, fillSettings(html));
+  const settings = readFileSync(PAGE_FILE, "utf8").replace(/\r\n/g, "\n");
+  writeFileSync(PAGE_FILE, fillSettings(settings));
   console.log("wrote settings/index.html");
+
+  const landing = readFileSync(LANDING_FILE, "utf8").replace(/\r\n/g, "\n");
+  writeFileSync(LANDING_FILE, fillMods(landing));
+  console.log("wrote index.html");
 }

@@ -22,6 +22,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="../app.js"></script>
 <script type="module" src="../scene.js"></script>
 <script type="module" src="../lands.js"></script>
+<script type="module" src="../mods.js"></script>
 <script type="module" src="../evidence.js"></script>
 <script type="module" src="../reveal.js"></script>
 <script>if (!matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("reveal");</script>
@@ -106,7 +107,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           <h2 id="out-title" tabindex="-1"><span data-t="result.title">Lo que escribe una configuración</span></h2>
         </div>
         <p class="preview-note" data-t="result.note">Se muestra para el proyecto público de una sola persona con todo activado. La configuración lo ajusta al tuyo según tus respuestas.</p>
-        <div class="stage lands" id="lands-stage">
+        <div class="stage split" id="lands-stage">
           <div class="term" role="img" aria-label="Una terminal con /bindwright:setup, donde cada archivo que escribe vuela a una de dos cajas"
             data-t-attr="aria-label:lands.aria">
             <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
@@ -178,6 +179,91 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <b data-t="evidence.story2.now">Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.</b>
       </li>
     </ul>
+  </section>
+
+  <section class="mods" id="mods" aria-labelledby="mods-title">
+    <h2 id="mods-title" data-t="mods.title">Mods</h2>
+    <p class="mods-lede" data-t="mods.lede">Complementos opcionales para Claude Code que muestran el estado en vivo y mantienen las sesiones largas en orden. Elige los que quieras durante la configuración.</p>
+    <div class="stage split flip mods-stage" id="mods-stage">
+      <div class="mods-carousel" id="mods-carousel">
+        <!-- mods:cards -->
+        <ul class="mod-cards">
+          <li class="mod-card" id="m-all">
+            <h3 data-t="mods.all.title">Todos juntos</h3>
+            <p data-t="mods.all.text">Cada mod encendido a la vez: la configuración con la que se construye este proyecto.</p>
+            <span class="setting-value"><b data-t="mods.all.value">Los 10 activados</b></span>
+          </li>
+          <li class="mod-card" id="m-ci-watch">
+            <h3><code>ci-watch</code></h3>
+            <p data-t="mods.ci-watch.text">Vigila las revisiones del pull request y despierta la sesión cuando terminan.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.ci-watch.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-compact-handoff">
+            <h3><code>compact-handoff</code></h3>
+            <p data-t="mods.compact-handoff.text">Lleva tus palabras y un traspaso a través de cada compactación.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.compact-handoff.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-mods">
+            <h3><code>mods</code></h3>
+            <p data-t="mods.mods.text">Un panel con tus mods y sus comandos.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.mods.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-runners">
+            <h3><code>runners</code></h3>
+            <p data-t="mods.runners.text">Muestra tus runners de CI locales, con botones de iniciar y detener.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.runners.value">Desactivado</b></span>
+          </li>
+          <li class="mod-card" id="m-session-facts">
+            <h3><code>session-facts</code></h3>
+            <p data-t="mods.session-facts.text">Le dice al asistente la hora, qué tan lleno está su contexto y el uso de tu plan.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.session-facts.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-session-info">
+            <h3><code>session-info</code></h3>
+            <p data-t="mods.session-info.text">Una fila con el modelo, el proyecto, la rama y los archivos cambiados.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.session-info.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-shared-pc">
+            <h3><code>shared-pc</code></h3>
+            <p data-t="mods.shared-pc.text">Una sesión a la vez corre el trabajo pesado, las demás esperan en fila.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.shared-pc.value">Desactivado</b></span>
+          </li>
+          <li class="mod-card" id="m-skill-check">
+            <h3><code>skill-check</code></h3>
+            <p data-t="mods.skill-check.text">Revisa que una habilidad haya corrido cada paso que exige.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.skill-check.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-tasks">
+            <h3><code>tasks</code></h3>
+            <p data-t="mods.tasks.text">Mantiene honesta la lista de tareas y la lleva a través de cada compactación.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.tasks.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-usage-guard">
+            <h3><code>usage-guard</code></h3>
+            <p data-t="mods.usage-guard.text">Guarda el trabajo cerca de un límite del plan y sigue cuando se reinicia.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.usage-guard.value">Activado</b></span>
+          </li>
+        </ul>
+        <!-- /mods:cards -->
+        <div class="mods-controls">
+          <button class="mods-step" id="mods-prev" type="button" aria-label="Mod anterior"
+            data-t-attr="aria-label:mods.prev">&lsaquo;</button>
+          <div class="mods-dots" id="mods-dots"></div>
+          <button class="mods-step" id="mods-next" type="button" aria-label="Mod siguiente"
+            data-t-attr="aria-label:mods.next">&rsaquo;</button>
+        </div>
+      </div>
+      <div class="term" role="img" aria-label="Una terminal que muestra el mod elegido en uso"
+        data-t-attr="aria-label:mods.term.aria">
+        <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+        <div class="pane"><div class="lines"></div></div>
+        <div class="spinrow" hidden><span class="glyph">✻&#xFE0E;</span><span class="verb">Thinking…</span><span class="meta"></span></div>
+        <div class="band"></div>
+        <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
+        <div class="hint">? for shortcuts</div>
+      </div>
+    </div>
+    <p class="mods-more"><a href="settings/#mods" data-t="mods.more">Ver todos los mods y su valor por defecto</a></p>
   </section>
 
   <section class="install" id="install" aria-labelledby="install-title">

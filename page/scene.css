@@ -8,6 +8,9 @@
   --bad: oklch(0.70 0.17 25);
   --spin: oklch(0.72 0.14 45);
   --spin-hi: oklch(0.90 0.08 60);
+  --warn: oklch(0.84 0.15 92);
+  --info: oklch(0.79 0.10 215);
+  --magic: oklch(0.75 0.14 320);
   --add-bg: oklch(0.32 0.06 150);
   --del-bg: oklch(0.32 0.07 25);
   position: relative; width: min(1120px, 100%); margin: 48px auto 0;
@@ -70,6 +73,9 @@
 .stage .mute { color: var(--dim); }
 .stage .okt { color: var(--ok); }
 .stage .badt { color: var(--bad); }
+.stage .warnt { color: var(--warn); }
+.stage .cyant { color: var(--info); }
+.stage .magt { color: var(--magic); }
 .stage .diff { margin-left: 2.8em; padding: 0 .5em; border-radius: 3px; }
 .stage .diff.add { background: var(--add-bg); }
 .stage .diff.del { background: var(--del-bg); }
@@ -90,6 +96,12 @@
 }
 @keyframes scene-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 .stage .meta { color: var(--dim); }
+/* The status band: one line per mod that is running, between the spinner and the input. */
+.stage .band { margin: 0 1.2em .5em; font-size: .92em; }
+.stage .band:empty { margin: 0; }
+.stage .band-row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+.stage .band .btn { color: var(--dim); }
+.stage .band .now { color: var(--info); font-weight: 700; }
 .stage .input {
   margin: 0 1.2em 1.1em; padding: .55em .8em; border: 1px solid var(--rule); border-radius: 8px;
   display: flex; gap: .7em; color: var(--text);
@@ -146,50 +158,60 @@
 .stage .card.on .note div:nth-child(3) { transition-delay: 500ms; }
 .stage .note b { color: var(--accent); font-weight: 400; }
 
-/* What lands where: the terminal on the left, the two boxes side by side on the right,
-   all as tall as the terminal. The rows fly in from the left as they arrive. */
-.stage.lands {
+/* A split stage: the terminal beside a side panel, both as tall as the terminal. The
+   terminal is on the left and the panel on the right, unless the stage has .flip, which
+   swaps them. The panel's rows fly in from the left as they arrive. */
+.stage.split {
   display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 2cqi;
   width: 100%; margin: 20px 0 0;
 }
-.stage.lands .term { margin: 0; height: auto; min-height: 30cqi; }
-.stage.lands .boxes { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 2cqi; }
-.stage.lands .box {
+.stage.split.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.stage.split .term { margin: 0; height: auto; min-height: 30cqi; }
+.stage.split .boxes { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 2cqi; }
+.stage.split .box {
   display: flex; flex-direction: column; min-width: 0;
   padding: 1.1em 1.2em; border-radius: 18px; background: oklch(0.27 0.008 240 / .92);
   border: 1px solid var(--rule); box-shadow: 0 24px 60px -24px oklch(0 0 0 / .7);
   font-size: clamp(12px, 1.45cqi, 16px);
 }
-.stage.lands .box h3 {
+.stage.split .box h3 {
   display: flex; align-items: center; gap: .6em; font-size: 1.05em; font-weight: 700; font-stretch: 108%;
 }
-.stage.lands .where { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-top: .6em; }
-.stage.lands .where code { font: .92em "Fragment Mono", monospace; color: var(--text-2); }
-.stage.lands .where .chip { margin-top: 0; }
+.stage.split .where { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-top: .6em; }
+.stage.split .where code { font: .92em "Fragment Mono", monospace; color: var(--text-2); }
+.stage.split .where .chip { margin-top: 0; }
 /* Each row is a label pill; the paths show in the terminal and behind the files button.
    Every row is there from the start as a faint outline, so the box keeps its size, and
    it fills in as setup writes it. */
-.stage.lands .rows {
+.stage.split .rows {
   list-style: none; margin-top: .8em; padding: 0; display: flex; flex-wrap: wrap; gap: 6px;
 }
-.stage.lands .row {
+.stage.split .row {
   padding: .3em .75em; border-radius: 99px; background: oklch(1 0 0 / .06); line-height: 1.3;
 }
-.stage.lands .row.ghost { background: none; box-shadow: inset 0 0 0 1px var(--rule); opacity: .5; }
-.stage.lands .row.ghost > * { visibility: hidden; }
-.stage.lands .row.landed { animation: lands-fly 420ms cubic-bezier(.2,.8,.2,1) both; }
-.stage.lands .row-label { font-weight: 650; }
+.stage.split .row.ghost { background: none; box-shadow: inset 0 0 0 1px var(--rule); opacity: .5; }
+.stage.split .row.ghost > * { visibility: hidden; }
+.stage.split .row.landed { animation: lands-fly 420ms cubic-bezier(.2,.8,.2,1) both; }
+.stage.split .row-label { font-weight: 650; }
 @keyframes lands-fly { from { opacity: 0; transform: translateX(-24px); filter: blur(4px); } }
 
 /* The stage is its own container, so its columns follow the viewport: below 900px the
    terminal goes full width above the boxes. */
+/* The mods terminal is taller than the others and grows with its band, so the rows never
+   squeeze the transcript below about seven lines. */
+.stage.split.mods-stage .term { min-height: 46cqi; }
+.stage.mods-stage .pane { flex: 1 0 auto; min-height: 10.5em; }
 @media (max-width: 900px) {
-  .stage.lands { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .stage.lands .term { min-height: 50cqi; }
+  .stage.split, .stage.split.flip { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .stage.split .term { min-height: 50cqi; }
+  .stage.split.mods-stage .term { min-height: 80cqi; }
 }
 @container (max-width: 640px) {
-  .stage.lands .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
+  .stage.split .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
+  .stage.split.mods-stage .term { height: auto; min-height: 96cqi; }
 }
+/* The band's collapse mark, which Claude Code draws at the band's top right. */
+.stage .band:not(:empty)::before { content: "[-]"; float: right; color: var(--dim); }
 
 
 /* Phones: everything stacks. Title, terminal, then a band of its own for the cards,
