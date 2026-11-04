@@ -12,6 +12,9 @@ const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "�
 const STEP = 40;
 // Under reduced motion, a wait this long or longer holds as a slide; shorter ones skip.
 const SLIDE_MS = 1000;
+// Every story pause runs this many times its scripted length: at 1, a line is gone before
+// most people finish reading it. Typing keeps its own speed.
+const PACE = 1.7;
 
 // The spinner's status text: seconds so far and thousands of tokens received.
 const spinnerMeta = (ms, tokens) =>
@@ -66,8 +69,15 @@ class Terminal {
     beat();
   }
 
-  // Resolves after ms of unpaused time. Rejects with STOP when a replay starts.
+  // Resolves after a story pause of ms, stretched by PACE so each line stays up long
+  // enough to read. Rejects with STOP when a replay starts.
   wait(ms) {
+    if (reduce && ms < SLIDE_MS) return Promise.resolve();
+    return this.hold(ms * PACE);
+  }
+
+  // Resolves after ms of unpaused time, unstretched. Rejects with STOP when a replay starts.
+  hold(ms) {
     if (reduce && ms < SLIDE_MS) return Promise.resolve();
     const id = this.run;
     return new Promise((resolve, reject) => {
@@ -116,9 +126,9 @@ class Terminal {
   async type(text) {
     for (const ch of text) {
       this.typed.textContent += ch;
-      await this.wait(45 + Math.random() * 70);
+      await this.hold(45 + Math.random() * 70);
     }
-    await this.wait(350);
+    await this.hold(350);
     this.typed.textContent = "";
     this.add(`<span class="echo">&gt; ${text}</span>`);
     this.gap();
@@ -130,7 +140,7 @@ class Terminal {
     row.hidden = false;
     this.verb.textContent = `${verb}…`;
     if (reduce) {
-      this.meta.textContent = spinnerMeta(ms, tokens);
+      this.meta.textContent = spinnerMeta(ms * PACE, tokens);
       await this.wait(ms);
       row.hidden = true;
       return;
@@ -145,7 +155,7 @@ class Terminal {
     this.every(100, () => {
       if (row.hidden || id !== this.run) return false;
       elapsed += 100;
-      this.meta.textContent = spinnerMeta(elapsed, tokens * Math.min(1, elapsed / ms));
+      this.meta.textContent = spinnerMeta(elapsed, tokens * Math.min(1, elapsed / (ms * PACE)));
     });
     await this.wait(ms);
     row.hidden = true;
