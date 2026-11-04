@@ -177,12 +177,11 @@ export default {
     + "2.1.287 o más reciente y Node.",
 
   "settings.code-research.title": "Búsqueda de código",
-  "settings.code-research.text": "Cómo encuentra el código el asistente: "
-    + "<a href=\"https://github.com/aovestdipaperino/tokensave\">tokensave</a>, "
-    + "<a href=\"https://code.claude.com/docs/en/discover-plugins\">lsp-plugins</a>, "
-    + "<a href=\"https://github.com/colbymchenry/codegraph\">codegraph</a>, "
-    + "<a href=\"https://github.com/oraios/serena\">serena</a>, "
-    + "<a href=\"https://github.com/DeusData/codebase-memory-mcp\">codebase-memory</a> o none.",
+  "settings.code-research.text": "<a href=\"https://github.com/aovestdipaperino/tokensave\">tokensave</a> "
+    + "indexa tu código para que "
+    + "las respuestas salgan como un cuarto más rápido en proyectos grandes, "
+    + "con unos cuantos puntos porcentuales más de tokens. "
+    + "none usa la búsqueda integrada: igual de precisa, más barata y más lenta.",
   "settings.code-research.value": "tokensave",
   "settings.global-instructions.title": "Instrucciones globales",
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
