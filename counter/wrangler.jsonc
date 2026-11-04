@@ -1,0 +1,24 @@
+// Deploys the opt-in review counter: `npx wrangler deploy` from this folder.
+// First time on a new database: `npx wrangler d1 execute bindwright-counter --remote --file schema.sql`.
+{
+  "name": "bindwright-counter",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bindwright-counter",
+      "database_id": "ef995eb0-bc20-4b43-9489-29195237944b"
+    }
+  ],
+  // Five sends a minute per IP, held by Cloudflare's limiter and not stored by the Worker.
+  "ratelimits": [
+    {
+      "name": "SENDS",
+      "namespace_id": "5510",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
+  "observability": { "enabled": false }
+}
