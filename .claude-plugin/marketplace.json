@@ -1,0 +1,20 @@
+{
+  "name": "bindwright",
+  "description": "The Bindwright plugin, from its GitHub releases.",
+  "owner": {
+    "name": "starfoxcom",
+    "url": "https://github.com/starfoxcom"
+  },
+  "plugins": [
+    {
+      "name": "bindwright",
+      "description": "Sets up a repo for agentic coding from a few questions in the session: rules, session skills, guard hooks and review workflows, fitted to the repo.",
+      "version": "2.0.0",
+      "source": {
+        "source": "archive",
+        "url": "https://github.com/starfoxcom/bindwright/releases/download/v2.0.0/bindwright-2.0.0.zip",
+        "sha256": "174cbdde28235d53fbc6d5ac48a0ad480284558eadb75fb8cf7c441e5a10fd60"
+      }
+    }
+  ]
+}

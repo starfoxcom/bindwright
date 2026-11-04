@@ -1,7 +1,7 @@
 {
   "name": "bindwright",
   "displayName": "Bindwright",
-  "description": "Sets up a repo for agentic coding from a setup code made on the Bindwright page: rules, session skills, guard hooks and review workflows, fitted to the repo.",
+  "description": "Sets up a repo for agentic coding from a few questions in the session: rules, session skills, guard hooks and review workflows, fitted to the repo.",
   "author": {
     "name": "Jorge Alexandro Zamudio Arredondo",
     "url": "https://github.com/starfoxcom"
