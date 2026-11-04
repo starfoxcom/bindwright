@@ -1,4 +1,4 @@
-# CLAUDE.md — claude-code-templates
+# CLAUDE.md — Bindwright
 
 This file guides Claude Code when working in **this** repository — the templates project itself.
 
@@ -27,9 +27,9 @@ Bypass for Bash `grep`/`rg`: include `# TOKENSAVE_BYPASS: <reason>` in the comma
 
 ## Project overview
 
-**claude-code-templates** is an open-source toolkit for setting up Claude Code in any project. It ships as Bindwright, a Claude Code plugin whose `/bindwright:setup` asks a few questions and writes the setup that fits the project, plus a landing page on GitHub Pages.
+**Bindwright** is an open-source Claude Code plugin: `/bindwright:setup` asks a few questions and writes the setup that fits the project. A landing page on GitHub Pages explains and installs it.
 
-- **Live page:** `page/`, deployed at https://starfoxcom.github.io/claude-code-templates/ (the root `index.html` redirects there)
+- **Live page:** `page/`, deployed at https://starfoxcom.github.io/bindwright/ (the root `index.html` redirects there)
 - **Source of truth for templates:** `_core/`
 - **Bind engine:** `engine/`, run by the plugin (`plugin/`, `/bindwright:setup`) and by the page's file preview
 - **Versioning:** SemVer (`v1.0.0 → v1.1.0 → v2.0.0 …`). Earlier conversational `v17 / v18` mentions consolidated into the v1.0.0 release. See `VERSION` file and `CHANGELOG.md`.
@@ -112,7 +112,7 @@ Skills `/session-start`, `/session-close` and `/find` live at `.claude/skills/`,
 ## Repo layout
 
 ```
-claude-code-templates/
+bindwright/
 ├── index.html              # redirects to page/
 ├── page/                   # the live page
 ├── engine/                 # the bind engine

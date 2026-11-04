@@ -2,8 +2,8 @@
   "team": true,
   "client": false,
   "project": {
-    "name": "claude-code-templates",
-    "repoUrl": "https://github.com/starfoxcom/claude-code-templates",
+    "name": "bindwright",
+    "repoUrl": "https://github.com/starfoxcom/bindwright",
     "licenseHolder": "Jorge Alexandro Zamudio Arredondo",
     "license": "MIT"
   },

@@ -1,6 +1,6 @@
 # Bindwright
 
-> **Live: [starfoxcom.github.io/claude-code-templates](https://starfoxcom.github.io/claude-code-templates/)**
+> **Live: [starfoxcom.github.io/bindwright](https://starfoxcom.github.io/bindwright/)**
 >
 > A Claude Code plugin that writes the files Claude Code reads about your project, so it knows how you work from the first message.
 
@@ -17,7 +17,7 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 In Claude Code, once per computer:
 
 ```
-/plugin marketplace add starfoxcom/claude-code-templates
+/plugin marketplace add starfoxcom/bindwright
 /plugin install bindwright@bindwright
 ```
 
@@ -32,7 +32,7 @@ The page's Install section says what each command changes on your computer and i
 ## Repo layout
 
 ```
-claude-code-templates/
+bindwright/
 ├── index.html              ← redirects the GitHub Pages root to page/
 ├── page/                   ← the live page (plain HTML, CSS and JS, no build step)
 ├── engine/                 ← the bind engine the plugin and the page's file preview run

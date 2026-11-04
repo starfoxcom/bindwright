@@ -6,7 +6,7 @@ export const LANGUAGES = [
 ];
 
 // The page's public address, for the hreflang links search engines read.
-export const SITE = "https://starfoxcom.github.io/claude-code-templates/page/";
+export const SITE = "https://starfoxcom.github.io/bindwright/page/";
 
 // The English pages every language has: the file, and the folder it sits in
 // under the site root (the path a language folder adds its own prefix to).

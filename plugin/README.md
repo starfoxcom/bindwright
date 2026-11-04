@@ -16,4 +16,4 @@ A notice at session start, at most once a day, says when the repo or the plugin 
 
 Git, and Node or Python 3.8 or later to run the setup engine. The optional extras (global instructions, a push guard for every project, the builder agent, a code-style profile and mods for `~/.claude`) are each asked once with a yes or no, saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without one.
 
-Page: https://starfoxcom.github.io/claude-code-templates/
+Page: https://starfoxcom.github.io/bindwright/

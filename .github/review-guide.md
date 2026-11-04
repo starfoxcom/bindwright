@@ -4,7 +4,7 @@ The project's own part of the review prompt. Both review tiers read this file fr
 
 ## About this project
 
-**claude-code-templates** is the open-source toolkit that ships Bindwright, a plugin that sets projects up for Claude Code. The bind engine and the canonical templates here become the binds every downstream user installs verbatim, so the review surface is load-bearing in a way ordinary OSS isn't.
+**Bindwright** is the open-source plugin that sets projects up for Claude Code. The bind engine and the canonical templates here become the binds every downstream user installs verbatim, so the review surface is load-bearing in a way ordinary OSS isn't.
 
 ## Project invariants to verify (in priority order)
 
