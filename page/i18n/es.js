@@ -176,7 +176,7 @@ export default {
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
   "evidence.title": "Lo que ha detectado en proyectos reales hasta ahora",
   "evidence.note": "Bindwright pone un revisor de IA en cada pull request. "
-    + "Estos son sus resultados hasta ahora en tres proyectos, de septiembre a noviembre de 2026.",
+    + "Estos son sus resultados hasta ahora en tres proyectos.",
   "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
   "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
   "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "
