@@ -1,9 +1,14 @@
 // The opt-in review counter Worker (counter/): what it accepts, refuses and reports.
+// Every case runs the real handler and the real D1Store, its SQL against counter/schema.sql
+// in an in-memory SQLite database behind the small part of D1's API the store uses.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 
 import { handle } from "../../counter/src/worker.js";
+import { D1Store } from "../../counter/src/store.js";
 import {
   MAX_BODY_IN_BYTES,
   MAX_NEW_PROJECTS_PER_DAY,
@@ -12,50 +17,60 @@ import {
   checkSend,
 } from "../../counter/src/rules.js";
 
+const SCHEMA = readFileSync(new URL("../../counter/schema.sql", import.meta.url), "utf8");
 const PROJECT = "0123456789abcdef0123456789abcdef";
 const OTHER = "fedcba9876543210fedcba9876543210";
 const NOON = Date.UTC(2026, 10, 4, 12);
 
-/** In-memory stand-in for D1Store: the same contract, atomic because it never awaits midway. */
-class MemoryStore {
+const isRead = (sql) => /^\s*(SELECT|WITH)\b/i.test(sql);
+
+/**
+ * D1's prepare/bind/first/run/batch over node:sqlite. `batch` runs its statements in one
+ * transaction, as D1 does, and reports `meta.changes` per statement.
+ */
+class SqliteD1 {
   constructor() {
-    this.projects = new Map();
-    this.days = new Map();
+    this.sqlite = new DatabaseSync(":memory:");
+    this.sqlite.exec(SCHEMA);
   }
-  async addSend({ send, country, timeInMilliseconds, gapInMilliseconds, maxNewPerDay }) {
-    const day = new Date(timeInMilliseconds).toISOString().slice(0, 10);
-    const known = this.projects.get(send.project);
-    if (known && timeInMilliseconds - known.lastSend < gapInMilliseconds) return "too-soon";
-    if (!known && (this.days.get(day) ?? 0) >= maxNewPerDay) return "day-full";
-    if (!known) this.days.set(day, (this.days.get(day) ?? 0) + 1);
-    const old = known ?? { checked: 0, caught: 0, deep: 0, merged: 0 };
-    this.projects.set(send.project, {
-      kind: send.kind,
-      country,
-      checked: old.checked + send.checked,
-      caught: old.caught + send.caught,
-      deep: old.deep + send.deep,
-      merged: old.merged + send.merged,
-      lastSend: timeInMilliseconds,
+
+  prepare(sql) {
+    const database = this;
+    const statement = (params) => ({
+      bind: (...values) => statement(values),
+      first: async () => database.sqlite.prepare(sql).get(...params) ?? null,
+      run: async () => database.execute(sql, params),
+      execute: () => database.execute(sql, params),
     });
-    return "added";
+    return statement([]);
   }
-  async totals(limit) {
-    const rows = [...this.projects.values()];
-    const sum = (field) => rows.reduce((total, row) => total + row[field], 0);
-    const top = rows
-      .sort((a, b) => b.checked - a.checked)
-      .slice(0, limit)
-      .map(({ kind, checked, caught, deep, merged }) => ({ kind, checked, caught, deep, merged }));
-    return {
-      projects: rows.length,
-      checked: sum("checked"),
-      caught: sum("caught"),
-      deep: sum("deep"),
-      merged: sum("merged"),
-      top,
-    };
+
+  execute(sql, params) {
+    const prepared = this.sqlite.prepare(sql);
+    if (isRead(sql)) return { results: prepared.all(...params), meta: { changes: 0 } };
+    return { results: [], meta: { changes: Number(prepared.run(...params).changes) } };
   }
+
+  async batch(statements) {
+    this.sqlite.exec("BEGIN");
+    try {
+      const results = statements.map((statement) => statement.execute());
+      this.sqlite.exec("COMMIT");
+      return results;
+    } catch (error) {
+      this.sqlite.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+function newStore() {
+  const database = new SqliteD1();
+  return { store: new D1Store(database), database };
+}
+
+function rowOf(database, id) {
+  return database.sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(id);
 }
 
 function send(fields = {}) {
@@ -67,7 +82,7 @@ function post(body, headers = {}) {
   return new Request("https://counter.test/increment", { method: "POST", body: text, headers });
 }
 
-async function run(request, { store = new MemoryStore(), rateLimiter, time = NOON } = {}) {
+async function run(request, { store, rateLimiter, time = NOON }) {
   const response = await handle(request, { store, rateLimiter, timeInMilliseconds: time });
   return { status: response.status, body: await response.json().catch(() => null), response };
 }
@@ -92,7 +107,7 @@ test("checkSend accepts a valid send and refuses each bad field", () => {
 });
 
 test("a send adds to the totals, and /total reports kinds and counts only", async () => {
-  const store = new MemoryStore();
+  const { store } = newStore();
   assert.equal((await run(post(send()), { store })).status, 200);
   assert.equal((await run(post(send({ project: OTHER, kind: "website", checked: 9 })), { store })).status, 200);
 
@@ -106,41 +121,58 @@ test("a send adds to the totals, and /total reports kinds and counts only", asyn
 });
 
 test("a project sends once per gap", async () => {
-  const store = new MemoryStore();
+  const { store, database } = newStore();
   await run(post(send()), { store });
   const early = await run(post(send()), { store, time: NOON + MIN_SEND_GAP_IN_MILLISECONDS - 1 });
   assert.equal(early.status, 429);
+  assert.equal(early.body.error, "this project already sent today");
   const later = await run(post(send()), { store, time: NOON + MIN_SEND_GAP_IN_MILLISECONDS });
   assert.equal(later.status, 200);
-  assert.equal(store.projects.get(PROJECT).checked, 8);
+  assert.equal(rowOf(database, PROJECT).checked, 8);
 });
 
 test("two sends for one project arriving together count once", async () => {
-  const store = new MemoryStore();
+  const { store, database } = newStore();
   const results = await Promise.all([run(post(send()), { store }), run(post(send()), { store })]);
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 429]);
-  assert.equal(store.projects.get(PROJECT).checked, 4);
+  assert.equal(rowOf(database, PROJECT).checked, 4);
 });
 
 test("new projects stop at the daily cap, existing ones keep sending", async () => {
-  const store = new MemoryStore();
+  const { store, database } = newStore();
   await run(post(send()), { store, time: NOON - MIN_SEND_GAP_IN_MILLISECONDS });
-  store.days.set("2026-11-04", MAX_NEW_PROJECTS_PER_DAY);
-  assert.equal((await run(post(send({ project: OTHER })), { store })).status, 429);
-  assert.equal((await run(post(send()), { store })).status, 200);
+  const claim = database.sqlite.prepare("INSERT INTO new_projects (day, id) VALUES ('2026-11-04', ?)");
+  for (let i = 0; i < MAX_NEW_PROJECTS_PER_DAY; i += 1) claim.run(`filler${i}`);
+
+  const refused = await run(post(send({ project: OTHER })), { store });
+  assert.equal(refused.status, 429);
+  assert.equal(refused.body.error, "too many new projects today");
+  assert.equal(rowOf(database, OTHER), undefined);
+  assert.equal((await run(post(send()), { store })).status, 200, "a known project is not new");
+});
+
+test("a new day frees the cap and keeps projects from earlier days", async () => {
+  const { store, database } = newStore();
+  await run(post(send()), { store });
+  const nextDay = NOON + 24 * 60 * 60 * 1000;
+  assert.equal((await run(post(send()), { store, time: nextDay })).status, 200);
+  const days = database.sqlite.prepare("SELECT DISTINCT day FROM new_projects").all().map((r) => r.day);
+  assert.deepEqual(days, [], "earlier days are cleared on the next send");
+  assert.equal(rowOf(database, PROJECT).checked, 8);
 });
 
 test("oversized, non-JSON and rate-limited sends are refused before they count", async () => {
-  const store = new MemoryStore();
+  const { store, database } = newStore();
   const padded = JSON.stringify(send()).padEnd(MAX_BODY_IN_BYTES + 1, " ");
   assert.equal((await run(post(padded), { store })).status, 413);
   assert.equal((await run(post("{not json"), { store })).status, 400);
   const limiter = { limit: async () => ({ success: false }) };
   assert.equal((await run(post(send()), { store, rateLimiter: limiter })).status, 429);
-  assert.equal(store.projects.size, 0);
+  assert.equal(rowOf(database, PROJECT), undefined);
 });
 
 test("other routes and methods answer 404", async () => {
-  assert.equal((await run(new Request("https://counter.test/increment"))).status, 404);
-  assert.equal((await run(new Request("https://counter.test/"))).status, 404);
+  const { store } = newStore();
+  assert.equal((await run(new Request("https://counter.test/increment"), { store })).status, 404);
+  assert.equal((await run(new Request("https://counter.test/"), { store })).status, 404);
 });
