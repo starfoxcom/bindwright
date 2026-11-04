@@ -14,11 +14,14 @@ const block = document.getElementById("community");
 const note = document.getElementById("community-note");
 const chart = document.getElementById("community-projects");
 
-// A local preview may read another counter with ?counter=<url>; the live page never does.
+// A preview may read sample totals with ?counter=<url>: any address on a local server,
+// otherwise only a file from the page's own site, so a link cannot point the page elsewhere.
 function counterUrl() {
-  const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
   const override = new URLSearchParams(location.search).get("counter");
-  return isLocal && override ? override : COUNTER;
+  if (!override) return COUNTER;
+  const url = new URL(override, location.href);
+  const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+  return isLocal || url.origin === location.origin ? url.href : COUNTER;
 }
 
 const isCount = (value) => Number.isInteger(value) && value >= 0;
