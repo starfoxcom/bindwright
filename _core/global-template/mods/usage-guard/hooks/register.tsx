@@ -261,25 +261,25 @@ async function measureCompaction($: EngineInterface): Promise<void> {
     setStatus($, `Plan limit near: paused until ${pending.pausedUntil} · ${outcomeMark(outcome)}`)
 }
 
-// The wrap-up's turn has ended: a session that resumes by itself compacts now, while its cache is warm,
-// so the resume after the reset starts from the summary instead of reading the whole context cold.
-// Only this work session gets here; the setting and the time to the wake decide whether it is worth it.
-async function compactAtPause($: EngineInterface, owed: Pause): Promise<void> {
-  const pause = await readPause($)
-  if (pause?.status !== 'active' || resetKey(pause) !== resetKey(owed)) return
-  if (!shouldCompactAtPause(await readFill($), live.compactAbovePercent, pause.wakeAt, await $.clock.now())) return
-  const outcome = await compactNow($, localTime(pause.wakeAt))
-  setStatus($, `Plan limit near: paused until ${localTime(pause.wakeAt)} · ${outcomeMark(outcome)}`)
+// Compacts while the cache is warm, so the wake starts from the summary. A pause's compaction runs only when
+// the setting and the time to the wake say it is worth it; one the arm tool was asked for always runs.
+async function compactOwed($: EngineInterface, owed: Pause | undefined, isAsked: boolean): Promise<void> {
+  const found = owed && (await readPause($))
+  const pause = owed && found?.status === 'active' && resetKey(found) === resetKey(owed) ? found : undefined
+  const now = await $.clock.now()
+  const isWorth = pause && shouldCompactAtPause(await readFill($), live.compactAbovePercent, pause.wakeAt, now)
+  if (!isAsked && !isWorth) return
+  const outcome = await compactNow($, pause && localTime(pause.wakeAt))
+  if (pause) setStatus($, `Plan limit near: paused until ${localTime(pause.wakeAt)} · ${outcomeMark(outcome)}`)
 }
 
-// The compactions this turn owed: a pause's, or the arm tool's. Taken before the turn's own wrap-up starts,
-// so a wrap-up started at this turn's end waits for its own.
+// Taken before the turn's own wrap-up starts, so a wrap-up started at this turn's end waits for its own.
 function scheduleOwedCompaction($: EngineInterface): void {
   const owed = live.compactAfterTurn
-  const isArmOwed = live.isArmCompactOwed
+  const isArmOwed = live.isArmCompactOwed === true
   live.compactAfterTurn = undefined
   live.isArmCompactOwed = false
-  const run = owed ? () => compactAtPause($, owed) : isArmOwed ? () => compactNow($) : undefined
+  const run = owed || isArmOwed ? () => compactOwed($, owed, isArmOwed) : undefined
   if (run) $.clock.after(COMPACT_DELAY_MS, () => void run().catch(() => undefined))
 }
 
