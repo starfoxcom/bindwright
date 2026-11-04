@@ -18,19 +18,23 @@
 .settings-list { list-style: none; margin: 20px 0 0; padding: 0; border-top: 1px solid var(--rule); }
 .setting {
   display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
-  gap: 6px 28px; align-items: baseline; padding: 18px 0; border-bottom: 1px solid var(--rule);
+  gap: 6px 28px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--rule);
 }
 .setting p { font-size: 15px; color: var(--text-2); }
 .setting-value {
   justify-self: end; padding: 4px 12px; border-radius: 999px; white-space: nowrap;
-  background: var(--key); color: var(--text-2); font-size: 13px;
+  background: var(--key); color: var(--text); font-size: 13px;
+}
+.setting-value b { font-weight: 600; }
+.setting-label {
+  margin-right: 4px; color: var(--text-2); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
 }
 
 @media (max-width: 720px) {
   .settings-group { margin-top: 72px; }
   /* A long default drops under the title instead of squeezing it. */
   .setting { display: flex; flex-wrap: wrap; gap: 6px 12px; }
-  .setting h3 { flex: 1 1 10rem; min-width: 0; }
+  .setting h3 { flex: 1 1 auto; min-width: 0; }
   .setting-value { order: 2; max-width: 100%; white-space: normal; }
   .setting p { order: 3; flex-basis: 100%; }
 }

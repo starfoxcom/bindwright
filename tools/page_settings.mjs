@@ -15,7 +15,8 @@ function listItem(prefix, entry, title) {
     `      <li class="setting" id="s-${entry.id}">`,
     `        <h3 data-t="${prefix}.${entry.id}.title">${title}</h3>`,
     `        <p data-t="${prefix}.${entry.id}.text">${entry.text}</p>`,
-    `        <span class="setting-value" data-t="${prefix}.${entry.id}.value">${entry.value}</span>`,
+    `        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span>`
+      + ` <b data-t="${prefix}.${entry.id}.value">${entry.value}</b></span>`,
     "      </li>",
   ].join("\n");
 }
