@@ -1,0 +1,412 @@
+import type { On, SessionMessage } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
+import { HELP, MKDIR_SCRIPT, MODE_TEXT, PERSON_MARK, personWords } from '../hooks/register'
+
+const SESSION = 'sess-1'
+
+function said(text: string): SessionMessage {
+  return { role: 'user', text, toolUses: [] }
+}
+
+const CONVERSATION: SessionMessage[] = [
+  said('Lock the far rings at 2/1/1/1, the load chip was too slow.'),
+  { role: 'assistant', text: 'Locked.', toolUses: [] },
+  {
+    role: 'user',
+    text: 'file contents',
+    toolUses: [],
+    toolResults: [{ tool_use_id: 't1', text: 'x', isError: false, result: 'x' }],
+  },
+  said('<system-reminder>not the person</system-reminder>'),
+  said(
+    'Keep cloud shadows ON from frame one.\n[session-facts] 2026-10-02 10:00 | ctx 40%\n[tasks] Open: #1 Bake the ' +
+      'rings.',
+  ),
+  // Prompts the other mods submit are not the person's words either.
+  said('[ci-watch] #12: all 3 checks settled with no failure. Verify it is mergeable.'),
+  said(
+    '[usage-guard] Plan usage limit nearly reached (automatic wrap-up).\n[session-facts] 2026-10-02 10:05 | ctx 41%',
+  ),
+]
+
+type World = {
+  writes: { path: string; text: string }[]
+  runs: (readonly string[])[]
+  forks: string[]
+  registered: string[]
+  commands: { name: string; argumentHint?: string }[]
+  opened: string[]
+  clock: ReturnType<typeof mock.clock>
+}
+type Run = { exitCode: number; stdout: string } | 'reject'
+
+function world(on: On, helperRuns: Record<string, Run> = {}): World {
+  const clock = mock.clock(on, { now: Date.UTC(2026, 9, 2, 17, 0, 0) })
+  const seen: World = { writes: [], runs: [], forks: [], registered: [], commands: [], opened: [], clock }
+  mock.env(on, { USERPROFILE: 'C:/Users/me' })
+  on('session.id', () => ({ value: SESSION }))
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { tokens: 100_000, window: 1_000_000, breakdown: { autoCompactThreshold: 500_000 } as never },
+      rateLimits: [],
+    },
+  }))
+  on('fs.write', ($, e) => {
+    seen.writes.push({ path: e.path, text: e.text })
+    return { value: undefined }
+  })
+  on('process.run', ($, e) => {
+    seen.runs.push(e.argv)
+    const run = helperRuns[e.argv[2] ?? ''] ?? { exitCode: 0, stdout: 'found it\n' }
+    if (run === 'reject') throw new Error('spawn node ENOENT')
+    const out = { ...run, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+    return { value: out }
+  })
+  on('model.fork', ($, e) => {
+    seen.forks.push(e.prompt)
+    return { value: { isAnswered: true, text: '## Doing\nshadow hand-off', usage: {} as never } }
+  })
+  on('tool.register', ($, e) => {
+    seen.registered.push(e.name)
+    return { value: { tool: `mcp__compact-handoff__${e.name}` } }
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => {
+    seen.commands.push({ name: e.name, argumentHint: e.argumentHint })
+    return { value: { command: e.name } as never }
+  })
+  on('ui.open', ($, e) => {
+    seen.opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  return seen
+}
+
+async function start($: Engine) {
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+}
+
+test(
+  'on: the hand-off instructions reach the summarizer and the person is kept word for word',
+  { options: { mode: 'on' } },
+  async ($, on) => {
+    const seen = world(on)
+    let instructions: string | undefined
+    on('session.compact', ($, e) => {
+      instructions = e.instructions
+      return { messages: [{ role: 'user', text: 'SUMMARY', toolUses: [] }, said('kept tail')] }
+    })
+    await start($)
+    const result = await $.session.compact({
+      trigger: 'manual',
+      instructions: 'stress the rings',
+      messages: CONVERSATION,
+    } as never)
+
+    expect(instructions).toContain('## Read next')
+    expect(instructions).toContain('about 12500 tokens')
+    expect(instructions).toContain('stress the rings')
+    const texts = (result.messages ?? []).map(m => m.text)
+    expect(texts[0]).toBe('SUMMARY')
+    expect(texts[1]).toContain(PERSON_MARK)
+    expect(texts[1]).toContain('Lock the far rings at 2/1/1/1')
+    expect(texts[1]).toContain('Keep cloud shadows ON from frame one.')
+    expect(texts[1]).not.toContain('[session-facts]')
+    expect(texts[1]).not.toContain('[tasks]')
+    expect(texts[1]).not.toContain('[ci-watch]')
+    expect(texts[1]).not.toContain('[usage-guard]')
+    expect(texts[1]).not.toContain('automatic wrap-up')
+    expect(texts[1]).not.toContain('system-reminder')
+    expect(texts[1]).not.toContain('file contents')
+    expect(texts[2]).toBe('kept tail')
+    expect(seen.writes.at(-1)?.path.replaceAll('\\', '/')).toBe(
+      'C:/Users/me/.claude/mods-data/compact-handoff/sess-1.md',
+    )
+    // The engine's fs makes no folders: the data folder is made through node first.
+    expect(seen.runs.filter(argv => argv[2] === MKDIR_SCRIPT)).toEqual([
+      ['node', '-e', MKDIR_SCRIPT, 'C:/Users/me/.claude/mods-data/compact-handoff'],
+    ])
+  },
+)
+
+test(
+  'on: an ahead-of-time summary gets the same hand-off brief, so the real compaction can reuse it',
+  { options: { mode: 'on' } },
+  async ($, on) => {
+    const seen = world(on)
+    let instructions: string | undefined
+    on('session.compact', ($, e) => {
+      instructions = e.instructions
+      return { messages: [{ role: 'user', text: 'SUMMARY', toolUses: [] }] }
+    })
+    await start($)
+    await $.session.compact({ trigger: 'precompute', messages: CONVERSATION } as never)
+
+    expect(instructions).toContain('## Read next')
+    expect(seen.writes.at(-1)?.path.replaceAll('\\', '/')).toBe(
+      'C:/Users/me/.claude/mods-data/compact-handoff/sess-1-precompute.md',
+    )
+  },
+)
+
+test(
+  'shadow: the stock compaction stands and the hand-off is recorded beside it',
+  { options: { mode: 'shadow' } },
+  async ($, on) => {
+    const seen = world(on)
+    let instructions: string | undefined = 'unset'
+    on('session.compact', ($, e) => {
+      instructions = e.instructions
+      return { messages: [{ role: 'user', text: 'STOCK SUMMARY', toolUses: [] }] }
+    })
+    await start($)
+    const result = await $.session.compact({ trigger: 'auto', messages: CONVERSATION } as never)
+
+    expect(instructions).toBeUndefined()
+    expect(result.messages?.[0]?.text).toBe('STOCK SUMMARY')
+    expect(result.messages?.length).toBe(1)
+    expect(seen.forks[0]).toContain('## Owed to the person')
+    const file = seen.writes.at(-1)
+    expect(file?.path.replaceAll('\\', '/')).toContain(
+      '/mods-data/compact-handoff/sess-1-2026-10-02T17-00-00-000Z-shadow.md',
+    )
+    expect(file?.text).toContain('STOCK SUMMARY')
+    expect(file?.text).toContain('shadow hand-off')
+    expect(file?.text).toContain('Lock the far rings')
+  },
+)
+
+test('the recall tool searches the transcript through the helper', { options: { mode: 'on' } }, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  expect(seen.registered).toEqual(['recall'])
+  const answer = await $.tool.call({ tool: 'mcp__compact-handoff__recall', query: 'far rings' } as never)
+
+  expect((answer as { result?: unknown }).result).toBe('found it')
+  const call = seen.runs.find(argv => argv.includes('recall'))
+  expect(call?.slice(2)).toEqual(['recall', SESSION, '6000', 'far rings'])
+})
+
+test('the transcript list is used when the helper finds it', { options: { mode: 'on' } }, async ($, on) => {
+  world(on, { persons: { exitCode: 0, stdout: '["typed while a turn ran"]\n' } })
+  on('session.compact', () => ({ messages: [{ role: 'user', text: 'SUMMARY', toolUses: [] }] }))
+  await start($)
+  const result = await $.session.compact({ trigger: 'manual', messages: CONVERSATION } as never)
+
+  expect(result.messages?.[1]?.text).toContain('typed while a turn ran')
+  expect(result.messages?.[1]?.text).not.toContain('Lock the far rings')
+})
+
+test("a failed helper falls back to the compaction's own messages", { options: { mode: 'on' } }, async ($, on) => {
+  // No transcript under this session id: the helper exits non-zero.
+  world(on, { persons: { exitCode: 1, stdout: '[]\n' } })
+  on('session.compact', () => ({ messages: [{ role: 'user', text: 'SUMMARY', toolUses: [] }] }))
+  await start($)
+  const result = await $.session.compact({ trigger: 'manual', messages: CONVERSATION } as never)
+
+  expect(result.messages?.[1]?.text).toContain('Lock the far rings at 2/1/1/1')
+  expect(result.messages?.[1]?.text).toContain('Keep cloud shadows ON from frame one.')
+})
+
+test('a sweep that cannot start node does not fail the session start', { options: { mode: 'on' } }, async ($, on) => {
+  const seen = world(on, { sweep: 'reject' })
+  await start($)
+  // The sweep is not awaited by session.start; let its chain run (an unhandled rejection fails the file).
+  await seen.clock.settle()
+
+  expect(seen.registered).toEqual(['recall'])
+  expect(seen.runs.some(argv => argv.includes('sweep'))).toBe(true)
+})
+
+test('off: no tool, no rewrite', { options: { mode: 'off' } }, async ($, on) => {
+  const seen = world(on)
+  let instructions: string | undefined = 'unset'
+  on('session.compact', ($, e) => {
+    instructions = e.instructions
+    return { messages: [{ role: 'user', text: 'STOCK', toolUses: [] }] }
+  })
+  await start($)
+  await $.session.compact({ trigger: 'auto', messages: CONVERSATION } as never)
+
+  expect(seen.registered).toEqual([])
+  expect(instructions).toBeUndefined()
+  expect(seen.writes).toEqual([])
+})
+
+test('over budget, the oldest words become an index and later compactions carry everything forward', async () => {
+  const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(letter => letter.repeat(150))
+  const first = personWords([said(a ?? ''), said(b ?? ''), said(c ?? '')], 350)
+  expect(first).toContain(`- ${'A'.repeat(100)}...`)
+  expect(first).not.toContain(a ?? '')
+  expect(first).toContain(b ?? '')
+  expect(first).toContain(c ?? '')
+
+  const second = personWords([said(first), said(d ?? '')], 10_000)
+  expect(second).toContain(`- ${'A'.repeat(100)}...`)
+  expect(second).toContain(b ?? '')
+  expect(second).toContain(d ?? '')
+  expect(second.indexOf(b ?? '')).toBeLessThan(second.indexOf(d ?? ''))
+})
+
+test("a bracket tag the person types is their words; only the mods' tags are dropped", async () => {
+  const words = personWords(
+    [said('[x] done with the parser'), said('[wip] split the loader\n[tasks] Open: #3'), said('[tasks] Open: #4')],
+    10_000,
+  )
+  expect(words).toContain('[x] done with the parser')
+  expect(words).toContain('[wip] split the loader')
+  expect(words).not.toContain('[tasks]')
+})
+
+test("a message that starts with a `<` of the person's own is their words; the engine's tags are not", async () => {
+  const words = personWords(
+    [
+      said('<details> renders empty on mobile, fix it'),
+      said('<T> is inferred wrong here'),
+      said('<system-reminder>not the person</system-reminder>'),
+      said('<task-notification>a task ended</task-notification>'),
+    ],
+    10_000,
+  )
+  expect(words).toContain('<details> renders empty on mobile, fix it')
+  expect(words).toContain('<T> is inferred wrong here')
+  expect(words).not.toContain('not the person')
+  expect(words).not.toContain('a task ended')
+})
+
+test("a plugin's wake-up and the interrupt note are not the person's words", async () => {
+  const wake = [
+    'The ci-watch plugin sent a message:',
+    '[ci-watch] PR #229: all checks settled; failed: Claude On-Demand.',
+    '',
+    'This is how the engine surfaces a prompt a plugin submits between turns. Address the message above.',
+  ].join('\n')
+  const words = personWords([said(wake), said('[Request interrupted by user]'), said('keep going')], 10_000)
+  expect(words).toContain('keep going')
+  expect(words).not.toContain('plugin sent a message')
+  expect(words).not.toContain('Request interrupted')
+})
+
+test('a wake-up an older version carried forward is dropped from the block and its index', async () => {
+  // The block as a version before the filter wrote it: the wake-up's own line stripped, the wrapper kept.
+  const stale = 'The ci-watch plugin sent a message:\n\nThis is how the engine surfaces a prompt. Address it.'
+  const block = [
+    `${PERSON_MARK}\nOlder messages, kept only as an index (full text via the recall tool):`,
+    '- The ci-watch plugin sent a message: This is how...',
+    '- lock the rings...',
+  ].join('\n')
+  const carried = [block, 'bake the shadows', stale].join('\n--- message ---\n')
+  const words = personWords([said(carried), said('ship it')], 10_000)
+  expect(words).not.toContain('plugin sent a message')
+  expect(words).toContain('- lock the rings...')
+  expect(words).toContain('bake the shadows')
+  expect(words).toContain('ship it')
+})
+
+test('a message the last compaction kept beside its summary is carried once', async () => {
+  const first = personWords([said('lock the rings'), said('bake the shadows')], 10_000)
+  // The engine kept "bake the shadows" as the tail, so it is in the next list as well as in the block.
+  const second = personWords([said(first), said('bake the shadows'), said('ship it')], 10_000)
+  expect(second.split('bake the shadows').length - 1).toBe(1)
+  expect(second.indexOf('bake the shadows')).toBeLessThan(second.indexOf('ship it'))
+})
+
+test('a kept tail the budget cut into the index is carried again, never lost', async () => {
+  const [a, b] = ['A', 'B'].map(letter => letter.repeat(150))
+  const first = personWords([said(a ?? ''), said(b ?? '')], 200)
+  expect(first).not.toContain(a ?? '')
+  // The engine kept both as the tail; only B was carried in full. A cannot be told from a new message,
+  // so it is carried again: B may show twice, A keeps its index line too, nothing goes missing.
+  const second = personWords([said(first), said(a ?? ''), said(b ?? ''), said('ship it')], 10_000)
+  expect(second).toContain(`- ${'A'.repeat(100)}...`)
+  expect(second).toContain(a ?? '')
+  expect(second).toContain(b ?? '')
+  expect(second.lastIndexOf(b ?? '')).toBeLessThan(second.indexOf('ship it'))
+})
+
+test('a new message that starts like an indexed one is never dropped, nor the one it resembles', async () => {
+  const x = 'X'.repeat(150)
+  const first = personWords([said(x), said('yes')], 100)
+  expect(first).not.toContain(x)
+  // A new paste with the same start, then a "yes" like the carried one: no tail was kept.
+  const changed = `${x} with one change`
+  const second = personWords([said(first), said(changed), said('yes'), said('ship')], 10_000)
+  expect(second).toContain(`- ${'X'.repeat(100)}...`)
+  expect(second).toContain(changed)
+  expect(second.split('\nyes').length - 1).toBe(2)
+  expect(second.indexOf('\nyes')).toBeLessThan(second.indexOf(changed))
+  expect(second.indexOf(changed)).toBeLessThan(second.indexOf('ship'))
+})
+
+test('a short answer the person gives again after a compaction is kept both times', async () => {
+  const first = personWords([said('lock the rings?'), said('yes')], 10_000)
+  const second = personWords([said(first), said('bake the shadows too?'), said('yes')], 10_000)
+  expect(second.split('\nyes').length - 1).toBe(2)
+  // From the transcript's list nothing is folded either.
+  const typed = personWords([said(first)], 10_000, ['yes'])
+  expect(typed.split('\nyes').length - 1).toBe(2)
+})
+
+test('answers that repeat the carried pair after the kept tail are kept', async () => {
+  const first = personWords([said('do it'), said('yes')], 10_000)
+  // The engine kept "yes"; the person then answers two new questions the same way.
+  const second = personWords([said(first), said('yes'), said('do it'), said('yes'), said('ship')], 10_000)
+  expect(second.split('\ndo it').length - 1).toBe(2)
+  expect(second.split('\nyes').length - 1).toBe(2)
+})
+
+for (const mode of ['on', 'off'] as const) {
+  const name = `${mode}: /compact-handoff names the mode, opens its settings, and lists its verbs`
+  test(name, { options: { mode } }, async ($, on) => {
+    const seen = world(on)
+    await start($)
+    expect(seen.commands).toEqual([{ name: 'compact-handoff', argumentHint: '[help | settings | set]' }])
+    const run = (args: string) => $.command.run({ command: 'compact-handoff', args } as never)
+    expect(await run('')).toEqual(expect.objectContaining({ text: MODE_TEXT[mode] }))
+    expect(await run('help')).toEqual(expect.objectContaining({ text: HELP }))
+    expect(await run('mode')).toEqual(expect.objectContaining({ text: HELP }))
+    await run('settings')
+    expect(seen.opened).toEqual(['compact-handoff-settings'])
+  })
+}
+
+// The mode saved in the mod's own file: `mode: off` over a loaded `on`.
+function savedOff(on: On) {
+  const manifest = JSON.stringify({ userConfig: { mode: { type: 'string', options: ['on', 'shadow', 'off'] } } })
+  on('fs.read', ($, e) => {
+    const path = e.path.replaceAll('\\', '/')
+    if (path === 'C:/Users/me/.claude/mods-data/compact-handoff/settings.json') return { value: '{"mode":"off"}' }
+    if (path.endsWith('/plugin.json')) return { value: manifest }
+    throw new Error('ENOENT')
+  })
+}
+
+test('the mode saved in the settings file applies from the session start', { options: { mode: 'on' } }, async (
+  $,
+  on,
+) => {
+  world(on)
+  savedOff(on)
+  await start($)
+  const shown = await $.command.run({ command: 'compact-handoff', args: '' } as never)
+  expect(shown).toEqual({ text: 'Mode off: stock compaction.' })
+})
+
+test(
+  'after a reload, with no session start, a compaction reads the saved mode first',
+  { options: { mode: 'on' } },
+  async ($, on) => {
+    const seen = world(on)
+    savedOff(on)
+    let instructions: string | undefined = 'unset'
+    on('session.compact', ($, e) => {
+      instructions = e.instructions
+      return { messages: [{ role: 'user', text: 'STOCK', toolUses: [] }] }
+    })
+    await $.session.compact({ trigger: 'auto', messages: CONVERSATION } as never)
+    expect(instructions).toBeUndefined()
+    expect(seen.writes).toEqual([])
+  },
+)

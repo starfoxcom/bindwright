@@ -1,101 +1,79 @@
-# claude-code-templates
+# Bindwright
 
-> **Live: [starfoxcom.github.io/claude-code-templates](https://starfoxcom.github.io/claude-code-templates/)**
+> **Live: [starfoxcom.github.io/bindwright](https://starfoxcom.github.io/bindwright/)**
 >
-> Four opinionated, toggle-driven bundles for setting up [Claude Code](https://claude.com/claude-code) in any project. Distilled from real session telemetry across two private projects; each rule shipped here was earned from a measurable receipt.
+> A Claude Code plugin that writes the files Claude Code reads about your project, so it knows how you work from the first message.
 
 ---
 
-## What this is
+## What it does
 
-A configurator (live at the URL above) that lets you compose a custom edition of Claude Code rules, skills, memory patterns, and CI workflows for your project. Pick a bundle, set toggles, click **Bind volume**, get a zip you unpack at your project root.
+`/bindwright:setup` asks a few questions in the session and writes the setup that fits the project: rules Claude Code reads at the start of every session, session skills that start with a plan and end with a hand-off, guard hooks that block force pushes and AI attribution, and CI workflows that put an AI review on every pull request. Questions about your computer come once; questions about the project come in every project. Files the repo already has are staged for you to merge, never overwritten.
 
-The point is **discipline, not boilerplate**. The bundles encode patterns that came out of receipts — moments where the absence of a rule produced a measurable cost. The most expensive of those receipts are printed verbatim in Folio V of the live page.
+Each rule here came from a real cost in a real project: the page's "What it caught in real projects" section shows the numbers and the mistakes that became rules.
 
-## The four bundles
+## Install
 
-| # | Bundle | Who it's for |
-|---|---|---|
-| 1 | **Solo · personal** | Single-author, single-machine. Aggressive auto-merge, lean PR ritual, full personal memory. |
-| 2 | **Multi-dev · OSS** | Public or community-collaborative. Conservative PR rituals, CODEOWNERS, contributing surface. |
-| 3 | **Client · solo consultant** | One contractor, one client. NDA-aware memory, audit-trail commits, billable handoff at session-close. |
-| 4 | **Client · team** | Strictest. Mandatory deep review, team-handoff notes, role-scoped isolation, full audit surface. |
+In Claude Code, once per computer:
 
-A decision tree on the live page resolves which one fits.
+```
+/plugin marketplace add starfoxcom/bindwright
+/plugin install bindwright@bindwright
+```
 
-## Using it
+Then, in each project, open Claude Code in the project's folder and run:
 
-### Fast path — in-browser bind (recommended)
+```
+/bindwright:setup
+```
 
-1. Go to [the live page](https://starfoxcom.github.io/claude-code-templates/).
-2. Pick a bundle, fill the project specification, set toggles.
-3. Click **Bind volume & download**.
-4. Unzip at your project root.
-5. Commit the result: `chore: install claude-code-templates v1.1.0 (<bundle>)`.
-
-The page runs entirely in your browser. No JSON, configuration, or telemetry is transmitted anywhere — the binder fetches template files from this domain and assembles the zip client-side.
-
-### Careful path — paste to Claude
-
-If you want a planning step before files land:
-
-1. Go to the live page, configure as above.
-2. Click **Copy config & paste to Claude**.
-3. Open Claude Code in your project root, paste the config as your first message.
-4. Claude reads `SETUP.md`, runs a short interview if anything's missing, proposes a file list, lands files atomically with a commit.
-
-The careful path is best when you want to inspect what'll be written *before* it lands, or when an existing project already has partial Claude Code setup you don't want to overwrite.
+The page's Install section says what each command changes on your computer and in the project; [plugin/README.md](plugin/README.md) lists the plugin's other commands.
 
 ## Repo layout
 
 ```
-claude-code-templates/
-├── index.html              ← the live page (also the GitHub Pages root)
-├── index.legacy.html       ← previous edition (v1.0.0), retained as fallback
-├── redesign/               ← dev source for the React UI (9 .jsx modules)
-├── README.md               ← this file
-├── CHANGELOG.md            ← version history
-├── CONTRIBUTING.md         ← how to PR / what's in scope
-├── LICENSE                 ← MIT
-├── VERSION                 ← current edition (v1.1.0)
-├── COMPARISON.md           ← bundle feature matrix (mirrored in Folio II)
-├── TOGGLES.md              ← full toggle reference (mirrored in Folio III)
-├── SETUP.md                ← orchestration prompt Claude follows
+bindwright/
+├── index.html              ← redirects the GitHub Pages root to page/
+├── page/                   ← the live page (plain HTML, CSS and JS, no build step)
+├── engine/                 ← the bind engine the plugin and the page's file preview run
+├── plugin/                 ← the Claude Code plugin (/bindwright:setup)
 ├── _core/                  ← canonical templates (source of truth)
 │   ├── project-template/   ← lands in your project root
 │   ├── global-template/    ← lands in ~/.claude
 │   └── licenses/           ← LICENSE template variants
-└── bundles/
-    ├── 1-solo-personal/
-    ├── 2-multi-dev-oss/
-    ├── 3-client-solo/
-    └── 4-client-team/
+├── tools/                  ← packing, page generation and the evidence counts
+├── docs/                   ← plans and research
+├── README.md               ← this file
+├── CHANGELOG.md            ← version history
+├── CONTRIBUTING.md         ← how to PR / what's in scope
+├── LICENSE                 ← MIT
+└── VERSION                 ← current version
 ```
-
-The `.md` files mirror what the live page renders — readable as git-diff fodder if you want to inspect changes between versions.
 
 ## Versioning
 
-[SemVer](https://semver.org/) from v1.0.0 onward.
+[SemVer](https://semver.org/).
 
-- **Major** (`v1 → v2`): breaking change to the toggle catalog, the bundle keys, the manifest schema, or the SETUP.md contract that a previously-rendered project depends on.
-- **Minor** (`v1.0 → v1.1`): new bundle, new toggle, new tool slot, new UI capability — additive, fully backward-compatible.
-- **Patch** (`v1.0.0 → v1.0.1`): bug fixes, copy edits, design polish without behavior change.
+- **Major:** a breaking change to the saved answers (`.bindwright/project.json`) or to the files a set-up project depends on.
+- **Minor:** a new setting, tool option, mod or command, fully backward-compatible.
+- **Patch:** bug fixes, copy edits and design polish without behavior change.
 
-Earlier conversational `v17` and `v18` mentions never shipped as standalone artifacts — they're consolidated into the v1.0.0 release. See [CHANGELOG.md](CHANGELOG.md) for what shipped when.
+See [CHANGELOG.md](CHANGELOG.md) for what shipped when.
 
 ## Privacy
 
-This page is static HTML + JavaScript hosted on GitHub Pages. There are no cookies, no analytics, no tracking pixels, and no server endpoints. The bind-volume button fetches template files from the same origin and assembles a zip in your browser. Your toggle selections and project metadata never leave the tab.
+The page is static HTML and JavaScript on GitHub Pages: no cookies, no analytics, no tracking. Its file preview runs the bind engine in your browser on files from the same site. The plugin sends nothing anywhere; it writes only into the project you run it in and, for the extras you say yes to, into `~/.claude`.
 
 ## Maintenance & contributing
 
 Solo-maintained as an open-source side project. Issues and pull requests welcome on a best-effort basis. See [CONTRIBUTING.md](CONTRIBUTING.md) for what's in scope and what's not.
 
+## Security and conduct
+
+Report a vulnerability privately as [SECURITY.md](SECURITY.md) describes. Participation follows the [code of conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+The repo is MIT — see [LICENSE](LICENSE). The files setup writes into your project are [MIT-0](LICENSE-MIT-0), so you owe no credit for them.
 
-## Acknowledgements
-
-The templates draw on patterns from production Claude Code work across two private projects (one consumer-software, one solo voxel-game build). The receipt-based methodology — earning each rule from a specific measurable cost — is what makes the bundles opinionated rather than aspirational.
+Bindwright works with Claude Code. It is not made by, endorsed by or affiliated with Anthropic.

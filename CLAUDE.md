@@ -1,20 +1,20 @@
-# CLAUDE.md — claude-code-templates
+# CLAUDE.md — Bindwright
 
 This file guides Claude Code when working in **this** repository — the templates project itself.
 
-Yes, the templates project dogfoods itself: the discipline we ship to other projects also applies to development of this repo. The rules at `.claude/rules/` are a *resolved bind* of the canonical sources at `_core/project-template/.claude/rules/` against this project's `.claude/BIND.md` toggle state — exactly what a fresh **Multi-dev · OSS** bind would write into a downstream project. The canonical templates never leave `_core/`; this repo's `.claude/` is the proof that the bind process produces a working setup.
+Yes, the templates project dogfoods itself: the discipline we ship to other projects also applies to development of this repo. The rules at `.claude/rules/` are a *resolved bind* of the canonical sources at `_core/project-template/.claude/rules/` rendered by the v2 engine from this project's answers in `.bindwright/project.json` — exactly what a fresh team bind would write into a downstream project. The canonical templates never leave `_core/`; this repo's `.claude/` is the proof that the bind process produces a working setup.
 
-When canonical templates evolve in `_core/project-template/.claude/rules/`, re-bind by re-resolving against `.claude/BIND.md` and replacing the corresponding `.claude/rules/*.md`. Same flow as the existing `.claude/skills/` bind.
+When canonical templates evolve in `_core/`, re-bind with `node engine/cli.js --update .` (the same three-way merge `/bindwright:update` runs, against `.bindwright/pristine.json`). Two hand tunes stay on top of the render: `code-size.md` lists only JavaScript and Python, and `collaboration.md` § Who reviews describes the solo-maintainer gate.
 
 ---
 
-## 🚨 BEFORE ANY CODE RESEARCH
+## Code research
 
-**The first tool for any "where is X / what calls Y / find usages of Z / locate the implementation of W" task MUST be `tokensave_search` or `tokensave_context`. NOT `Grep`. NOT `Glob`. NOT raw `grep`/`rg` in Bash.**
+Start any "where is X / what calls Y / find usages of Z" task with `tokensave_search` or `tokensave_context`, not Grep, Glob or raw `grep`/`rg`.
 
 This rule is enforced by a hook at `~/.claude/hooks/tokensave-first.py` (installed **globally**, never project-local — see `reference_tokensave_hook_global_install` memory for why). Grep/Glob/raw-grep calls are **blocked** when tokensave is available.
 
-**This repo has a tokensave index** at `.tokensave/` (32 files / 287 nodes, schema v9). The hook routes code-research through tokensave MCP tools by default. Re-sync incrementally with `tokensave sync` after edits; full rebuild via `tokensave sync -f` after schema migrations or large refactors.
+**This repo has a tokensave index** at `.tokensave/` (`tokensave_status` shows its size and freshness). The hook routes code-research through tokensave MCP tools by default. Re-sync incrementally with `tokensave sync` after edits; full rebuild via `tokensave sync -f` after schema migrations or large refactors.
 
 Fallback to Grep/Glob is allowed when:
 1. You've tried tokensave with 2+ keyword variants and got nothing usable
@@ -27,15 +27,14 @@ Bypass for Bash `grep`/`rg`: include `# TOKENSAVE_BYPASS: <reason>` in the comma
 
 ## Project overview
 
-**claude-code-templates** is an open-source toolkit for setting up Claude Code in any project. It ships four opinionated bundles (Solo, OSS, Client-solo, Client-team) and a configurable web UI hosted on GitHub Pages.
+**Bindwright** is an open-source Claude Code plugin: `/bindwright:setup` asks a few questions and writes the setup that fits the project. A landing page on GitHub Pages explains and installs it.
 
-- **Live page:** `index.html` — also deployed at https://starfoxcom.github.io/claude-code-templates/
+- **Live page:** `page/`, deployed at https://starfoxcom.github.io/bindwright/ (the root `index.html` redirects there)
 - **Source of truth for templates:** `_core/`
-- **Bundle-specific overrides:** `bundles/<n>/bundle.toggles.md`
-- **In-browser binder:** JSZip-based, client-side, no backend
+- **Bind engine:** `engine/`, run by the plugin (`plugin/`, `/bindwright:setup`) and by the page's file preview
 - **Versioning:** SemVer (`v1.0.0 → v1.1.0 → v2.0.0 …`). Earlier conversational `v17 / v18` mentions consolidated into the v1.0.0 release. See `VERSION` file and `CHANGELOG.md`.
 
-The page itself is the deliverable. There is no separate frontend build step; `index.html` is hand-authored and deployed as-is via the Pages workflow.
+The page itself is the deliverable. There is no build step; `page/` is hand-authored and deployed as-is via the Pages workflow.
 
 ---
 
@@ -44,33 +43,33 @@ The page itself is the deliverable. There is no separate frontend build step; `i
 Per `.claude/rules/git.md` (resolved from canonical `_core/project-template/.claude/rules/git.md`):
 
 - **Atomic commits.** One logical change per commit. Format: `<type>(<scope>): <imperative description>` (max 72 chars).
-- **Conventional types:** `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `data`.
+- **Conventional types:** `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `data`, `style`.
 - **No AI-attribution markers** anywhere — not in commit messages, PR titles, PR bodies, or issue comments. No `Co-Authored-By: Claude`, no `Generated with Claude Code`, no `claude.com` links in footers. The discipline is the work; the tool is a detail.
 - **Gitflow branching model.** Per the project's own `_core/project-template/.claude/rules/git.md`:
   - `main` — stable releases only, tag every release commit
   - `develop` — base for all in-flight work
   - `feature/<n>` — branches from `develop`, merges back to `develop`
-  - `release/<v>` — branches from `develop`, merges to `main` AND `develop`
-  - `hotfix/<n>` — branches from `main`, merges to `main` AND `develop`
-- **Always merge commit** on PR merge — never squash or rebase. Keep merge history visible.
+  - `release/<v>` — branches from `develop`, merges to `main`, then reaches `develop` through a cascade PR opened by hand (`.claude/rules/git.md` § "Cascade after every merge into `main`")
+  - `hotfix/<n>` — branches from `main`, merges to `main`, then the same hand-opened cascade PR into `develop`
+- **Every PR merges with a merge commit** (`gh pr merge <pr> --merge`), so each branch stays visible in the history graph. Keep every commit on the branch meaningful; the PR title (64 characters max) goes into the merge commit. Squash and rebase merges are not used here.
 
 ---
 
 ## Token-efficiency discipline
 
-Per `.claude/rules/token-efficiency.md` (resolved from canonical `_core/project-template/.claude/rules/token-efficiency.md`):
+Rules from `.claude/rules/token-efficiency.md`, `.claude/rules/task-tracking.md` and `.claude/rules/git.md`, plus a few that live only here:
 
-- **Task tracking is mandatory for 3+ step sessions.** Use the `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` tools (standard Claude Code as of v2.1.142, default-flip May 2026; opt-in available since v2.1.16, Jan 2026; on older builds or when `CLAUDE_CODE_ENABLE_TASKS=0` is set, `TodoWrite` is the fallback). Enumerate the planned steps with `TaskCreate` at session start. To chain dependencies, capture each new task's ID from the `tool_result` and call `TaskUpdate({ taskId, addBlockedBy: [<prereq-id>] })` (`addBlockedBy` is a `TaskUpdate` input parameter, not a separate tool). `TaskUpdate({ taskId, status: 'in_progress' })` BEFORE starting; `TaskUpdate({ taskId, status: 'completed' })` immediately when done — don't batch. New follow-ups discovered mid-session get their own `TaskCreate` call. The task list is the in-session source of truth and the basis for the session-close DoD audit. Single-task or trivial conversational work doesn't need it; the threshold is 3+ discrete items. **For multi-PR workstreams** (hotfix + cascade chains, large refactors split for review), create one task per PR up-front and chain dependencies with `TaskUpdate({ taskId, addBlockedBy: [<prior-pr-task-id>] })` so the task list mirrors the merge order — treating a 10-PR chain as ad-hoc work burns hours on out-of-sequence routing.
+- **Task tracking is mandatory for 3+ step sessions** (`.claude/rules/task-tracking.md`). Use the `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` tools (`TodoWrite` where they are not available). Enumerate the planned steps with `TaskCreate` at session start. To chain dependencies, capture each new task's ID from the `tool_result` and call `TaskUpdate({ taskId, addBlockedBy: [<prereq-id>] })` (`addBlockedBy` is a `TaskUpdate` input parameter, not a separate tool). `TaskUpdate({ taskId, status: 'in_progress' })` BEFORE starting; `TaskUpdate({ taskId, status: 'completed' })` immediately when done — don't batch. New follow-ups discovered mid-session get their own `TaskCreate` call. The task list is the in-session source of truth and the basis for the session-close DoD audit. Single-task or trivial conversational work doesn't need it; the threshold is 3+ discrete items. **For multi-PR workstreams** (hotfix + cascade chains, large refactors split for review), create one task per PR up-front and chain dependencies with `TaskUpdate({ taskId, addBlockedBy: [<prior-pr-task-id>] })` so the task list mirrors the merge order — treating a 10-PR chain as ad-hoc work burns hours on out-of-sequence routing.
 - **Read before writing.** Locate the relevant function/class before reading whole files. Use `tokensave_body <symbol>` to pull a single symbol's source when reading the whole file would be wasteful.
-- **Command timeout scaling.** Default starting timeout for builds: 420 000 ms. Each retry escalates by 120 000 ms.
-- **Never use `gh run watch`.** Always poll `gh run list` with a background loop — see the canonical pattern in the rule file.
-- **CI polling cadence is fixed by PR class, and ALL cadences run in the background.** Use the Bash tool with `run_in_background: true` and an until-loop — never foreground-sleep. The harness notifies on exit; pick up other work while CI runs.
-  - **Fast-path / auto-pass PRs** (docs-only, anything `triage` classifies non-reviewable; `.claude/` rules always get a review) — background until-loop with `sleep 90` per check, then `gh pr view <pr> --json statusCheckRollup`. Expect `Diff triage: SUCCESS`, `Evaluate review outcome: SUCCESS` (auto-passes via `if: always()`), `Claude On-Demand: SKIPPED` (`evaluate-review-outcome` PATCHes the deep check for non-reviewable diffs). Merge with `gh pr merge <pr> --merge` (never `--admin`).
-  - **Normal-review PRs** — background until-loop with `sleep 420` (7 minutes) between checks. Read the routine reviewer's verdict comment via `gh pr view <pr> --json comments` and act on the last non-empty 🟢/🔴 line. On 🟢, merge with `--merge`; on 🔴, fix on the PR branch and push.
-  - **PRs that edit `.github/workflows/claude-code-review.yml`** — the edit goes in a PR whose only other files are skippable docs, so triage passes it as non-reviewable; it merges on two local reviews of the exact head. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate script, `.claude/`, code) makes the review start and stop on `Workflow validation failed`, and the gate blocks with no way through: split it into its own PR first (`.claude/rules/review-tiers.md`). Edits to `claude.yml` alone get a normal review.
-- **Branch cleanup after every merge.** Delete the branch BOTH locally and on remote. Chain `git branch -D <name> && git push origin --delete <name>` into the post-merge sequence — `gh pr merge --delete-branch` only handles remote.
-- **Auto-merge on paths-ignore PRs is OFF** for this repo. The OSS bundle defaults this off because a public repo deserves a human eyeball on every PR.
-- **Usage ceiling:** at ≥80%, commit locally and stop. Don't push to PR (CI run costs 10–15% of remaining capacity).
+- **Command timeout scaling** follows `.claude/rules/token-efficiency.md`.
+- **Never use `gh run watch`.** When the ci-watch mod is loaded, it watches the PR after `git push`/`gh pr create` and wakes the session once all checks settle; without it, use the watchers in `.claude/rules/token-efficiency.md` (the Monitor tool, then a bounded background loop).
+- **What the checks report by PR class:**
+  - **Docs-only / non-reviewable PRs** (anything `triage` classifies non-reviewable; `.claude/` and any `CLAUDE.md` always get a review) — expect `Diff triage: SUCCESS` and `Review gate: SUCCESS` ("No review needed"). Merge with `gh pr merge <pr> --merge` once the PR reports `CLEAN`.
+  - **Normal-review PRs** — the `Review gate` check's title says where the PR stands (routine 🔴, deep review in progress, both 🟢); read the verdict comments for the findings. Green gate: merge with `--merge`. 🔴: fix on the PR branch and push.
+  - **PRs that edit `.github/workflows/claude-code-review.yml`** — triage never reviews that one file, so with only skippable docs beside it the PR passes the gate like a docs PR. The review action would refuse to run anyway: it requires the PR's copy of that workflow to match the default branch's. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate script, `.claude/`, code) starts the review, which stops on `Workflow validation failed`, and the PR can never merge: split it into its own PR first. Edits to `claude.yml` alone get a normal review. It merges only as `.claude/rules/review-tiers.md` § "PRs that edit the review workflow" describes: two local 🟢 reviews on the head commit when every commit came from our own sessions, otherwise the maintainer's read.
+- **No admin bypass, ever.** Never `gh pr merge --admin`. The rulesets have no bypass actors; `BLOCKED` means find and fix the cause.
+- **Branch cleanup after every merge** follows `.claude/rules/git.md` § Merging: `gh pr merge --delete-branch` removes the remote branch (and the local one when it is checked out); run `git branch -D <name>` as a separate call if it remains. Never `&&`-chain cleanup commands: permission rules match the whole command string, so chained calls get denied.
+- **Our own PRs merge on green, without waiting for the maintainer.** Once every check passes (and, for a PR that edits the review workflow, both local reviews of the head commit are 🟢), the session merges and cleans up. Only a PR carrying a commit from outside our sessions waits for the maintainer's read.
 
 ---
 
@@ -80,17 +79,17 @@ This project ships templates that downstream users install verbatim. A malicious
 
 Per `.claude/rules/review-tiers.md` (resolved from canonical `_core/project-template/.claude/rules/review-tiers.md`), applied with extra strictness here:
 
-- **Two tiers.** Routine review (Sonnet, every PR) + on-demand deep review (Opus, fired by `@claude review` comment).
+- **Two tiers.** Routine review (every PR) + on-demand deep review (fired by a comment starting with `@claude review this PR`). Both run Fable 5.1 at low effort with an Opus 5.5 high-effort backup; the deep tier retries Fable once before falling back. The `Review gate` check's summary names the model whose attempt wrote each tier's verdict, and whether it ran on the API credits.
 - **Binary verdict rule.** `🟢 LGTM` only when fully clean. `🔴 Blocking` when *any* real finding exists. No "minor non-blocking" rot. This applies to both tiers.
-- **Auto-fire deep review** on the trigger surface (parsing/codec/serialization, threading, scheduling, save/load formats, mod-loader DAG changes — full list in `git.md`). The routine reviewer applies the `needs-deep-review` label automatically.
+- **Auto-fire deep review** on the trigger surface (parsing/codec/serialization, threading, scheduling, save/load formats, mod-loader DAG changes — full list in `.claude/rules/review-tiers.md` § Deep review triggers). The routine reviewer applies the `needs-deep-review` label automatically.
 - **Strict OSS review posture on `main` AND `develop`:**
-  - Required-status-checks: routine-review verdict MUST be 🟢 before merge
-  - Required approvals: 1 (the maintainer manually approves after reading the AI verdict)
-  - Bypass: admin role only (the maintainer can self-merge their own PRs without the approval; that's their accountability)
-  - Every external contribution: AI routine review verdict + maintainer eyes-on review + approval = three signals before merge
-  - Deep review fires automatically on any PR touching `_core/`, the bundled `index.html`, `_core/project-template/.claude/hooks/`, or `redesign/*.jsx`. These are the highest-blast-radius surfaces.
+  - Required status checks: `Review gate` (both review tiers) and `No AI attribution` must pass before merge. On `develop`, `Engine and hook tests` (the `Tests` workflow: engine, Python twin and guard-hook tests) and `Mod tests` (every template mod's suite on a Windows runner) are required too; both run on every PR so they never wait on a docs-only one
+  - Required approvals: 0 (the AI gates decide; a solo maintainer cannot approve their own PR)
+  - Bypass actors: none. Nobody, admins included, can merge past the gates
+  - Every external contribution: AI routine review verdict + maintainer eyes-on review before merge
+  - Deep review fires automatically on any PR touching `_core/` (its hooks included) or `engine/`, which renders every bind. These are the highest-blast-radius surfaces.
 
-The routine-review + deep-review workflows are tracked-follow-up for installation here (issue #1) — they exist canonically in `_core/project-template/.github/workflows/` and need to be copied to the project's own `.github/workflows/` to self-host the same discipline the templates ship.
+The routine-review + deep-review workflows are installed and active in this repo's own `.github/workflows/` (`claude-code-review.yml` and `claude.yml`) — they self-host the same discipline the templates ship. They exist canonically in `_core/project-template/.github/workflows/` (`claude-code-review.yml.template`, `claude.yml.template`); this repo's live copies are the resolved bind of those canonical templates.
 
 ---
 
@@ -98,7 +97,7 @@ The routine-review + deep-review workflows are tracked-follow-up for installatio
 
 The page IS a visual artifact. Per `.claude/rules/visual.md` (resolved from canonical `_core/project-template/.claude/rules/visual.md`):
 
-- Ship one verifiable slice at a time. Smaller than ~150 lines of net change per slice.
+- Ship one verifiable slice at a time, each checkable with one short yes/no list.
 - **Local-iterate-then-push** for visual changes. Commit locally, report, wait for visual approval, then push. Skipping this burns CI cycles on iteration.
 - **Concrete visual smoke-test checklists** — never "verify no regressions." Hand the reviewer a specific yes/no list tied to what changed.
 
@@ -106,37 +105,28 @@ The page IS a visual artifact. Per `.claude/rules/visual.md` (resolved from cano
 
 ## Session ritual
 
-Skills `/session-start` and `/session-close` (and `/find`, `/architecture-graph`) live at `.claude/skills/` — this repo is self-bound from `_core/project-template/.claude/skills/` per `bundles/2-multi-dev-oss/bundle.toggles.md` with Discovery-mode resolution for null toggles. Rules at `.claude/rules/` follow the same bind pattern from `_core/project-template/.claude/rules/`. See `.claude/BIND.md` for the full audit trail (placeholders, toggle decisions, evidence). When templates evolve in `_core/`, re-resolve and replace the corresponding `.claude/skills/*.md` and `.claude/rules/*.md` files; once issue #3 (v1.2.0 Audit mode) ships, that flow becomes automated.
-
----
-
-## What's intentionally NOT here
-
-- **Routine + deep review workflows not yet installed** — the workflows exist canonically in `_core/project-template/.github/workflows/` but haven't been copied to this project's own `.github/workflows/` yet. Tracked follow-up.
+Skills `/session-start`, `/session-close` and `/find` live at `.claude/skills/`, rendered with the rules above. Work state lives on the GitHub board (`starfoxcom/6`) and in each issue's `### Current state` (`.claude/rules/tracker.md`); `/session-close` also rewrites the git-ignored pointer file `.bindwright/handoff.md`. This repo's own extra steps (the review gate's `--check` at session start) live in `.bindwright/session-steps.md`.
 
 ---
 
 ## Repo layout
 
 ```
-claude-code-templates/
-├── index.html              # the live page
+bindwright/
+├── index.html              # redirects to page/
+├── page/                   # the live page
+├── engine/                 # the bind engine
+├── plugin/                 # the Claude Code plugin
 ├── README.md               # public-facing
 ├── CLAUDE.md               # this file
 ├── CHANGELOG.md            # version history
 ├── CONTRIBUTING.md         # how to PR
 ├── LICENSE                 # MIT
 ├── VERSION                 # current edition
-├── COMPARISON.md, TOGGLES.md, SETUP.md
 ├── _core/
 │   ├── project-template/   # lands in user's repo on bind
 │   ├── global-template/    # lands in user's ~/.claude on bind
 │   └── licenses/           # LICENSE variants per type
-├── bundles/                # four bundle defaults
-│   ├── 1-solo-personal/
-│   ├── 2-multi-dev-oss/
-│   ├── 3-client-solo/
-│   └── 4-client-team/
 └── .github/
     └── workflows/
         └── pages.yml       # GitHub Pages deployment
@@ -147,7 +137,6 @@ claude-code-templates/
 ## Project conventions
 
 - **All code + prose in English.** Variable names, comments, manifest text, docs.
-- **HTML/CSS in `index.html` is hand-authored** — no build step, no minification. The file is meant to be readable in a browser dev tools window.
+- **The page in `page/` is hand-authored** HTML, CSS and JavaScript modules: no build step, no minification, readable in a browser's dev tools.
 - **OKLCH for color** in CSS — see the v1.0.0 redesign rationale in `CHANGELOG.md`.
-- **Geist (sans + mono) from Google Fonts** — loaded via `<link>` at the top of `index.html`.
-- **JSZip loaded on demand from CDN** for the bundle generator. No npm, no node_modules, no bundling.
+- **Hubot Sans and Fragment Mono from Google Fonts**, loaded via `<link>` at the top of each page. No npm, no node_modules, no bundling.

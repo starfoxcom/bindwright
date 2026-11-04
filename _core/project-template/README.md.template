@@ -48,10 +48,12 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the contributor guide.
 Open an issue describing the change you want to make before opening a PR.
 <!-- TOGGLE:contributing_md:off END -->
 
+<!-- TOGGLE:license_file START -->
 ## License
 
 See [`LICENSE`](./LICENSE).
+<!-- TOGGLE:license_file END -->
 
 ---
 
-_This README was scaffolded from a `claude-code-templates` setup. Edit freely._
+_This README was scaffolded from a Bindwright setup. Edit freely._

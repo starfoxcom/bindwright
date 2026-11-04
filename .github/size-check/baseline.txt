@@ -1,0 +1,5 @@
+# Hard size breaches the project had when this was written. One that is
+# not listed, or whose value grew past the listed one, fails the check.
+# Delete a line once its code complies. Rewrite with --write-baseline.
+# path|construct|name|value
+docs/v2/mockup-data.js|line_length|-|6

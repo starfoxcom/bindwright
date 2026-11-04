@@ -9,12 +9,22 @@ global-template/
 ├── README.md                              # (this file)
 ├── CLAUDE.md.additions                    # Append to ~/.claude/CLAUDE.md
 ├── memory-template/
-│   ├── README.md                          # How the memory system works
 │   └── MEMORY.md                          # Empty index — copy to the per-project memory dir
-└── hooks/
-    ├── code-research-first.py.template    # Generic PreToolUse hook (rendered at bind time)
-    ├── code-research-profiles.json        # Per-tool profiles consumed by the renderer
-    └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
+├── hooks/
+│   ├── code-research-first.py.template    # Generic PreToolUse hook (rendered at bind time)
+│   ├── code-research-profiles.json        # Per-tool profiles consumed by the renderer
+│   ├── push-guard.py                      # PreToolUse hook that blocks ordinary force pushes
+│   ├── no-ai-attribution.py               # PreToolUse hook that blocks AI attribution in commits and PRs
+│   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
+└── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
+    ├── README.md                          # What each mod does, install, options, tests
+    ├── ci-watch/                          # Watches a pushed PR's checks, wakes the session once
+    ├── compact-handoff/                   # Compaction as a focused hand-off, plus a recall tool
+    ├── session-facts/                     # Time, context fill and plan usage on every prompt
+    ├── shared-pc/                         # One session at a time runs heavy work on the machine
+    ├── skill-check/                       # Follows up when a skill's run skips a required step
+    ├── tasks/                             # Keeps the task list honest and visible
+    └── usage-guard/                       # Pauses sessions near a plan limit, resumes after the reset
 ```
 
 ---
@@ -27,7 +37,7 @@ If you DO have one, append the contents of `CLAUDE.md.additions` (or have Claude
 
 The additions include:
 
-- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — tokensave / ast-grep / Sourcegraph / ctags / Semgrep / Other) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
+- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — tokensave / none / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
 - **Memory system instructions** — the four memory types, when to save each, when to access, how MEMORY.md works as an index.
 
 These are project-agnostic — they're useful for any project, which is why they live in the global config.
@@ -47,7 +57,7 @@ where `<project-slug>` is what Claude Code auto-derives from your project's work
 After SETUP determines the slug:
 
 1. Copy `memory-template/MEMORY.md` to `~/.claude/projects/<project-slug>/memory/MEMORY.md` (if it doesn't already exist).
-2. Read `memory-template/README.md` for the four memory types + when to save each + the body structure for feedback / project memories (the `**Why:**` + `**How to apply:**` lines).
+2. The memory types, when to save each and the body structure come from the "Auto memory" section of `CLAUDE.md.additions`, merged into `~/.claude/CLAUDE.md` in step 1.
 
 Claude will start populating memory entries during your normal sessions — you don't need to pre-fill anything beyond the empty MEMORY.md index.
 
@@ -55,37 +65,35 @@ Claude will start populating memory entries during your normal sessions — you 
 
 ## 3. Install the code-research-first hook (optional, recommended)
 
-When the `tokensave_entry_point` toggle is ON and `tools.code_research` is not `none`, SETUP.md § Phase 7a renders `hooks/code-research-first.py.template` against the profile in `hooks/code-research-profiles.json` matching your chosen tool and writes the result to `~/.claude/hooks/<tool>-first.py`. The hook is then registered in `~/.claude/settings.json` under `hooks.PreToolUse` so it intercepts `Grep`/`Glob`/`Bash` calls and routes Claude through your chosen tool first.
+`hooks/code-research-profiles.json` holds one profile per code-research tool: how to install it, how to wire it into Claude Code, how to index a project, and who redirects `Grep`/`Glob`/`Bash` searches to it. Its keys match the engine's tool list (`engine/model.js`), and a test keeps the two in step.
 
-**Supported `tools.code_research` keys** (must match a key in `code-research-profiles.json`):
+| Key | Tool | Search redirect |
+|---|---|---|
+| `tokensave` | tokensave | the tool's own installer adds it (`tokensave install --agent claude`) |
+| `none` | (no tool) | none |
+| `custom` | a tool you name | this hook, as a stub; detection looks for the tool's CLI on PATH |
 
-| Key | Display name | Detection | Hook file written to |
-|---|---|---|---|
-| `tokensave` | tokensave | walks-up `.tokensave/tokensave.db` | `~/.claude/hooks/tokensave-first.py` |
-| `ast-grep` | ast-grep | `ast-grep` CLI on PATH | `~/.claude/hooks/ast-grep-first.py` |
-| `sourcegraph` | Sourcegraph | `src` CLI on PATH | `~/.claude/hooks/sourcegraph-first.py` |
-| `ctags` | ctags | walks-up `tags` file | `~/.claude/hooks/ctags-first.py` |
-| `semgrep` | Semgrep | `semgrep` CLI on PATH | `~/.claude/hooks/semgrep-first.py` |
-| `none` | (no hook) | — | not installed |
-| `custom` | (user-supplied) | user-specified CLI on PATH | `~/.claude/hooks/<name-kebab>-first.py` |
+This hook is installed only for profiles whose `hook.source` is `bindwright`. It is registered in `~/.claude/settings.json` under `hooks.PreToolUse`, so it intercepts `Grep`/`Glob`/`Bash` calls and routes Claude through the tool first.
 
-**Manual install** (if you're not running SETUP.md): substitute the six placeholders in `hooks/code-research-first.py.template` against your tool's profile, save to the destination path above, register in `~/.claude/settings.json`. **Worked example for tokensave:**
+**Manual install:** substitute the six placeholders in `hooks/code-research-first.py.template` against your tool's profile, save it, and register it in `~/.claude/settings.json`. **Worked example for a custom tool named `mygraph`** (a made-up name; substitute your own tool, index folder and commands):
 
-1. Read `hooks/code-research-profiles.json` and copy the FULL `tokensave` entry verbatim — you'll need its `sequence_bullets` (a long multi-line string with embedded `\n`s) for step 3. Do not hand-shorten the bullets; the rendered hook prints them to stderr on every block.
+1. Read `hooks/code-research-profiles.json` and copy the `custom` entry's `hook` object. Write your own `sequence_bullets` (a multi-line string with embedded `\n`s) for step 3, replacing the stub bullets with your tool's lookup commands. Do not shorten the bullets; the rendered hook prints them on every block.
 
-2. Copy `hooks/code-research-first.py.template` to `~/.claude/hooks/tokensave-first.py` (expand `~` to your real home path — Windows: `C:/Users/<name>/.claude/hooks/...`, POSIX: `/home/<name>/.claude/hooks/...`).
+2. Copy `hooks/code-research-first.py.template` to `~/.claude/hooks/mygraph-first.py` (the profile's `filename_basename` plus `.py`; expand `~` to your real home path — Windows: `C:/Users/<name>/.claude/hooks/...`, POSIX: `/home/<name>/.claude/hooks/...`).
 
 3. Substitute these SIX placeholders (every occurrence; case-sensitive):
-   - `{{TOOLS_CODE_RESEARCH_NAME}}` → `tokensave` (the DISPLAY_NAME line wraps it as `"tokensave"` — Python string literal)
-   - `{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}` → `tokensave`
-   - `{{TOOLS_CODE_RESEARCH_BYPASS_MARKER}}` → `TOKENSAVE_BYPASS:`
+   - `{{TOOLS_CODE_RESEARCH_NAME}}` → `MyGraph` (the DISPLAY_NAME line wraps it as `"MyGraph"` — Python string literal)
+   - `{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}` → `mygraph`
+   - `{{TOOLS_CODE_RESEARCH_BYPASS_MARKER}}` → `RESEARCH_BYPASS:`
    - `{{TOOLS_CODE_RESEARCH_DETECTION_MODE}}` → `walk_up`
-   - `{{TOOLS_CODE_RESEARCH_DETECTION_TARGET}}` → `.tokensave/tokensave.db`
-   - `{{TOOLS_CODE_RESEARCH_SEQUENCE_BULLETS}}` → the multi-line bullets from the profile JSON's `sequence_bullets` field (the JSON-decoded form — `\n` characters become actual newlines inside the rendered `SEQUENCE_BULLETS = """..."""` triple-quoted block)
+   - `{{TOOLS_CODE_RESEARCH_DETECTION_TARGET}}` → `.mygraph/mygraph.db`
+   - `{{TOOLS_CODE_RESEARCH_SEQUENCE_BULLETS}}` → your bullets from step 1 (the JSON-decoded form — `\n` characters become actual newlines inside the rendered `SEQUENCE_BULLETS = """..."""` triple-quoted block)
+
+   The name and bypass marker come from the engine (`engine/model.js`), which uses `RESEARCH_BYPASS:` for every tool without a marker of its own.
 
 4. Verify the substituted file is valid Python. Use the rendered absolute path (not `~`, which `open()` does not expand):
-   - macOS/Linux: `python3 -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/tokensave-first.py')).read())"`
-   - Windows: `py -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/tokensave-first.py')).read())"`
+   - macOS/Linux: `python3 -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/mygraph-first.py')).read())"`
+   - Windows: `py -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/mygraph-first.py')).read())"`
    - If the file parses successfully, the command exits silently. A `SyntaxError` means a placeholder substitution failed; re-check step 3.
 
 5. Add this entry to `~/.claude/settings.json` under `hooks.PreToolUse[]`. **If the array already has entries, APPEND yours; do NOT replace the array** (you'll wipe out memory + other hooks).
@@ -96,7 +104,7 @@ When the `tokensave_entry_point` toggle is ON and `tools.code_research` is not `
    {
      "matcher": "Grep|Glob|Bash",
      "hooks": [
-       { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/tokensave-first.py\"" }
+       { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/mygraph-first.py\"" }
      ]
    }
    ```
@@ -111,7 +119,7 @@ When the `tokensave_entry_point` toggle is ON and `tools.code_research` is not `
          {
            "matcher": "Grep|Glob|Bash",
            "hooks": [
-             { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/tokensave-first.py\"" }
+             { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/mygraph-first.py\"" }
            ]
          }
        ]
@@ -125,9 +133,9 @@ When the `tokensave_entry_point` toggle is ON and `tools.code_research` is not `
    - Replace `<name>` with your username (Windows) or expand to your full home path (POSIX) — Claude Code does NOT auto-expand `~` in hook command strings.
    - Trailing commas in JSON are invalid — re-check after editing.
 
-6. Reload Claude Code (`/exit` + reopen). Test by running a `Grep` in a directory with `.tokensave/` — hook should block.
+6. Reload Claude Code (`/exit` + reopen). Test by running a `Grep` in a directory with `.mygraph/` — the hook should block.
 
-**For other tools**, swap the profile values from `hooks/code-research-profiles.json` keyed on `ast-grep` / `sourcegraph` / `ctags` / `semgrep` / `custom`. The substitution list is identical.
+**For a custom tool**, use the `custom` profile with your tool's name, kebab name and homepage in place of its `{{TOOLS_CODE_RESEARCH_*}}` placeholders, then replace the stub bullets in the rendered hook with the tool's own commands. The substitution list is identical.
 
 **⚠️ Advisory enforcement, not a security boundary** — the hook fails open on malformed input and unknown profile fields. Treat it as a Claude-discipline nudge, not as a sandbox.
 
@@ -144,6 +152,26 @@ It's project-agnostic, parameter-free (the zone comes from the OS at call time �
 To install, follow the worked example in `hooks/time-injection.snippet.md` — it documents the Node command (with a Python fallback), the JSON entry to append to `~/.claude/settings.json` under `hooks.UserPromptSubmit`, and the verification step. The hook composes cleanly with the code-research-first hook from § 3; they register under different slots and never conflict.
 
 The AI-side counterpart — instructions that tell the model to attend to the `[time]` lines rather than ignore them — lives in `CLAUDE.md.additions` under the "Time-of-day awareness" section, so step 1 above already covered it.
+
+---
+
+## 4b. Install the push guard (recommended)
+
+The project's deny rules match command text, so a force push written as a bundle of short flags (`git push -qf`) gets past them. `hooks/push-guard.py` reads the command's text with quoting removed and blocks a `git push` carrying `--force`, `-f` inside any flag bundle, `--mirror` or a `+` refspec, wherever it appears in the command. `--force-with-lease` and `--force-if-includes` stay allowed. It only ever blocks or stays silent, never asks. Text that only mentions a force push (a commit message, a script) is blocked too, as, rarely, is a plain push chained after a quoted string that spans lines or in a Bash command with a `\` ending a line when a force word follows it anywhere, and the message says to pass such text in a file, or to put such a command on one line or run the push as its own command. It is a safety net for force pushes written the ordinary way, not a sandbox; its docstring lists what stays out of reach.
+
+`/bindwright:setup` installs it to `~/.claude/hooks/push-guard.py`, registers it in `~/.claude/settings.json` by the absolute path of a Python 3.8+ interpreter found on the machine (`engine/home.py install-hook`, whose launcher keeps a missing file from blocking every command), and then asks whether pushes should run without a prompt in every project. Without Python, or if you say no, pushes other than a bare `git push` ask for approval.
+
+## 4c. Install the attribution guard (hook location "home")
+
+`hooks/no-ai-attribution.py` denies a git or gh write whose text, or a message file it names, carries AI attribution: an AI co-author trailer, a "generated with" line, a session link or the robot emoji. Plain mentions of a tool pass. `/bindwright:setup` installs it next to the push guard and turns off the harness's own trailers in `~/.claude/settings.json`.
+
+By default a bind ships both guards inside the project instead (`.claude/hooks/`, registered in the committed `.claude/settings.json`), so teammates and cloud sessions get them too; setup then installs neither here. A project launcher steps aside for a guard registered here, so a guard never runs twice.
+
+## 4d. Mods (optional, Claude Code 2.1.287+)
+
+`mods/` holds ten function-hook plugins that run inside Claude Code: session facts on every prompt, a session row (model, project, branch), a compaction hand-off, a local CI watcher, an in-process guard, a shared-machine work queue, skill step checks, task-list upkeep, a plan-usage pause and a local CI runner row. Each is optional; every mod but `runners` and `shared-pc` is recommended for everyone, and `session-facts` supersedes the time-injection hook from § 4. They install globally through `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` and keep their data under `~/.claude/mods-data/<mod>/`. Four of them draw rows above the prompt that take the place of a status line, in the terminal and in the Desktop app (see `mods/README.md`).
+
+See [`mods/README.md`](mods/README.md) for what each mod does, its default and options, how to install, test and validate it, and notes for writing your own.
 
 ---
 

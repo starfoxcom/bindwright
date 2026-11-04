@@ -1,0 +1,38 @@
+/* The settings page. Colours and type come from the tokens on :root in style.css. */
+
+.settings-intro { margin-top: 36px; }
+
+.settings-group { margin-top: 96px; }
+.settings-group h2 {
+  margin-bottom: 14px; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.05; letter-spacing: -0.03em;
+}
+.settings-group h3 { font-size: 16px; font-weight: 650; }
+.settings-group .where { max-width: 72ch; font-size: 15px; color: var(--text-2); }
+.settings-group .where code, .setting code {
+  font: 400 14px/1.4 "Fragment Mono", ui-monospace, monospace; color: var(--text);
+}
+
+#mods { margin-top: 56px; }
+#mods + p { margin-top: 8px; max-width: 72ch; font-size: 15px; color: var(--text-2); }
+
+.settings-list { list-style: none; margin: 20px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.setting {
+  display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+  gap: 6px 28px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--rule);
+}
+.setting p { font-size: 15px; color: var(--text-2); }
+.setting-value {
+  justify-self: end; padding: 4px 12px; border-radius: 999px; white-space: nowrap;
+  background: var(--key); color: var(--text); font-size: 13px;
+}
+.setting-value b { font-weight: 600; }
+.setting-label {
+  margin-right: 4px; color: var(--text-2); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .settings-group { margin-top: 72px; }
+  /* One column: title, what it does, then the default, the same on every row. */
+  .setting { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .setting-value { justify-self: start; margin-top: 4px; max-width: 100%; white-space: normal; }
+}

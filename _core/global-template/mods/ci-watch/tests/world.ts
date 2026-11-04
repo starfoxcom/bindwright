@@ -1,0 +1,152 @@
+import type { On } from 'claude-code'
+import { mock } from 'claude-code/testing'
+
+import { STATUS_SCRIPT } from '../hooks/incident'
+import { MKDIR_SCRIPT, SWEEP_SCRIPT } from '../hooks/register'
+
+// The engine beneath ci-watch in its tests: gh, the state files, the clock and the session's prompts.
+export type Seen = {
+  prompts: string[]
+  files: Map<string, string>
+  bucket: string
+  /** Extra check rows beside `build`. */
+  rows: { name: string; bucket: string }[]
+  /** Reads see the written files (default: no file can be read). */
+  isReadable: boolean
+  /** Runs inside each `gh pr checks` call: another instance acting while this one waits on gh. */
+  duringChecks?: () => unknown
+  /** Runs inside a read of the state file, after the text was read. */
+  duringStateRead?: () => unknown
+  /** Runs inside each folder make, before it returns (the owner claim makes its folder first). */
+  duringMkdir?: () => unknown
+  /** `gh pr checks` fails (network, auth) with nothing on stdout. */
+  isChecksDown?: boolean
+  /** Folder makes, file writes and reads of the rounds file, in order. */
+  order: string[]
+  /** Every write fails (a folder that cannot be made). */
+  isWriteDown?: boolean
+  /** What `gh pr view --json state` reports. */
+  prState: string
+  /** The PR of the branch a push names (7 by default), and PRs GitHub reports merged whatever `prState` says. */
+  branchPr?: number
+  mergedPrs?: number[]
+  /** The head commit `gh pr view` reports (default `a1`). */
+  head?: string
+  /** The mod's manifest, read as any plugin.json (default: none). */
+  manifest?: string
+  /** `gh pr checks` calls so far: one per watch per poll. */
+  checksRead: number
+  /** What githubstatus.com answers (default: nothing), and how often it was read. */
+  status?: string
+  statusReads: number
+  /** Runs inside each status read: something else acting while the mod waits on GitHub. */
+  duringStatus?: () => unknown
+  /** How many prompts a hook drops before one enters. */
+  refusals?: number
+  /** Each slash command registered, with its argument hint. */
+  commands: { name: string; argumentHint?: string }[]
+  /** Every gh call's words. */
+  ghCalls: string[]
+}
+
+export function world(on: On) {
+  const seen: Seen = {
+    prompts: [],
+    files: new Map(),
+    bucket: 'pending',
+    rows: [],
+    isReadable: false,
+    order: [],
+    prState: 'OPEN',
+    commands: [],
+    checksRead: 0,
+    statusReads: 0,
+    ghCalls: [],
+  }
+  const clock = mock.clock(on, { now: 1_000 })
+  mock.env(on, { USERPROFILE: 'C:/Users/me' })
+  on('session.id', () => ({ value: 's1' }))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('tool.register', ($, e) => ({ value: { tool: `mcp__ci-watch__${e.name}` } }))
+  on('command.register', ($, e) => {
+    seen.commands.push({ name: e.name, argumentHint: e.argumentHint })
+    return { value: { command: e.name } as never }
+  })
+  on('fs.write', ($, e) => {
+    if (seen.isWriteDown) throw new Error('ENOENT')
+    seen.files.set(e.path.replaceAll('\\', '/'), e.text)
+    seen.order.push(`write ${e.path.replaceAll('\\', '/')}`)
+    return { value: undefined }
+  })
+  on('fs.read', async ($, e) => {
+    const path = e.path.replaceAll('\\', '/')
+    if (path.endsWith('/plugin.json') && seen.manifest !== undefined) return { value: seen.manifest }
+    if (path.endsWith('/rounds.json')) seen.order.push(`read ${path}`)
+    const text = seen.isReadable ? seen.files.get(path) : undefined
+    if (text === undefined) throw new Error('ENOENT')
+    // The read already holds the old text when the change lands.
+    if (path.endsWith('.json')) await seen.duringStateRead?.()
+    return { value: text }
+  })
+  on('process.run', async ($, e) => {
+    const args = e.argv.join(' ')
+    if (e.argv[2] === MKDIR_SCRIPT) {
+      seen.order.push(`mkdir ${e.argv[3]}`)
+      await seen.duringMkdir?.()
+    }
+    if (e.argv[1]?.endsWith(`/${SWEEP_SCRIPT}`)) seen.order.push(`sweep ${e.argv.slice(2).join(' ')}`)
+    if (e.argv[2] === STATUS_SCRIPT) {
+      seen.statusReads++
+      await seen.duringStatus?.()
+      const stdout = seen.status ?? ''
+      return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (e.argv[0] === 'gh') seen.ghCalls.push(args)
+    if (args.includes('pr checks')) seen.checksRead++
+    if (args.includes('pr checks')) await seen.duringChecks?.()
+    if (args.includes('pr checks') && seen.isChecksDown) {
+      return {
+        value: {
+          exitCode: 1,
+          stdout: '',
+          stderr: 'error connecting to api.github.com',
+          isStdoutTruncated: false,
+          isStderrTruncated: false,
+        },
+      }
+    }
+    const named = /--repo (\S+)/.exec(args)?.[1]
+    const repo = named ?? 'o/r'
+    const stdout = args.includes('pr checks')
+      ? JSON.stringify([{ name: 'build', bucket: seen.bucket }, ...seen.rows])
+      : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('prompt.submit', ($, e) => {
+    if (seen.refusals) {
+      seen.refusals--
+      return { drop: 'refused' }
+    }
+    seen.prompts.push(e.text)
+    return { text: e.text }
+  })
+  const answer = () => ({ result: { stdout: '', stderr: '', interrupted: false } as never })
+  on('tool.call', { tool: ['Bash', 'PowerShell'] }, answer)
+  // The engine's own band beneath the plugins: empty.
+  on('ui.render', () => ({ type: 'Box', children: [] }) as never)
+  return { seen, clock }
+}
+
+function prView(seen: Seen, repo: string, number: number): string {
+  const state = seen.mergedPrs?.includes(number) ? 'MERGED' : seen.prState
+  const url = `https://github.com/${repo}/pull/${number}`
+  return JSON.stringify({ number, url, headRefOid: seen.head ?? 'a1', headRefName: 'feature/x', state })
+}
+
+// The test runner has timers; the mod sandbox's types do not list them.
+declare function setTimeout(callback: () => void, ms: number): unknown
+
+/** A short real wait: room for other work to go ahead (a bound, never what a test waits on to pass). */
+export function moment(ms = 100): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}

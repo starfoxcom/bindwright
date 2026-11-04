@@ -1,0 +1,234 @@
+/* The hero's drawn terminal scene. Every rule sits under .stage, so nothing leaks
+   into the rest of the page. The page tokens (--canvas, --panel, --rule, --text,
+   --text-2, --accent) come from style.css. */
+.stage {
+  --term: oklch(0.165 0.006 240);
+  --dim: oklch(0.62 0.01 240);
+  --ok: oklch(0.76 0.15 150);
+  --bad: oklch(0.70 0.17 25);
+  --spin: oklch(0.72 0.14 45);
+  --spin-hi: oklch(0.90 0.08 60);
+  --warn: oklch(0.84 0.15 92);
+  --info: oklch(0.79 0.10 215);
+  --magic: oklch(0.75 0.14 320);
+  --add-bg: oklch(0.32 0.06 150);
+  --del-bg: oklch(0.32 0.07 25);
+  position: relative; width: min(1120px, 100%); margin: 48px auto 0;
+  container-type: inline-size;
+}
+
+.stage .caption {
+  font-size: clamp(18px, 3.1cqi, 34px); font-weight: 750; font-stretch: 110%; letter-spacing: -0.015em;
+}
+.stage .caption b { color: var(--accent); font-weight: 750; margin-right: .3em; }
+.stage .caption.in { animation: scene-cap 520ms cubic-bezier(.2,.8,.2,1) both; }
+@keyframes scene-cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
+
+/* Terminal window: the scene's full width, with the cards in a row under it. */
+.stage .term {
+  margin-top: 2cqi; height: 50cqi;
+  display: flex; flex-direction: column;
+  background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
+  box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
+  font: 400 clamp(11px, 1.6cqi, 15px)/1.55 "Fragment Mono", ui-monospace, monospace;
+  overflow: hidden;
+}
+.stage .bar {
+  display: flex; align-items: center; gap: 7px; padding: .8em 1em;
+  border-bottom: 1px solid var(--rule); color: var(--dim); font-size: .9em;
+}
+.stage .bar i { width: .85em; height: .85em; border-radius: 50%; background: var(--rule); }
+.stage .bar span { margin: 0 auto; transform: translateX(-2.2em); }
+.stage .pane { position: relative; flex: 1; overflow: hidden; padding: 0 1.2em; }
+.stage .lines {
+  position: absolute; left: 1.2em; right: 1.2em; top: 1em;
+  transition: transform 420ms cubic-bezier(.2,.8,.2,1);
+}
+.stage .line {
+  white-space: pre-wrap; min-height: 1.55em; animation: scene-rise 260ms cubic-bezier(.2,.8,.2,1) both;
+  transition: opacity 300ms, filter 300ms;
+}
+@keyframes scene-rise { from { opacity: 0; transform: translateY(6px); } }
+.stage .gap { height: .7em; }
+.stage .pane.spot .line:not(.focus) { opacity: .22; filter: blur(1.2px); }
+/* Focused lines read as one block: one tint, rounded only at its outer corners. */
+.stage .line.focus { background: oklch(0.70 0.17 25 / .12); margin: 0 -.5em; padding: 0 .5em; }
+.stage .line.focus:not(.focus + .focus) { border-radius: 6px 6px 0 0; padding-top: .3em; }
+.stage .line.focus:not(:has(+ .focus)) { border-radius: 0 0 6px 6px; padding-bottom: .3em; }
+
+.stage .echo { color: var(--text-2); background: oklch(1 0 0 / .05); border-radius: 4px; padding: 0 .4em; }
+.stage .dot { display: inline-block; width: 1.4em; color: var(--text); }
+/* Drawn, not the ⏺ character, which phones render as an emoji. */
+.stage .dot::before {
+  content: ""; display: inline-block; width: .55em; height: .55em; border-radius: 50%;
+  background: currentColor; vertical-align: .08em;
+}
+.stage .dot.run { color: var(--dim); animation: scene-blink 900ms steps(2, jump-none) infinite; }
+.stage .dot.ok { color: var(--ok); }
+.stage .dot.bad { color: var(--bad); }
+@keyframes scene-blink { 50% { opacity: .25; } }
+.stage .name { font-weight: 700; color: var(--text); }
+.stage .arg { color: var(--text-2); }
+.stage .elbow { color: var(--dim); display: inline-block; width: 1.4em; margin-left: 1.4em; }
+.stage .mute { color: var(--dim); }
+.stage .okt { color: var(--ok); }
+.stage .badt { color: var(--bad); }
+.stage .warnt { color: var(--warn); }
+.stage .cyant { color: var(--info); }
+.stage .magt { color: var(--magic); }
+.stage .diff { margin-left: 2.8em; padding: 0 .5em; border-radius: 3px; }
+.stage .diff.add { background: var(--add-bg); }
+.stage .diff.del { background: var(--del-bg); }
+.stage .diff .n { color: var(--dim); margin-right: 1em; }
+.stage .todo .box { display: inline-block; width: 1.5em; }
+.stage .todo.done { color: var(--dim); }
+.stage .todo.done .txt { text-decoration: line-through; }
+.stage .thought { color: var(--dim); font-style: italic; }
+
+/* The live spinner row and the input box sit under the transcript. */
+.stage .spinrow { padding: .2em 1.2em .5em; min-height: 2em; display: flex; gap: .6em; align-items: baseline; }
+.stage .spinrow[hidden] { visibility: hidden; display: flex !important; }
+/* Compacting the conversation spins in the CLI's cool blue instead of the thinking orange. */
+.stage .spinrow[data-tone="compact"] { --spin: oklch(0.78 0.10 275); --spin-hi: oklch(0.93 0.05 275); }
+.stage .glyph { color: var(--spin); width: 1em; text-align: center; }
+.stage .verb {
+  background: linear-gradient(90deg, var(--spin) 0 35%, var(--spin-hi) 50%, var(--spin) 65% 100%);
+  background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: scene-shimmer 1.8s linear infinite;
+}
+@keyframes scene-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.stage .meta { color: var(--dim); }
+/* The status band: one line per mod that is running, between the spinner and the input. */
+.stage .band { margin: 0 1.2em .5em; font-size: .92em; }
+.stage .band:empty { margin: 0; }
+.stage .band-row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+.stage .band .btn { color: var(--dim); }
+.stage .band .now { color: var(--info); font-weight: 700; }
+.stage .input {
+  margin: 0 1.2em 1.1em; padding: .55em .8em; border: 1px solid var(--rule); border-radius: 8px;
+  display: flex; gap: .7em; color: var(--text);
+}
+.stage .input .p { color: var(--dim); }
+.stage .caret {
+  display: inline-block; width: .55em; height: 1.15em; vertical-align: -.2em; background: var(--text-2);
+  animation: scene-blink 1s steps(2, jump-none) infinite;
+}
+.stage .hint { padding: 0 2.4em .9em; color: var(--dim); font-size: .85em; margin-top: -.6em; }
+
+/* Pop-out cards: one slot each, all as tall as the row, so nothing moves as they appear. */
+.stage .cards {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2cqi; margin-top: 2cqi;
+}
+.stage .placeholder { display: none; }
+.stage .card {
+  padding: 1.1em 1.2em; border-radius: 18px; background: oklch(0.27 0.008 240 / .92);
+  border: 1px solid var(--rule); box-shadow: 0 24px 60px -24px oklch(0 0 0 / .7);
+  font-size: clamp(12px, 1.45cqi, 16px);
+  opacity: 0; transform: translateY(18px) scale(.96); filter: blur(6px);
+  transition: opacity 420ms, transform 520ms cubic-bezier(.2,.9,.25,1.2), filter 420ms;
+}
+.stage .card.on { opacity: 1; transform: none; filter: none; }
+.stage .card h3 {
+  display: flex; align-items: center; gap: .6em; font-size: 1.05em; font-weight: 700; font-stretch: 108%;
+}
+.stage .card p { color: var(--text-2); margin-top: .4em; font-size: .92em; }
+.stage .ico { width: 2.1em; height: 2.1em; border-radius: 10px; display: grid; place-items: center; flex: none; }
+.stage .ico svg { width: 1.3em; height: 1.3em; }
+.stage .ico.g { background: oklch(0.70 0.17 25 / .18); color: var(--bad); }
+.stage .ico.r { background: oklch(0.76 0.15 150 / .16); color: var(--ok); }
+.stage .ico.h { background: oklch(0.72 0.14 45 / .18); color: var(--spin); }
+.stage .chip {
+  display: inline-block; margin-top: .7em; padding: .2em .65em; border-radius: 99px; font-size: .78em;
+  background: oklch(1 0 0 / .06); color: var(--text-2);
+}
+.stage .status { display: flex; align-items: center; gap: .55em; margin-top: .6em; font-size: .92em; }
+.stage .status .s {
+  width: .7em; height: .7em; border-radius: 50%; background: var(--bad);
+  box-shadow: 0 0 0 .3em oklch(0.70 0.17 25 / .18); transition: background 300ms, box-shadow 300ms;
+}
+.stage .card.green .status .s {
+  background: var(--ok); box-shadow: 0 0 0 .3em oklch(0.76 0.15 150 / .18);
+}
+.stage .status .t2 { display: none; }
+.stage .card.green .status .t1 { display: none; }
+.stage .card.green .status .t2 { display: inline; }
+.stage .note { margin-top: .6em; font: .85em/1.6 "Fragment Mono", monospace; color: var(--text-2); }
+.stage .note div { opacity: 0; transform: translateX(-6px); transition: opacity 300ms, transform 300ms; }
+.stage .card.on .note div { opacity: 1; transform: none; }
+.stage .card.on .note div:nth-child(2) { transition-delay: 250ms; }
+.stage .card.on .note div:nth-child(3) { transition-delay: 500ms; }
+.stage .note b { color: var(--accent); font-weight: 400; }
+
+/* A split stage: the terminal beside a side panel, both as tall as the terminal. The
+   terminal is on the left and the panel on the right, unless the stage has .flip, which
+   swaps them. The panel's rows fly in from the left as they arrive. */
+.stage.split {
+  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 2cqi;
+  width: 100%; margin: 20px 0 0;
+}
+.stage.split.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.stage.split .term { margin: 0; height: auto; min-height: 30cqi; }
+.stage.split .boxes { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 2cqi; }
+.stage.split .box {
+  display: flex; flex-direction: column; min-width: 0;
+  padding: 1.1em 1.2em; border-radius: 18px; background: oklch(0.27 0.008 240 / .92);
+  border: 1px solid var(--rule); box-shadow: 0 24px 60px -24px oklch(0 0 0 / .7);
+  font-size: clamp(12px, 1.45cqi, 16px);
+}
+.stage.split .box h3 {
+  display: flex; align-items: center; gap: .6em; font-size: 1.05em; font-weight: 700; font-stretch: 108%;
+}
+.stage.split .where { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-top: .6em; }
+.stage.split .where code { font: .92em "Fragment Mono", monospace; color: var(--text-2); }
+.stage.split .where .chip { margin-top: 0; }
+/* Each row is a label pill; the paths show in the terminal and behind the files button.
+   Every row is there from the start as a faint outline, so the box keeps its size, and
+   it fills in as setup writes it. */
+.stage.split .rows {
+  list-style: none; margin-top: .8em; padding: 0; display: flex; flex-wrap: wrap; gap: 6px;
+}
+.stage.split .row {
+  padding: .3em .75em; border-radius: 99px; background: oklch(1 0 0 / .06); line-height: 1.3;
+}
+.stage.split .row.ghost { background: none; box-shadow: inset 0 0 0 1px var(--rule); opacity: .5; }
+.stage.split .row.ghost > * { visibility: hidden; }
+.stage.split .row.landed { animation: lands-fly 420ms cubic-bezier(.2,.8,.2,1) both; }
+.stage.split .row-label { font-weight: 650; }
+@keyframes lands-fly { from { opacity: 0; transform: translateX(-24px); filter: blur(4px); } }
+
+/* The stage is its own container, so its columns follow the viewport: below 900px the
+   terminal goes full width above the boxes. */
+/* The mods terminal is taller than the others and grows with its band, so the rows never
+   squeeze the transcript below about seven lines. */
+.stage.split.mods-stage .term { min-height: 46cqi; }
+.stage.mods-stage .pane { flex: 1 0 auto; min-height: 10.5em; }
+@media (max-width: 900px) {
+  .stage.split, .stage.split.flip { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .stage.split .term { min-height: 50cqi; }
+  .stage.split.mods-stage .term { min-height: 80cqi; }
+}
+@container (max-width: 640px) {
+  .stage.split .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
+  .stage.split.mods-stage .term { height: auto; min-height: 96cqi; }
+}
+/* The band's collapse mark, which Claude Code draws at the band's top right. */
+.stage .band:not(:empty)::before { content: "[-]"; float: right; color: var(--dim); }
+
+
+/* Phones: everything stacks. Title, terminal, then a band of its own for the cards,
+   so a card never covers the newest lines. */
+@container (max-width: 640px) {
+  .stage .caption {
+    margin: 0; font-size: 6cqi; line-height: 1.15; min-height: 2.3em;
+    display: flex; align-items: flex-end;
+  }
+  .stage .term { margin: 4cqi 0 0; height: 92cqi; font-size: 3.1cqi; }
+  .stage .cards { margin-top: 4cqi; grid-template-columns: minmax(0, 1fr); min-height: 40cqi; }
+  .stage .placeholder {
+    display: grid; grid-area: 1 / 1; place-items: center; border: 1px dashed var(--rule);
+    border-radius: 18px; color: var(--dim); font-size: 3.4cqi; transition: opacity 300ms;
+  }
+  .stage .cards:has(.card.on) .placeholder { opacity: 0; }
+  .stage .card { grid-area: 1 / 1; font-size: 3.8cqi; }
+}

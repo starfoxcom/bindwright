@@ -1,131 +1,129 @@
 ---
 name: session-close
-description: Run the session-close ritual end-to-end — DoD verification, commit, PR, polling loop, merge (where applicable), branch cleanup, context refresh.
+description: Close a work session. Verifies what is really finished, commits, opens or merges the PR, cleans up branches and hands off to the next session. Use when the maintainer asks for it, or when every task of the session is done; never just because the context is filling up.
 ---
 
 # /session-close
 
-Run this skill at the end of every work session, or when the conversation is near saturation. Executes end-to-end — no per-step approval gate unless the next move is genuinely dangerous (force-push, force-delete with unmerged work, destructive history rewrite).
-
-## Steps
+Run the steps in order without asking between them. Stop and ask only before a force-push, deleting a branch that holds unmerged work, or rewriting history someone else has pulled. If `.claude/rules/visual.md` exists and this session changed what people see, do not push until the maintainer has confirmed the visual check.
 
 <!-- TOGGLE:definition_of_done_verification START -->
-### Definition-of-done verification (if claiming a milestone / feature complete)
+## Verify what is done
 
-Re-read the relevant DoD (from ROADMAP.md, the feature's design doc, or the PR description). For each DoD bullet:
+Only when this session claims a feature or milestone complete. Re-read its definition of done (its issue, ROADMAP, design doc or PR description) and mark each item:
 
-- ✅ **verified** — reproduced in running app + commit SHA + scene/route/page + (where applicable) screenshot or log evidence path
-- ⚠️ **partial** — works in some scenarios, not others — list the gaps
-- ❌ **unmet** — does not work — open a follow-up branch, set milestone status to 🔄 in ROADMAP.md, STOP
+- ✅ **verified**: seen working in the running app, with the commit, the screen or route, and a screenshot or log where it applies;
+- ⚠️ **partial**: works in some cases; list the gaps;
+- ❌ **unmet**: open a follow-up and stop claiming completion.
 
-If any bullet is ❌, **the milestone is not complete.** Do not generate a "milestone complete" context file or commit message.
+One ❌ means the feature is not complete. If an item stopped making sense mid-way, change the definition of done in its own commit first; never quietly call a gap "deferred".
 
-If a DoD bullet has become unrealistic or out-of-scope mid-milestone, revise the DoD on its own commit before the verification ritual — never silently rationalize a gap as deferred.
 <!-- TOGGLE:definition_of_done_verification END -->
+<!-- TOGGLE:tracker:file START -->
+## Hand-off file
 
-### Commit / PR decision tree
+Write `{{PROJECT_NAME_UPPER}}-CONTEXT_YYYY-MM-DD_HH-MM.md` at the repo root and `git rm` the previous one, so exactly one exists. It holds current state only: where the work stands, decisions made and why, what the next session should do first. Rules and conventions stay in `.claude/rules/`.
 
-Evaluate in order — apply the first row that matches:
+For the timestamp, use the latest `[time]` line in the conversation if a hook provides one. Otherwise read the local clock: `date '+%Y-%m-%d %H:%M'`, or `Get-Date -Format 'yyyy-MM-dd HH:mm'` in PowerShell. Never hardcode a timezone.
 
-| Condition | Action |
+The hand-off names roadmap items by id (`R4`) and never copies their text.
+
+## Roadmap
+
+`ROADMAP.md` lists only the work still ahead, so it cannot fill up with stale history. Create it in this shape if it is missing:
+
+```
+# Roadmap
+
+Next id: R8
+
+## Now
+- R5 Checkout page (branch feature/checkout)
+
+## Next
+- R6 Saved carts
+
+## Later
+- R7 Gift cards
+```
+
+Edit only the lines for items this session touched:
+
+- An item whose work started gets the branch in brackets and moves to Now. Now holds at most five items; ask which one waits when a sixth would join.
+- A finished item is deleted here and added to `CHANGELOG.md` in the same commit.
+- A new item takes the `Next id`, which then goes up by one. Ids are never reused.
+
+<!-- TOGGLE:tracker:file END -->
+## Derived docs
+
+<!-- TOGGLE:tracker:file START -->
+Update `README.md` or `CLAUDE.md` when this session changed what they describe, and say which sections changed.
+<!-- TOGGLE:tracker:file END -->
+<!-- TOGGLE:tracker:github START -->
+Update `README.md` or `CLAUDE.md` when this session changed what they describe, and say which sections changed.
+<!-- TOGGLE:tracker:github END -->
+
+Then check the living docs are still current: for each behaviour, name, path, command or number the session's diff changed, search `README.md`, `CLAUDE.md`, `docs/` and `.claude/rules/` for the old wording, and fix every claim that no longer holds. Dated records (released changelog entries, dated notes) stay as written. `docs/docs-audit.md` covers a full sweep.
+
+<!-- TOGGLE:code_research_first START -->
+## Code-research count
+
+Run `python3 .claude/scripts/research-adherence.py` from the repo root (`python` on Windows). It reads the transcript and compares calls to {{TOOLS_CODE_RESEARCH_NAME}} with plain code searches that carry no bypass marker: Grep and Glob calls, and shell commands that start with a recursive search. Searches of docs, logs and data, and filters on another command's output, do not count. Report its line. Below 70% means the next session starts by finding out why.
+
+<!-- TOGGLE:code_research_first END -->
+## Project steps
+
+If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
+
+## Commit and PR
+
+Take the first row that matches:
+
+| Situation | Do |
 |---|---|
-| No code changes (context refresh only) | Generate context file (if `context_refresh_files` is ON) + commit + PR + paths-ignore fast-path auto-merge (if enabled) + branch cleanup. |
-| Changes exist, branch objective **incomplete** | Commit with work done. No PR. |
-| Changes exist, branch objective **complete** | Commit (if uncommitted) + PR to `{{DEV_BRANCH}}` + standard polling loop + merge + branch cleanup. |
-| Branch is `hotfix/*` and complete | Commit + PR to `{{MAIN_BRANCH}}` (merge to `{{DEV_BRANCH}}` managed from GitHub). |
-| Branch is `release/*` and complete | Commit + PR to `{{MAIN_BRANCH}}` AND `{{DEV_BRANCH}}`. |
+| Branch goal not finished | Commit the work. No PR. |
+<!-- TOGGLE:tracker:file START -->
+<!-- TOGGLE:github_actions_paths_ignore_auto_merge START -->
+| Only the hand-off file, `ROADMAP.md` and `CHANGELOG.md` changed | Commit and open the PR; it takes the docs-only path in `token-efficiency.md`. |
+<!-- TOGGLE:github_actions_paths_ignore_auto_merge END -->
+<!-- TOGGLE:github_actions_paths_ignore_auto_merge:off START -->
+| Only the hand-off file, `ROADMAP.md` and `CHANGELOG.md` changed | Commit and open the PR, watch its checks per `token-efficiency.md`, and merge per `git.md` § Merging. |
+<!-- TOGGLE:github_actions_paths_ignore_auto_merge:off END -->
+<!-- TOGGLE:tracker:file END -->
+<!-- TOGGLE:branching_model_gitflow START -->
+| `hotfix/*` finished | PR to `{{MAIN_BRANCH}}`. After it merges, open the cascade PR into `{{DEV_BRANCH}}` (`git.md` § Cascade). Done only when the cascade merges. |
+| `release/*` finished | Same as a hotfix: PR to `{{MAIN_BRANCH}}`, tag the release commit, then cascade. |
+<!-- TOGGLE:branching_model_gitflow END -->
+| Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge on 🟢. |
 
-Commit and PR format per `.claude/rules/git.md`. Use **atomic Bash calls** — never `&&`-chain post-merge cleanup; permission rules match the full command string and chained calls stall on partial deny.
+Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
 
-<!-- TOGGLE:context_refresh_files START -->
-### Update context
+<!-- TOGGLE:tracker:github START -->
+## Hand-off in the tracker
 
-Generate a new `{{PROJECT_NAME_UPPER}}-CONTEXT_YYYY-MM-DD_HH-MM.md` (rename the existing one with current date and time).
+After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat.
 
-**Local time:**
+Then check the three status-update triggers in `tracker.md` and post an update only when one fired.
 
-1. **Check the conversation context first.** If the optional `UserPromptSubmit` time-injection hook is installed (see `~/.claude/CLAUDE.md` → "Time-of-day awareness"), every prompt comes prefixed with a line of the form `[time] YYYY-MM-DD HH:MM:SS <zone>`. Reuse the most recent one — it's authoritative.
-2. **If no `[time]` line is available** (hook not installed, or you need to confirm against a fresh clock), fall back to terminal commands. Try in order, OS-clock only — **never hardcode a timezone**:
+<!-- TOGGLE:public_roadmap START -->
+Last, bring the public roadmap in line (`tracker.md` § Public roadmap): run `python3 .github/scripts/public_roadmap.py check` (`python` on Windows), fix what it lists in the issues' public summaries, then run it with `push`.
+<!-- TOGGLE:public_roadmap END -->
 
-   ```bash
-   node -e "console.log(new Date().toLocaleString('sv-SE').replace(',',' '))"
-   python -c "from datetime import datetime; print(datetime.now().strftime('%Y-%m-%d %H:%M'))"
-   date '+%Y-%m-%d %H:%M'
-   powershell -Command "Get-Date -Format 'yyyy-MM-dd HH:mm'"
-   ```
+<!-- TOGGLE:tracker:github END -->
+<!-- TOGGLE:handoff_file START -->
+## Hand-off file
 
-   Hardcoded IANA strings (e.g. `'America/Mazatlan'`) inherit US-DST assumptions that are wrong for non-US-DST locales; the OS clock is always the right source.
+Rewrite `.bindwright/handoff.md`. It stays in this checkout, out of git: the first time, add the line `.bindwright/handoff.md` to the file `git rev-parse --git-path info/exclude` prints (a worktree shares it with its main checkout, but keeps its own hand-off file). It only points at the tracker, in at most ten lines, and never restates an issue's state:
 
-**Context file structure:** current state only — decisions and implementation details not derivable from the code. Conventions and rules already live in `.claude/rules/` — do not duplicate.
+```
+# Hand-off (YYYY-MM-DD HH:MM)
+- Worked on: #12 (PR #40 waiting on review), #15
+- Start with: #13
+- Open question: <one line, or none>
+```
 
-**Uniqueness rule:** exactly **one** `*-CONTEXT_*.md` must exist in the root at all times. When creating a new one, delete the previous with `git rm`.
+<!-- TOGGLE:handoff_file END -->
 
-### Model + effort outcome log
+## Last message
 
-Append to the regenerated context file under a `## Session model setup` section:
-
-- **Recommended at start:** <tier> · <resolved model id> · <effort> · <archetype>
-- **Used:** <tier> · <resolved model id> · <effort> (note any mid-session switches with reason)
-- **Outcome:** <retries needed? cleanup PR needed? wrong-branch edits? notes>
-
-Recording **both the tier and the concrete id** keeps the log comparable across model releases — the tier is stable, the id drifts. Empirical feedback loop: if `Used` diverged from `Recommended`, note why — it's signal for tuning the tier-resolution pins in `.claude/skills/session-start/SKILL.md`. A tier's pin is promoted to a newer model only once the log proves it on this project's own work, never on release day.
-
-**Promotion-check nudge:** when a newer top-tier model has appeared in the session environment across several recent sessions but a tier's pinned model hasn't been re-evaluated, append a one-line "run the tier-promotion check" reminder to this section — trial the newer model on the lowest-blast-radius tier first and compare its outcome against the incumbent before moving the pin.
-
-**This section sits inside the `context_refresh_files` toggle** because it appends to the file that toggle creates; disabling the toggle strips both coherently.
-<!-- TOGGLE:context_refresh_files END -->
-
-### Update derived docs
-
-If applicable, update `CLAUDE.md`, `README.md`, and any touched module's `ROADMAP.md` with relevant changes. Clearly indicate which sections changed.
-
-<!-- TOGGLE:dod_devlog_step START -->
-### Devlog draft (only when a milestone just closed)
-
-Triggered only when the DoD verification step just flipped a milestone to ✅. Skipped for routine sessions, hotfixes, releases, or partial-milestone sessions.
-
-1. Create `devlog/posts/<NNNN>-<slug>/` (next sequential number; slug = milestone topic).
-2. Copy from `devlog/posts/0000-template/` and fill in `post.md` from the milestone DoD checklist + new context file.
-3. Commit drafts with `docs(devlog): draft post for M<N>`.
-4. **Stop there.** The user reviews and publishes manually — never auto-push to external services.
-<!-- TOGGLE:dod_devlog_step END -->
-
-<!-- TOGGLE:tokensave_entry_point START -->
-### Code-research adherence metric
-
-Before signaling session close, count how often code-research happened through {{TOOLS_CODE_RESEARCH_NAME}} vs through Grep/Glob/raw-grep this session:
-
-- **{{TOOLS_CODE_RESEARCH_NAME}} calls this session:** look at your tool-use history and count calls matching the tool's primitive shape:
-  <!-- TOGGLE:code_research:tokensave START -->
-  any call matching `tokensave_*` (search, context, callers, callees, impact, body, files, etc.).
-  <!-- TOGGLE:code_research:tokensave END -->
-  <!-- TOGGLE:code_research:ast-grep START -->
-  any Bash command starting with `ast-grep run`, `ast-grep scan`, or `ast-grep test`.
-  <!-- TOGGLE:code_research:ast-grep END -->
-  <!-- TOGGLE:code_research:sourcegraph START -->
-  any Bash command starting with `src search`, `src api`, or `src code-intel`.
-  <!-- TOGGLE:code_research:sourcegraph END -->
-  <!-- TOGGLE:code_research:ctags START -->
-  any Bash command using `readtags`, or `grep` against a `tags` file, or `ctags -R` regeneration.
-  <!-- TOGGLE:code_research:ctags END -->
-  <!-- TOGGLE:code_research:semgrep START -->
-  any Bash command starting with `semgrep`.
-  <!-- TOGGLE:code_research:semgrep END -->
-  <!-- TOGGLE:code_research:custom START -->
-  any Bash command invoking the `{{TOOLS_CODE_RESEARCH_NAME}}` CLI per its documentation at {{TOOLS_CODE_RESEARCH_URL}}.
-  <!-- TOGGLE:code_research:custom END -->
-- **Grep + Glob calls this session:** count `Grep` + `Glob` tool calls + any Bash command containing `grep `, `rg `, `ag `, `ack `, `ripgrep ` UNLESS the command had a `# {{TOOLS_CODE_RESEARCH_BYPASS_MARKER}}` marker.
-- **Adherence ratio** = `{{TOOLS_CODE_RESEARCH_NAME}}_calls / ({{TOOLS_CODE_RESEARCH_NAME}}_calls + grep_glob_calls)` — express as a percentage.
-
-Report it like:
-
-> **{{TOOLS_CODE_RESEARCH_NAME}} adherence this session: 7 {{TOOLS_CODE_RESEARCH_NAME}} calls / 1 grep fallback → 87%.** (Bypass reason: <if any>.)
-
-If the ratio is under 70% AND there were no documented bypass reasons, surface that as a regression to fix next session. The hook should have prevented unjustified Grep calls; if any got through, note why.
-<!-- TOGGLE:tokensave_entry_point END -->
-
-### Signal session close
-
-After completing the above, explicitly tell the user:
-
-> **Session closed.** The context file is updated, all changes are committed, [PR merged + branches cleaned up | branch pushed, awaiting CI]. You can close this conversation and start a fresh one for maximum free context.
+> **Session closed.** Everything is committed; [PR #N merged and branches deleted | branch pushed, PR #N waiting on checks | work committed locally on `<branch>`]. Start a fresh conversation for the next session.

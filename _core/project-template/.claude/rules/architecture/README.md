@@ -15,9 +15,9 @@ This directory holds one Markdown rule per supported architectural pattern. Duri
 | **ECS (Entity Component System)** | `ecs.md` | Games and simulations. Bevy, Unity DOTS, flecs, EnTT. |
 | **None** | (skip) | Greenfield with no chosen pattern yet. Add later by re-running setup. |
 
-## How SETUP picks one
+## How setup picks one
 
-Setup form has a "Architecture pattern" dropdown in Advanced. Selected value flows into the JSON command's `project.architecture` field (e.g., `"clean"`, `"hexagonal"`, `"none"`). SETUP.md's Phase 3 copies `_core/.../architecture/<pattern>.md` → `.claude/rules/architecture.md`, prepending a short note that the rule was scaffolded from a template and should be tightened to match the project's actual conventions.
+The answers' `advanced.architecture` value (e.g., `"clean"`, `"hexagonal"`, `"none"`) picks the pattern. The bind copies `_core/.../architecture/<pattern>.md` → `.claude/rules/architecture.md`; tighten it afterwards to match the project's actual conventions.
 
 ## Why these patterns specifically
 

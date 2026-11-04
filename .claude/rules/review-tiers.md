@@ -1,98 +1,65 @@
-# Review tiers — binary verdict + auto-escalation
+# Review tiers
 
-## The two tiers
+Every PR gets an AI review with a pass or block verdict, run by `.github/workflows/`. Local sessions never start the CI reviews themselves; the one local review is the workflow-only PR path in § PRs that edit the review workflow.
 
-| Tier | Trigger | Cost | What it does |
-|---|---|---|---|
-| **Routine** | Auto on every PR via `claude-code-review.yml` | Subscription (Sonnet) | Pre-screen + architectural review + **binary 🔴/🟢 verdict comment**. Verdict feeds the `Evaluate review outcome` check. |
-| **On-demand deep** | `@claude review this PR` comment (fires `claude.yml`) | Subscription (Opus) | Depth pass on the focus the routine review escalated to. **Same binary 🔴/🟢 rule.** Verdict feeds the `Claude On-Demand` check via the Checks API — independently required by branch protection. |
+| Tier | Starts when | Model |
+|---|---|---|
+| Routine | Every PR with reviewable files (`claude-code-review.yml`) | `claude-fable-5-1` at low effort; backup `claude-opus-5-5` at high |
+| Deep | A comment starting with `@claude review this PR` (`claude.yml`) | `claude-fable-5-1` at low effort; backup `claude-opus-5-5` at high |
 
-## The gate model — two independent required status checks
+Both tiers report into one check, `Review gate`: it passes when the routine verdict is 🟢 and, once a deep review is asked for, the deep verdict is 🟢 too. That check is required on protected branches, and branch protection has no bypass actors; `.github/scripts/setup-review-gate.sh` sets this up (`--check` only reports what is missing). With a single maintainer, require zero approvals so the gate alone decides, since authors cannot approve their own PRs. With more people, also require one approval from someone other than the author. Docs-only and other non-reviewable diffs pass automatically in about 30 seconds.
 
-Branch protection requires **two** status checks, both attached to the PR HEAD SHA via the Checks API, both ANDed together for merge:
+The gate's settings live in `.github/review-gate.yml` (models, runner, the project's own pre-screen checks, trigger paths and always-reviewed paths), and the project's part of the review prompt lives in `.github/review-guide.md`. Both are read from the PR's base branch, so a PR cannot change the rules of its own review. Model pins change only after a side-by-side comparison of candidate models on the same saved PRs, never just because a newer model exists.
 
-1. **`Evaluate review outcome`** — the routine gate (in `claude-code-review.yml`). Logic:
-   - Triage classified the diff as non-reviewable → auto-pass (also PATCHes `Claude On-Demand` to skipped so it doesn't block on docs-only PRs).
-   - Routine review job didn't reach success (action errored, OIDC tripped, workflow-validation skip, runner crash) → fail.
-   - Routine verdict comment missing or 🔴 → fail.
-   - Routine 🟢 → pass.
-2. **`Claude On-Demand`** — the deep-tier check, walked through a state machine by the Checks API:
-   - PR opens → `init-deep-check` creates at `status=in_progress` ("Waiting for routine review to evaluate").
-   - Triage non-reviewable → `evaluate-review-outcome` PATCHes to `conclusion=skipped`.
-   - Routine done, no escalation → `claude-review`'s Resolve step PATCHes to `conclusion=skipped`.
-   - Routine escalated → Resolve step PATCHes to `status=in_progress` titled "Deep review in progress".
-   - Opus completes → `claude.yml`'s Evaluate step PATCHes to `conclusion=success` (🟢) or `conclusion=failure` (🔴).
-   - Opus errored (no completion comment) → PATCHes to `conclusion=failure` (FAIL-CLOSED).
+## The verdict rule (both tiers)
 
-`success`, `skipped`, and `neutral` all pass branch protection; `in_progress` blocks merge with a visible spinner; `failure` blocks merge with a red X.
+- 🟢 LGTM only when the review is fully clean: no caveats, no nits, no "non-blocking" findings.
+- 🔴 Blocking when any real finding exists, however it is framed. "LGTM with caveats" is 🔴.
+- Style preferences and speculative future-proofing are dropped, not listed as minor.
 
-**Dismiss path for the maintainer:** if the deep tier is genuinely broken or its finding doesn't apply, admin-bypass leaves an audit trail. Removing the `needs-deep-review` label does NOT auto-reset the check in the two-check architecture (no event fires to PATCH on unlabeled).
+A 🟢 that carries findings lets them merge and come back later as the same review.
 
-Both `Evaluate review outcome` AND `Claude On-Demand` are configured as required status checks on `main` and `develop`. Omitting either from required checks would leave one tier advisory; this repo dogfoods the full strict model.
+## Deep review triggers
 
-## PRs that edit claude-code-review.yml go alone
+The routine reviewer escalates automatically: it adds the `needs-deep-review` label and posts the `@claude review this PR` comment when the diff touches the gate's own files, the trigger paths and patterns in `.github/review-gate.yml` (`escalate.*`), or the list below. While that label is on the PR, every push gets a deep review, and the gate waits for its 🟢.
 
-The Anthropic Claude Code GitHub App validates that the workflow file on a PR's head ref is byte-identical to the version on the default branch before granting an OIDC-exchanged token. Any PR that edits `.github/workflows/claude-code-review.yml` therefore fails the token exchange and the routine review action cannot post a verdict.
+Escalate on risk, not size:
 
-Triage never reviews that one file, so a PR whose only other files are skippable (Markdown, images and fonts outside the always-reviewed paths) passes as non-reviewable; our own such PRs merge on two local reviews of the exact head. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate script, `SETUP.md`, `.claude/`, a `CLAUDE.md`, code) starts the review, which stops on `Workflow validation failed`, and the gate blocks with no way through. Split it: the reviewable part goes in its own PR, which gets a normal review, and the `claude-code-review.yml` edit follows alone.
+- Parsing, encoding or serialization logic
+- Threading, locking, async coordination
+- Schedulers, graph or DAG algorithms
+- New public API surface
+- Save or load formats, schema migrations
+- Authentication, authorization, secrets, cryptography
+- Anything that crosses a trust boundary (user input, network, plugins)
 
-(Edits to `claude.yml` alone do not trip this: claude.yml runs from the default branch's version on `issue_comment` events, and the routine review runs the unchanged `claude-code-review.yml`. Such a PR gets a normal review.)
+Skip escalation for docs, CI or settings tweaks, version bumps, mechanical refactors, test-only changes and one-line fixes. Fit the list to the project's risk: paths and added-line patterns go in `.github/review-gate.yml` (`escalate.paths`, `escalate.patterns`), changes that need judgment to spot go in `.github/review-guide.md` under "Also escalate when the diff includes". Keep this list in step with both.
 
-Confirm the failure mode by inspecting the `Claude review` job log for `Workflow validation failed. The workflow file must exist and have identical content to the version on the repository's default branch`. For every other failure mode (Sonnet posted 🔴, missing verdict line, etc.), fix the underlying issue. Never bypass.
+## After a 🔴
 
----
+Fix on the same PR branch and push; the review re-runs. Then search the codebase for the same mistake elsewhere and fix every copy in that commit, because the reviewer only sees the diff.
 
-## The binary verdict rule (BOTH tiers)
+## What a finding blocks on
 
-This is the single most load-bearing rule for review quality.
+A finding belongs to the PR when the PR causes it: a regression from the base branch, or a break of what the PR says it does. A gap the base branch already has, or one the comparable community tool shares (for a workflow, the official action it pins), is not the PR's finding. It goes into a follow-up issue instead of the verdict. The review still covers the whole diff; this only decides what blocks.
 
-- **🟢 LGTM ONLY when fully clean** — zero caveats, zero minors, zero nits, zero "with caveats" headings, zero non-blocking-but-real findings.
-- **🔴 Blocking when ANY real finding exists**, regardless of how the reviewer frames it. "Minor wording nit" that suggests a real correctness improvement is 🔴. "All clear with caveats" is a contradiction in terms — the caveats make it 🔴. "Non-blocking but worth landing" is 🔴.
-- **The only legitimate omission** is style preferences, micro-optimizations, future-proofing for hypothetical changes, or "consider extracting" suggestions — those should be **DROPPED** entirely, not labeled as 🟡 or non-blocking.
-- **"All clear on X" is allowed AS A SECTION HEADING** when that section genuinely has nothing to flag. It is NEVER allowed as the verdict line when other sections have findings.
-- **In a 🟢 review, 🔴 and the word "Blocking" appear only inside inline backticks on the same line** (a line inside a fenced code block counts like any other; no "Blocking issues" heading, no "Blocking: none"): the gate blocks on lines like `**🔴 …**`, `- 🔴 x`, `### Blocking issues` or `**Verdict:** blocking` wherever they sit, and on any 🔴 on the last line, backticks or not, so a 🟢 verdict line holds no 🔴 at all. The verdict is the last line (under the review action's footer), and it opens with 🔴 or 🟢.
+- Write this bar into every reviewer prompt from the first round, local or CI, before any finding arrives.
+- When a review reports, sort each finding against the bar before touching code. Fix only what passes it, plus the other copies of that same mistake (§ After a 🔴), with the smallest change, and add no features while fixing.
+- After 6 red rounds in a row, stop patching: look up how others solved the same problem, simplify the design, then continue. Do the same at every 6th red round.
 
-**Why:** a deep tier that returns 🟢 LGTM with three "minor non-blocking" findings tucked in the body becomes useless — the merge proceeds, the findings rot, and they re-surface as the same review weeks later. Binary verdict forces the reviewer to either drop genuinely-trivial observations or flag them as blockers worth fixing now.
+Without the bar, each fix adds surface for the next round to find, and the rounds never converge.
 
----
+## PRs that edit the review workflow
 
-## Deep-review trigger list
+The review action refuses to run when the PR's copy of `claude-code-review.yml` differs from the default branch's copy, so the review must never start on them. Triage never reviews `claude-code-review.yml`, which it skips by name, so a PR whose only other files are skippable (Markdown, images and fonts outside the always-reviewed paths) is non-reviewable: the `Review gate` check passes without a review. That makes two rules:
 
-**Auto-escalation enabled** — the routine review's Step 2.5 applies the `needs-deep-review` label AND posts a structured `@claude review this PR` comment automatically when the diff touches any of the items below.
+- An edit to `claude-code-review.yml` ships in a PR of its own. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate's scripts, `.claude/`, a `CLAUDE.md`, code) starts the review, which fails `Workflow validation failed`, and the PR can never merge; split it. Edits to `claude.yml` alone get a normal review: it runs from the default branch's copy.
+- No AI reviews such a PR in CI, so it is reviewed before merge, one of two ways:
+  - **Every commit in it was written in the maintainer's own sessions:** two fresh subagents review the exact head commit that will merge. Neither is a fork of the session that wrote the change, and each gets only the PR's diff and its own prompt. One follows the review steps and the binary verdict rule of the routine-review prompt taken from the base branch's copy of `claude-code-review.yml`, never the PR's own copy. It runs the pre-screen's mechanical checks itself, since the CI pre-screen report does not exist locally. The other reviews as the deep tier, briefed to review the whole diff at that SHA adversarially under the binary verdict rule; the author may add focus points but never narrows that scope. Neither reviewer posts to the PR, applies a label or writes the deep-review trigger phrase; each returns its verdict to the author. Once both give 🟢, a PR comment records the head SHA and both verdict lines, and the merge passes `--match-head-commit <sha>` so it goes through only while that SHA is still the head. Any new commit re-runs both.
+  - **Anything else,** including a PR the maintainer opened that carries someone else's commits: it merges only after the maintainer has read its whole diff.
 
-This list is canonical here AND in the workflow's Step 2.5 prompt — **keep them in sync when extending.**
+For any other failure, fix the cause.
 
-The trigger surface — when a PR's diff touches any of these, the deep review is warranted. Edit this list to match your project's risk surface; the categories below are starting points.
+## Local session's job
 
-- New parsing / codec / serialization logic, especially with bit-level or byte-level operations
-- Threading, locking, or async/sync coordination, lock-free data structures
-- Cellular automata, scheduler, or DAG / graph algorithms
-- New public API surface (interface, exported function, route handler)
-- Save / load format changes, schema migrations
-- Anything that ships a new system contract
-- Authentication, authorization, secret handling, cryptography
-- Anything that crosses a trust boundary (user input → server, server → DB, plugin → host)
-
-The criterion is **risk surface**, not size. A 30-line bit-pack tweak triggers; a 600-line mechanical refactor does not.
-
-### Skip the auto-escalation for
-
-- Pure docs PRs (`docs(*)`, ROADMAP edits, milestone checklist updates)
-- Pure CI / workflow / `.gitignore` / settings tweaks
-- Manifest-only changes (`package.json` version bump, etc.)
-- Mechanical refactors with no behavioral change (rename, extract, mass file moves)
-- Test-only PRs (adding coverage to existing logic without changing the logic)
-- Trivial fixes (typo, one-line bug, dependency-version pin)
-
----
-
-## Local Claude's role (this harness)
-
-Local-session Claude does NOT auto-fire either review tier. The workflows do. Local responsibilities:
-
-- Push the branch + open the PR.
-- Run the CI polling loop (`token-efficiency.md`) and report PR state — including label state at completion.
-- If `needs-deep-review` was applied but no `@claude review this PR` follow-up lands within reasonable time (workflow outage), surface that anomaly to me. Do not silently take over the workflow's job.
-- On my explicit ask, post a deeper-context `@claude` comment manually. Default is "let the workflow do it."
-
-`@claude` mentions are environment-agnostic — the workflow is triggered by the comment text alone, regardless of which actor posted it.
+Push, open the PR, watch the checks (see `token-efficiency.md`), and merge on 🟢. If `needs-deep-review` appears but no deep review starts within a few minutes, report it instead of starting one yourself.

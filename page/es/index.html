@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-t="meta.title">Bindwright</title>
+<meta name="description" data-t-attr="content:meta.description"
+  content="Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo trabajas desde el primer mensaje.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/bindwright/page/">
+<!-- /alternates -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../scene.css">
+<script type="module" src="../app.js"></script>
+<script type="module" src="../scene.js"></script>
+<script type="module" src="../lands.js"></script>
+<script type="module" src="../mods.js"></script>
+<script type="module" src="../evidence.js"></script>
+<script type="module" src="../reveal.js"></script>
+<script>if (!matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("reveal");</script>
+</head>
+<body>
+<a class="skip" href="#install" data-t="skip.link">Ir a la instalación</a>
+<header>
+  <a class="mark" href="./">Bindwright</a>
+  <nav aria-label="Sitio" data-t-attr="aria-label:nav.site">
+    <a href="settings/" data-t="nav.settings">Ajustes del plugin</a>
+    <a href="compare/" data-t="nav.compare">Comparar</a>
+    <a href="https://github.com/starfoxcom/bindwright" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Idioma" data-langs data-t-attr="aria-label:nav.language">
+    <a href="../" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="hero">
+    <div class="pitch">
+      <h1 data-t="hero.title">Deja de explicarle tu proyecto a Claude cada vez.</h1>
+      <p class="lede" data-t="hero.lede">Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la configuración es un solo comando.</p>
+      <div class="actions">
+        <a class="go" href="#install" data-t="hero.go">Instalar Bindwright</a>
+        <a class="source" href="https://github.com/starfoxcom/bindwright"
+          data-t="hero.source">Ver en GitHub</a>
+      </div>
+    </div>
+    <div class="stage" id="scene-stage">
+      <h2 class="caption" id="scene-caption"><span><b>1.</b><span data-t="scene.caption.1">Arranca sin complicaciones desde donde lo dejaste</span></span></h2>
+
+      <div class="term" role="img" aria-label="Una sesión de programación en la terminal con Bindwright configurado"
+        data-t-attr="aria-label:scene.aria">
+        <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+        <div class="pane"><div class="lines"></div></div>
+        <div class="spinrow" hidden><span class="glyph">✻&#xFE0E;</span><span class="verb">Thinking…</span><span class="meta"></span></div>
+        <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
+        <div class="hint">? for shortcuts</div>
+      </div>
+
+      <div class="cards">
+        <p class="placeholder" data-t="scene.placeholder">Lo que hace Bindwright aparece aquí</p>
+        <div class="card" data-card="guard">
+          <h3><span class="ico g"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/><path d="m9.5 9.5 5 5m0-5-5 5"/></svg></span><span data-t="scene.guard.title">Guardia de push</span></h3>
+          <p data-t="scene.guard.text">Detuvo un push forzado a main antes de que llegara a GitHub.</p>
+          <span class="chip" data-t="scene.guard.chip">Cada proyecto en tu computadora</span>
+        </div>
+        <div class="card" data-card="review">
+          <h3><span class="ico r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/><path d="m8.5 11 1.8 1.8 3.4-3.6"/></svg></span><span data-t="scene.review.title">Control de revisión</span></h3>
+          <div class="status"><span class="s"></span><span class="t1" data-t="scene.review.open">1 hallazgo: la cantidad puede faltar</span><span class="t2" data-t="scene.review.done">Limpio. Integrado en develop</span></div>
+          <span class="chip" data-t="scene.review.chip">Revisión con IA en cada PR</span>
+        </div>
+        <div class="card" data-card="handoff">
+          <h3><span class="ico h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M14 3.5V8h4M10 12h5M10 15.5h5"/></svg></span><span data-t="scene.handoff.title">Nota de traspaso</span></h3>
+          <div class="note"><div><b data-t="scene.handoff.done">Hecho</b> <span data-t="scene.handoff.done.item">#12 total del carrito</span></div><div><b data-t="scene.handoff.next">Sigue</b> <span data-t="scene.handoff.next.item">#14 códigos de descuento</span></div><div><b data-t="scene.handoff.watch">Vigilar</b> <span data-t="scene.handoff.watch.item">redondeo de impuestos</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="changes" id="changes" aria-labelledby="changes-title">
+    <h2 id="changes-title" data-t="changes.title">Qué cambia</h2>
+    <ul>
+      <li><span class="was" data-t="changes.1.was">Claude olvida cómo trabajas en cada sesión</span>
+        <b data-t="changes.1.title">Claude deja de repetir errores</b>
+        <span data-t="changes.1.text">Lee tus reglas al inicio de cada sesión, así las funciones pequeñas y las pruebas reales dejan de ser algo que tienes que pedir cada vez.</span></li>
+      <li><span class="was" data-t="changes.2.was">Los cambios se integran sin que nadie los revise</span>
+        <b data-t="changes.2.title">Cada pull request se revisa</b>
+        <span data-t="changes.2.text">Una IA revisa cada cambio antes de integrarlo, y si la revisión no pasa, nada entra.</span></li>
+      <li><span class="was" data-t="changes.3.was">Cada sesión empieza desde cero</span>
+        <b data-t="changes.3.title">Las sesiones siguen donde se quedaron</b>
+        <span data-t="changes.3.text">Cada sesión empieza con un plan y termina con una nota para la siguiente, así el trabajo sigue justo donde se quedó.</span></li>
+      <li><span class="was" data-t="changes.4.was">Un comando equivocado puede borrar tu rama principal</span>
+        <b data-t="changes.4.title">Los comandos peligrosos se bloquean</b>
+        <span data-t="changes.4.text">Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un comando equivocado ahí te puede costar días de trabajo.</span></li>
+      <li><span class="was" data-t="changes.5.was">El modelo más caro escribe cada línea</span>
+        <b data-t="changes.5.title">Un ayudante barato escribe el código</b>
+        <span data-t="changes.5.text">Un modelo pequeño y barato escribe el código que tus pruebas pueden comprobar, y el modelo principal lo planea y revisa el resultado. En 24 trabajos medidos en dos proyectos, 23 pasaron todas las comprobaciones a la primera, por un costo estimado de un tercio. Puedes apagarlo al configurar.</span></li>
+      <li><span class="was" data-t="changes.6.was">Tienes que vigilar el CI y los límites del plan</span>
+        <b data-t="changes.6.title">Sigue trabajando mientras no estás</b>
+        <span data-t="changes.6.text">Vigila el CI e integra en cuanto pasan todas las comprobaciones, se pausa cerca del límite de tu plan y retoma después del reinicio, y conserva tus palabras cuando el contexto se llena, así el trabajo avanza sin ti.</span></li>
+      <li><span class="was" data-t="changes.7.was">Claude abre archivo tras archivo para encontrar una función</span>
+        <b data-t="changes.7.title">Encuentra el código antes de leerlo</b>
+        <span data-t="changes.7.text">Una herramienta de búsqueda indexa tu código, así en proyectos grandes encuentra una función y quién la llama cerca de un cuarto más rápido, por unos pocos tokens más. Puedes quedarte con la búsqueda integrada.</span></li>
+      <li><span class="was" data-t="changes.8.was">Su código no se parece al tuyo</span>
+        <b data-t="changes.8.title">Escribe como tú</b>
+        <span data-t="changes.8.text">Con tu permiso aprende cómo escribes código a partir de tus repos, luego escribe así con los puntos débiles corregidos, y la documentación que escribe usa palabras claras en vez de jerga.</span></li>
+    </ul>
+  </section>
+
+  <section class="preview" id="preview" aria-labelledby="out-title">
+    <div class="frame">
+      <div class="result" id="result">
+        <div class="out-head">
+          <h2 id="out-title" tabindex="-1"><span data-t="result.title">Lo que escribe una configuración</span></h2>
+        </div>
+        <p class="preview-note" data-t="result.note">Se muestra para el proyecto público de una sola persona con todo activado. La configuración lo ajusta al tuyo según tus respuestas.</p>
+        <div class="stage split" id="lands-stage">
+          <div class="term" role="img" aria-label="Una terminal con /bindwright:setup, donde cada archivo que escribe vuela a una de dos cajas"
+            data-t-attr="aria-label:lands.aria">
+            <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+            <div class="pane"><div class="lines"></div></div>
+            <div class="spinrow" hidden><span class="glyph">✻&#xFE0E;</span><span class="verb">Thinking…</span><span class="meta"></span></div>
+            <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
+            <div class="hint">? for shortcuts</div>
+          </div>
+          <div class="boxes">
+            <div class="box">
+              <h3><span class="ico h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><span data-t="lands.computer.title">Tu computadora</span></h3>
+              <p class="where"><code>~/.claude</code><span class="chip" data-t="lands.computer.tag">Se pregunta una vez</span></p>
+              <ul class="rows" id="lands-computer"></ul>
+            </div>
+            <div class="box">
+              <h3><span class="ico r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2.5h8.5A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg></span><span data-t="lands.project.title">Este proyecto</span></h3>
+              <p class="where"><code>~/shop</code><span class="chip" data-t="lands.project.tag">Se pregunta en cada proyecto</span></p>
+              <ul class="rows" id="lands-project"></ul>
+            </div>
+          </div>
+        </div>
+        <button class="browse" id="browse" type="button" aria-expanded="false" aria-controls="files"></button>
+        <div class="out-body" id="files" hidden>
+          <nav class="tree" id="tree" aria-label="Archivos" data-t-attr="aria-label:files.label"></nav>
+          <div class="view">
+            <button class="back-files" id="back-files" type="button" data-t="files.back">&larr; Todos los archivos</button>
+            <p class="path" id="path"></p>
+            <pre id="code" tabindex="0" aria-labelledby="path"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="evidence" id="evidence" aria-labelledby="evidence-title">
+    <h2 id="evidence-title" data-t="evidence.title">Lo que ha detectado en proyectos reales hasta ahora</h2>
+    <p class="preview-note" data-t="evidence.note">Bindwright pone un revisor de IA en cada pull request. Estos son sus resultados hasta ahora en tres proyectos.</p>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-num" data-total="reviewed" data-count="993">993</span>
+        <p class="stat-label" data-t="evidence.reviewed">pull requests que la IA revisó antes de integrarse</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="fixed" data-count="319">319</span>
+        <p class="stat-label" data-t="evidence.stopped">tenían un problema que la IA detectó y se detuvieron hasta corregirlo</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-accent" data-count="583">583</span>
+        <p class="stat-label" data-t="evidence.deep">tocaban código riesgoso, como seguridad o datos guardados, y recibieron una segunda revisión más a fondo</p>
+      </div>
+    </div>
+    <p class="chart-title" data-t="evidence.chart">Por proyecto: pull requests revisados y cuántos tenían un problema detectado</p>
+    <ul class="projects" id="projects"></ul>
+    <ul class="legend" id="legend"></ul>
+    <p class="chart-title" data-t="evidence.stories">Errores que se volvieron reglas</p>
+    <ul class="stories">
+      <li class="story">
+        <span class="chip" data-t="evidence.story1.where">GameProject</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story1.was">El tablero de tareas del proyecto quedó público, con cada nota interna de ingeniería.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story1.now">Revisa la visibilidad del tablero en cada lectura y te avisa si es público.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story2.where">Este proyecto</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story2.was">Un cambio subió funciones de 273 líneas porque la regla que limita su tamaño nunca se cargó.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story2.now">Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story3.where">Este proyecto</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story3.was">Dos pull requests tardaron 22 y 30 rondas de revisión, porque cada arreglo le daba al revisor algo nuevo que señalar.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story3.now">Un hallazgo solo bloquea si el cambio lo causó; los huecos viejos se vuelven issues aparte.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story4.where">Este proyecto</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story4.was">Un arreglo que entró a la rama principal nunca regresó a la rama de desarrollo.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story4.now">Un hotfix solo cuenta como terminado cuando ya regresó a la rama de desarrollo.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story5.where">Este proyecto</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story5.was">Un pull request se integró con la primera revisión mientras la revisión profunda que había pedido seguía pendiente.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story5.now">Si se pide una revisión profunda, nada se integra hasta que también pase.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story6.where">Este proyecto</span>
+        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
+        <span class="was" data-t="evidence.story6.was">Un cambio al flujo de revisión, hecho en una rama de feature, reprobó su propia revisión.</span>
+        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
+        <b data-t="evidence.story6.now">Los cambios de workflow van primero a la rama principal y luego bajan a desarrollo.</b>
+      </li>
+    </ul>
+  </section>
+
+  <section class="mods" id="mods" aria-labelledby="mods-title">
+    <h2 id="mods-title" data-t="mods.title">Mods</h2>
+    <p class="mods-lede" data-t="mods.lede">Complementos opcionales para Claude Code que muestran el estado en vivo y mantienen las sesiones largas en orden. Elige los que quieras durante la configuración.</p>
+    <div class="stage split flip mods-stage" id="mods-stage">
+      <div class="mods-carousel" id="mods-carousel">
+        <!-- mods:cards -->
+        <ul class="mod-cards">
+          <li class="mod-card" id="m-all">
+            <h3 data-t="mods.all.title">Todos juntos</h3>
+            <p data-t="mods.all.text">Cada mod encendido a la vez: la configuración con la que se construye este proyecto.</p>
+            <span class="setting-value"><b data-t="mods.all.value">Los 10 activados</b></span>
+          </li>
+          <li class="mod-card" id="m-ci-watch">
+            <h3><code>ci-watch</code></h3>
+            <p data-t="mods.ci-watch.text">Vigila las revisiones del pull request y despierta la sesión cuando terminan.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.ci-watch.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-compact-handoff">
+            <h3><code>compact-handoff</code></h3>
+            <p data-t="mods.compact-handoff.text">Lleva tus palabras y un traspaso a través de cada compactación.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.compact-handoff.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-mods">
+            <h3><code>mods</code></h3>
+            <p data-t="mods.mods.text">Un panel con tus mods y sus comandos.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.mods.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-runners">
+            <h3><code>runners</code></h3>
+            <p data-t="mods.runners.text">Muestra tus runners de CI locales, con botones de iniciar y detener.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.runners.value">Desactivado</b></span>
+          </li>
+          <li class="mod-card" id="m-session-facts">
+            <h3><code>session-facts</code></h3>
+            <p data-t="mods.session-facts.text">Le dice al asistente la hora, qué tan lleno está su contexto y el uso de tu plan.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.session-facts.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-session-info">
+            <h3><code>session-info</code></h3>
+            <p data-t="mods.session-info.text">Una fila con el modelo, el proyecto, la rama y los archivos cambiados.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.session-info.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-shared-pc">
+            <h3><code>shared-pc</code></h3>
+            <p data-t="mods.shared-pc.text">Una sesión a la vez corre el trabajo pesado, las demás esperan en fila.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.shared-pc.value">Desactivado</b></span>
+          </li>
+          <li class="mod-card" id="m-skill-check">
+            <h3><code>skill-check</code></h3>
+            <p data-t="mods.skill-check.text">Revisa que una habilidad haya corrido cada paso que exige.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.skill-check.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-tasks">
+            <h3><code>tasks</code></h3>
+            <p data-t="mods.tasks.text">Mantiene honesta la lista de tareas y la lleva a través de cada compactación.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.tasks.value">Activado</b></span>
+          </li>
+          <li class="mod-card" id="m-usage-guard">
+            <h3><code>usage-guard</code></h3>
+            <p data-t="mods.usage-guard.text">Guarda el trabajo cerca de un límite del plan y sigue cuando se reinicia.</p>
+            <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.usage-guard.value">Activado</b></span>
+          </li>
+        </ul>
+        <!-- /mods:cards -->
+        <div class="mods-controls">
+          <button class="mods-step" id="mods-prev" type="button" aria-label="Mod anterior"
+            data-t-attr="aria-label:mods.prev">&lsaquo;</button>
+          <div class="mods-dots" id="mods-dots"></div>
+          <button class="mods-step" id="mods-next" type="button" aria-label="Mod siguiente"
+            data-t-attr="aria-label:mods.next">&rsaquo;</button>
+        </div>
+      </div>
+      <div class="term" role="img" aria-label="Una terminal que muestra el mod elegido en uso"
+        data-t-attr="aria-label:mods.term.aria">
+        <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
+        <div class="pane"><div class="lines"></div></div>
+        <div class="spinrow" hidden><span class="glyph">✻&#xFE0E;</span><span class="verb">Thinking…</span><span class="meta"></span></div>
+        <div class="band"></div>
+        <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
+        <div class="hint">? for shortcuts</div>
+      </div>
+    </div>
+    <p class="mods-more"><a href="settings/#mods" data-t="mods.more">Ver todos los mods y su valor por defecto</a></p>
+  </section>
+
+  <section class="install" id="install" aria-labelledby="install-title">
+    <h2 id="install-title" data-t="install.title">Instalar</h2>
+    <p class="command-how" data-t="install.how">Dos comandos una vez en tu computadora, y luego uno en cada proyecto. Pega cada uno en Claude Code, presiona Enter y espera a que termine antes del siguiente.</p>
+    <div class="install-groups">
+    <div class="install-group">
+    <h3 data-t="install.computer">En tu computadora, una vez</h3>
+    <ol class="command-steps">
+      <li>
+        <p class="command-sub"><b data-t="install.market.title">Dile a Claude Code de dónde viene Bindwright.</b>
+          <span data-t="install.market.text">Esto agrega el marketplace de Bindwright, una lista desde la que Claude Code puede instalar. Todavía no instala nada.</span></p>
+        <div class="install-line"><code>/plugin marketplace add starfoxcom/bindwright</code>
+          <button class="icon-copy" type="button" aria-label="Copiar comando" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
+      </li>
+      <li>
+        <p class="command-sub"><b data-t="install.plugin.title">Instala Bindwright.</b>
+          <span data-t="install.plugin.text">Esto agrega los comandos /bindwright a todos los proyectos de tu computadora, más un aviso una vez al día cuando algo esté desactualizado. Todavía no cambia ningún proyecto.</span></p>
+        <div class="install-line"><code>/plugin install bindwright@bindwright</code>
+          <button class="icon-copy" type="button" aria-label="Copiar comando" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
+      </li>
+    </ol>
+    </div>
+    <div class="install-group">
+    <h3 data-t="install.project">En cada proyecto</h3>
+    <ol class="command-steps">
+      <li>
+        <p class="command-sub"><b data-t="install.open.title">Abre Claude Code en la carpeta del proyecto.</b>
+          <span data-t="install.open.text">La configuración escribe en la carpeta donde está abierto Claude Code.</span></p>
+      </li>
+      <li>
+        <p class="command-sub"><b data-t="install.setup.title">Ejecuta la configuración.</b>
+          <span data-t="install.setup.text">Hace unas preguntas y luego escribe los archivos que encajan. Nada de lo que ya tienes cambia sin tu sí.</span></p>
+        <div class="install-line"><code>/bindwright:setup</code>
+          <button class="icon-copy" type="button" aria-label="Copiar comando" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
+      </li>
+    </ol>
+    </div>
+    </div>
+    <div class="asks">
+      <div class="ask-list">
+        <h3 data-t="asks.computer.title">Se pregunta una vez en tu computadora</h3>
+        <p data-t="asks.computer.text">Qué herramienta de búsqueda de código usar, si agregar las reglas de trabajo de Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos, si un modelo ayudante barato escribe el código que planea el modelo principal, si aprender tu estilo de código del código que escribiste a mano y qué mods agregar. Cámbialas después con /bindwright:setup global.</p>
+      </div>
+      <div class="ask-list">
+        <h3 data-t="asks.project.title">Se pregunta en cada proyecto</h3>
+        <p data-t="asks.project.text">Quién trabaja en él, de quién es, si es privado o público, si el crédito de la IA queda fuera de los commits, qué revisiones corren, cómo escribe y trabaja el asistente, y dónde vive el plan: un tablero de GitHub, issues o un archivo de traspaso.</p>
+      </div>
+    </div>
+    <p class="asks-more"><a href="settings/" data-t="asks.more">Ver todos los ajustes</a></p>
+  </section>
+</main>
+<footer>
+  <p data-t="footer.note">Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.</p>
+</footer>
+</body>
+</html>

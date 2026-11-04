@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-t="compare.meta.title">Comparar · Bindwright</title>
+<meta name="description" data-t-attr="content:compare.meta.description"
+  content="Cómo se ve un día de trabajo en Claude Code sin Bindwright y con él.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/compare/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/compare/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/bindwright/page/compare/">
+<!-- /alternates -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
+<link rel="stylesheet" href="../../style.css">
+<link rel="stylesheet" href="../../compare.css">
+</head>
+<body>
+<a class="skip" href="#moments" data-t="compare.skip">Ir a la comparación</a>
+<header>
+  <a class="mark" href="../">Bindwright</a>
+  <nav aria-label="Sitio" data-t-attr="aria-label:nav.site">
+    <a href="../settings/" data-t="nav.settings">Ajustes del plugin</a>
+    <a href="./" aria-current="page" data-t="nav.compare">Comparar</a>
+    <a href="https://github.com/starfoxcom/bindwright" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Idioma" data-langs data-t-attr="aria-label:nav.language">
+    <a href="../../compare/" hreflang="en" lang="en">English</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="settings-intro">
+    <h1 data-t="compare.title">Sin y con Bindwright</h1>
+    <p class="lede" data-t="compare.lede">El mismo Claude Code, el mismo modelo. Esto es lo que cambia en cada momento del día.</p>
+  </section>
+
+  <section id="moments" class="compare" aria-labelledby="moments-title">
+    <h2 id="moments-title" class="visually-hidden" data-t="compare.moments">Momento a momento</h2>
+    <div class="compare-head" aria-hidden="true">
+      <span></span>
+      <span data-t="compare.label.without">Sin</span>
+      <span data-t="compare.label.with">Con Bindwright</span>
+    </div>
+    <ul class="moments">
+      <li class="moment" id="c-start">
+        <h3 data-t="compare.start.moment">Arranca una sesión</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.start.without">Le vuelves a explicar el proyecto y dónde te quedaste.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.start.with">Lee tus reglas y el tablero, y te propone un plan.</span></p>
+      </li>
+      <li class="moment" id="c-code">
+        <h3 data-t="compare.code.moment">Claude escribe código</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.code.without">Le sigues pidiendo funciones chicas y pruebas de verdad.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.code.with">Tus reglas se lo piden en cada sesión, así ya no tienes que hacerlo tú.</span></p>
+      </li>
+      <li class="moment" id="c-risky">
+        <h3 data-t="compare.risky.moment">Un comando riesgoso</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.risky.without">Un force push a main corre como cualquier otro comando.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.risky.with">La guardia de push lo frena antes de que corra.</span></p>
+      </li>
+      <li class="moment" id="c-pr">
+        <h3 data-t="compare.pr.moment">Se abre un pull request</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.pr.without">Se mergea aunque nadie lo haya leído.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.pr.with">Una IA lo revisa, y si la revisión no pasa, no se mergea.</span></p>
+      </li>
+      <li class="moment" id="c-ci">
+        <h3 data-t="compare.ci.moment">Corren los checks</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.ci.without">Vuelves a revisar a cada rato, o Claude pregunta y pregunta y gasta tu plan.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.ci.with">ci-watch los vigila en tu computadora y despierta la sesión cuando terminan.</span></p>
+      </li>
+      <li class="moment" id="c-compact">
+        <h3 data-t="compare.compact.moment">Se llena el contexto</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.compact.without">Claude lo compacta y los detalles se pierden.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.compact.with">compact-handoff guarda tus mensajes palabra por palabra, más una nota de traspaso.</span></p>
+      </li>
+      <li class="moment" id="c-limit">
+        <h3 data-t="compare.limit.moment">Se acerca el límite de tu plan</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.limit.without">La sesión se corta a media tarea.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.limit.with">usage-guard guarda el trabajo, pausa y retoma después del reinicio.</span></p>
+      </li>
+      <li class="moment" id="c-commit">
+        <h3 data-t="compare.commit.moment">Haces commit</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.commit.without">Se pueden colar líneas de coautor de IA en tu historial.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.commit.with">Una guardia las deja fuera, así tus commits siguen siendo tuyos.</span></p>
+      </li>
+      <li class="moment" id="c-end">
+        <h3 data-t="compare.end.moment">Termina la sesión</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Sin</span> <span data-t="compare.end.without">La siguiente empieza desde cero.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">Con Bindwright</span> <span data-t="compare.end.with">El tablero y una nota de traspaso dicen qué quedó y qué sigue.</span></p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="compare-same" aria-labelledby="same-title">
+    <h2 id="same-title" data-t="compare.same.title">Lo que no cambia</h2>
+    <p data-t="compare.same.text">Sigue siendo Claude Code. Todo lo que agrega Bindwright son archivos que puedes leer y editar.</p>
+    <p class="compare-links"><a class="go" href="../#install" data-t="compare.install">Instalar Bindwright</a> <a href="../#evidence" data-t="compare.evidence">Mira lo que encontró en proyectos reales</a></p>
+  </section>
+</main>
+<footer>
+  <p data-t="footer.note">Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.</p>
+</footer>
+</body>
+</html>

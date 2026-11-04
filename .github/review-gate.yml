@@ -63,7 +63,7 @@ prescreen:
 # images, fonts outside the always-reviewed paths) passes without a review,
 # so a trigger on such a file never fires; list its path under
 # triage.always_review too. Empty: none. This repo: the templates every bind
-# ships, the page and its source.
+# ships and the engine that renders them.
 # auto: on lets the routine review ask for the deep review by itself: on
 # these triggers, on the gate's own files, and when it judges one needed.
 # off: it starts none by itself and the triggers are not used; a person
@@ -71,16 +71,16 @@ prescreen:
 # or adds the needs-deep-review label so every later push gets one.
 escalate:
   auto: on
-  paths: _core/, redesign/, index.html
+  paths: _core/, engine/
   patterns:
 
 # Paths that always get a review, whatever their file type, on top of the
 # gate's own (.github/scripts/, any .claude/ folder, any CLAUDE.md): globs as
 # for escalate.paths. Without this, a PR of only Markdown, images or fonts
-# passes without a review. This repo: the templates every bind ships, the
-# bundle defaults, the setup prompt and the files it reads, and redesign/.
+# passes without a review. This repo: the templates every bind ships and the
+# plugin's setup instructions.
 triage:
-  always_review: _core/, bundles/, redesign/, SETUP.md, TOGGLES.md, COMPARISON.md
+  always_review: _core/, plugin/
 
 # Extra tools both reviewers may use, comma separated: Bash(...) patterns,
 # Read, Grep or Glob. A Bash pattern that runs the PR's code hands that code

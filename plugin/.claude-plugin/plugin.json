@@ -1,0 +1,13 @@
+{
+  "name": "bindwright",
+  "displayName": "Bindwright",
+  "description": "Sets up a repo for agentic coding from a few questions in the session: rules, session skills, guard hooks and review workflows, fitted to the repo.",
+  "author": {
+    "name": "Jorge Alexandro Zamudio Arredondo",
+    "url": "https://github.com/starfoxcom"
+  },
+  "homepage": "https://starfoxcom.github.io/bindwright/",
+  "repository": "https://github.com/starfoxcom/bindwright",
+  "license": "MIT",
+  "keywords": ["setup", "rules", "skills", "hooks", "code-review"]
+}
