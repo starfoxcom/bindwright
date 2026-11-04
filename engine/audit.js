@@ -10,7 +10,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ANSWERS } from "./bind.js";
 import { runSettings } from "./layers.js";
-import { researchTool } from "./model.js";
+import { mapRemovedTool, researchTool } from "./model.js";
 import { MAX_DEPTH, depthOf } from "./setupcode.js";
 
 export const SESSIONS = 50; // the newest main transcripts read
@@ -273,7 +273,8 @@ function researchPattern(root, config) {
   if (value === "custom") {
     // Only the project layer can pick "custom", and runSettings has read that file already.
     const answers = JSON.parse(readFileSync(join(root, ...ANSWERS.split("/")), "utf8"));
-    custom = isObject(answers.advanced) ? answers.advanced.codeResearchCustom : undefined;
+    // A removed tool in the file is custom with its old name, as runSettings read it.
+    custom = isObject(answers.advanced) ? mapRemovedTool(answers.advanced).codeResearchCustom : undefined;
     if (!(isObject(custom) && typeof custom.name === "string" && typeof custom.url === "string")) return null;
   }
   return new RegExp(researchTool({ codeResearch: value, codeResearchCustom: custom }).match);

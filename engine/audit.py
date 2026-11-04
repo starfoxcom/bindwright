@@ -6,7 +6,7 @@ import os
 import re
 
 from layers import _read_layer_file, run_settings
-from model import _research_tool
+from model import _research_tool, map_removed_tool
 from setupcode import MAX_DEPTH, _depth, _not_json
 from update import ANSWERS, _code_units
 
@@ -300,6 +300,8 @@ def _research_pattern(root, config):
     if value == "custom":
         answers = _read_layer_file(os.path.join(root, *ANSWERS.split("/")), ANSWERS)
         adv = answers.get("advanced") if isinstance(answers, dict) else None
+        # A removed tool in the file is custom with its old name, as run_settings read it.
+        adv = map_removed_tool(adv) if isinstance(adv, dict) else adv
         custom = adv.get("codeResearchCustom") if isinstance(adv, dict) else None
         named = isinstance(custom, dict) and isinstance(custom.get("name"), str)
         if not (named and isinstance(custom.get("url"), str)):
