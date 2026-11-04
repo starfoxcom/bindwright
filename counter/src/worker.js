@@ -1,6 +1,6 @@
 // The opt-in review counter behind the Bindwright page.
 //
-//   POST /increment  {project, kind, checked, caught, deep, merged}  adds one send
+//   POST /increment  {project, kind, checked, caught, deep, merged, from, to}  adds one send
 //   GET  /total      the sums, projects per country and the top projects
 //
 // Sends come from the plugin of users who said yes at setup; the page reads
@@ -62,15 +62,18 @@ async function increment(request, { store, rateLimiter, timeInMilliseconds }) {
   const checked = checkSend(parsed.body);
   if (!checked.ok) return json({ error: checked.reason }, 400);
 
-  const outcome = await store.addSend({
+  const result = await store.addSend({
     send: checked.send,
     country: countryOf(request),
     timeInMilliseconds,
     gapInMilliseconds: MIN_SEND_GAP_IN_MILLISECONDS,
     maxNewPerDay: MAX_NEW_PROJECTS_PER_DAY,
   });
-  if (outcome === "too-soon") return json({ error: "this project already sent today" }, 429);
-  if (outcome === "day-full") return json({ error: "too many new projects today" }, 429);
+  if (result.outcome === "overlap") {
+    return json({ error: "this window was already counted", coveredTo: result.coveredTo }, 409);
+  }
+  if (result.outcome === "too-soon") return json({ error: "this project already sent today" }, 429);
+  if (result.outcome === "day-full") return json({ error: "too many new projects today" }, 429);
   return json({ ok: true }, 200);
 }
 

@@ -21,6 +21,8 @@ const SCHEMA = readFileSync(new URL("../../counter/schema.sql", import.meta.url)
 const PROJECT = "0123456789abcdef0123456789abcdef";
 const OTHER = "fedcba9876543210fedcba9876543210";
 const NOON = Date.UTC(2026, 10, 4, 12);
+const DAY = 24 * 60 * 60 * 1000;
+const LATER = NOON + MIN_SEND_GAP_IN_MILLISECONDS;
 
 const isRead = (sql) => /^\s*(SELECT|WITH)\b/i.test(sql);
 
@@ -74,7 +76,10 @@ function rowOf(database, id) {
 }
 
 function send(fields = {}) {
-  return { project: PROJECT, kind: "game", checked: 4, caught: 1, deep: 1, merged: 3, ...fields };
+  return {
+    project: PROJECT, kind: "game", checked: 4, caught: 1, deep: 1, merged: 3, from: NOON - DAY, to: NOON,
+    ...fields,
+  };
 }
 
 function post(body, headers = {}) {
@@ -101,6 +106,9 @@ test("checkSend accepts a valid send and refuses each bad field", () => {
     ["caught above checked", send({ checked: 1, caught: 2 })],
     ["deep above checked", send({ checked: 1, deep: 2 })],
     ["all zero", send({ checked: 0, caught: 0, deep: 0, merged: 0 })],
+    ["no window", { ...send(), from: undefined }],
+    ["window ending before it starts", send({ from: NOON, to: NOON - 1 })],
+    ["window as text", send({ to: String(NOON) })],
   ];
   for (const [name, body] of refused) assert.equal(checkSend(body).ok, false, name);
   assert.equal(checkSend(send({ checked: MAX_PER_SEND, merged: MAX_PER_SEND })).ok, true, "cap");
@@ -123,18 +131,30 @@ test("a send adds to the totals, and /total reports kinds and counts only", asyn
 test("a project sends once per gap", async () => {
   const { store, database } = newStore();
   await run(post(send()), { store });
-  const early = await run(post(send()), { store, time: NOON + MIN_SEND_GAP_IN_MILLISECONDS - 1 });
+  const early = await run(post(send({ from: NOON, to: LATER - 1 })), { store, time: LATER - 1 });
   assert.equal(early.status, 429);
   assert.equal(early.body.error, "this project already sent today");
-  const later = await run(post(send()), { store, time: NOON + MIN_SEND_GAP_IN_MILLISECONDS });
+  const later = await run(post(send({ from: NOON, to: LATER })), { store, time: LATER });
   assert.equal(later.status, 200);
+  assert.equal(rowOf(database, PROJECT).checked, 8);
+});
+
+test("a resent window is refused with where the count stops, and the next window counts", async () => {
+  const { store, database } = newStore();
+  await run(post(send()), { store });
+  const resent = await run(post(send()), { store, time: LATER });
+  assert.equal(resent.status, 409);
+  assert.equal(resent.body.coveredTo, NOON);
+  const overlapping = await run(post(send({ from: NOON - 1, to: LATER })), { store, time: LATER });
+  assert.equal(overlapping.status, 409);
+  assert.equal((await run(post(send({ from: NOON, to: LATER })), { store, time: LATER })).status, 200);
   assert.equal(rowOf(database, PROJECT).checked, 8);
 });
 
 test("two sends for one project arriving together count once", async () => {
   const { store, database } = newStore();
   const results = await Promise.all([run(post(send()), { store }), run(post(send()), { store })]);
-  assert.deepEqual(results.map((r) => r.status).sort(), [200, 429]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
   assert.equal(rowOf(database, PROJECT).checked, 4);
 });
 
@@ -148,14 +168,13 @@ test("new projects stop at the daily cap, existing ones keep sending", async () 
   assert.equal(refused.status, 429);
   assert.equal(refused.body.error, "too many new projects today");
   assert.equal(rowOf(database, OTHER), undefined);
-  assert.equal((await run(post(send()), { store })).status, 200, "a known project is not new");
+  assert.equal((await run(post(send({ from: NOON, to: NOON })), { store })).status, 200, "a known project is not new");
 });
 
 test("a new day frees the cap and keeps projects from earlier days", async () => {
   const { store, database } = newStore();
   await run(post(send()), { store });
-  const nextDay = NOON + 24 * 60 * 60 * 1000;
-  assert.equal((await run(post(send()), { store, time: nextDay })).status, 200);
+  assert.equal((await run(post(send({ from: NOON, to: NOON + DAY })), { store, time: NOON + DAY })).status, 200);
   const days = database.sqlite.prepare("SELECT DISTINCT day FROM new_projects").all().map((r) => r.day);
   assert.deepEqual(days, [], "earlier days are cleared on the next send");
   assert.equal(rowOf(database, PROJECT).checked, 8);

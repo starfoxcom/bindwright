@@ -30,7 +30,10 @@ export const MAX_BODY_IN_BYTES = 1024;
 export const TOP_PROJECTS = 10;
 
 const PROJECT_ID = /^[0-9a-f]{32}$/;
-const ALLOWED_KEYS = new Set(["project", "kind", ...FIELDS]);
+/** The window a send covers: pull requests merged from `from` up to `to`, in epoch milliseconds. */
+export const WINDOW = Object.freeze(["from", "to"]);
+
+const ALLOWED_KEYS = new Set(["project", "kind", ...FIELDS, ...WINDOW]);
 
 /**
  * Checks a parsed send and returns either `{ ok: true, send }` with the
@@ -38,7 +41,8 @@ const ALLOWED_KEYS = new Set(["project", "kind", ...FIELDS]);
  * than dropped, so a client that starts sending more data fails loudly.
  *
  * ```js
- * checkSend({ project: "0f…", kind: "game", checked: 3, caught: 1, deep: 0, merged: 2 });
+ * checkSend({ project: "0f…", kind: "game", checked: 3, caught: 1, deep: 0, merged: 2,
+ *   from: 1793750400000, to: 1793836800000 });
  * ```
  */
 export function checkSend(body) {
@@ -51,6 +55,10 @@ export function checkSend(body) {
     return refuse("project must be 32 lowercase hex characters");
   }
   if (!KINDS.includes(body.kind)) return refuse("kind is not one of the listed kinds");
+  const isTime = (value) => Number.isSafeInteger(value) && value >= 0;
+  if (!isTime(body.from) || !isTime(body.to) || body.from > body.to) {
+    return refuse("from and to must be times in milliseconds, from not after to");
+  }
 
   const counts = {};
   for (const field of FIELDS) {
@@ -64,7 +72,8 @@ export function checkSend(body) {
     return refuse("caught and deep cannot exceed checked");
   }
   if (FIELDS.every((field) => counts[field] === 0)) return refuse("nothing to add");
-  return { ok: true, send: { project: body.project, kind: body.kind, ...counts } };
+  const { project, kind, from, to } = body;
+  return { ok: true, send: { project, kind, ...counts, from, to } };
 }
 
 /** The country code Cloudflare derived from the request, or "XX" when unknown. */

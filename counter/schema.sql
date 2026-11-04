@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS projects (
   caught    INTEGER NOT NULL DEFAULT 0,
   deep      INTEGER NOT NULL DEFAULT 0,
   merged    INTEGER NOT NULL DEFAULT 0,
-  last_send INTEGER NOT NULL   -- milliseconds since the epoch
+  last_send INTEGER NOT NULL,  -- milliseconds since the epoch
+  covered_to INTEGER NOT NULL  -- end of the newest counted window, milliseconds since the epoch
 );
 
 CREATE INDEX IF NOT EXISTS projects_by_checked ON projects (checked DESC, merged DESC);
