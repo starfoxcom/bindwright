@@ -14,7 +14,7 @@ export const COMPUTER = [
     id: "code-research",
     title: "Code search",
     text: "tokensave indexes your code so answers come about a quarter faster on big codebases, "
-      + "for a few percent more tokens. none uses the built-in search: as accurate, cheaper, slower.",
+      + "for a few percent more tokens. none uses the built-in search: as accurate and cheaper, but slower.",
     value: "tokensave",
     keys: ["advanced.codeResearch", "advanced.codeResearchCustom"],
     options: ["tokensave", "none"],

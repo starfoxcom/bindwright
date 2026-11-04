@@ -181,7 +181,7 @@ export default {
     + "indexa tu código para que "
     + "las respuestas salgan como un cuarto más rápido en proyectos grandes, "
     + "con unos cuantos puntos porcentuales más de tokens. "
-    + "none usa la búsqueda integrada: igual de precisa, más barata y más lenta.",
+    + "none usa la búsqueda integrada: igual de precisa y más barata, pero más lenta.",
   "settings.code-research.value": "tokensave",
   "settings.global-instructions.title": "Instrucciones globales",
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
