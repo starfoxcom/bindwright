@@ -156,7 +156,7 @@ export default {
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
   "evidence.title": "Lo que detectó en proyectos reales",
   "evidence.note": "Bindwright pone un revisor de IA en cada pull request. "
-    + "Estos son sus resultados en cinco proyectos, de septiembre a noviembre de 2026.",
+    + "Estos son sus resultados en tres proyectos, de septiembre a noviembre de 2026.",
   "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
   "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
   "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "
@@ -168,8 +168,6 @@ export default {
   "evidence.project.game": "GameProject",
   "evidence.project.this": "Este proyecto",
   "evidence.project.business": "BusinessApp",
-  "evidence.project.language": "LanguageApp",
-  "evidence.project.community": "CommunityApp",
   "evidence.checked": { one: "{count} revisado", other: "{count} revisados" },
   "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
   "evidence.legend.passed": "pasaron la revisión",

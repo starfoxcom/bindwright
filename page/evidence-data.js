@@ -7,6 +7,4 @@ export const projects = [
   { name: "game", reviewed: 629, fixed: 189 },
   { name: "this", reviewed: 277, fixed: 114 },
   { name: "business", reviewed: 87, fixed: 16 },
-  { name: "language", reviewed: 14, fixed: 8 },
-  { name: "community", reviewed: 3, fixed: 1 },
 ];
