@@ -1,7 +1,20 @@
 import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 import type { World } from './world'
-import { ARM_FILE, endTurn, NOW, quietWakes, RESET, resumes, start, TASKS_DIR, tools, WAKE, world } from './world'
+import {
+  ARM_FILE,
+  doWork,
+  endTurn,
+  NOW,
+  quietWakes,
+  RESET,
+  resumes,
+  start,
+  TASKS_DIR,
+  tools,
+  WAKE,
+  world,
+} from './world'
 
 // Arms set for a time of day, the quoted reason a wake hands on, and the arm tool. NOW is Fri 10:00 in Phoenix.
 
@@ -92,6 +105,39 @@ test('the arm tool is registered and arms like the command', LONG, async ($, on)
   expect(refused.result).toBe('Use 24-hour time: /usage-guard arm 21:30.')
   await seen.clock.advance(HALF_HOUR)
   expect(resumes(seen)[0]).toContain(REASON_LINE)
+})
+
+test('the arm tool with compact compacts once, after the turn that set it ends', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  const call = { tool: 'mcp__usage-guard__arm', at: '10:30', compact: true, reason: 'check the build' }
+  const { result } = (await $.tool.call(call as never)) as { result: string }
+  expect(result).toContain('Compacting this session once this turn ends')
+  // A tool runs mid-turn, where the engine refuses a compaction.
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toEqual([])
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toHaveLength(1)
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toHaveLength(1)
+  await seen.clock.advance(HALF_HOUR)
+  expect(resumes(seen)[0]).toContain(REASON_LINE)
+})
+
+test('the arm tool compacts in a wrap-up turn the pause alone would not', async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await doWork($)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  await endTurn($)
+  // The context is below the pause's setting: only the tool's ask makes the wrap-up turn compact.
+  await $.tool.call({ tool: 'mcp__usage-guard__arm', at: '10:30', compact: true } as never)
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toHaveLength(1)
+  expect(seen.statuses.at(-1)).toContain('Plan limit near: paused until')
 })
 
 test('a session that only set an arm with the tool has no work to wrap up at a pause', async ($, on) => {

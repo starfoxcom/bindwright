@@ -110,7 +110,9 @@ test('the tool reads its input as the command reads its words', () => {
     isCompact: false,
     reason: 'check CI',
   })
-  expect(String(toolRequest({ at: '5h compact' }))).toContain('cannot compact')
+  expect(toolRequest({ at: '5h', compact: true })).toEqual({ which: '5h', isCompact: true })
+  expect(toolRequest({ at: '5h compact' })).toEqual({ which: '5h', isCompact: true })
+  expect(String(toolRequest({ at: '5h', compact: 'yes' }))).toContain('"compact"')
   expect(toolRequest({ at: '"5h"' })).toEqual({ which: '5h', isCompact: false })
   expect(String(toolRequest({ at: 5 }))).toContain('Pass "at"')
   expect(String(toolRequest({ at: '9pm' }))).toContain('Use 24-hour time')
