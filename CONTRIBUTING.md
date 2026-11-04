@@ -8,7 +8,7 @@ Thanks for considering a contribution. This project is solo-maintained on a best
 - **Branch from `develop`, not `main`.** This project uses Gitflow. `main` holds tagged releases only; all in-flight work lives on `develop`. Your PR should target `develop` as its base — `gh pr create --base develop`. PRs to `main` are reserved for release / hotfix branches owned by the maintainer.
 - **Atomic commits.** One logical change per commit. Format: `<type>(<scope>): <imperative description>` — same convention the templates themselves teach.
 - **No AI-attribution markers** in commit messages, PR titles, or PR bodies. No `Co-Authored-By: Claude`, no `Generated with Claude Code` footer, no links to `claude.com`/`claude.ai`/`anthropic.com` in commit metadata. The discipline is the work; the tool is a detail.
-- **One bundle's defaults are not another's.** When adjusting toggle defaults, change them in `bundles/<n>/bundle.toggles.md`.
+- **Defaults are a decision.** A changed default answer (`engine/model.js`, and its Python twin `engine/model.py`) says why in the PR, and the settings page (`page/settings-data.js`) shows the new default.
 
 ## What review looks like
 
@@ -27,15 +27,15 @@ What that means for you as a contributor:
 
 - Bug fixes in the bind engine (`engine/`), the plugin (`plugin/`) or the page (`page/`).
 - Typos, broken links, factual corrections in any of the `.md` files.
-- New toggles that codify a discipline the maintainer has already adopted in their own projects. Speculative discipline additions get pushed back; *receipts*-backed proposals get serious consideration.
-- New bundles for genuinely distinct shapes (e.g. "research scientist running their own infra" vs the four shipped bundles). Open an issue first.
-- Documentation improvements — especially in `SETUP.md`, which Claude reads verbatim.
+- New settings that codify a discipline the maintainer has already adopted in their own projects. Speculative discipline additions get pushed back; *receipts*-backed proposals get serious consideration.
+- New project shapes the setup questions do not cover yet. Open an issue first.
+- Documentation improvements, especially in `plugin/skills/setup/SKILL.md`, which Claude reads verbatim.
 
 ## What's out of scope
 
-- Renaming existing bundles or toggles. The naming surface is stable; downstream Setup commands reference them by key.
+- Renaming existing settings. Set-up projects save their answers by key in `.bindwright/project.json`.
 - Reformatting / restyling the HTML page beyond bug fixes — the design is a deliberate aesthetic commit. Discuss in an issue if you have a strong opinion.
-- Adding telemetry / analytics. The page runs entirely in the browser; it stays that way.
+- Telemetry or analytics that are on by default. The page runs entirely in the browser, and anything the plugin sends is opt-in.
 
 ## Local development
 
