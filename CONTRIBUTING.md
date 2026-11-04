@@ -8,14 +8,14 @@ Thanks for considering a contribution. This project is solo-maintained on a best
 - **Branch from `develop`, not `main`.** This project uses Gitflow. `main` holds tagged releases only; all in-flight work lives on `develop`. Your PR should target `develop` as its base — `gh pr create --base develop`. PRs to `main` are reserved for release / hotfix branches owned by the maintainer.
 - **Atomic commits.** One logical change per commit. Format: `<type>(<scope>): <imperative description>` — same convention the templates themselves teach.
 - **No AI-attribution markers** in commit messages, PR titles, or PR bodies. No `Co-Authored-By: Claude`, no `Generated with Claude Code` footer, no links to `claude.com`/`claude.ai`/`anthropic.com` in commit metadata. The discipline is the work; the tool is a detail.
-- **One bundle's defaults are not another's.** When adjusting toggle defaults, change them in `bundles/<n>/bundle.toggles.md` AND in `index.html`'s `TOGGLES` array AND in `FALLBACK_MANIFEST` if file-routing changes. Keep them in lockstep.
+- **One bundle's defaults are not another's.** When adjusting toggle defaults, change them in `bundles/<n>/bundle.toggles.md`.
 
 ## What review looks like
 
 This project ships templates that downstream users install verbatim into their own repos — a malicious or buggy PR landing on `main` could ship harmful code to every future bind. The review surface is load-bearing, so every PR (yours and mine) goes through:
 
 1. **AI routine review.** A Claude-powered workflow auto-fires on every PR open / synchronize. It posts a binary 🔴 / 🟢 verdict comment. 🔴 blocks merge. No "minor non-blocking" findings — anything worth writing down is blocking.
-2. **Auto-deep-review** on high-blast-radius diffs (anything touching `_core/`, `index.html`, `_core/project-template/.claude/hooks/`, or `redesign/*.jsx`). A second AI pass from Opus, same binary verdict rule. The routine reviewer applies the `needs-deep-review` label automatically.
+2. **Auto-deep-review** on high-blast-radius diffs (anything touching `_core/` or `engine/`). A second AI pass from Opus, same binary verdict rule. The routine reviewer applies the `needs-deep-review` label automatically.
 3. **Maintainer review + approval.** I read the AI verdict, then the diff itself. External PRs require my approval before merge regardless of AI verdict. The combination is the gate — AI catches the mechanical stuff, I catch the contextual stuff and the supply-chain-risk stuff.
 
 What that means for you as a contributor:
@@ -25,7 +25,7 @@ What that means for you as a contributor:
 
 ## What's in scope
 
-- Bug fixes in the binder (`index.html` JS / CSS), the toggle-marker filter, the manifest fallback.
+- Bug fixes in the bind engine (`engine/`), the plugin (`plugin/`) or the page (`page/`).
 - Typos, broken links, factual corrections in any of the `.md` files.
 - New toggles that codify a discipline the maintainer has already adopted in their own projects. Speculative discipline additions get pushed back; *receipts*-backed proposals get serious consideration.
 - New bundles for genuinely distinct shapes (e.g. "research scientist running their own infra" vs the four shipped bundles). Open an issue first.
@@ -39,13 +39,12 @@ What that means for you as a contributor:
 
 ## Local development
 
-The page is a single React-based `index.html` — open it in any modern browser. Some notes:
+The page lives in `page/`: plain HTML, CSS and JavaScript modules, no build step. Some notes:
 
-- **From `file://`**, the bind-volume button will fail because `fetch()` of the template files is CORS-blocked. Serve locally with `python -m http.server 8080` and open `http://localhost:8080/` instead.
-- **`redesign/` is the dev source** — nine `.jsx` modules + a dev shell. Each module corresponds 1:1 to a `<script type="text/babel" data-component="…">` block in the bundled `index.html`. Edit a single module during iteration; when ready, sync your change to the matching block in `index.html` so the bundled artifact stays current.
-- **Module navigation**: grep for `data-component="<Name>"` (e.g. `data-component="BindFolio"`) to jump to a specific component in the 5,000-line `index.html`. Each block is preceded by a `<!-- ==== redesign/<filename>.jsx ==== -->` marker.
-- **Toggle filter test**: the JS includes a `<!-- TOGGLE:key START/END -->` filter. To verify it works, edit a template `.md`, wrap a section in markers, bind a volume with the toggle on and again with it off, and diff the outputs.
-- **JSZip is loaded on demand from a CDN.** If you want to vendor it for offline development, drop `jszip.min.js` next to `index.html` and update the `<script src>` accordingly.
+- **Serve it, don't open it from `file://`.** The file preview fetches the template files, which `file://` blocks. Run `python -m http.server 8080` from the repo root and open `http://localhost:8080/page/`.
+- **The file preview is the real engine.** `page/files.js` runs `engine/bind.js` on the files in `_core/`, so a template change shows up there as it will in a bind.
+- **English text lives in the HTML.** Every other language has a dictionary in `page/i18n/`; after changing English text, add the key to each one and regenerate the translated pages with `node tools/page_languages.mjs`.
+- **Tests:** `node --test engine/test/page-*.test.js`.
 
 ## Releasing a new version
 

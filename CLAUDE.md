@@ -29,13 +29,13 @@ Bypass for Bash `grep`/`rg`: include `# TOKENSAVE_BYPASS: <reason>` in the comma
 
 **claude-code-templates** is an open-source toolkit for setting up Claude Code in any project. It ships four opinionated bundles (Solo, OSS, Client-solo, Client-team) and a configurable web UI hosted on GitHub Pages.
 
-- **Live page:** `index.html` — also deployed at https://starfoxcom.github.io/claude-code-templates/
+- **Live page:** `page/`, deployed at https://starfoxcom.github.io/claude-code-templates/ (the root `index.html` redirects there)
 - **Source of truth for templates:** `_core/`
 - **Bundle-specific overrides:** `bundles/<n>/bundle.toggles.md`
-- **In-browser binder:** JSZip-based, client-side, no backend
+- **Bind engine:** `engine/`, run by the plugin (`plugin/`, `/bindwright:setup`) and by the page's file preview
 - **Versioning:** SemVer (`v1.0.0 → v1.1.0 → v2.0.0 …`). Earlier conversational `v17 / v18` mentions consolidated into the v1.0.0 release. See `VERSION` file and `CHANGELOG.md`.
 
-The page itself is the deliverable. There is no separate frontend build step; `index.html` is hand-authored and deployed as-is via the Pages workflow.
+The page itself is the deliverable. There is no build step; `page/` is hand-authored and deployed as-is via the Pages workflow.
 
 ---
 
@@ -88,7 +88,7 @@ Per `.claude/rules/review-tiers.md` (resolved from canonical `_core/project-temp
   - Required approvals: 0 (the AI gates decide; a solo maintainer cannot approve their own PR)
   - Bypass actors: none. Nobody, admins included, can merge past the gates
   - Every external contribution: AI routine review verdict + maintainer eyes-on review before merge
-  - Deep review fires automatically on any PR touching `_core/`, the bundled `index.html`, `_core/project-template/.claude/hooks/`, or `redesign/*.jsx`. These are the highest-blast-radius surfaces.
+  - Deep review fires automatically on any PR touching `_core/` (its hooks included) or `engine/`, which renders every bind. These are the highest-blast-radius surfaces.
 
 The routine-review + deep-review workflows are installed and active in this repo's own `.github/workflows/` (`claude-code-review.yml` and `claude.yml`) — they self-host the same discipline the templates ship. They exist canonically in `_core/project-template/.github/workflows/` (`claude-code-review.yml.template`, `claude.yml.template`); this repo's live copies are the resolved bind of those canonical templates.
 
@@ -114,7 +114,10 @@ Skills `/session-start`, `/session-close` and `/find` live at `.claude/skills/`,
 
 ```
 claude-code-templates/
-├── index.html              # the live page
+├── index.html              # redirects to page/
+├── page/                   # the live page
+├── engine/                 # the bind engine
+├── plugin/                 # the Claude Code plugin
 ├── README.md               # public-facing
 ├── CLAUDE.md               # this file
 ├── CHANGELOG.md            # version history
@@ -141,7 +144,6 @@ claude-code-templates/
 ## Project conventions
 
 - **All code + prose in English.** Variable names, comments, manifest text, docs.
-- **HTML/CSS in `index.html` is hand-authored** — no build step, no minification. The file is meant to be readable in a browser dev tools window.
+- **The page in `page/` is hand-authored** HTML, CSS and JavaScript modules: no build step, no minification, readable in a browser's dev tools.
 - **OKLCH for color** in CSS — see the v1.0.0 redesign rationale in `CHANGELOG.md`.
-- **Geist (sans + mono) from Google Fonts** — loaded via `<link>` at the top of `index.html`.
-- **JSZip loaded on demand from CDN** for the bundle generator. No npm, no node_modules, no bundling.
+- **Hubot Sans and Fragment Mono from Google Fonts**, loaded via `<link>` at the top of each page. No npm, no node_modules, no bundling.

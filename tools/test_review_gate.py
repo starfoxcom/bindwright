@@ -53,7 +53,7 @@ class Triage(unittest.TestCase):
                 self.assertTrue(gate.triage([path]))
 
     def test_always_reviewed_paths_count_whatever_the_file_type(self):
-        for path in (".github/scripts/json.pyc", ".github/scripts/run.sh", "redesign/notes.md",
+        for path in (".github/scripts/json.pyc", ".github/scripts/run.sh", "_core/notes.md",
                      "_core/project-template/README.md", ".github/review-gate.yml", "SETUP.md",
                      "CLAUDE.md", "engine/CLAUDE.md", ".claude/rules/git.md", ".claude/skills/find/SKILL.md",
                      "bundles/1-solo-personal/bundle.toggles.md", "_core/x/logo.png",
@@ -154,13 +154,6 @@ class ReviewChecks(unittest.TestCase):
                 self.assertFalse(names["odd"](name))
         t = "_core/project-template/x/y.md"
         self.assertEqual(self.run_check("template_names.py", [t], {t: "x"})[0], 0)
-
-    def test_page_parity_only_warns(self):
-        code, out = self.run_check("page_parity.py", ["redesign/app.jsx"], {"redesign/app.jsx": "<a/>"})
-        self.assertEqual(code, 0)
-        self.assertIn("JSX_HTML_PARITY", out)
-        code, out = self.run_check("page_parity.py", ["redesign/app.jsx", "index.html"], {})
-        self.assertNotIn("JSX_HTML_PARITY", out)
 
 
 class Verdict(unittest.TestCase):

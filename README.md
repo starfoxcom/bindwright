@@ -50,9 +50,10 @@ The careful path is best when you want to inspect what'll be written *before* it
 
 ```
 claude-code-templates/
-├── index.html              ← the live page (also the GitHub Pages root)
-├── index.legacy.html       ← previous edition (v1.0.0), retained as fallback
-├── redesign/               ← dev source for the React UI (9 .jsx modules)
+├── index.html              ← redirects the GitHub Pages root to page/
+├── page/                   ← the live page (plain HTML, CSS and JS, no build step)
+├── engine/                 ← the bind engine the plugin and the page's file preview run
+├── plugin/                 ← the Claude Code plugin (/bindwright:setup)
 ├── README.md               ← this file
 ├── CHANGELOG.md            ← version history
 ├── CONTRIBUTING.md         ← how to PR / what's in scope

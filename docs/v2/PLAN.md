@@ -92,7 +92,7 @@ Changed 2026-11-02 (maintainer): the page becomes a landing page and install gui
 - [x] "What goes where": an animated diagram of what lands on the computer and what lands in each project, inside "What a setup writes" (#536).
 - [x] Install scene: dropped 2026-11-02 (maintainer), since "What goes where" already shows what setup installs (#537).
 - [x] Evidence section: numbers from `tools/receipts.py` (PR history) for the five projects that run the AI reviewer, a checked-vs-caught bar per project, and two incident stories (GameProject and this project), each with the rule it produced. Opt-in counts from users follow in #551.
-- [ ] Secondary pages: compare, all settings, how it works.
+- [x] Secondary pages: compare and all settings; "how it works" dropped, since the landing already plays the loop and splits what lands on the computer from what lands in each project. The root `index.html` redirects to `page/`, and the v1 page is gone (#491).
 
 ### Phase 4: rename and release
 - [ ] Rename the repo and Pages site, update every reference, add the non-affiliation notice, `SECURITY.md`, code of conduct, MIT-0 for output.
