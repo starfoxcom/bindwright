@@ -145,18 +145,18 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">What it caught in real projects</h2>
-    <p class="preview-note" data-t="evidence.note">Bindwright puts an AI reviewer on every pull request. These are its results in five projects, September to November 2026.</p>
+    <p class="preview-note" data-t="evidence.note">Bindwright puts an AI reviewer on every pull request. These are its results in three projects, September to November 2026.</p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="reviewed" data-count="1010">1010</span>
+        <span class="stat-num" data-total="reviewed" data-count="993">993</span>
         <p class="stat-label" data-t="evidence.reviewed">pull requests checked by the AI reviewer before they merged</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="fixed" data-count="328">328</span>
+        <span class="stat-num stat-red" data-total="fixed" data-count="319">319</span>
         <p class="stat-label" data-t="evidence.stopped">had a problem the reviewer caught and were held back until it was fixed</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-count="590">590</span>
+        <span class="stat-num stat-accent" data-count="583">583</span>
         <p class="stat-label" data-t="evidence.deep">touched risky code, like security or saved data, and got a second, deeper review</p>
       </div>
     </div>
@@ -178,6 +178,34 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <span class="was" data-t="evidence.story2.was">A change shipped functions 273 lines long, because the rule that limits function size never loaded.</span>
         <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
         <b data-t="evidence.story2.now">A size check runs on every pull request and fails any function that grows too long.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story3.where">This project</span>
+        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
+        <span class="was" data-t="evidence.story3.was">Two pull requests took 22 and 30 review rounds, since every fix gave the reviewer something new to flag.</span>
+        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
+        <b data-t="evidence.story3.now">A finding blocks only when the change caused it; older gaps become their own issues.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story4.where">This project</span>
+        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
+        <span class="was" data-t="evidence.story4.was">A fix merged into the main branch never made it back to the development branch.</span>
+        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
+        <b data-t="evidence.story4.now">A hotfix only counts as done once it's merged back into the development branch.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story5.where">This project</span>
+        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
+        <span class="was" data-t="evidence.story5.was">A pull request merged on its first review while the deeper review it had asked for was still pending.</span>
+        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
+        <b data-t="evidence.story5.now">Once a deeper review is asked for, nothing merges until it passes too.</b>
+      </li>
+      <li class="story">
+        <span class="chip" data-t="evidence.story6.where">This project</span>
+        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
+        <span class="was" data-t="evidence.story6.was">A change to the review workflow, made on a feature branch, failed its own review check.</span>
+        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
+        <b data-t="evidence.story6.now">Workflow changes go to the main branch first, then flow back to development.</b>
       </li>
     </ul>
   </section>

@@ -68,8 +68,6 @@ export default {
   "evidence.project.game": "GameProject",
   "evidence.project.this": "This project",
   "evidence.project.business": "BusinessApp",
-  "evidence.project.language": "LanguageApp",
-  "evidence.project.community": "CommunityApp",
   "evidence.checked": { one: "{count} checked", other: "{count} checked" },
   "evidence.caught": { one: "{count} caught", other: "{count} caught" },
   "evidence.legend.passed": "passed the review",
