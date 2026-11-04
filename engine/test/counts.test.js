@@ -9,7 +9,18 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { KINDS, countPrs, counterUrl, send, setProject, setShare, statusOf } from "../../plugin/hooks/counts.mjs";
+import {
+  HISTORY_START,
+  KINDS,
+  countPrs,
+  counterUrl,
+  historyOf,
+  send,
+  setBackfill,
+  setProject,
+  setShare,
+  statusOf,
+} from "../../plugin/hooks/counts.mjs";
 import { KINDS as COUNTER_KINDS } from "../../counter/src/rules.js";
 
 const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "hooks", "counts.mjs");
@@ -20,13 +31,28 @@ const ALREADY_SENT = { status: 429, error: "this project already sent today" };
 const DEEP = "needs-deep-review";
 
 const comment = (body, login = "claude") => ({ author: { login }, body });
-const pr = (comments = [], labels = []) => ({ number: 1, labels: labels.map((name) => ({ name })), comments });
-const GREEN_PR = pr([comment("🟢 LGTM")]);
 const red = comment("🔴 Blocking: the parser drops the last field");
 const green = comment("🟢 LGTM");
 
 // Local noon of a November 2026 day, so the local calendar day is the one named.
 const noon = (day, hour = 12) => new Date(2026, 10, day, hour);
+const MINUTE = 60 * 1000;
+const SECOND = 1000;
+const CAP = 500;
+const GH_LIMIT = 1000;
+
+// gh writes times in whole seconds.
+const ghTime = (date) => date.toISOString().replace(".000Z", "Z");
+
+// A merged PR of the author as gh lists it, created and merged at noon of day 2 unless told.
+const pr = (comments = [], labels = [], { number = 1, mergedAt = noon(2) } = {}) => ({
+  number,
+  createdAt: ghTime(mergedAt),
+  mergedAt: ghTime(mergedAt),
+  labels: labels.map((name) => ({ name })),
+  comments,
+});
+const GREEN_PR = pr([green]);
 
 const countRows = [
   ["no merged PRs counts nothing", [], { checked: 0, caught: 0, deep: 0, merged: 0 }],
@@ -56,8 +82,8 @@ const countRows = [
     { checked: 1, caught: 1, deep: 1, merged: 1 }],
   ["a deep label without a verdict does not count", [pr([], [DEEP])],
     { checked: 0, caught: 0, deep: 0, merged: 1 }],
-  ["each count caps at 1000", Array.from({ length: 1001 }, () => pr([green], [DEEP])),
-    { checked: 1000, caught: 0, deep: 1000, merged: 1000 }],
+  ["each count caps at the batch size of 500", Array.from({ length: 501 }, () => pr([green], [DEEP])),
+    { checked: 500, caught: 0, deep: 500, merged: 500 }],
 ];
 
 for (const [name, prs, expected] of countRows) {
@@ -116,15 +142,37 @@ function projectOf(s) {
   return JSON.parse(readFileSync(s.stateFile, "utf8")).projects[s.repo];
 }
 
-// Records the repo each gh call ran in and answers with `result`, or throws it.
-function fakeGh(result) {
+// A fake gh over `prs`, which a test may add to between sends. An Error is thrown instead.
+function fakeGh(prs) {
   const calls = [];
   const ghJson = async (args, cwd) => {
     calls.push({ args, cwd });
-    if (result instanceof Error) throw result;
-    return result;
+    if (prs instanceof Error) throw prs;
+    return answerGh(prs, args);
   };
-  return { ghJson, calls };
+  return { ghJson, calls, prs };
+}
+
+// Answers a `gh pr list` call over `prs` as gh does: the `merged:` qualifier, newest created
+// first unless `sort:created-asc`, at most GH_LIMIT results, and only the --json fields asked for.
+function answerGh(prs, args) {
+  const search = args[args.indexOf("--search") + 1];
+  const fields = args[args.indexOf("--json") + 1].split(",");
+  const direction = search.includes("sort:created-asc") ? 1 : -1;
+  return prs
+    .filter((item) => inMergedQualifier(item.mergedAt, search))
+    .sort((a, b) => direction * (Date.parse(a.createdAt) - Date.parse(b.createdAt)))
+    .slice(0, GH_LIMIT)
+    .map((item) => Object.fromEntries(fields.map((field) => [field, item[field]])));
+}
+
+// Whether a merge time matches the `merged:` qualifier: `>=X`, or the inclusive range `A..B`.
+function inMergedQualifier(mergedAt, search) {
+  const at = Date.parse(mergedAt);
+  const from = /merged:>=(\S+)/.exec(search);
+  if (from) return at >= Date.parse(from[1]);
+  const [, start, end] = /merged:(\S+?)\.\.(\S+)/.exec(search);
+  return at >= Date.parse(start) && at <= Date.parse(end);
 }
 
 // Records each post. `reply` is what it answers; an Error is thrown instead.
@@ -245,15 +293,16 @@ test("a failed send is not retried for a minute, and is retried after it", () =>
   assert.equal(projectOf(s).failedAt, null);
 }));
 
-test("a repo with no merged PRs moves since forward and asks gh once that day", () => inScene(async (s) => {
+test("a repo with no merged PRs moves since forward and does not ask gh again that day", () => inScene(async (s) => {
   seedState(s);
   const when = noon(3);
   const gh = fakeGh([]);
   const counter = fakeCounter(OK);
   await sendAt(s, when, gh, counter);
+  const asked = gh.calls.length;
   await sendAt(s, noon(3, 18), gh, counter);
   assert.deepEqual(counter.posts, []);
-  assert.equal(gh.calls.length, 1);
+  assert.equal(gh.calls.length, asked);
   assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString(), lastSendDay: "2026-11-03" }));
 }));
 
@@ -267,6 +316,7 @@ test("a send whose answer was lost is not counted twice", () => inScene(async (s
   await sendAt(s, noon(4), gh, counter);
   assert.equal(counter.posts[1].body.from, noon(1).getTime(), "the retry resends the same start");
   assert.deepEqual(projectOf(s), projectEntry({ since: lost.toISOString() }));
+  gh.prs.push(pr([green], [], { mergedAt: new Date(2026, 10, 3, 12, 30) }));
   counter.reply = OK;
   await sendAt(s, noon(4, 13), gh, counter);
   assert.equal(counter.posts[2].body.from, lost.getTime(), "the next send starts where the count stops");
@@ -300,9 +350,9 @@ test("a project call made while the send waits is kept", () => inScene(async (s)
 }));
 
 test("adding a repo again keeps its id and start, and sets the kind", () => inScene(async (s) => {
-  setProject(s.stateFile, s.repo, "game", () => noon(1));
+  setProject(s.stateFile, s.repo, "game");
   const first = projectOf(s);
-  setProject(s.stateFile, s.repo, "website", () => noon(2));
+  setProject(s.stateFile, s.repo, "website");
   const second = projectOf(s);
   assert.match(first.id, /^[0-9a-f]{32}$/);
   assert.equal(second.id, first.id);
@@ -354,4 +404,102 @@ test("the CLI send exits 0 and prints nothing when sharing is off", () => inScen
   const sent = cli(s.configDir, "send", s.repo);
   assert.equal(sent.status, 0);
   assert.equal(sent.stdout, "");
+}));
+
+// `count` green PRs merged a minute apart, the first at noon of the first day.
+const many = (count) => Array.from({ length: count }, (_, index) =>
+  pr([green], [], { number: index + 1, mergedAt: new Date(noon(1).getTime() + index * MINUTE) }));
+
+test("a repo added counts from GitHub's first day, with backfill off", () => inScene(async (s) => {
+  setProject(s.stateFile, s.repo, "game");
+  assert.equal(projectOf(s).since, HISTORY_START);
+  assert.equal(projectOf(s).backfill, false);
+}));
+
+test("a history of one batch goes out in one send, from GitHub's first day to now", () => inScene(async (s) => {
+  setShare(s.stateFile, "on");
+  setProject(s.stateFile, s.repo, "game");
+  const counter = fakeCounter(OK);
+  await sendAt(s, noon(3), fakeGh(many(CAP)), counter);
+  assert.deepEqual(counter.posts, [{
+    url: SEND_URL,
+    body: {
+      project: projectOf(s).id, kind: "game", checked: CAP, caught: 0, deep: 0, merged: CAP,
+      from: Date.parse(HISTORY_START), to: noon(3).getTime(),
+    },
+  }]);
+}));
+
+test("backfill on: a history past one batch goes out a batch a day, oldest first", () => inScene(async (s) => {
+  seedState(s, { projects: { [s.repo]: projectEntry({ since: HISTORY_START, backfill: true }) } });
+  const gh = fakeGh(many(650));
+  const counter = fakeCounter(OK);
+  await sendAt(s, noon(3), gh, counter);
+  const first = counter.posts[0].body;
+  assert.ok(first.merged <= CAP);
+  assert.equal(projectOf(s).since, new Date(first.to + SECOND).toISOString());
+  await sendAt(s, noon(4), gh, counter);
+  const second = counter.posts[1].body;
+  assert.equal(second.from, first.to + SECOND);
+  assert.equal(second.to, noon(4).getTime());
+  assert.equal(first.merged + second.merged, 650);
+}));
+
+test("backfill on: a batch whose answer was lost resumes after it, counting no PR twice", () => inScene(async (s) => {
+  seedState(s, { projects: { [s.repo]: projectEntry({ since: HISTORY_START, backfill: true }) } });
+  const gh = fakeGh(many(650));
+  const counter = fakeCounter(new Error("The operation was aborted due to timeout"));
+  await sendAt(s, noon(3), gh, counter);
+  const first = counter.posts[0].body;
+  counter.reply = { status: 409, error: "this window was already counted", coveredTo: first.to };
+  await sendAt(s, noon(4), gh, counter);
+  counter.reply = OK;
+  await sendAt(s, noon(5), gh, counter);
+  const rest = counter.posts[2].body;
+  assert.equal(rest.from, first.to + SECOND);
+  assert.equal(first.merged + rest.merged, 650);
+}));
+
+test("backfill off: a history past one batch sends only the newest batch", () => inScene(async (s) => {
+  seedState(s, { projects: { [s.repo]: projectEntry({ since: HISTORY_START }) } });
+  const gh = fakeGh(many(650));
+  const counter = fakeCounter(OK);
+  await sendAt(s, noon(3), gh, counter);
+  await sendAt(s, noon(4), gh, counter);
+  assert.equal(counter.posts.length, 1);
+  const newest = counter.posts[0].body;
+  assert.ok(newest.merged <= CAP);
+  assert.equal(newest.to, noon(3).getTime());
+  assert.ok(newest.from > noon(1).getTime());
+}));
+
+const historyRows = [
+  ["a history of one batch is not over the batch", CAP, false],
+  ["a history one PR past a batch is over it", CAP + 1, true],
+];
+
+for (const [name, count, overLimit] of historyRows) {
+  test(`history: ${name}`, () => inScene(async (s) => {
+    const gh = fakeGh(many(count));
+    const result = await historyOf({ root: s.repo, stateFile: s.stateFile, ghJson: gh.ghJson });
+    assert.deepEqual(result, { overLimit });
+  }));
+}
+
+test("the CLI turns backfill on for an added repo", () => inScene(async (s) => {
+  cli(s.configDir, "project", s.repo, "game");
+  const result = cli(s.configDir, "backfill", s.repo, "on");
+  assert.equal(result.status, 0);
+  assert.deepEqual(JSON.parse(result.stdout), { project: s.repo, backfill: true });
+  assert.equal(projectOf(s).backfill, true);
+}));
+
+test("the CLI refuses backfill for a repo never added, and a value other than on or off", () => inScene(async (s) => {
+  const unknown = cli(s.configDir, "backfill", s.repo, "on");
+  assert.equal(unknown.status, 1);
+  assert.match(JSON.parse(unknown.stdout).error, /no project/);
+  cli(s.configDir, "project", s.repo, "game");
+  const badValue = cli(s.configDir, "backfill", s.repo, "maybe");
+  assert.equal(badValue.status, 1);
+  assert.match(JSON.parse(badValue.stdout).error, /on or off/);
 }));
