@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-t="compare.meta.title">Compare · Bindwright</title>
+<meta name="description" data-t-attr="content:compare.meta.description"
+  content="What a work day in Claude Code looks like without Bindwright and with it.">
+<!-- alternates -->
+<link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/claude-code-templates/page/compare/">
+<link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/claude-code-templates/page/es/compare/">
+<link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/claude-code-templates/page/compare/">
+<!-- /alternates -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=swap"
+  rel="stylesheet">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../compare.css">
+</head>
+<body>
+<a class="skip" href="#moments" data-t="compare.skip">Skip to the comparison</a>
+<header>
+  <a class="mark" href="../">Bindwright</a>
+  <nav aria-label="Site" data-t-attr="aria-label:nav.site">
+    <a href="../settings/" data-t="nav.settings">Plugin settings</a>
+    <a href="./" aria-current="page" data-t="nav.compare">Compare</a>
+    <a href="https://github.com/starfoxcom/claude-code-templates" data-t="nav.github">GitHub</a>
+  </nav>
+  <nav class="langs" aria-label="Language" data-langs data-t-attr="aria-label:nav.language">
+    <a href="../es/compare/" hreflang="es" lang="es">Español</a>
+  </nav>
+</header>
+<main id="main">
+  <section class="settings-intro">
+    <h1 data-t="compare.title">Without and with Bindwright</h1>
+    <p class="lede" data-t="compare.lede">Same Claude Code, same model. This is what changes at each moment of a work day.</p>
+  </section>
+
+  <section id="moments" class="compare" aria-labelledby="moments-title">
+    <h2 id="moments-title" class="visually-hidden" data-t="compare.moments">Moment by moment</h2>
+    <div class="compare-head" aria-hidden="true">
+      <span></span>
+      <span data-t="compare.label.without">Without</span>
+      <span data-t="compare.label.with">With Bindwright</span>
+    </div>
+    <ul class="moments">
+      <li class="moment" id="c-start">
+        <h3 data-t="compare.start.moment">A session starts</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.start.without">You explain the project and where you stopped, again.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.start.with">It reads your rules and the board, then proposes a plan.</span></p>
+      </li>
+      <li class="moment" id="c-code">
+        <h3 data-t="compare.code.moment">Claude writes code</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.code.without">You keep asking for small functions and real tests.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.code.with">Your rules ask for them every session, so you don't have to.</span></p>
+      </li>
+      <li class="moment" id="c-risky">
+        <h3 data-t="compare.risky.moment">A risky command</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.risky.without">A force push to main runs like any other command.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.risky.with">The push guard stops it before it runs.</span></p>
+      </li>
+      <li class="moment" id="c-pr">
+        <h3 data-t="compare.pr.moment">A pull request opens</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.pr.without">It merges whether anyone read it or not.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.pr.with">An AI reviews it, and if the review doesn't pass, it doesn't merge.</span></p>
+      </li>
+      <li class="moment" id="c-ci">
+        <h3 data-t="compare.ci.moment">The checks run</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.ci.without">You keep checking back, or Claude keeps asking and spends your plan.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.ci.with">ci-watch watches them on your computer and wakes the session once they finish.</span></p>
+      </li>
+      <li class="moment" id="c-compact">
+        <h3 data-t="compare.compact.moment">The context fills up</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.compact.without">Claude compacts it and the details get lost.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.compact.with">compact-handoff keeps your messages word for word, plus a hand-off note.</span></p>
+      </li>
+      <li class="moment" id="c-limit">
+        <h3 data-t="compare.limit.moment">Your plan limit gets close</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.limit.without">The session stops in the middle of a task.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.limit.with">usage-guard saves the work, pauses, and picks up after the reset.</span></p>
+      </li>
+      <li class="moment" id="c-commit">
+        <h3 data-t="compare.commit.moment">You commit</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.commit.without">AI co-author lines can end up in your history.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.commit.with">A guard keeps them out, so your commits stay yours.</span></p>
+      </li>
+      <li class="moment" id="c-end">
+        <h3 data-t="compare.end.moment">The session ends</h3>
+        <p class="without"><span class="moment-label" data-t="compare.label.without">Without</span> <span data-t="compare.end.without">The next one starts from scratch.</span></p>
+        <p class="with"><span class="moment-label" data-t="compare.label.with">With Bindwright</span> <span data-t="compare.end.with">The board and a hand-off note say what's done and what's next.</span></p>
+      </li>
+    </ul>
+  </section>
+
+  <section class="compare-same" aria-labelledby="same-title">
+    <h2 id="same-title" data-t="compare.same.title">What stays the same</h2>
+    <p data-t="compare.same.text">It's still Claude Code. Everything Bindwright adds is plain files you can read and edit.</p>
+    <p class="compare-links"><a class="go" href="../#install" data-t="compare.install">Install Bindwright</a> <a href="../#evidence" data-t="compare.evidence">See what it caught in real projects</a></p>
+  </section>
+</main>
+<footer>
+  <p data-t="footer.note">Bindwright works with Claude Code. It is not made by, endorsed by or
+    affiliated with Anthropic.</p>
+</footer>
+</body>
+</html>

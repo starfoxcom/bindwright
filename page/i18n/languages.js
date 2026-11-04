@@ -13,4 +13,5 @@ export const SITE = "https://starfoxcom.github.io/claude-code-templates/page/";
 export const PAGES = [
   { file: "index.html", path: "" },
   { file: "settings/index.html", path: "settings/" },
+  { file: "compare/index.html", path: "compare/" },
 ];
