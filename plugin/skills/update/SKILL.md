@@ -57,7 +57,11 @@ Files that were `added`, or merged from new text, can hold placeholders setup fi
 
 For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.
 
-## 6. Finish
+## 6. Review counts
+
+When Node is there and `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and save the answer the same way.
+
+## 7. Finish
 
 Tell the user, in plain words and grouped by kind (rules, skills, hooks, workflows, docs) rather than file by file: what was updated, what merged, what they settled, what was added or removed, and anything left unsettled in `.bindwright/incoming/`.
 

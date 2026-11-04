@@ -24,6 +24,9 @@ node_modules/
 package-lock.json
 yarn.lock
 
+# Wrangler's local state for the counter Worker
+.wrangler/
+
 # Logs + scratch
 *.log
 *.tmp

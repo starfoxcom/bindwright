@@ -27,7 +27,7 @@ With neither, tell the user setup needs Node or Python 3.8+, and stop.
 
 ## 1. Check the argument and the repo
 
-- **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on, and for each one that turned off, say what stays installed and how to remove it (`python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" remove-hook <name>` for a guard; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent; delete `~/.claude/rules/code-style.md` for the code-style profile). Then stop.
+- **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on, and for each one that turned off, say what stays installed and how to remove it (`python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" remove-hook <name>` for a guard; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent; delete `~/.claude/rules/code-style.md` for the code-style profile; `counts.mjs share off` for the counts, which stops every send). When sharing just turned on and the repo root holds `.bindwright/pristine.json` with no entry in `counts.mjs status`, ask this repo's kind as step 3 says; other set-up repos are asked at their next `/bindwright:update`. Then stop.
 - **A code starting with `bw1-`:** a setup code from an older Bindwright page. It holds every project answer, so skip step 3 and run the engine with `--code <the code>` in step 4. Step 2 still asks the computer questions that have no saved answer.
 - **Anything else that is not empty:** say this skill takes no argument, `global`, or a `bw1-` code, and stop.
 - Find the repo root with `git rev-parse --show-toplevel`. If this is not a git repo, ask whether to run `git init` here or stop.
@@ -51,7 +51,9 @@ Ask with the question tool, recommended option first:
 - **Code-style profile** (extra `code-style`): with their permission, read the code they wrote by hand, in their local repos and their GitHub account, and save a short profile of how they write code, with the weak spots brought up to current practice, which every session then follows. Yes (recommended) or no; say it takes a few minutes and can run later with `/bindwright:code-style`.
 - **Mods** (one extra per mod): small add-ons for the CLI, which need CLI 2.1.287 or later and Node. Take the version this session runs from the `AI_AGENT` environment variable (`claude-code_2-1-316_agent` is 2.1.316), not from `claude --version`: the desktop app runs its own copy of the CLI, which can be older than the one on the PATH. Only when `AI_AGENT` is unset, use `claude --version`. When the version is older or Node is missing, skip this question and say why in one line, saving nothing for the mods, so a later run asks again. Otherwise ask one multiple-choice question listing only the mods with no saved answer, from the table in `${CLAUDE_PLUGIN_ROOT}/_core/global-template/mods/README.md`, one line each, the recommended ones first and marked recommended (every mod but `runners` and `shared-pc`, which fit only a machine with local CI runners or several sessions at once). Every mod listed and not picked is saved as a no.
 
-Save the answers in one call: the engine with `--remember <repo root> --layer personal`, passing on standard input `{"codeResearch": "<tool>", "extras": {"global-instructions": true, "push-guard": true, "builder": true, "code-style": true, "session-facts": true, "ci-watch": false, ...}}` with only the keys just asked. On `{"error": ...}`, show it and go on: the choices still apply to this run.
+- **Anonymous review counts** (needs Node; asked when `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" status` prints `"asked": false`): once a day, each set-up project on this computer whose kind they pick sends four numbers about the user's own merged pull requests (how many the AI review checked, how many it caught a problem in, how many went to a deeper review, how many merged) and the start and end time of the span they cover, so the Bindwright page can show results from real projects next to the maintainer's. A project goes in under a random id and a kind the user picks; no names, code, usernames or repo links leave the computer. Offer "No" first and "Yes" second, neither marked recommended: it stays off unless they say yes.
+
+Save the answers in one call: the engine with `--remember <repo root> --layer personal`, passing on standard input `{"codeResearch": "<tool>", "extras": {"global-instructions": true, "push-guard": true, "builder": true, "code-style": true, "session-facts": true, "ci-watch": false, ...}}` with only the keys just asked. On `{"error": ...}`, show it and go on: the choices still apply to this run. Save the counts answer on its own with `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" share on` (or `share off`).
 
 ## 3. Project choices, asked every run
 
@@ -104,6 +106,14 @@ Then read its visibility (`gh project view <number> --owner <owner> --format jso
 > ⚠️ **This publishes the project's engineering record.** Everyone, including AI crawlers and anyone building a copy of the product, could read the board's fields, status updates and every note on its items: measurements, file and function names, tuning values, dead ends, what is planned next. Once public, it can be scraped and cached within hours, and making it private again does not take back what was copied. The safer way is the clean public copy: outsiders see what is planned and done, and the details stay private.
 
 Then ask once more: keep it private (recommended), add the clean public copy instead, or make it public anyway. On "make it public anyway", run `gh project edit <number> --owner <owner> --visibility PUBLIC` and say once that the session checks warn about it from now on. It is the user's call; do not ask a third time.
+
+### What kind of project, for the counts
+
+Only when sharing is on and `counts.mjs status` lists no entry for this repo root. Ask:
+
+- **What kind of project is this?** The page lists the top projects by kind only, as in "Game project 2". Game, business app, developer tool, mobile app, website, other, or "leave this project out".
+
+Save it with `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" project <repo root> <kind>`, the kind written `game`, `business-app`, `developer-tool`, `mobile-app`, `website` or `other`, or `none` to leave it out, which is remembered so no later run asks again. Counting starts now: pull requests merged before today are not sent.
 
 ## 4. Write the files
 
@@ -226,8 +236,8 @@ Tell the user, in plain words, in two parts.
 
 **This computer:**
 
-- Each computer choice and its answer, one line each (code-search tool, global instructions, push guard, builder agent, code-style profile, mods), and what was installed this run.
-- Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The next project on this computer will not ask them.
+- Each computer choice and its answer, one line each (code-search tool, global instructions, push guard, builder agent, code-style profile, mods, anonymous review counts), and what was installed this run.
+- Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The counts answer and each project's kind live in `<config>/bindwright/counts.json`; `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" share off` stops every send at once. The next project on this computer will not ask them.
 - That `~/.claude/settings.json.bak` holds the settings from before the last change, when one was made.
 
 Do not commit or push. Outside the repo, change only what the user said yes to.
