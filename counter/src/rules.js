@@ -15,7 +15,7 @@ export const KINDS = Object.freeze([
 export const FIELDS = Object.freeze(["checked", "caught", "deep", "merged"]);
 
 /** Upper bound for one field in one send. A send covers the days since the last one. */
-export const MAX_PER_SEND = 1000;
+export const MAX_PER_SEND = 500;
 
 /** A project may send again only this long after its last accepted send. */
 export const MIN_SEND_GAP_IN_MILLISECONDS = 20 * 60 * 60 * 1000;
