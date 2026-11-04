@@ -4,10 +4,12 @@
 // a day, with a short timeout, and says nothing when offline, when nothing is
 // behind, or on any error. Node 18+; the hook skips it where Node is missing.
 
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readState, repoKey, stateFileIn } from "./counts.mjs";
 
 // The released version: main moves only on a release, and the plugin packs this file.
 export const LATEST_URL = "https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION";
@@ -114,12 +116,26 @@ async function driftOf(root, repo, config) {
   return runSettings(repo, config).drift;
 }
 
+// Starts the opt-in daily counts send for a repo that shares them, in its own
+// process, so the session never waits on gh or the network.
+function startCountsSend(repo, config) {
+  const state = readState(stateFileIn(config));
+  if (!repo || !state.share || !state.projects[repoKey(repo)]) return;
+  const script = join(dirname(fileURLToPath(import.meta.url)), "counts.mjs");
+  spawn(process.execPath, [script, "send", repo], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+}
+
 async function main() {
   const input = readJson(0) ?? {};
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+  try {
+    startCountsSend(findRepo(input.cwd || process.cwd()), config);
+  } catch {
+    // The counts never stand in the way of the notice.
+  }
   const pluginVersion = existsSync(join(root, "VERSION")) ? readFileSync(join(root, "VERSION"), "utf8").trim() : null;
   if (!parse(pluginVersion)) return;
-  const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   const url = process.env.BINDWRIGHT_LATEST_URL || LATEST_URL;
   const text = await notice({
     cwd: input.cwd || process.cwd(),

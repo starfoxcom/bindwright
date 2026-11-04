@@ -1,5 +1,5 @@
 {
-  "description": "Once a day, says when this repo's Bindwright files or the plugin itself are behind",
+  "description": "Once a day, says when this repo's Bindwright files or the plugin itself are behind, and starts the opt-in review counts send",
   "hooks": {
     "SessionStart": [
       {
