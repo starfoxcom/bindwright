@@ -9,7 +9,8 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { countPrs, counterUrl, send, setProject, setShare, statusOf } from "../../plugin/hooks/counts.mjs";
+import { KINDS, countPrs, counterUrl, send, setProject, setShare, statusOf } from "../../plugin/hooks/counts.mjs";
+import { KINDS as COUNTER_KINDS } from "../../counter/src/rules.js";
 
 const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "hooks", "counts.mjs");
 const SEND_URL = "http://127.0.0.1:8787/increment";
@@ -62,6 +63,10 @@ const countRows = [
 for (const [name, prs, expected] of countRows) {
   test(`counts: ${name}`, () => assert.deepEqual(countPrs(prs), expected));
 }
+
+test("the plugin offers exactly the kinds the counter accepts", () => {
+  assert.deepEqual(KINDS, COUNTER_KINDS);
+});
 
 test("the counter URL is the live Worker unless BINDWRIGHT_COUNTER_URL names another base", () => {
   assert.equal(counterUrl({}), "https://bindwright-counter.starfoxcom.workers.dev/increment");
