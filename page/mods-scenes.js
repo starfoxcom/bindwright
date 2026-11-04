@@ -5,7 +5,8 @@
 //   ["type", text]             a typed prompt, sent as is
 //   ["tool", name, arg, ms]    a tool call that turns to its result after ms
 //   ["think", key, ms, tokens, options] the spinner row, its verb from the dictionary;
-//                              options { interrupt: false } drops the escape hint
+//                              options { interrupt: false } drops the escape hint,
+//                              { tone: "compact" } colours it as a compaction
 //   ["band", rows]             the status rows above the input box, set to these rows
 //   ["wait", ms]               a pause
 // The keys are the dictionary's texts, and engine/test/page-mods.test.js checks each one
@@ -169,7 +170,7 @@ export const SCENES = {
     ["band", [budgets({ percent: 92 })]],
     ["say", "mods.scene.compact-handoff.compacting"],
     ["wait", 1200],
-    ["think", "mods.scene.compact-handoff.spinner", 2400, 1.1, { interrupt: false }],
+    ["think", "mods.scene.compact-handoff.spinner", 2400, 1.1, { interrupt: false, tone: "compact" }],
     ["band", [budgets({ percent: 8, justCompacted: "14:40" })]],
     ["out", "mods.scene.compact-handoff.kept", "mute"],
     ["out", "mods.scene.compact-handoff.words", "mute"],
