@@ -1,0 +1,46 @@
+/* The compare page. Colours and type come from the tokens on :root in style.css. */
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.compare { margin-top: 56px; }
+
+.compare-head { display: none; }
+.moments { list-style: none; margin: 20px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.moment { padding: 18px 0; border-bottom: 1px solid var(--rule); }
+.moment h3 { font-size: 16px; font-weight: 650; }
+.moment p { margin-top: 6px; font-size: 15px; line-height: 1.5; }
+.moment .without { color: var(--text-2); }
+.moment .with { color: var(--text); font-weight: 500; }
+.moment-label {
+  display: block; margin-bottom: 2px; font-size: 11px; font-weight: 400; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-2);
+}
+
+.compare-same { margin-top: 96px; }
+.compare-same h2 {
+  margin-bottom: 14px; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.05; letter-spacing: -0.03em;
+}
+.compare-same p { max-width: 72ch; font-size: 15px; color: var(--text-2); }
+.compare-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; margin-top: 24px; }
+
+@media (min-width: 721px) {
+  /* The moment, then what it is without Bindwright, then with it, one row each. */
+  .compare-head, .moment {
+    display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px 28px; align-items: baseline;
+  }
+  .compare-head { padding-bottom: 10px; font-size: 13px; color: var(--text-2); }
+  .moment { padding: 14px 0; }
+  .moment p { margin-top: 0; }
+  .moment-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
+
+@media (max-width: 720px) {
+  .compare { margin-top: 40px; }
+  .compare-same { margin-top: 72px; }
+}
