@@ -37,7 +37,7 @@ If you DO have one, append the contents of `CLAUDE.md.additions` (or have Claude
 
 The additions include:
 
-- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — tokensave / LSP plugins / CodeGraph / Serena / codebase-memory-mcp / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
+- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — tokensave / none / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
 - **Memory system instructions** — the four memory types, when to save each, when to access, how MEMORY.md works as an index.
 
 These are project-agnostic — they're useful for any project, which is why they live in the global config.
@@ -70,34 +70,30 @@ Claude will start populating memory entries during your normal sessions — you 
 | Key | Tool | Search redirect |
 |---|---|---|
 | `tokensave` | tokensave | the tool's own installer adds it (`tokensave install --agent claude`) |
-| `lsp-plugins` | Claude Code LSP plugins | none |
-| `codegraph` | CodeGraph | this hook; detection walks up to `.codegraph/codegraph.db` |
-| `serena` | Serena | the tool's own opt-in hooks |
-| `codebase-memory` | codebase-memory-mcp | the tool's installer adds context-only hooks that never block |
 | `none` | (no tool) | none |
 | `custom` | a tool you name | this hook, as a stub; detection looks for the tool's CLI on PATH |
 
 This hook is installed only for profiles whose `hook.source` is `bindwright`. It is registered in `~/.claude/settings.json` under `hooks.PreToolUse`, so it intercepts `Grep`/`Glob`/`Bash` calls and routes Claude through the tool first.
 
-**Manual install:** substitute the six placeholders in `hooks/code-research-first.py.template` against your tool's profile, save it, and register it in `~/.claude/settings.json`. **Worked example for CodeGraph:**
+**Manual install:** substitute the six placeholders in `hooks/code-research-first.py.template` against your tool's profile, save it, and register it in `~/.claude/settings.json`. **Worked example for a custom tool named `mygraph`** (a made-up name; substitute your own tool, index folder and commands):
 
-1. Read `hooks/code-research-profiles.json` and copy the `codegraph` entry's `hook` object verbatim. You'll need its `sequence_bullets` (a multi-line string with embedded `\n`s) for step 3. Do not shorten the bullets; the rendered hook prints them on every block.
+1. Read `hooks/code-research-profiles.json` and copy the `custom` entry's `hook` object. Write your own `sequence_bullets` (a multi-line string with embedded `\n`s) for step 3, replacing the stub bullets with your tool's lookup commands. Do not shorten the bullets; the rendered hook prints them on every block.
 
-2. Copy `hooks/code-research-first.py.template` to `~/.claude/hooks/codegraph-first.py` (the profile's `filename_basename` plus `.py`; expand `~` to your real home path — Windows: `C:/Users/<name>/.claude/hooks/...`, POSIX: `/home/<name>/.claude/hooks/...`).
+2. Copy `hooks/code-research-first.py.template` to `~/.claude/hooks/mygraph-first.py` (the profile's `filename_basename` plus `.py`; expand `~` to your real home path — Windows: `C:/Users/<name>/.claude/hooks/...`, POSIX: `/home/<name>/.claude/hooks/...`).
 
 3. Substitute these SIX placeholders (every occurrence; case-sensitive):
-   - `{{TOOLS_CODE_RESEARCH_NAME}}` → `CodeGraph` (the DISPLAY_NAME line wraps it as `"CodeGraph"` — Python string literal)
-   - `{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}` → `codegraph`
+   - `{{TOOLS_CODE_RESEARCH_NAME}}` → `MyGraph` (the DISPLAY_NAME line wraps it as `"MyGraph"` — Python string literal)
+   - `{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}` → `mygraph`
    - `{{TOOLS_CODE_RESEARCH_BYPASS_MARKER}}` → `RESEARCH_BYPASS:`
    - `{{TOOLS_CODE_RESEARCH_DETECTION_MODE}}` → `walk_up`
-   - `{{TOOLS_CODE_RESEARCH_DETECTION_TARGET}}` → `.codegraph/codegraph.db`
-   - `{{TOOLS_CODE_RESEARCH_SEQUENCE_BULLETS}}` → the bullets from the profile's `hook.sequence_bullets` (the JSON-decoded form — `\n` characters become actual newlines inside the rendered `SEQUENCE_BULLETS = """..."""` triple-quoted block)
+   - `{{TOOLS_CODE_RESEARCH_DETECTION_TARGET}}` → `.mygraph/mygraph.db`
+   - `{{TOOLS_CODE_RESEARCH_SEQUENCE_BULLETS}}` → your bullets from step 1 (the JSON-decoded form — `\n` characters become actual newlines inside the rendered `SEQUENCE_BULLETS = """..."""` triple-quoted block)
 
    The name and bypass marker come from the engine (`engine/model.js`), which uses `RESEARCH_BYPASS:` for every tool without a marker of its own.
 
 4. Verify the substituted file is valid Python. Use the rendered absolute path (not `~`, which `open()` does not expand):
-   - macOS/Linux: `python3 -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/codegraph-first.py')).read())"`
-   - Windows: `py -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/codegraph-first.py')).read())"`
+   - macOS/Linux: `python3 -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/mygraph-first.py')).read())"`
+   - Windows: `py -c "import ast, os; ast.parse(open(os.path.expanduser('~/.claude/hooks/mygraph-first.py')).read())"`
    - If the file parses successfully, the command exits silently. A `SyntaxError` means a placeholder substitution failed; re-check step 3.
 
 5. Add this entry to `~/.claude/settings.json` under `hooks.PreToolUse[]`. **If the array already has entries, APPEND yours; do NOT replace the array** (you'll wipe out memory + other hooks).
@@ -108,7 +104,7 @@ This hook is installed only for profiles whose `hook.source` is `bindwright`. It
    {
      "matcher": "Grep|Glob|Bash",
      "hooks": [
-       { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/codegraph-first.py\"" }
+       { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/mygraph-first.py\"" }
      ]
    }
    ```
@@ -123,7 +119,7 @@ This hook is installed only for profiles whose `hook.source` is `bindwright`. It
          {
            "matcher": "Grep|Glob|Bash",
            "hooks": [
-             { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/codegraph-first.py\"" }
+             { "type": "command", "command": "py \"C:/Users/<name>/.claude/hooks/mygraph-first.py\"" }
            ]
          }
        ]
@@ -137,7 +133,7 @@ This hook is installed only for profiles whose `hook.source` is `bindwright`. It
    - Replace `<name>` with your username (Windows) or expand to your full home path (POSIX) — Claude Code does NOT auto-expand `~` in hook command strings.
    - Trailing commas in JSON are invalid — re-check after editing.
 
-6. Reload Claude Code (`/exit` + reopen). Test by running a `Grep` in a directory with `.codegraph/` — the hook should block.
+6. Reload Claude Code (`/exit` + reopen). Test by running a `Grep` in a directory with `.mygraph/` — the hook should block.
 
 **For a custom tool**, use the `custom` profile with your tool's name, kebab name and homepage in place of its `{{TOOLS_CODE_RESEARCH_*}}` placeholders, then replace the stub bullets in the rendered hook with the tool's own commands. The substitution list is identical.
 

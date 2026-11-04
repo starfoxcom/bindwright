@@ -16,23 +16,17 @@ export const CODE_RESEARCH_TOOLS = {
     bypass: "TOKENSAVE_BYPASS:",
     match: "tokensave",
   },
-  "lsp-plugins": {
-    name: "Claude Code LSP plugins",
-    url: "https://code.claude.com/docs/en/discover-plugins",
-    bypass: null,
-    match: "^LSP$",
-  },
-  codegraph: { name: "CodeGraph", url: "https://github.com/colbymchenry/codegraph", bypass: null, match: "codegraph" },
-  serena: { name: "Serena", url: "https://github.com/oraios/serena", bypass: null, match: "serena" },
-  "codebase-memory": {
-    name: "codebase-memory-mcp",
-    url: "https://github.com/DeusData/codebase-memory-mcp",
-    bypass: null,
-    match: "codebase.memory",
-  },
   none: { name: "none", url: "(no homepage)", bypass: null, match: null },
   // A tool the person names: valuesFor fills all four from codeResearchCustom.
   custom: { name: null, url: null, bypass: null, match: null },
+};
+// Tools no longer offered. An answers file saved while one was offered is read
+// as a custom tool with its old name and homepage (expandAnswers).
+const REMOVED_CODE_RESEARCH_TOOLS = {
+  "lsp-plugins": { name: "Claude Code LSP plugins", url: "https://code.claude.com/docs/en/discover-plugins" },
+  codegraph: { name: "CodeGraph", url: "https://github.com/colbymchenry/codegraph" },
+  serena: { name: "Serena", url: "https://github.com/oraios/serena" },
+  "codebase-memory": { name: "codebase-memory-mcp", url: "https://github.com/DeusData/codebase-memory-mcp" },
 };
 // How setup installs each tool lives in _core/global-template/hooks/code-research-profiles.json.
 
@@ -242,7 +236,14 @@ export function expandAnswers(saved) {
   if (!isObject(saved)) return saved;
   const { project, advanced, ...rest } = own(saved, "private") ? saved : { ...saved, private: saved.client };
   const base = defaults({ team: rest.team, client: rest.client, isPrivate: rest.private });
-  return { ...rest, project: fillKeys(project, base.project), advanced: fillKeys(advanced, base.advanced) };
+  const filled = fillKeys(advanced, base.advanced);
+  return { ...rest, project: fillKeys(project, base.project), advanced: mapRemovedTool(filled) };
+}
+
+export function mapRemovedTool(advanced) {
+  if (!isObject(advanced) || !own(REMOVED_CODE_RESEARCH_TOOLS, advanced.codeResearch)) return advanced;
+  const old = REMOVED_CODE_RESEARCH_TOOLS[advanced.codeResearch];
+  return { ...advanced, codeResearch: "custom", codeResearchCustom: { ...old } };
 }
 
 // Every toggle name the templates use must resolve here to true or false.

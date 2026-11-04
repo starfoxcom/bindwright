@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CODE_RESEARCH_TOOLS, TRACKERS } from "./model.js";
+import { CODE_RESEARCH_TOOLS, TRACKERS, mapRemovedTool } from "./model.js";
 import { MAX_DEPTH, depthOf } from "./setupcode.js";
 import { ANSWERS } from "./bind.js";
 import { decode } from "./update.js";
@@ -97,7 +97,8 @@ function readProject(answers) {
   const layer = { settings: {}, extras: {}, required: [], ignored: [] };
   if (answers === null) return layer;
   if (!isObject(answers)) throw new Error(`${ANSWERS} must hold a JSON object`);
-  const advanced = isObject(answers.advanced) ? answers.advanced : {};
+  // A removed tool reads as custom, as expandAnswers reads a saved answers file.
+  const advanced = mapRemovedTool(isObject(answers.advanced) ? answers.advanced : {});
   for (const key of Object.keys(SETTINGS)) {
     if (SETTINGS[key](advanced[key])) layer.settings[key] = advanced[key];
   }

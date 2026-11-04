@@ -60,7 +60,7 @@ test("a setup round-trips: export, then a teammate's settings, choices and drift
     const exported = run(["--export", s.repo], JSON.stringify(choices));
     const before = run(["--settings", s.repo]);
     const declined = run(["--remember", s.repo, "--layer", "personal"], JSON.stringify({ extras: { tasks: false } }));
-    const mine = JSON.stringify({ codeResearch: "serena", tracker: "file" });
+    const mine = JSON.stringify({ codeResearch: "none", tracker: "file" });
     const local = run(["--remember", s.repo, "--layer", "local"], mine);
     const after = run(["--settings", s.repo]);
     return { exported, before, declined, local, after };
@@ -135,6 +135,17 @@ test("remember keeps only what the layers use, and lists what it dropped", needs
   const kept = { extras: { "session-facts": true, tasks: true }, schema: 1, tracker: "file" };
   assert.equal(personal, `${JSON.stringify(kept, null, 2)}\n`);
   assert.deepEqual(seen.dropped, ["personal: 10", "personal: 2", "personal: extras.ci-watch", "personal: x"]);
+});
+
+test("an export that requires a removed tool is not refused, in both engines", needsPython, () => {
+  const { seen, files } = both((run, s) => {
+    const saved = { ...ANSWERS, advanced: { ...ANSWERS.advanced, codeResearch: "codegraph" } };
+    writeFileSync(join(s.repo, ".bindwright", "project.json"), `${JSON.stringify(saved, null, 2)}\n`);
+    return run(["--export", s.repo], JSON.stringify({ required: ["codeResearch"] }));
+  });
+  assert.equal(seen.status, 0);
+  assert.deepEqual(seen.setup, { schema: 1, extras: {}, required: ["codeResearch"] });
+  assert.match(files[0], /"codeResearch": "codegraph"/);
 });
 
 test("export refuses a project.json that is not an object, and leaves it alone", needsPython, () => {

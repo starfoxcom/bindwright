@@ -4,7 +4,7 @@
 import json
 import os
 
-from model import CODE_RESEARCH_TOOLS, TRACKERS
+from model import CODE_RESEARCH_TOOLS, TRACKERS, map_removed_tool
 from setupcode import MAX_DEPTH, _depth, _not_json
 from update import ANSWERS, _code_units
 
@@ -106,8 +106,9 @@ def _read_project(answers):
         return layer
     if not isinstance(answers, dict):
         raise ValueError("%s must hold a JSON object" % ANSWERS)
+    # A removed tool reads as custom, as expand_answers reads a saved answers file.
     advanced = answers.get("advanced")
-    advanced = advanced if isinstance(advanced, dict) else {}
+    advanced = map_removed_tool(advanced if isinstance(advanced, dict) else {})
     for key in SETTINGS:
         if key in advanced and SETTINGS[key](advanced[key]):
             layer["settings"][key] = advanced[key]

@@ -30,7 +30,7 @@ test("the packed plugin binds what the repo's engine binds", { skip: !python && 
     const team = defaults({ team: true, client: true });
     // Every template family: pre-commit, architecture, the research hook and the home guards.
     team.advanced = {
-      ...team.advanced, precommit: "husky", architecture: "hexagonal", codeResearch: "codegraph", hookLocation: "home",
+      ...team.advanced, precommit: "husky", architecture: "hexagonal", codeResearch: "tokensave", hookLocation: "home",
     };
     for (const answers of [defaults(), team]) {
       const args = ["--code", encodeSetupCode(answers), "--year", "2026"];

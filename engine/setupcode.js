@@ -4,7 +4,7 @@
 // defaults; expandAnswers (model.js) fills the rest. The Python twin
 // (setupcode.py) decodes it with the same checks and messages.
 
-import { defaults, quoted } from "./model.js";
+import { CODE_RESEARCH_TOOLS, defaults, quoted } from "./model.js";
 
 export const PREFIX = "bw1-";
 // Real answers encode to about 1 KB and nest three levels deep. The caps keep
@@ -90,6 +90,17 @@ function refuseUnknownKeys(answers) {
   }
 }
 
+// A code names only a tool the page offers. expandAnswers maps a removed tool
+// only in a saved answers file, so one in a code is refused here.
+function refuseUnknownTool(answers) {
+  const { advanced } = answers;
+  if (!isObjectLike(advanced) || Array.isArray(advanced) || !Object.hasOwn(advanced, "codeResearch")) return;
+  const tool = advanced.codeResearch;
+  if (typeof tool !== "string" || !Object.hasOwn(CODE_RESEARCH_TOOLS, tool)) {
+    fail("codeResearch names a tool the page does not offer");
+  }
+}
+
 // The page never sets free text, so a code that carries any was edited: the project
 // strings must be empty and the custom tool and path values must be null.
 function refuseFreeText(answers) {
@@ -126,6 +137,7 @@ export function decodeSetupCode(code) {
   }
   if (answers === null || typeof answers !== "object" || Array.isArray(answers)) fail("the answers must be an object");
   refuseUnknownKeys(answers);
+  refuseUnknownTool(answers);
   refuseFreeText(answers);
   return answers;
 }

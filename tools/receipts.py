@@ -47,7 +47,7 @@ def load_classifier():
     with open(ADHERENCE_SCRIPT, encoding="utf-8") as f:
         text = f.read()
     fills = {
-        "TOOLS_CODE_RESEARCH_MATCH": r"tokensave|codegraph|serena|codebase.memory|^LSP$",
+        "TOOLS_CODE_RESEARCH_MATCH": r"tokensave",
         "TOOLS_CODE_RESEARCH_BYPASS_MARKER": "BYPASS",
         "TOOLS_CODE_RESEARCH_NAME": "code-research tools",
     }

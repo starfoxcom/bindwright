@@ -202,3 +202,9 @@ test("a custom code-research tool with no URL skips that check in both engines",
     assert.ok(out.skipped.some((s) => s.id === "code-research"), JSON.stringify(out.skipped));
   }
 });
+
+test("a project saved with a removed code-research tool keeps that check in both engines", needsPython, () => {
+  const out = audit({ answers: { codeResearch: "codegraph", codeResearchCustom: null } });
+  assert.equal(out.status, 0);
+  assert.ok(!out.skipped.some((s) => s.id === "code-research"), JSON.stringify(out.skipped));
+});

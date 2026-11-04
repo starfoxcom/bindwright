@@ -13,16 +13,13 @@ export const COMPUTER = [
   {
     id: "code-research",
     title: "Code search",
-    text: "How the assistant finds code: tokensave, lsp-plugins, codegraph, serena, codebase-memory or none.",
+    text: "tokensave indexes your code so answers come about a quarter faster on big codebases, "
+      + "for a few percent more tokens. none uses the built-in search: as accurate and cheaper, but slower.",
     value: "tokensave",
     keys: ["advanced.codeResearch", "advanced.codeResearchCustom"],
-    options: ["tokensave", "lsp-plugins", "codegraph", "serena", "codebase-memory", "none"],
+    options: ["tokensave", "none"],
     links: {
       tokensave: "https://github.com/aovestdipaperino/tokensave",
-      "lsp-plugins": "https://code.claude.com/docs/en/discover-plugins",
-      codegraph: "https://github.com/colbymchenry/codegraph",
-      serena: "https://github.com/oraios/serena",
-      "codebase-memory": "https://github.com/DeusData/codebase-memory-mcp",
     },
   },
   {
