@@ -88,6 +88,8 @@
 /* The live spinner row and the input box sit under the transcript. */
 .stage .spinrow { padding: .2em 1.2em .5em; min-height: 2em; display: flex; gap: .6em; align-items: baseline; }
 .stage .spinrow[hidden] { visibility: hidden; display: flex !important; }
+/* Compacting the conversation spins in the CLI's cool blue instead of the thinking orange. */
+.stage .spinrow[data-tone="compact"] { --spin: oklch(0.78 0.10 275); --spin-hi: oklch(0.93 0.05 275); }
 .stage .glyph { color: var(--spin); width: 1em; text-align: center; }
 .stage .verb {
   background: linear-gradient(90deg, var(--spin) 0 35%, var(--spin-hi) 50%, var(--spin) 65% 100%);

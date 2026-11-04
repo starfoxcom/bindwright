@@ -151,8 +151,10 @@ class Terminal {
   }
 
   // The spinner row: a cycling glyph, a shimmering verb, and a live seconds and token count.
-  async think(verb, ms, tokens, { interrupt = true } = {}) {
+  // A tone (such as "compact") recolours the glyph and the verb as the CLI does for that state.
+  async think(verb, ms, tokens, { interrupt = true, tone = "" } = {}) {
     const row = this.spinrow;
+    row.dataset.tone = tone;
     row.hidden = false;
     this.verb.textContent = `${verb}…`;
     if (reduce) {
