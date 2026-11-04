@@ -22,4 +22,4 @@ The plugin is MIT. The files setup writes into your project are MIT-0, so you ow
 
 Bindwright works with Claude Code. It is not made by, endorsed by or affiliated with Anthropic.
 
-Page: https://starfoxcom.github.io/claude-code-templates/
+Page: https://starfoxcom.github.io/bindwright/

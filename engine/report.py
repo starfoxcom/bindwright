@@ -7,7 +7,7 @@ from urllib.parse import quote
 from doctor import run_doctor
 from update import _code_units
 
-ISSUES = "https://github.com/starfoxcom/claude-code-templates/issues/new"
+ISSUES = "https://github.com/starfoxcom/bindwright/issues/new"
 
 EDGE = "(?<![A-Za-z0-9_])"
 TOKENS = [

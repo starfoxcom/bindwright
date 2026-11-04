@@ -56,7 +56,7 @@ Maintainer-only. Follows Gitflow:
 4. Open PR `release/vX.Y.Z → main`. After AI + maintainer review pass: merge with `--merge` (true merge commit).
 5. Tag `vX.Y.Z` on the merge commit, push the tag.
 6. Open PR `release/vX.Y.Z → develop` (or cherry-pick the merge commit back to `develop`) so `develop` stays ahead of `main`.
-7. The Pages workflow rebuilds automatically on push to `main`. Build the release zip with `git archive --format=zip --prefix=claude-code-templates/ --output=../claude-code-templates-vX.Y.Z.zip vX.Y.Z` and attach to a GitHub Release via `gh release create`.
+7. The Pages workflow rebuilds automatically on push to `main`. Build the release zip with `git archive --format=zip --prefix=bindwright/ --output=../bindwright-vX.Y.Z.zip vX.Y.Z` and attach to a GitHub Release via `gh release create`.
 
 ## Code of conduct
 

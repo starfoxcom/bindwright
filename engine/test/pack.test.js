@@ -106,7 +106,7 @@ test("the marketplace file lists the release zip by version and SHA-256", needsP
     version: "2.0.0",
     source: {
       source: "archive",
-      url: "https://github.com/starfoxcom/claude-code-templates/releases/download/v2.0.0/bindwright-2.0.0.zip",
+      url: "https://github.com/starfoxcom/bindwright/releases/download/v2.0.0/bindwright-2.0.0.zip",
       sha256: "ab".repeat(32),
     },
   }]);

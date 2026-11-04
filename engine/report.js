@@ -5,7 +5,7 @@
 
 import { runDoctor } from "./doctor.js";
 
-export const ISSUES = "https://github.com/starfoxcom/claude-code-templates/issues/new";
+export const ISSUES = "https://github.com/starfoxcom/bindwright/issues/new";
 
 // Secrets, and the places and names that identify the person. Word edges are
 // spelled out in ASCII, which both engines read alike.

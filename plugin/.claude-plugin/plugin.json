@@ -6,8 +6,8 @@
     "name": "Jorge Alexandro Zamudio Arredondo",
     "url": "https://github.com/starfoxcom"
   },
-  "homepage": "https://starfoxcom.github.io/claude-code-templates/",
-  "repository": "https://github.com/starfoxcom/claude-code-templates",
+  "homepage": "https://starfoxcom.github.io/bindwright/",
+  "repository": "https://github.com/starfoxcom/bindwright",
   "license": "MIT",
   "keywords": ["setup", "rules", "skills", "hooks", "code-review"]
 }

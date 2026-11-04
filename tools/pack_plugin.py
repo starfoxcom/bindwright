@@ -47,7 +47,7 @@ GLOBAL_FILES = [
 MARKER = ".bindwright-pack"
 
 # Where releases are published, and the marketplace file that lists them.
-REPO = "starfoxcom/claude-code-templates"
+REPO = "starfoxcom/bindwright"
 MARKETPLACE = ".claude-plugin/marketplace.json"
 DESCRIPTION = "The Bindwright plugin, from its GitHub releases."
 # A fixed date for every zip entry, the earliest a zip can hold.

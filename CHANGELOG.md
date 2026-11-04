@@ -70,6 +70,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
+- **The project is Bindwright** (#342). The repo moves to `starfoxcom/bindwright` and the site to `starfoxcom.github.io/bindwright`; every link, the plugin's homepage and update check, the bug-report link and this repo's own saved answers follow. GitHub forwards the old repo address; the old site address does not.
+
 - **Code-search choices cut to tokensave, none and custom** (#564). A head-to-head test ran tokensave, CodeGraph, Serena, codebase-memory-mcp, the LSP plugins and no tool on the same 40 questions and 6 multi-step tasks across two repos. Every setup answered correctly, plain search included; the tools differed only in speed and cost, and none beat tokensave on either, so setup, the profiles, the global `CLAUDE.md.additions`, the `/find` skill and the settings page offer only tokensave (recommended), none and custom.
 - **Every extra starts on.** The deeper review for risky changes, the visual-steps rule, the plain-writing rule and the code size check are now on by default for every setup, solo projects included. Each one can still be turned off.
 

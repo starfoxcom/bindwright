@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // The released version: main moves only on a release, and the plugin packs this file.
-export const LATEST_URL = "https://raw.githubusercontent.com/starfoxcom/claude-code-templates/main/VERSION";
+export const LATEST_URL = "https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION";
 const PRISTINE = join(".bindwright", "pristine.json");
 
 // "v1.4.0" or "1.4.0" as [1, 4, 0], or null for anything else.

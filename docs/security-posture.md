@@ -1,4 +1,4 @@
-# Security posture: claude-code-templates
+# Security posture: bindwright
 
 Internal record of what this project defends, which controls are live and which are owed. `.claude/rules/security.md` holds the everyday rule; this file holds the facts it points to. In a private repo, fill in the tables here, delete the rows that do not apply, and update the file at each review below.
 

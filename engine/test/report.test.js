@@ -132,7 +132,7 @@ test("both engines draft the same scrubbed report, and file nothing", needsPytho
     assert.deepEqual(same(py), same(js));
     assert.ok(!js.body.includes(repo) && !js.body.includes(homedir()) && !js.body.includes("ghp_"), js.body);
     assert.match(js.body, /This repo is not set up with Bindwright\. \(state\)/);
-    assert.match(js.url, /^https:\/\/github\.com\/starfoxcom\/claude-code-templates\/issues\/new\?title=bug%3A%20/);
+    assert.match(js.url, /^https:\/\/github\.com\/starfoxcom\/bindwright\/issues\/new\?title=bug%3A%20/);
 
     // A home path across the title's 100-character cut is taken out whole first.
     const long = { title: `${"word ".repeat(17)}at ${join(homedir(), "x")}` };
