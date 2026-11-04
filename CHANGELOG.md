@@ -8,6 +8,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
+- **Release project files** (#342). `SECURITY.md` (private reports through GitHub, what is in scope), `CODE_OF_CONDUCT.md` (the Contributor Covenant 2.1), `LICENSE-MIT-0` for the files setup writes into a project, and a notice that Bindwright is not made by, endorsed by or affiliated with Anthropic.
+
 - **A private repo for the work items** (#540). `advanced.trackerRepo` names a private repo that holds the issues when the code repo is public, since a public repo's issues are public whatever the board's setting. `tracker.md` adds `--repo` to its issue commands and filters the board by that repo, PR bodies link its issues by full name, the public roadmap script reads the private items from it, and setup offers it whenever the code is public. It can never be the public roadmap repo. `/bindwright:update` and the doctor fill in the default for any answer a project saved before that answer existed, so older projects keep working.
 
 - **A warning whenever the full-detail board is public** (#538). `tracker.md` now checks the board's visibility before every board read and, when it is public, opens the reply with a plain warning and the command that makes it private again, since a board can be made public on GitHub without going through setup. `/bindwright:doctor` lists it as its most serious finding.
