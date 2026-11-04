@@ -182,7 +182,10 @@ test("an accepted send moves since and the day forward", () => inScene(async (s)
   assert.equal(gh.calls[0].cwd, s.repo);
   assert.deepEqual(counter.posts, [{
     url: SEND_URL,
-    body: { project: ID, kind: "game", checked: 1, caught: 0, deep: 0, merged: 1 },
+    body: {
+      project: ID, kind: "game", checked: 1, caught: 0, deep: 0, merged: 1,
+      from: noon(1).getTime(), to: when.getTime(),
+    },
   }]);
   assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString(), lastSendDay: "2026-11-03" }));
 }));
@@ -226,13 +229,31 @@ test("a failed send is not retried for a minute, and is retried after it", () =>
   assert.equal(projectOf(s).failedAt, null);
 }));
 
-test("a repo with no merged PRs moves since forward without a post", () => inScene(async (s) => {
+test("a repo with no merged PRs moves since forward and asks gh once that day", () => inScene(async (s) => {
   seedState(s);
   const when = noon(3);
+  const gh = fakeGh([]);
   const counter = fakeCounter(OK);
-  await sendAt(s, when, fakeGh([]), counter);
+  await sendAt(s, when, gh, counter);
+  await sendAt(s, noon(3, 18), gh, counter);
   assert.deepEqual(counter.posts, []);
-  assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString() }));
+  assert.equal(gh.calls.length, 1);
+  assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString(), lastSendDay: "2026-11-03" }));
+}));
+
+test("a send whose answer was lost is not counted twice", () => inScene(async (s) => {
+  seedState(s);
+  const gh = fakeGh([GREEN_PR]);
+  const counter = fakeCounter(new Error("The operation was aborted due to timeout"));
+  const lost = noon(3, 12);
+  await sendAt(s, lost, gh, counter);
+  counter.reply = { status: 409, error: "this window was already counted", coveredTo: lost.getTime() };
+  await sendAt(s, noon(4), gh, counter);
+  assert.equal(counter.posts[1].body.from, noon(1).getTime(), "the retry resends the same start");
+  assert.deepEqual(projectOf(s), projectEntry({ since: lost.toISOString() }));
+  counter.reply = OK;
+  await sendAt(s, noon(4, 13), gh, counter);
+  assert.equal(counter.posts[2].body.from, lost.getTime(), "the next send starts where the count stops");
 }));
 
 test("a gh that fails stops the send and changes nothing", () => inScene(async (s) => {

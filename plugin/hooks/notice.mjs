@@ -122,7 +122,10 @@ function startCountsSend(repo, config) {
   const state = readState(stateFileIn(config));
   if (!repo || !state.share || !state.projects[repoKey(repo)]) return;
   const script = join(dirname(fileURLToPath(import.meta.url)), "counts.mjs");
-  spawn(process.execPath, [script, "send", repo], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  const options = { detached: true, stdio: "ignore", windowsHide: true };
+  const child = spawn(process.execPath, [script, "send", repo], options);
+  child.on("error", () => {});
+  child.unref();
 }
 
 async function main() {

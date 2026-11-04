@@ -115,7 +115,8 @@ function readJson(file) {
 }
 
 function isProject(entry) {
-  return PROJECT_ID.test(entry?.id) && typeof entry.since === "string";
+  const hasSince = typeof entry?.since === "string" && !Number.isNaN(Date.parse(entry.since));
+  return PROJECT_ID.test(entry?.id) && hasSince;
 }
 
 /** The state, or sharing off and no projects when the file is missing or damaged. */
@@ -214,7 +215,7 @@ async function postJson(url, body) {
     signal: AbortSignal.timeout(POST_TIMEOUT_IN_MILLISECONDS),
   });
   const reply = await res.json().catch(() => null);
-  return { status: res.status, error: reply?.error ?? "" };
+  return { status: res.status, error: reply?.error ?? "", coveredTo: reply?.coveredTo };
 }
 
 function isDue(entry, current) {
@@ -223,10 +224,15 @@ function isDue(entry, current) {
   return current.getTime() - entry.failedAt >= RETRY_GAP_IN_MILLISECONDS;
 }
 
-// What the counter's answer changes in the repo's entry. A 429 saying the
-// project already sent today keeps `since`, so those PRs go in the next send.
+// What the counter's answer changes in the repo's entry. A 409 means an earlier
+// send of this window was counted though its answer was lost: counting resumes
+// where the counter's count stops. A 429 saying the project already sent today
+// keeps `since`, so those PRs go in the next send.
 function outcomeChange(outcome, { queryTime, today, failedAt }) {
   if (outcome?.status === 200) return { since: queryTime, lastSendDay: today, failedAt: null };
+  if (outcome?.status === 409 && Number.isSafeInteger(outcome.coveredTo)) {
+    return { since: new Date(outcome.coveredTo).toISOString(), failedAt: null };
+  }
   if (outcome?.status === 429 && ALREADY_SENT.test(outcome.error)) return { lastSendDay: today };
   return { failedAt };
 }
@@ -255,9 +261,11 @@ export async function send({
   if (!Array.isArray(prs)) return;
   const counts = countPrs(prs);
   if (Object.values(counts).every((count) => count === 0)) {
-    return changeProject(stateFile, key, { since: queryTime });
+    return changeProject(stateFile, key, { since: queryTime, lastSendDay: today });
   }
-  const outcome = await post(url, { project: entry.id, kind: entry.kind, ...counts }).catch(() => null);
+  const sendWindow = { from: Date.parse(entry.since), to: current.getTime() };
+  const body = { project: entry.id, kind: entry.kind, ...counts, ...sendWindow };
+  const outcome = await post(url, body).catch(() => null);
   return changeProject(stateFile, key, outcomeChange(outcome, { queryTime, today, failedAt: current.getTime() }));
 }
 
