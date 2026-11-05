@@ -156,6 +156,21 @@ function keptTail(carried: readonly string[], texts: readonly string[]): number 
 
 // `typed` is the transcript's own list (see transcriptWords); without it the
 // compaction's message list is used, which misses prompts typed mid-turn.
+// The note that stands in for the middle of a message too large for the budget.
+const CUT_NOTE_CHARS = 80
+
+// One message larger than the whole budget keeps its start and its end within it, so a huge paste
+// cannot fill the context after every compaction. The recall tool still finds the full text.
+function fitted(text: string, budgetChars: number): string {
+  if (text.length <= budgetChars) return text
+  const half = Math.max(0, Math.floor((budgetChars - CUT_NOTE_CHARS) / 2))
+  const cut = text.length - 2 * half
+  const note = `[... ${cut} characters cut here; recall finds the whole message]`
+  return `${text.slice(0, half)}
+${note}
+${text.slice(text.length - half)}`
+}
+
 export function personWords(
   messages: readonly SessionMessage[],
   budgetChars: number,
@@ -174,7 +189,7 @@ export function personWords(
   let used = 0
   let cut = all.length
   for (let i = all.length - 1; i >= 0; i--) {
-    const text = all[i] ?? ''
+    const text = kept.length === 0 ? fitted(all[i] ?? '', budgetChars) : all[i] ?? ''
     if (used + text.length > budgetChars && kept.length > 0) break
     kept.unshift(text)
     used += text.length
