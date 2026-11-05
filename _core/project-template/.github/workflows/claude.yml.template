@@ -953,6 +953,7 @@ jobs:
       # so a person reading the PR does not take it for a verdict either.
       - name: Mark errored attempts as no verdict
         if: always() && steps.floor.outputs.at != ''
+        timeout-minutes: 5
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -967,7 +968,7 @@ jobs:
           body="$RUNNER_TEMP/errored-body.md"
           while read -r id; do
             [ -n "$id" ] || continue
-            gh api "repos/$REPO/issues/comments/$id" --jq .body > "$body" || continue
+            timeout -k 10 60 gh api "repos/$REPO/issues/comments/$id" --jq .body > "$body" || continue
             # Exits 1 when the comment is already marked, so it is left alone.
             if python3 -I - "$body" <<'PY'
           import sys
