@@ -137,6 +137,7 @@ export default {
   "lands.item.memory": "Índice de memoria",
   "lands.item.guard": "Guardia de push",
   "lands.item.builder": "Ayudante que escribe código",
+  "lands.item.style": "Estilo de respuesta claro",
   "lands.item.mods": "Mods que elegiste",
   "lands.item.brief": "Guía del proyecto",
   "lands.item.rules": "Reglas",
@@ -259,6 +260,10 @@ export default {
   "settings.code-style.title": "Perfil de estilo de código",
   "settings.code-style.text": "Aprende cómo escribes código de tus repos, con tu permiso.",
   "settings.code-style.value": "Sí",
+  "settings.reply-style.title": "Estilo de respuesta",
+  "settings.reply-style.text": "Respuestas cortas y claras en el chat, primero la respuesta "
+    + "(igual habla una IA ;V). /output-style default lo apaga.",
+  "settings.reply-style.value": "Sí",
 
   "settings.who-works.title": "Quién trabaja en él",
   "settings.who-works.text": "Un equipo recibe reglas de colaboración y un hook de pre-commit.",
