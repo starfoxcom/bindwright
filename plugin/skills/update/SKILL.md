@@ -17,7 +17,7 @@ This skill rebuilds the repo's Bindwright files from the answers saved at setup,
 
 ## 2. Run the update
 
-Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` works, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, tell the user the update needs Node or Python 3.8+, and stop.
+Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, tell the user the update needs Node or Python 3.8+, and stop.
 
 Run it with `--update <repo root>`. It prints one line of JSON:
 

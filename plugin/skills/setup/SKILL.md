@@ -18,20 +18,20 @@ Two kinds of choices, and the user always hears which is which:
 
 ## 0. Pick the engine and read the saved choices
 
-Pick the engine: the first of these that runs.
+Check the tools first, all three before saying anything: `git --version`, `node --version` (18 or later counts) and `python3 --version` or `python --version` (3.8 or later counts; a `python` that only opens the Microsoft Store does not). Setup needs Git, and Node or Python to run its engine.
 
-1. `node --version` works: the engine is `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`.
-2. `python3 --version` or `python --version` reports 3.8 or later: the engine is that interpreter with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
+When something is missing, name everything missing in one plain message: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it; Node or Python runs the setup itself. Then give the install for the user's system:
 
-With neither, tell the user setup needs Node or Python 3.8+ to write its files, and stop. A `python` that only opens the Microsoft Store does not count.
+- **Windows:** offer to run it on a yes: `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements`, and the same form with `OpenJS.NodeJS.LTS` when neither Node nor Python is there.
+- **macOS:** offer to run it on a yes: `xcode-select --install` for Git (it opens the system's own installer), and `brew install node` when Homebrew is there, otherwise the installer from nodejs.org.
+- **Linux:** give the command for the user to run in their own terminal, since it asks for their password: `sudo apt install -y git python3` (`sudo dnf install -y git python3` on Fedora). The distributions' own `nodejs` package can be too old for the engine.
 
-Then check `git --version`. Without Git, tell the user in plain words that setup needs it: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it. Then stop.
+Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app, or start `claude` again in a new terminal), and to run `/bindwright:setup` again. Stop here.
 
-For either stop, give the install route for the user's system, offer to run it on a yes, and say to open a new terminal and run `/bindwright:setup` again once it is in:
+With every tool in place, pick the engine, the first of these that runs:
 
-- **Windows:** `winget install --id Git.Git -e`, `winget install --id OpenJS.NodeJS.LTS -e`, or `winget install --id Python.Python.3.12 -e`.
-- **macOS:** `xcode-select --install` for Git, `brew install node` or `brew install python` (or the installers from nodejs.org and python.org).
-- **Linux:** the system's package manager, for example `sudo apt install git nodejs` or `sudo apt install git python3`.
+1. Node 18 or later: the engine is `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`.
+2. Python 3.8 or later: the engine is that interpreter with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
 
 ## 1. Check the argument and the repo
 

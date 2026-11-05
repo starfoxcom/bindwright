@@ -21,7 +21,7 @@ In Claude Code, once per computer:
 /plugin install bindwright@bindwright
 ```
 
-It needs Git, and Node or Python 3.8 or later; setup says which one is missing and how to install it. Then, in each project, open Claude Code in the project's folder and run:
+It needs Git, and Node 18 or Python 3.8 or later; setup says what is missing and how to install it. Then, in each project, open Claude Code in the project's folder and run:
 
 ```
 /bindwright:setup
