@@ -6,7 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.2.0] — 2026-11-05
+
+v2.2.0 makes Bindwright installable with one command, with no Git and from the Claude desktop app, and gets it ready for the plugin directory. It also makes each review tier post exactly one verdict, checked by the gate's reader before it is posted.
+
 ### Added
+
+- **The packed plugin on its own branch** (#421). Each published release also writes the packed plugin to a `plugin` branch, the layout the plugin directory installs from, and the plugin gains an icon and an install line for its listing.
 
 - **Where session scratch goes** (#531). `token-efficiency.md` asks every session to keep scratch files, test copies and captures in its scratchpad or the project's git-ignored build folder, never a fixed folder such as `C:/tmp`, since the CLI deletes a session's scratchpad with its transcript after `cleanupPeriodDays`.
 
@@ -18,7 +24,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **The routine review posts from a job apart from its reviewers** (#456, #460). The review attempts run with a read-only job token, and a second job checks the review again with the gate's reader and posts it, so no reviewer process shares a job whose token can write checks. A run whose PR has a newer head posts nothing, a deep-review request with automatic escalation off is posted only when one is owed, every GitHub call in the repair step has a time limit, and the CLI installs into a home folder of the job's own.
 
-- **The deep review posts once, after every attempt** (#458). The deep attempts post nothing: each returns its review as structured output, the workflow checks it with the gate's reader, and one step posts the first readable review as the review app. A crashed, hung or late attempt can no longer leave a second verdict that buries the first, and a run whose PR has a newer head posts nothing.
+- **The deep review posts once, after every attempt** (#458, #628). The deep attempts post nothing: each returns its review as structured output, the workflow checks it with the gate's reader, and one step posts the first readable review as the review app. A crashed, hung or late attempt can no longer leave a second verdict that buries the first, and a run whose PR has a newer head posts nothing.
 
 ## [v2.1.0] — 2026-11-05
 
