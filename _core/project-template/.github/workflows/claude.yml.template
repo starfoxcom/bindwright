@@ -894,9 +894,8 @@ jobs:
           echo "version=$installed" >> "$GITHUB_OUTPUT"
 
       # Attempt 2b: the fallback model from the settings. Fires on a usage limit,
-      # or when the same-model retry also left no verdict. The CLI the pinned action
-      # bundles is refused for the default fallback (Opus 5.5), so this runs
-      # only on the copy the step above picked. The Evaluate step below owns the
+      # or when the same-model retry also left no verdict. It runs only on the
+      # CLI copy the step above picked. The Evaluate step below owns the
       # outcome, so every attempt continues on error.
       - name: Run Claude (fallback model)
         id: claude_fallback
