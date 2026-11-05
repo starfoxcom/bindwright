@@ -25,6 +25,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <header>
   <a class="mark" href="../">Bindwright</a>
   <nav aria-label="Site" data-t-attr="aria-label:nav.site">
+    <a href="../" data-t="nav.home">Home</a>
     <a href="./" aria-current="page" data-t="nav.settings">Plugin settings</a>
     <a href="../compare/" data-t="nav.compare">Compare</a>
     <a href="https://github.com/starfoxcom/bindwright" data-t="nav.github">GitHub</a>
@@ -49,6 +50,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <p data-t="settings.code-research.text"><a href="https://github.com/aovestdipaperino/tokensave">tokensave</a> indexes your code so answers come about a quarter faster on big codebases, for a few percent more tokens. none uses the built-in search: as accurate and cheaper, but slower.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.code-research.value">tokensave</b></span>
       </li>
+      <li class="setting" id="s-work-language">
+        <h3 data-t="settings.work-language.title">Work language</h3>
+        <p data-t="settings.work-language.text">The language replies, commit messages and code comments come in, English or Spanish. The setup's own files stay in English: only the assistant reads them.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.work-language.value">English</b></span>
+      </li>
       <li class="setting" id="s-global-instructions">
         <h3 data-t="settings.global-instructions.title">Global instructions</h3>
         <p data-t="settings.global-instructions.text">Working rules every project on your computer reads.</p>
@@ -68,6 +74,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <h3 data-t="settings.code-style.title">Code-style profile</h3>
         <p data-t="settings.code-style.text">Learns how you write code from your repos, with your permission.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.code-style.value">Yes</b></span>
+      </li>
+      <li class="setting" id="s-reply-style">
+        <h3 data-t="settings.reply-style.title">Reply style</h3>
+        <p data-t="settings.reply-style.text">Short, plain replies that are easy to follow (or at least it tries ;V): the answer first, and a follow-up question when it needs one. /output-style default turns it off.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.reply-style.value">Yes</b></span>
       </li>
     </ul>
     <!-- /settings:computer -->

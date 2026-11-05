@@ -62,7 +62,15 @@ See [CHANGELOG.md](CHANGELOG.md) for what shipped when.
 
 ## Privacy
 
-The page is static HTML and JavaScript on GitHub Pages: no cookies, no analytics, no tracking. Its file preview runs the bind engine in your browser on files from the same site. The plugin sends nothing anywhere; it writes only into the project you run it in and, for the extras you say yes to, into `~/.claude`.
+The plugin writes only into the project you run it in and, for the extras you say yes to, into `~/.claude`. The page is static HTML and JavaScript on GitHub Pages, with no cookies and no analytics; its file preview runs the bind engine in your browser. Every network call either makes:
+
+| Call | What it sends | When | How to stop it |
+|---|---|---|---|
+| Plugin version check | A plain request for the released version number from `raw.githubusercontent.com`; nothing about you or the repo | At most once a day, at session start | Disable the plugin (`/plugin`) |
+| Review counts, opt-in | A random project id, the project kind you picked, and six numbers: your merged pull requests that the AI review checked, caught a problem in, sent to a deeper review, held back 6 or more rounds, and merged, plus the red review rounds summed over them, with the start and end time of the span they cover. The first send covers the project's past pull requests; a history past 500 goes out in daily batches only if you say yes. Cloudflare sees your IP address for its rate limiter; the counter never stores it, only the country Cloudflare reads from it, and publishes just how many projects each country has ([`counter/`](counter/README.md)) | At most once a day per set-up repo, only after a yes at setup | `/bindwright:setup global`, or `node <plugin folder>/hooks/counts.mjs share off` |
+| GitHub, through your own `gh` login | The counts read your merged pull requests; setup and `/bindwright:code-style` read and create what you ask for (repos, boards, issues) | When that step runs | Answer no to the step |
+| Code-search tool, when you install it | tokensave has an anonymous usage counter of its own, on by default; see its [privacy guide](https://github.com/aovestdipaperino/tokensave/blob/main/docs/guide/PRIVACY.md) | tokensave's own schedule | tokensave's own setting |
+| The page | Reads the community totals from the counter, and its fonts from Google Fonts | On page load | Nothing to stop: it sends nothing about you |
 
 ## Maintenance & contributing
 

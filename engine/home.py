@@ -11,6 +11,8 @@ Standard library, Python 3.8+.
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
     python engine/home.py add-agent FILE
+    python engine/home.py add-style FILE      (copies the output style, turns it on)
+    python engine/home.py set-language NAME   (the work language: english or spanish)
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -43,6 +45,15 @@ CANDIDATES = (
     [["python"], ["python3"], ["py", "-3"]]
     + [["python3.%d" % n] for n in range(13, 7, -1)]
     + [["/usr/bin/python3"], ["/usr/local/bin/python3"], ["/opt/homebrew/bin/python3"]]
+)
+
+# The work languages engine/layers.py accepts (its LANGUAGES): keep the two lists alike.
+LANGUAGES = ["english", "spanish"]
+# The rule file for a work language other than English; %s is the language's name.
+WORK_LANGUAGE_RULE = (
+    "# Work language\n\n"
+    "Write commit messages and code comments in %s, "
+    "unless the project's own rules name a language for them.\n"
 )
 
 
@@ -156,6 +167,24 @@ def _pre_tool_use(data, path):
     return _section(_section(data, "hooks", dict, path), "PreToolUse", list, path)
 
 
+def _same_file(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _hook_command(python):
+    """The bare name PATH resolves to `python`, else `python` unchanged."""
+    if not os.path.isabs(python):
+        return python
+    for name in ("python3", "python"):
+        found = shutil.which(name)
+        if found and _same_file(found, python):
+            return name
+    return python
+
+
 def install_hook(home, file, python, matcher):
     name = os.path.basename(file)
     if not name.endswith(".py"):
@@ -168,8 +197,9 @@ def install_hook(home, file, python, matcher):
     _drop(entries, name)
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
+    # A bare name follows PATH, so the hook survives the install it came from moving.
     entries.append({"matcher": matcher, "hooks": [{
-        "type": "command", "command": python,
+        "type": "command", "command": _hook_command(python),
         "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
     }]})
     _save(path, data)
@@ -252,6 +282,75 @@ def add_agent(home, file):
     return {"installed": target, "kept_existing": kept}
 
 
+def _style_name(text):
+    """The `name:` of an output style's front matter, or None without one."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return None
+        key, sep, value = line.partition(":")
+        value = value.strip()
+        # YAML may quote the value: one matching pair of quotes is not part of the name.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1].strip()
+        if sep and key.strip() == "name" and value:
+            return value
+    return None
+
+
+def add_style(home, file):
+    name = os.path.basename(file)
+    if not (name.endswith(".md") and os.path.isfile(file)):
+        raise HomeError("Not an output style file (an existing .md file): " + file)
+    with open(file, encoding="utf-8-sig") as fh:
+        text = fh.read()
+    if _style_name(text) is None:
+        raise HomeError("The output style has no name in its front matter: " + file)
+    path, data = _load(home)
+    target = os.path.normpath(os.path.join(_claude(home), "output-styles", name))
+    # An installed style may carry the user's own edits, so it stays, and its own
+    # name is the one turned on: the CLI names a style without one after its file.
+    kept = os.path.exists(target)
+    if kept:
+        with open(target, encoding="utf-8-sig") as fh:
+            text = fh.read()
+    else:
+        _atomic_write(target, text)
+    style = _style_name(text) or os.path.splitext(name)[0]
+    previous = data.get("outputStyle")
+    if previous != style:
+        data["outputStyle"] = style
+        _save(path, data)
+    return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
+
+
+def _work_language_rule(home):
+    return os.path.abspath(os.path.join(_claude(home), "rules", "work-language.md"))
+
+
+def set_language(home, name):
+    if name not in LANGUAGES:
+        raise HomeError("Unknown work language: %s; use %s" % (name, " or ".join(LANGUAGES)))
+    path, data = _load(home)
+    previous = data.get("language")
+    rule = _work_language_rule(home)
+    if name == "english":
+        # A language the person set by hand, such as "japanese", is theirs to keep.
+        if previous in LANGUAGES:
+            del data["language"]
+            _save(path, data)
+        if os.path.exists(rule):
+            os.remove(rule)
+        return {"language": name, "previous": previous, "rule": None}
+    if previous != name:
+        data["language"] = name
+        _save(path, data)
+    _atomic_write(rule, WORK_LANGUAGE_RULE % name.capitalize())
+    return {"language": name, "previous": previous, "rule": rule}
+
+
 def _option(argv, name):
     if name not in argv:
         return None
@@ -261,6 +360,18 @@ def _option(argv, name):
     value = argv[i]
     del argv[i - 1:i + 1]
     return value
+
+
+# The commands that take one name, each run as command(home, name).
+NAMED_COMMANDS = {
+    "remove-hook": remove_hook,
+    "allow": lambda home, rule: set_allow(home, rule, True),
+    "disallow": lambda home, rule: set_allow(home, rule, False),
+    "add-mod": add_mod,
+    "add-agent": add_agent,
+    "add-style": add_style,
+    "set-language": set_language,
+}
 
 
 def run(argv):
@@ -273,18 +384,12 @@ def run(argv):
         return find_python()
     if cmd == "install-hook" and one and python and matcher:
         return install_hook(home, one, python, matcher)
-    if cmd == "remove-hook" and one:
-        return remove_hook(home, one)
     if cmd == "list-hooks" and not args:
         return list_hooks(home)
-    if cmd in ("allow", "disallow") and one:
-        return set_allow(home, one, cmd == "allow")
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
-    if cmd == "add-mod" and one:
-        return add_mod(home, one)
-    if cmd == "add-agent" and one:
-        return add_agent(home, one)
+    if cmd in NAMED_COMMANDS and one:
+        return NAMED_COMMANDS[cmd](home, one)
     raise HomeError("Usage: see the top of engine/home.py")
 
 

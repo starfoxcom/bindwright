@@ -4,6 +4,7 @@ import type { EngineInterface as Engine, Register } from 'claude-code'
 import type { RunnerView } from '../types'
 import { parseAdd, withRunner } from './add'
 import { soonestRun } from './cron'
+import { diskText, isOptionalWsl, parseUsedBytes, parseWholeNumber } from './disk'
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
@@ -18,6 +19,8 @@ const START_GRACE_MS = 2 * 60_000
 // The hooks run in a sandbox with no time zone of its own (its clock reads UTC), so the host's UTC
 // offset is read through node at start and every hour, as shared-pc and usage-guard do.
 const READ_ZONE = ['node', '-e', 'console.log(new Date().getTimezoneOffset())']
+const STAT_SCRIPT = 'console.log(require("fs").statSync(process.argv[1]).size)'
+type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes'>
 const view = atom({ plugin: 'runners', key: 'view' } as const, null)
 const live = {
   checkMs: 60_000,
@@ -29,6 +32,8 @@ const live = {
   /** Minutes behind UTC, as getTimezoneOffset gives it; null until read. */
   zoneOffset: null as number | null,
   schedules: new Map<string, { at: number; texts: string[] }>(),
+  /** Each entry's last disk reading, by label, kept between the hourly reads. */
+  disks: new Map<string, { at: number; fields: DiskFields }>(),
   /** rules.ts, then the machine's own list file: read once at start. */
   runners: [...RUNNERS] as Runner[],
   isChecking: false,
@@ -54,7 +59,12 @@ async function readList($: Engine): Promise<Runner[]> {
 
 function isRunner(entry: unknown): entry is Runner {
   const r = entry as Runner
-  return typeof r?.label === 'string' && Array.isArray(r.processes) && r.processes.every(n => typeof n === 'string')
+  return (
+    typeof r?.label === 'string' &&
+    Array.isArray(r.processes) &&
+    r.processes.every(n => typeof n === 'string') &&
+    isOptionalWsl(r.wsl)
+  )
 }
 
 async function run($: Engine, argv: string[]): Promise<string | null> {
@@ -129,8 +139,25 @@ async function workflowTexts($: Engine, repo: string, now: number): Promise<stri
   return texts
 }
 
+// The disk file is sized by node, which leaves the distro stopped; the data inside needs df, which boots
+// it, so df runs only while the row is on. A failed read is not kept, so the next check retries it.
+async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): Promise<DiskFields> {
+  const last = live.disks.get(runner.label)
+  if (!runner.wsl || !isOn) return last?.fields ?? {}
+  if (last && now - last.at < HOUR_MS) return last.fields
+  const size = await run($, ['node', '-e', STAT_SCRIPT, runner.wsl.disk])
+  const df = ['wsl.exe', '-d', runner.wsl.distro, '--exec', 'df', '-B1', '--output=used', '/']
+  const used = await run($, df)
+  const diskBytes = size === null ? null : parseWholeNumber(size)
+  const usedBytes = used === null ? null : parseUsedBytes(used)
+  if (diskBytes === null || usedBytes === null) return {}
+  live.disks.set(runner.label, { at: now, fields: { diskBytes, usedBytes } })
+  return { diskBytes, usedBytes }
+}
+
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {
   const row: RunnerView = { label: runner.label, isOn: await isUp($, runner) }
+  Object.assign(row, await readDisk($, runner, row.isOn, now))
   if (!runner.repo) return row
   const counts = await online($, runner.repo)
   if (counts) Object.assign(row, counts)
@@ -285,6 +312,8 @@ export function rowText(row: RunnerView, now: number, zoneTime: (ms: number) => 
   if (row.busy) parts.push(`${row.busy} busy`)
   if (row.queued) parts.push(`${row.queued} queued`)
   if (row.nextRun !== undefined) parts.push(`next ${zoneTime(row.nextRun)} (scheduled)`)
+  const disk = diskText(row)
+  if (disk !== undefined) parts.push(disk)
   return parts.join(' · ')
 }
 

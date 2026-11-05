@@ -24,11 +24,14 @@ cd $(basename {{REPO_URL}})
 
 ## Development
 
-- **Default branch:** `{{DEFAULT_BRANCH}}` (work-in-progress)
 - **Production branch:** `{{MAIN_BRANCH}}` (stable releases)
+<!-- TOGGLE:branching_model_gitflow START -->
+- **Development branch:** `{{DEV_BRANCH}}` (work in progress; work branches start here)
+<!-- TOGGLE:branching_model_gitflow END -->
+- **Default branch on GitHub:** `{{DEFAULT_BRANCH}}`
 - **Branching model:** {{GITFLOW_OR_TRUNK}}
 
-See `.claude/rules/git.md` for the full atomic-commits + Gitflow conventions.
+See `.claude/rules/git.md` for the commit and branch conventions.
 
 ## Testing
 

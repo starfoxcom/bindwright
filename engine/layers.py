@@ -3,10 +3,11 @@
 
 import json
 import os
+import re
 
 from model import CODE_RESEARCH_TOOLS, TRACKERS, map_removed_tool
 from setupcode import MAX_DEPTH, _depth, _not_json
-from update import ANSWERS, _code_units
+from update import ANSWERS, _code_units, read_state
 
 SCHEMA = 1
 LOCAL = ".bindwright/local.json"
@@ -20,6 +21,7 @@ EXTRA_FILES = {
     "code-style": "rules/code-style.md",
     "global-instructions": "CLAUDE.md",
     "push-guard": "hooks/push-guard.py",
+    "reply-style": "output-styles/straight-talk.md",
 }
 # An extra whose file is the person's own (CLAUDE.md) counts as installed only
 # when that file holds its marker on a line of its own, spaces and tabs aside.
@@ -32,6 +34,8 @@ MODS = [
 ]
 EXTRAS = sorted(list(EXTRA_FILES) + MODS, key=_code_units)
 LEVELS = ["required", "recommended"]
+# The work languages a personal layer may pick; home.py keeps the same list.
+LANGUAGES = ["english", "spanish"]
 
 
 def _text(v):
@@ -40,6 +44,7 @@ def _text(v):
 
 SETTINGS = {
     "codeResearch": lambda v: _text(v) and v in CODE_RESEARCH_TOOLS,
+    "language": lambda v: _text(v) and v in LANGUAGES,
     "tracker": lambda v: _text(v) and v in TRACKERS,
 }
 
@@ -209,17 +214,19 @@ def installed_extras(config):
     return {extra: present(extra) for extra in EXTRAS}
 
 
-def _read_layer_file(path, file, keep_ints=False):
-    # keep_ints: for a file written back, where 5 must stay 5, as JSON.stringify writes it.
-    try:
-        with open(path, "rb") as f:
-            raw = f.read()
-    except FileNotFoundError:
+def _read_layer_text(path, file):
+    # A settings file's text, or None when it is missing.
+    raw = read_state(path, file)
+    if raw is None:
         return None
     try:
-        text = raw.decode("utf-8")
+        return raw.decode("utf-8")
     except UnicodeDecodeError:
         raise ValueError("%s is not UTF-8 text" % file)
+
+
+def _parse_layer_text(text, file, keep_ints=False):
+    # keep_ints: for a file written back, where 5 must stay 5, as JSON.stringify writes it.
     if _depth(text) > MAX_DEPTH:
         raise ValueError("%s nests too deeply" % file)
     try:
@@ -229,6 +236,34 @@ def _read_layer_file(path, file, keep_ints=False):
         return json.loads(text, parse_constant=_not_json, parse_int=None if keep_ints else float)
     except ValueError:
         raise ValueError("%s is not valid JSON" % file)
+
+
+def _read_layer_file(path, file, keep_ints=False):
+    text = _read_layer_text(path, file)
+    return None if text is None else _parse_layer_text(text, file, keep_ints)
+
+
+# Refuses a project.json that the two engines would rewrite differently; layers.js says why.
+_JSON_TOKEN = re.compile(r'("(?:[^"\\]|\\.)*")(\s*:)?|(-?[0-9][-+.eE0-9]*)')
+_PLAIN_INTEGER = re.compile(r"0|-?[1-9][0-9]{0,14}")
+_ARRAY_INDEX = re.compile(r"0|[1-9][0-9]*")
+
+
+def _unstable(what):
+    return ValueError("%s holds %s that the two engines would write differently; "
+                      "edit it by hand first" % (ANSWERS, what))
+
+
+def refuse_unstable_json(text):
+    for match in _JSON_TOKEN.finditer(text):
+        quoted, colon, number = match.group(1), match.group(2), match.group(3)
+        if number is not None and not _PLAIN_INTEGER.fullmatch(number):
+            raise _unstable("the number %s" % number)
+        if colon is None:
+            continue
+        key = json.loads(quoted)
+        if _ARRAY_INDEX.fullmatch(key):
+            raise _unstable('the key "%s"' % key)
 
 
 def run_settings(root, config):

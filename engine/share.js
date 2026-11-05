@@ -7,7 +7,17 @@
 import { lstatSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ANSWERS, stateJson } from "./bind.js";
-import { LOCAL, PERSONAL, SCHEMA, SETTINGS, readLayerFile, resolveLayers } from "./layers.js";
+import {
+  LOCAL,
+  PERSONAL,
+  SCHEMA,
+  SETTINGS,
+  parseLayerText,
+  readLayerFile,
+  readLayerText,
+  refuseUnstableJson,
+  resolveLayers,
+} from "./layers.js";
 
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -35,9 +45,11 @@ export function exportSetup(root, choices) {
   refuse("export", unknownKeys(choices, ["extras", "required"]));
   const { extras = {}, required = [] } = choices;
   const path = join(root, ...ANSWERS.split("/"));
-  const answers = readLayerFile(path, ANSWERS);
-  if (answers === null) throw new Error(`${ANSWERS} is missing: this repo was not set up with /bindwright:setup`);
+  const text = readLayerText(path, ANSWERS);
+  if (text === null) throw new Error(`${ANSWERS} is missing: this repo was not set up with /bindwright:setup`);
+  const answers = parseLayerText(text, ANSWERS);
   if (!isObject(answers)) throw new Error(`${ANSWERS} must hold a JSON object`);
+  refuseUnstableJson(text);
   const setup = { schema: SCHEMA, extras, required };
   refuse("export", resolveLayers({ project: { ...answers, setup } }).ignored);
   const out = { ...answers };
@@ -55,7 +67,7 @@ function layerFile(name, root, config) {
   throw new Error(`Unknown layer "${name}": use personal or local`);
 }
 
-// Merges `choices` ({ codeResearch, tracker, extras: { <extra>: true |
+// Merges `choices` ({ codeResearch, language, tracker, extras: { <extra>: true |
 // false } }, null removing a key) into one person's layer. Only what the
 // layers use is kept: anything they ignore is dropped and listed, so the file
 // holds nothing but known names, true and false, and both twins write it

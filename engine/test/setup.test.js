@@ -4,7 +4,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -52,6 +54,7 @@ const LONG = "Invalid setup code: it is too long";
 const B64 = "Invalid setup code: the part after the prefix is not base64url";
 const JSON_ = "Invalid setup code: it does not hold UTF-8 JSON";
 const DEEP = "Invalid setup code: it nests too deeply";
+const TOO_LARGE = "Invalid setup code: it holds a number too large to read";
 const OBJECT = "Invalid setup code: the answers must be an object";
 const BAD = [
   [123, START], [null, START], ["", START], ["bw2-e30", START], ["BW1-e30", START],
@@ -61,6 +64,7 @@ const BAD = [
   [codeOf(Buffer.from([0xff])), JSON_], [codeOf(Buffer.from([0xed, 0xa0, 0x80])), JSON_],
   [codeOf(Buffer.from([0xc0, 0xaf])), JSON_],
   [codeOf("\ufeff\ufeff{}"), JSON_], [codeOf('{"a":NaN}'), JSON_], [codeOf("Infinity"), JSON_],
+  [codeOf(`{"team":${"1".repeat(5000)}}`), TOO_LARGE],
   [codeOf('{"a":1,}'), JSON_], [codeOf("{'a':1}"), JSON_], [codeOf('{"a":"\t"}'), JSON_], [codeOf("{}\u00a0"), JSON_],
   [codeOf("[".repeat(65) + "]".repeat(65)), DEEP], [codeOf('{"a":'.repeat(65) + "1" + "}".repeat(65)), DEEP],
   [codeOf("[]"), OBJECT], [codeOf("null"), OBJECT], [codeOf("1"), OBJECT], [codeOf('"x"'), OBJECT],
@@ -362,6 +366,39 @@ test("both writers write new files, stage what exists and skip what is staged", 
     assert.equal(read(`${STAGING}both.md`), "old");
     assert.equal(read(`${STAGING}CLAUDE.md`), "old");
   });
+});
+
+// Links each engine's copy of `linkRel` to an empty folder outside the repo, then
+// checks both writers refuse `files` with `message` and write nothing outside.
+// A directory junction needs no admin rights on Windows.
+function refusesLinked(files, linkRel, message) {
+  withTemp((outside) => withTemp((root) => {
+    for (const side of ["js", "py"]) {
+      mkdirSync(dirname(join(root, side, linkRel)), { recursive: true });
+      mkdirSync(join(outside, side));
+      symlinkSync(join(outside, side), join(root, side, linkRel), "junction");
+    }
+    assert.throws(() => applyFiles(files, join(root, "js")), { message });
+    assert.deepEqual(runPython(PY_APPLY, { files, root: join(root, "py") }), { error: message });
+    assert.deepEqual(readdirSync(join(outside, "js")), []);
+    assert.deepEqual(readdirSync(join(outside, "py")), []);
+  }));
+}
+
+test("both writers refuse a write through a linked .claude folder and write nothing", { skip: noPython }, () => {
+  refusesLinked(
+    [[".claude/rules/task-tracking.md", "x"], [".claude/settings.json", "y"]],
+    ".claude",
+    "Refusing to write through a symbolic link: .claude",
+  );
+});
+
+test("both writers name a link deeper down by its own path", { skip: noPython }, () => {
+  refusesLinked(
+    [[".claude/rules/task-tracking.md", "x"]],
+    ".claude/rules",
+    "Refusing to write through a symbolic link: .claude/rules",
+  );
 });
 
 const run = (cmd, args) => spawnSync(cmd, args, { cwd: repo, encoding: "utf8" });

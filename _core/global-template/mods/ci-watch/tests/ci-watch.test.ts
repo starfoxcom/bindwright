@@ -61,6 +61,87 @@ test('no checks reported is never a pass; the time limit wakes with what is stuc
   expect(wakeText(stuck)).toContain('review')
 })
 
+test('after a /clear the watch keeps polling under the new session id and wakes it', async ($, on) => {
+  // The engine stops the ended session's timers at a /clear; the process goes on under a new id. A
+  // clock.every hook runs once per period, so a period that waited across the /clear refuses and the
+  // interval ends.
+  let clears = 0
+  on('clock.every', { ms: POLL_MS }, async ($, e, next) => {
+    const clearsBefore = clears
+    const result = await next(e)
+    if (clears !== clearsBefore) throw new Error('the session ended')
+    return result
+  })
+  const { seen, clock } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  await clock.advance(POLL_MS)
+
+  clears++
+  // The ending session's id holds through session.end; the new one only after it.
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+  seen.session = 's2'
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
+
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
+  expect(saved.watches?.[0]?.checks).toEqual({ build: 'pass' })
+  expect(saved.watches?.[0]?.outcome).toBe('passed')
+})
+
+test('after a reload and a /clear, the instance the reload retired leaves the new id alone', async ($, on) => {
+  const { seen } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  seen.files.set(OWNER, 'a-newer-instance')
+
+  // The ending session's id holds through session.end; the new one only after it.
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+  seen.session = 's2'
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  expect(seen.files.has('C:/Users/me/.claude/mods-data/ci-watch/s2.owner')).toBe(false)
+  expect(seen.files.has('C:/Users/me/.claude/mods-data/ci-watch/s2.json')).toBe(false)
+})
+
+test('a /clear that lands while a reload is still starting keeps the saved watches', async ($, on) => {
+  const { seen } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  seen.files.set(STATE, JSON.stringify({ watches: [{ ...BASE, id: 'w1' }], isTurnRunning: false }))
+  // The reload's start is inside its first folder make when the /clear comes; the id moves after it.
+  let ended: Promise<unknown> | undefined
+  seen.duringMkdir = () => {
+    seen.duringMkdir = undefined
+    ended = $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never).then(() => {
+      seen.session = 's2'
+    })
+  }
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  await ended
+  await $.turn.start({ turnId: 't2', prompt: 'work' } as never)
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
+  expect(saved.watches?.map((w: Watch) => w.number)).toEqual([7])
+})
+
+test('a reload with no hook yet when a /clear comes takes the new id at its first hook', async ($, on) => {
+  const { seen } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  // The older instance owns the session and has saved its watch.
+  seen.files.set(OWNER, 'an-older-instance')
+  seen.files.set(STATE, JSON.stringify({ watches: [{ ...BASE, id: 'w1' }], isTurnRunning: false }))
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+  seen.session = 's2'
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
+  expect(saved.watches?.map((w: Watch) => w.number)).toEqual([7])
+})
+
 test('a push starts a watch and the session is woken once when it passes', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })

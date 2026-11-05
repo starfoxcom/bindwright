@@ -29,6 +29,7 @@ export default {
   "lands.item.memory": "Memory index",
   "lands.item.guard": "Push guard",
   "lands.item.builder": "Helper that writes code",
+  "lands.item.style": "Plain reply style",
   "lands.item.mods": "Mods you picked",
   "lands.item.brief": "Project brief",
   "lands.item.rules": "Rules",
@@ -65,11 +66,25 @@ export default {
   "mods.scene.usage-guard.save": "Saved your work in progress and paused until the reset.",
   "mods.scene.usage-guard.resume": "Limit reset. Resuming where it stopped.",
 
-  "evidence.project.game": "GameProject",
-  "evidence.project.this": "This project",
-  "evidence.project.business": "BusinessApp",
   "evidence.checked": { one: "{count} checked", other: "{count} checked" },
-  "evidence.caught": { one: "{count} caught", other: "{count} caught" },
-  "evidence.legend.passed": "passed the review",
-  "evidence.legend.fixed": "had a problem caught, fixed before merging",
+  "evidence.firstTry": "{percent}% first try",
+  "evidence.legend.passed": "passed the first review",
+  "evidence.legend.fixed": "fixed in 1 to 5 rounds",
+  "evidence.legend.stalled": "took 6 rounds or more",
+  "evidence.detail": "Of {merged} merged pull requests, {skipped} skipped the review, mostly docs-only changes, "
+    + "which leaves the {checked} above. The {held} held back, yellow and red, took {rounds} fix rounds "
+    + "on average. {deep} of the {checked} touched risky code, like security or saved data, and also got "
+    + "a deeper review.",
+  "evidence.note": {
+    one: "Bindwright puts an AI reviewer on every pull request. "
+      + "These are its results so far in {count} project whose owner chose to share anonymous counts.",
+    other: "Bindwright puts an AI reviewer on every pull request. "
+      + "These are its results so far in {count} projects whose owners chose to share anonymous counts.",
+  },
+  "evidence.kind.game": "Game project",
+  "evidence.kind.business-app": "Business app",
+  "evidence.kind.developer-tool": "Developer tool",
+  "evidence.kind.mobile-app": "Mobile app",
+  "evidence.kind.website": "Website",
+  "evidence.kind.other": "Project",
 };

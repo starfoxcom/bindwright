@@ -1,9 +1,10 @@
-# Python twin of setupcode.js: decodes the setup code the page hands to
+# Python twin of setupcode.js: decodes a setup code from an older page, passed to
 # /bindwright:setup ("bw1-" + base64url of the answers as UTF-8 JSON, no
 # padding) with the same checks and messages. Standard library only.
 
 import base64
 import json
+import math
 import re
 
 from model import CODE_RESEARCH_TOOLS, defaults, quoted
@@ -14,9 +15,14 @@ PREFIX = "bw1-"
 # which gives up near 1000 levels where JSON.parse keeps going.
 MAX_BODY = 20000
 MAX_DEPTH = 64
+TOO_LARGE = "it holds a number too large to read"
 
 
 class SetupCodeError(ValueError):
+    pass
+
+
+class _NumberTooLarge(ValueError):
     pass
 
 
@@ -26,6 +32,15 @@ def _fail(msg):
 
 def _not_json(name):
     raise ValueError(name + " is not JSON")
+
+
+def _double(text):
+    """A number read as a double, as JSON.parse reads it. One past the double
+    range is refused, so no number reaches the answers as infinity."""
+    value = float(text)
+    if math.isinf(value):
+        raise _NumberTooLarge(text)
+    return value
 
 
 def _depth(text):
@@ -108,7 +123,9 @@ def decode_setup_code(code):
         _fail("it nests too deeply")
     try:
         # NaN and Infinity are not JSON, and JSON.parse refuses them.
-        answers = json.loads(text, parse_constant=_not_json)
+        answers = json.loads(text, parse_constant=_not_json, parse_int=_double, parse_float=_double)
+    except _NumberTooLarge:
+        _fail(TOO_LARGE)
     except ValueError:
         _fail("it does not hold UTF-8 JSON")
     if not isinstance(answers, dict):

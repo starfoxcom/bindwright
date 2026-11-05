@@ -41,7 +41,7 @@ GLOBAL_FILES = [
     "CLAUDE.md.additions", "memory-template/MEMORY.md",
     "hooks/push-guard.py", "hooks/no-ai-attribution.py",
     "hooks/code-research-profiles.json", "hooks/code-research-first.py.template",
-    "agents/builder.md",
+    "agents/builder.md", "output-styles/straight-talk.md",
 ]
 # Marks a folder as a pack, so --out never replaces anything else.
 MARKER = ".bindwright-pack"

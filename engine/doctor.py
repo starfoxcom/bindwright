@@ -3,6 +3,7 @@
 
 import os
 import re
+import shutil
 
 from model import JS_WHITESPACE, expand_answers, validate
 from layers import MODS, _read_layer_file, run_settings
@@ -24,6 +25,8 @@ FIX = {
     "unreadable": "Fix or remove the file it names.",
     "roadmap": "Fix those lines: each item is one line that starts with its id (R4), at most five sit under Now, "
                "and the Next id line is above every id in use.",
+    "hooks": "Run /bindwright:setup again to reinstall them, "
+             "or fix the paths in the settings file named.",
 }
 
 
@@ -206,10 +209,81 @@ def _cli_check(installed, cli_version):
                   FIX["cli"])
 
 
+def _as(value, kind):
+    """The value when it is of the kind, else an empty one, so a malformed entry is skipped."""
+    return value if isinstance(value, kind) else kind()
+
+
+def _command_hooks(settings):
+    """The command hooks under every event of a settings file, in file order."""
+    hooks = []
+    for entries in _as(_as(settings, dict).get("hooks"), dict).values():
+        for entry in _as(entries, list):
+            for hook in _as(_as(entry, dict).get("hooks"), list):
+                if isinstance(hook, dict) and hook.get("type") == "command":
+                    hooks.append(hook)
+    return hooks
+
+
+def _first_word(command):
+    text = command.strip(JS_WHITESPACE)
+    if text[:1] in ('"', "'"):
+        return text[1:].split(text[0], 1)[0]
+    return text.split(" ", 1)[0]
+
+
+def _program(hook):
+    """The program a command hook starts, or None when it is not judged."""
+    command = hook.get("command")
+    if not isinstance(command, str):
+        return None
+    if "args" in hook:
+        program = command
+    else:
+        # A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
+        program = _first_word(command)
+        if not _is_absolute(program):
+            return None
+    if not program or "$" in program or "%" in program:
+        return None
+    return program
+
+
+def _is_absolute(program):
+    # Node counts a rooted path as absolute on Windows too, as Python 3.13 no longer does.
+    return os.path.isabs(program) or (os.name == "nt" and program[:1] in ("/", "\\"))
+
+
+def _is_missing(program):
+    if _is_absolute(program):
+        return not os.path.exists(program)
+    if "/" in program or "\\" in program:
+        return False
+    return shutil.which(program) is None
+
+
+def _hooks_check(config):
+    try:
+        settings = _read_layer_file(os.path.join(config, "settings.json"), "settings.json")
+    except Exception:
+        return _check("hooks", True, "Every hook's program is on this computer.")
+    missing = []
+    for hook in _command_hooks(settings):
+        program = _program(hook)
+        if program is not None and program not in missing and _is_missing(program):
+            missing.append(program)
+    if missing:
+        return _check("hooks", False,
+                      "Some hooks start a program this computer does not have: %s. "
+                      "Those hooks fail on every call." % ", ".join(missing),
+                      FIX["hooks"])
+    return _check("hooks", True, "Every hook's program is on this computer.")
+
+
 def run_doctor(root, config, plugin_version, cli_version):
     """See runDoctor in doctor.js."""
     state = _state_checks(root)
-    checks = list(state["checks"])
+    checks = list(state["checks"]) + [_hooks_check(config)]
     if "answers" in state:
         checks += [_version_check(state["pristine"], plugin_version),
                    _guard_check(root, state["answers"], state["pristine"])]

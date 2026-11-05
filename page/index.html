@@ -32,6 +32,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <header>
   <a class="mark" href="./">Bindwright</a>
   <nav aria-label="Site" data-t-attr="aria-label:nav.site">
+    <a href="./" aria-current="page" data-t="nav.home">Home</a>
     <a href="settings/" data-t="nav.settings">Plugin settings</a>
     <a href="compare/" data-t="nav.compare">Compare</a>
     <a href="https://github.com/starfoxcom/bindwright" data-t="nav.github">GitHub</a>
@@ -157,75 +158,49 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">What it caught in real projects so far</h2>
-    <p class="preview-note" data-t="evidence.note">Bindwright puts an AI reviewer on every pull request. These are its results so far in three projects.</p>
+    <div id="evidence-counts" hidden>
+    <p class="preview-note" id="evidence-note"></p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="reviewed" data-count="993">993</span>
-        <p class="stat-label" data-t="evidence.reviewed">pull requests checked by the AI reviewer before they merged</p>
+        <span class="stat-num" data-total="checked" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.checked.label">pull requests checked by the AI reviewer before they merged</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="fixed" data-count="319">319</span>
-        <p class="stat-label" data-t="evidence.stopped">had a problem the reviewer caught and were held back until it was fixed</p>
+        <span class="stat-num stat-accent" data-total="firstTry" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.firstTry.label">passed on the first try, deep review included, with nothing to fix</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-count="583">583</span>
-        <p class="stat-label" data-t="evidence.deep">touched risky code, like security or saved data, and got a second, deeper review</p>
+        <span class="stat-num stat-warn" data-total="fixed" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.fixed.label">were held back 1 to 5 rounds until the problem was fixed</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="stalled" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.stalled.label">took 6 rounds or more, where the session stops to research a simpler fix</p>
       </div>
     </div>
-    <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many had a problem caught</p>
+    <p class="evidence-detail" id="evidence-detail"></p>
+    <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many rounds each took to pass</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
+    </div>
     <p class="chart-title" data-t="evidence.stories">Mistakes that became rules</p>
-    <ul class="stories">
-      <li class="story">
-        <span class="chip" data-t="evidence.story1.where">GameProject</span>
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story1.was">The project's task board was made public, with every internal engineering note on it.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story1.now">It checks the board's visibility on every read and warns you when it's public.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story2.where">This project</span>
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story2.was">A change shipped functions 273 lines long, because the rule that limits function size never loaded.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story2.now">A size check runs on every pull request and fails any function that grows too long.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story3.where">This project</span>
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story3.was">Two pull requests took 22 and 30 review rounds, since every fix gave the reviewer something new to flag.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story3.now">A finding blocks only when the change caused it; older gaps become their own issues.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story4.where">This project</span>
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story4.was">A fix merged into the main branch never made it back to the development branch.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story4.now">A hotfix only counts as done once it's merged back into the development branch.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story5.where">This project</span>
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story5.was">A pull request merged on its first review while the deeper review it had asked for was still pending.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story5.now">Once a deeper review is asked for, nothing merges until it passes too.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story6.where">This project</span>
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story6.was">A change to the review workflow, made on a feature branch, failed its own review check.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story6.now">Workflow changes go to the main branch first, then flow back to development.</b>
-      </li>
-    </ul>
+    <table class="stories">
+      <thead><tr><th data-t="evidence.wrong">What went wrong</th><th data-t="evidence.now">What Bindwright does now</th></tr></thead>
+      <tbody>
+        <tr><td class="was" data-t="evidence.story1.was">The task board went public, internal engineering notes and all.</td><td class="now" data-t="evidence.story1.now">Checks the board's visibility on every read and warns when it's public.</td></tr>
+        <tr><td class="was" data-t="evidence.story2.was">Functions 273 lines long shipped, because the size rule never loaded.</td><td class="now" data-t="evidence.story2.now">A size check fails any pull request with an overlong function.</td></tr>
+        <tr><td class="was" data-t="evidence.story3.was">Two pull requests took 22 and 30 rounds: every fix gave the reviewer something new to flag.</td><td class="now" data-t="evidence.story3.now">A finding blocks only when the change caused it; older gaps become their own issues.</td></tr>
+        <tr><td class="was" data-t="evidence.story4.was">A hotfix merged into main never reached develop.</td><td class="now" data-t="evidence.story4.now">A hotfix counts as done only once it's back in develop.</td></tr>
+        <tr><td class="was" data-t="evidence.story5.was">A pull request merged with the deeper review it had asked for still pending.</td><td class="now" data-t="evidence.story5.now">Once a deeper review is asked for, nothing merges until it passes.</td></tr>
+        <tr><td class="was" data-t="evidence.story6.was">A workflow change made on a feature branch failed its own check.</td><td class="now" data-t="evidence.story6.now">Workflow changes land on main first, then flow back to develop.</td></tr>
+      </tbody>
+    </table>
   </section>
 
   <section class="mods" id="mods" aria-labelledby="mods-title">
     <h2 id="mods-title" data-t="mods.title">Mods</h2>
     <p class="mods-lede" data-t="mods.lede">Optional add-ons for Claude Code that show live status and keep long sessions on track. Pick the ones you want during setup.</p>
-    <div class="stage split flip mods-stage" id="mods-stage">
+    <div class="stage mods-stage" id="mods-stage">
       <div class="mods-carousel" id="mods-carousel">
         <!-- mods:cards -->
         <ul class="mod-cards">
@@ -286,14 +261,10 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           </li>
         </ul>
         <!-- /mods:cards -->
-        <div class="mods-controls">
-          <button class="mods-step" id="mods-prev" type="button" aria-label="Previous mod"
-            data-t-attr="aria-label:mods.prev">&lsaquo;</button>
-          <div class="mods-dots" id="mods-dots"></div>
-          <button class="mods-step" id="mods-next" type="button" aria-label="Next mod"
-            data-t-attr="aria-label:mods.next">&rsaquo;</button>
-        </div>
       </div>
+      <div class="mods-viewer">
+        <button class="mods-step" id="mods-prev" type="button" aria-label="Previous mod"
+          data-t-attr="aria-label:mods.prev">&lsaquo;</button>
       <div class="term" role="img" aria-label="A terminal showing the selected mod at work"
         data-t-attr="aria-label:mods.term.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
@@ -303,6 +274,10 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
         <div class="hint">? for shortcuts</div>
       </div>
+        <button class="mods-step" id="mods-next" type="button" aria-label="Next mod"
+          data-t-attr="aria-label:mods.next">&rsaquo;</button>
+      </div>
+      <div class="mods-dots" id="mods-dots"></div>
     </div>
     <p class="mods-more"><a href="settings/#mods" data-t="mods.more">See every mod and its default</a></p>
   </section>

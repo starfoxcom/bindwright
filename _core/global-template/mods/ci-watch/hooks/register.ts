@@ -1,5 +1,5 @@
 import { atom, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Hook, Register } from 'claude-code'
 
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from './command'
@@ -39,6 +39,10 @@ const live = {
   rechecked: new Map<string, number>(),
   /** The load's one start: claim, sweep, load, poll. Every hook awaits it, so none acts mid-claim. */
   started: undefined as Promise<void> | undefined,
+  /** Poll timer; a /clear stops it, notes the ended id for load, and retires a retired instance for good. */
+  tick: undefined as { cancel: () => void } | undefined,
+  endedId: undefined as string | undefined,
+  isRetiredForGood: false,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -138,6 +142,7 @@ async function claimOwner($: EngineInterface): Promise<void> {
 }
 
 export async function isRetired($: EngineInterface): Promise<boolean> {
+  if (live.isRetiredForGood) return true
   try {
     const owner = String(await $.fs.read(await ownerPath($))).trim()
     return owner !== '' && owner !== INSTANCE
@@ -171,9 +176,9 @@ async function save($: EngineInterface): Promise<void> {
 
 type Saved = { watches?: Watch[]; isTurnRunning?: boolean }
 
-async function readState($: EngineInterface): Promise<Saved | undefined> {
+async function readState($: EngineInterface, path?: string): Promise<Saved | undefined> {
   try {
-    return JSON.parse(String(await $.fs.read(await statePath($)))) as Saved
+    return JSON.parse(String(await $.fs.read(path ?? (await statePath($))))) as Saved
   } catch {
     return undefined
   }
@@ -183,8 +188,10 @@ async function readSaved($: EngineInterface): Promise<Watch[] | undefined> {
   return (await readState($))?.watches
 }
 
+// After a /clear the new id has no state file until its first save: the ended id's file stands in.
 async function load($: EngineInterface): Promise<void> {
-  const saved = await readState($)
+  const ended = live.endedId && (await statePath($)).replace(/[^/]+\.json$/, `${live.endedId}.json`)
+  const saved = (await readState($)) ?? (ended ? await readState($, ended) : undefined)
   live.watches = saved?.watches ?? []
   live.isTurnRunning = Boolean(saved?.isTurnRunning)
   await publish($)
@@ -607,18 +614,31 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
   return due.map(w => wakeText(w, now, redStreak(rounds[`${w.repo}#${w.number}`])))
 }
 
-// A hot reload starts the module over without a new session.start: the next
-// turn or tool call reloads the saved watches and restarts polling. Each hook waits for the same start:
-// a reload runs its start beside the model's next call, and a call that only saw the start under way
-// read the older load's name in the owner file, passed itself on as retired, and went unanswered.
+// A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.
+// Each hook awaits the same start, so none reads the owner file mid-claim and passes itself on as retired.
 function startPolling($: EngineInterface): Promise<void> {
-  live.started ??= (async () => {
+  const start = (live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
     await load($)
-    armPolling($)
-  })().catch(() => undefined)
-  return live.started
+    if (live.started === start) armPolling($)
+  })().catch(() => undefined))
+  return start
+}
+
+// A /clear moves the session to a new id and stops its timer; a start under way finishes first, under the
+// ending id, where retirement is read too (only for an instance that started, the only kind that claimed).
+const endSession: Hook<'session.end'> = async ($, e, next) => {
+  if (e.reason !== 'clear') return next(e)
+  await live.started
+  const isRetiredNow = live.started !== undefined && (await isRetired($))
+  live.endedId = e.sessionId
+  const result = await next(e)
+  live.tick?.cancel()
+  live.tick = undefined
+  if (isRetiredNow) live.isRetiredForGood = true
+  else live.started = undefined
+  return result
 }
 
 // A new interval from the settings file takes over at the next tick of the old one.
@@ -632,6 +652,7 @@ function armPolling($: EngineInterface): void {
     }
     await poll($).catch(() => undefined)
   })
+  live.tick = tick
 }
 
 // The settings file at the session's start, before any tool call: the settings module follows it from
@@ -686,6 +707,8 @@ export const register: Register = (on, options) => {
     await setTurnRunning($, false)
     return result
   })
+
+  on('session.end', endSession)
 
   // startPolling first: a freshly loaded instance claims the owner file before any check.
   on('turn.start', async ($, e, next) => {

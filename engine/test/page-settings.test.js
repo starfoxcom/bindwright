@@ -12,14 +12,15 @@ import { COMPUTER, FIXED, MODS_ROWS, PROJECT } from "../../page/settings-data.js
 import { DICTIONARIES } from "../../page/i18n/index.js";
 import { alternates, pageKeys, switchLinks } from "../../page/i18n/render.js";
 import { fillSettings } from "../../tools/page_settings.mjs";
-import { EXTRAS, MODS } from "../layers.js";
+import { EXTRAS, MODS, SETTINGS } from "../layers.js";
 import { CODE_RESEARCH_TOOLS, defaults } from "../model.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
 const read = (path) => readFileSync(join(page, path), "utf8").replace(/\r\n/g, "\n");
 const settings = read("settings/index.html");
 const entries = [...COMPUTER, ...PROJECT, ...FIXED];
-const answerKeys = entries.flatMap((entry) => entry.keys).filter((key) => !key.startsWith("extra:") && key !== "mods");
+const allKeys = entries.flatMap((entry) => entry.keys);
+const answerKeys = allKeys.filter((key) => !/^(extra|setting):/.test(key) && key !== "mods");
 
 // Every answer key the engine's defaults hold, dotted as the answers are: "project.name".
 function flatten(obj, prefix = "") {
@@ -48,11 +49,17 @@ test("every answer the engine keeps is listed by exactly one entry", () => {
 });
 
 test("the extra settings and the mods entry cover every extra and the mods", () => {
-  const extras = entries.flatMap((entry) => entry.keys)
+  const extras = allKeys
     .filter((key) => key.startsWith("extra:"))
     .map((key) => key.slice("extra:".length));
   assert.deepEqual(extras.sort(), EXTRAS.filter((name) => !MODS.includes(name)).sort());
   assert.equal(entries.filter((entry) => entry.keys.includes("mods")).length, 1);
+});
+
+test("the computer-setting entries cover every setting the answers do not hold", () => {
+  const listed = allKeys.filter((key) => key.startsWith("setting:")).map((key) => key.slice("setting:".length));
+  const personalOnly = Object.keys(SETTINGS).filter((key) => !(key in defaults().advanced));
+  assert.deepEqual(listed.sort(), personalOnly.sort());
 });
 
 test("the mods rows are the engine's mods, in the engine's order", () => {

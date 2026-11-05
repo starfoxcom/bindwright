@@ -7,6 +7,7 @@ export const computer = [
   { key: "memory", path: "~/.claude/memory/MEMORY.md" },
   { key: "guard", path: "~/.claude/hooks/push-guard.py" },
   { key: "builder", path: "~/.claude/agents/builder.md" },
+  { key: "style", path: "~/.claude/output-styles/straight-talk.md" },
   { key: "mods", path: "~/.claude/mods/" },
 ];
 

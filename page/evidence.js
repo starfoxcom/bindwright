@@ -1,25 +1,22 @@
-// The evidence section: the three totals count up once, and a bar per project grows
-// with its reviewed pull requests, split by whether the review passed or caught a
-// problem. Each starts as its own block enters the view, while it fades in. Reduced motion
-// shows the final state.
+// The evidence section's counts, all from the projects whose owners chose to share them:
+// the four totals count up once and a bar per project grows with its checked pull
+// requests, split by how many review rounds they took. The counts stay
+// hidden until the counter answers with at least one project. Each animation starts as
+// its block enters the view, while it fades in; reduced motion shows the final state.
 import { t } from "./i18n/index.js";
-import { projects } from "./evidence-data.js";
+import { shared } from "./community.js";
 import { ENTER_MARGIN } from "./reveal.js";
+import { PARTS, el, projectRow } from "./bars.js";
 
-const stats = document.querySelector("#evidence .stats");
+const counts = document.getElementById("evidence-counts");
+const note = document.getElementById("evidence-note");
+const detail = document.getElementById("evidence-detail");
+const stats = counts.querySelector(".stats");
 const chart = document.getElementById("projects");
 const legend = document.getElementById("legend");
 const DURATION_MS = 1200;
 const STEP_MS = 30;
 const steps = DURATION_MS / STEP_MS;
-
-// The parts of a project's bar, left to right: the colour class, the legend text and
-// how many of the project's reviewed pull requests the part covers.
-const PARTS = [
-  { cls: "seg-ok", key: "evidence.legend.passed", count: (p) => p.reviewed - p.fixed },
-  { cls: "seg-fixed", key: "evidence.legend.fixed", count: (p) => p.fixed },
-];
-const largest = Math.max(...projects.map((project) => project.reviewed));
 
 // Ease-out: quick at first, then slowing into the final number.
 const easeOut = (p) => 1 - (1 - p) ** 3;
@@ -37,53 +34,14 @@ function countUp(node) {
   setTimeout(tick, STEP_MS);
 }
 
-function el(tag, cls, text = "") {
-  return Object.assign(document.createElement(tag), { className: cls, textContent: text });
-}
-
-const percent = (part, whole) => `${((100 * part) / whole).toFixed(3)}%`;
-
-function segment(part, project) {
-  const piece = el("i", part.cls);
-  piece.style.width = percent(part.count(project), project.reviewed);
-  return piece;
-}
-
-// One project: its name, its bar (as wide as its reviewed count against the largest), and
-// its counts. The bar's CSS grows it from the left once the section is counted.
-function row(project, index) {
-  const item = el("li", "project");
-  item.style.setProperty("--row", index);
-  const bar = el("i", "project-bar");
-  bar.style.width = percent(project.reviewed, largest);
-  bar.append(...PARTS.map((part) => segment(part, project)));
-  const track = el("span", "project-track");
-  track.append(bar);
-  item.append(
-    el("span", "project-name", t(`evidence.project.${project.name}`)),
-    track,
-    el("span", "project-count", [
-      t("evidence.checked", { count: project.reviewed }),
-      t("evidence.caught", { count: project.fixed }),
-    ].join(" · ")),
-  );
-  return item;
-}
-
 function legendItem(part) {
   const item = el("li", "legend-item");
   item.append(el("i", `swatch ${part.cls}`), t(part.key));
   return item;
 }
 
-// Drawn on load, so the rows exist before the animation runs.
-function draw() {
-  chart.replaceChildren(...projects.map(row));
-  legend.replaceChildren(...PARTS.map(legendItem));
-}
-
-// Runs `start` once, when `node` enters the view: the moment reveal.js fades it in.
-function onEnter(node, start) {
+/** Runs `start` once, when `node` enters the view: the moment reveal.js fades it in. */
+export function onEnter(node, start) {
   const observer = new IntersectionObserver((entries) => {
     if (!entries.some((entry) => entry.isIntersecting)) return;
     observer.disconnect();
@@ -92,10 +50,41 @@ function onEnter(node, start) {
   observer.observe(node);
 }
 
-draw();
-if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  chart.classList.add("counted");
-} else {
+// The four big numbers: checked, then passed first try, fixed in a few rounds and stalled.
+function totalsOf(total) {
+  return {
+    checked: total.checked,
+    firstTry: total.checked - total.caught,
+    fixed: total.caught - total.stalled,
+    stalled: total.stalled,
+  };
+}
+
+function show(total) {
+  for (const [name, value] of Object.entries(totalsOf(total))) {
+    const node = stats.querySelector(`[data-total="${name}"]`);
+    node.dataset.count = String(value);
+    node.textContent = String(value);
+  }
+  note.textContent = t("evidence.note", { count: total.projects });
+  detail.textContent = t("evidence.detail", {
+    checked: total.checked,
+    held: total.caught,
+    rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
+    deep: total.deep,
+    skipped: total.merged - total.checked,
+    merged: total.merged,
+  });
+  const largest = Math.max(...total.rows.map((row) => row.checked));
+  chart.replaceChildren(...total.rows.map((row, index) => projectRow(row, index, largest)));
+  legend.replaceChildren(...PARTS.map(legendItem));
+  counts.hidden = false;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    chart.classList.add("counted");
+    return;
+  }
   onEnter(stats, () => stats.querySelectorAll("[data-count]").forEach(countUp));
   onEnter(chart, () => chart.classList.add("counted"));
 }
+
+shared.then((total) => total && show(total)).catch(() => {});

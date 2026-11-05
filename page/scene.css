@@ -18,15 +18,17 @@
 }
 
 .stage .caption {
+  max-width: 727px; margin-inline: auto;
   font-size: clamp(18px, 3.1cqi, 34px); font-weight: 750; font-stretch: 110%; letter-spacing: -0.015em;
 }
 .stage .caption b { color: var(--accent); font-weight: 750; margin-right: .3em; }
 .stage .caption.in { animation: scene-cap 520ms cubic-bezier(.2,.8,.2,1) both; }
 @keyframes scene-cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
 
-/* Terminal window: the scene's full width, with the cards in a row under it. */
+/* Terminal window: the common width (the hero split column), with the cards in a row under it. */
+/* Every terminal is one height, the tallest any scene needs; almost square on phones (below). */
 .stage .term {
-  margin-top: 2cqi; height: 50cqi;
+  width: 100%; max-width: 727px; margin: 2cqi auto 0; height: 620px;
   display: flex; flex-direction: column;
   background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
   box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
@@ -160,15 +162,13 @@
 .stage .card.on .note div:nth-child(3) { transition-delay: 500ms; }
 .stage .note b { color: var(--accent); font-weight: 400; }
 
-/* A split stage: the terminal beside a side panel, both as tall as the terminal. The
-   terminal is on the left and the panel on the right, unless the stage has .flip, which
-   swaps them. The panel's rows fly in from the left as they arrive. */
+/* A split stage: the terminal at the common width beside a side panel whose rows fly in
+   from the left as they arrive. Below 900px the panel goes under the terminal. */
 .stage.split {
-  display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 2cqi;
+  display: grid; grid-template-columns: minmax(0, 727px) minmax(0, 1fr); gap: 2cqi;
   width: 100%; margin: 20px 0 0;
 }
-.stage.split.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
-.stage.split .term { margin: 0; height: auto; min-height: 30cqi; }
+.stage.split .term { margin: 0 auto; }
 .stage.split .boxes { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 2cqi; }
 .stage.split .box {
   display: flex; flex-direction: column; min-width: 0;
@@ -197,20 +197,13 @@
 .stage.split .row-label { font-weight: 650; }
 @keyframes lands-fly { from { opacity: 0; transform: translateX(-24px); filter: blur(4px); } }
 
-/* The stage is its own container, so its columns follow the viewport: below 900px the
-   terminal goes full width above the boxes. */
-/* The mods terminal is taller than the others and grows with its band, so the rows never
-   squeeze the transcript below about seven lines. */
-.stage.split.mods-stage .term { min-height: 46cqi; }
-.stage.mods-stage .pane { flex: 1 0 auto; min-height: 10.5em; }
 @media (max-width: 900px) {
-  .stage.split, .stage.split.flip { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .stage.split .term { min-height: 50cqi; }
-  .stage.split.mods-stage .term { min-height: 80cqi; }
+  .stage.split { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }
+/* The mods pane keeps about seven transcript lines above its band. */
+.stage.mods-stage .pane { flex: 1 0 auto; min-height: 10.5em; }
 @container (max-width: 640px) {
-  .stage.split .term { height: 58cqi; min-height: 0; font-size: 3.1cqi; }
-  .stage.split.mods-stage .term { height: auto; min-height: 96cqi; }
+  .stage.split .term { font-size: 3.1cqi; }
 }
 /* The band's collapse mark, which Claude Code draws at the band's top right. */
 .stage .band:not(:empty)::before { content: "[-]"; float: right; color: var(--dim); }
@@ -223,7 +216,7 @@
     margin: 0; font-size: 6cqi; line-height: 1.15; min-height: 2.3em;
     display: flex; align-items: flex-end;
   }
-  .stage .term { margin: 4cqi 0 0; height: 92cqi; font-size: 3.1cqi; }
+  .stage .term { margin: 4cqi 0 0; height: 96cqi; font-size: 3.1cqi; }
   .stage .cards { margin-top: 4cqi; grid-template-columns: minmax(0, 1fr); min-height: 40cqi; }
   .stage .placeholder {
     display: grid; grid-area: 1 / 1; place-items: center; border: 1px dashed var(--rule);

@@ -6,6 +6,46 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.1.0] — 2026-11-05
+
+v2.1.0 adds two computer choices to setup (a plain reply style and the work language), opt-in review counts from real projects that feed the page's evidence, a helper that sets up local CI runners, and a layout check for visual work. It also fixes how the bundled mods follow a `/clear`, and closes gaps in the review gate and the two engines.
+
+### Added
+
+- **A plain reply style** (#532). Setup asks once per computer whether to install `straight-talk`, an output style that keeps chat replies short and plain, the answer first; `home.py add-style` copies it into `~/.claude/output-styles/` and turns it on, and keeps a copy the user already edited. `/output-style default` turns it off.
+
+- **The work language** (#522). Setup asks once per computer which language the user works in, English or Spanish. For Spanish, `home.py set-language` sets the CLI's `language` setting, so replies come in Spanish, and writes `~/.claude/rules/work-language.md`, asking for commit messages and code comments in Spanish unless a project's own rules name a language. The setup's own files stay in English. The settings page lists the new row.
+
+- **Opt-in review counts** (#551). Asked once per computer and off unless the user says yes: each day, each set-up project the user picks sends six numbers about the user's own merged pull requests (reviewed, caught, deep reviews, held back six or more rounds, merged, red rounds) under a random id, with no names, code or links. Past pull requests are counted in daily batches. A Cloudflare Worker keeps the totals, and the page's evidence section reads them.
+
+- **A runner setup helper** (#586). `/bindwright:runners` measures how long recent jobs waited and how many ran at once, recommends how many local runners the machine can take, and walks through installing them. The runners mod shows the WSL disk file against the data in it and suggests compacting past a 10 GB gap (#581).
+
+- **A layout check for visual jobs** (#553). `plugin/hooks/layout-check.mjs` opens a page headless at phone and desktop width and fails on overlapping elements, text that overflows its box and sideways scroll; the builder agent's brief runs it on every job that changes a page.
+
+- **A doctor check for hook programs** (#530). `/bindwright:doctor` reports a global hook whose program is no longer on the computer, and setup writes `python3` or `python` for the hook launchers when the PATH finds that same interpreter, so a moved Python install no longer breaks every hook.
+
+### Changed
+
+- **The board without the hand-off note** (#493). Setup offers a GitHub board on its own, with the hand-off note as a separate choice.
+
+- **The page** shows its sections open, keeps one terminal size, and sets the mods side by side.
+
+- **The review workflow templates** match the review action pinned at v1.0.266, and their pin update notes are corrected (#410, #598).
+
+### Fixed
+
+- **Mods after a `/clear`** (#618, #622). The tasks panel shows the new session's list and carries the last session's unfinished tasks over at its first prompt; ci-watch keeps polling its watched pull requests and wakes the session when they settle.
+
+- **A shared-PC seat claim under contention** (#607). A claim keeps waiting while the lock changes hands, and gives up only when one holder keeps it for 10 s or after 15 s in all, inside the time the mod's hooks give one call.
+
+- **An oversized message in the compaction hand-off** (#591) is cut to the hand-off's budget instead of crowding out the rest.
+
+- **The review gate's verdict window** (#433, #434) is taken from GitHub's clock for both tiers, and the gate fails with a clear reason when its checkout fails.
+
+- **The two engines** refuse writes through a linked parent folder (#467), word unreadable files and huge numbers alike (#471), and refuse answers they would export differently (#473).
+
+- **The research count** skips searches outside the repo (#462), and two misleading lines in shipped files are corrected (#345).
+
 ## [v2.0.0] — 2026-11-04 — Bindwright
 
 v2.0.0 renames the project to **Bindwright** and replaces the v1 configurator with a Claude Code plugin. `/bindwright:setup` asks a few questions in the session (computer questions once, project questions in every project) and writes the setup through one bind engine with JavaScript and Python twins; `/bindwright:update` keeps it current with a three-way merge that never overwrites hand edits. The site is a landing page with the install steps, every setting and its default, a comparison, and the review results from real projects. The plugin installs from this repo's own marketplace.

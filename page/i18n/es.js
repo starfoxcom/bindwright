@@ -7,6 +7,7 @@ export default {
     + "trabajas desde el primer mensaje.",
   "skip.link": "Ir a la instalación",
   "nav.site": "Sitio",
+  "nav.home": "Inicio",
   "nav.github": "GitHub",
   "nav.language": "Idioma",
   "hero.title": "Deja de explicarle tu proyecto a Claude cada vez.",
@@ -136,6 +137,7 @@ export default {
   "lands.item.memory": "Índice de memoria",
   "lands.item.guard": "Guardia de push",
   "lands.item.builder": "Ayudante que escribe código",
+  "lands.item.style": "Estilo de respuesta claro",
   "lands.item.mods": "Mods que elegiste",
   "lands.item.brief": "Guía del proyecto",
   "lands.item.rules": "Reglas",
@@ -175,44 +177,49 @@ export default {
   "mods.scene.usage-guard.save": "Guardé tu trabajo en curso y hice pausa hasta el reinicio.",
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
   "evidence.title": "Lo que ha detectado en proyectos reales hasta ahora",
-  "evidence.note": "Bindwright pone un revisor de IA en cada pull request. "
-    + "Estos son sus resultados hasta ahora en tres proyectos.",
-  "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
-  "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
-  "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "
-    + "y recibieron una segunda revisión más a fondo",
-  "evidence.chart": "Por proyecto: pull requests revisados y cuántos tenían un problema detectado",
+  "evidence.checked.label": "pull requests que la IA revisó antes de integrarse",
+  "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
+  "evidence.fixed.label": "se detuvieron de 1 a 5 rondas hasta corregir el problema",
+  "evidence.stalled.label": "tomaron 6 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
+  "evidence.chart": "Por proyecto: pull requests revisados y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",
   "evidence.wrong": "Qué salió mal",
   "evidence.now": "Qué hace Bindwright ahora",
-  "evidence.project.game": "GameProject",
-  "evidence.project.this": "Este proyecto",
-  "evidence.project.business": "BusinessApp",
   "evidence.checked": { one: "{count} revisado", other: "{count} revisados" },
-  "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
-  "evidence.legend.passed": "pasaron la revisión",
-  "evidence.legend.fixed": "tenían un problema, corregido antes de integrarse",
-  "evidence.story1.where": "GameProject",
-  "evidence.story1.was": "El tablero de tareas del proyecto quedó público, con cada nota interna de ingeniería.",
-  "evidence.story1.now": "Revisa la visibilidad del tablero en cada lectura y te avisa si es público.",
-  "evidence.story2.where": "Este proyecto",
-  "evidence.story2.was": "Un cambio subió funciones de 273 líneas porque la regla "
-    + "que limita su tamaño nunca se cargó.",
-  "evidence.story2.now": "Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.",
-  "evidence.story3.where": "Este proyecto",
-  "evidence.story3.was": "Dos pull requests tardaron 22 y 30 rondas de revisión, porque cada arreglo "
-    + "le daba al revisor algo nuevo que señalar.",
+  "evidence.firstTry": "{percent}% a la primera",
+  "evidence.legend.passed": "pasaron la primera revisión",
+  "evidence.legend.fixed": "corregidos en 1 a 5 rondas",
+  "evidence.legend.stalled": "tomaron 6 rondas o más",
+  "evidence.detail": "De {merged} pull requests integrados, {skipped} no pasaron por revisión, "
+    + "casi todos solo de documentación, "
+    + "lo que deja los {checked} de arriba. Los {held} detenidos, en amarillo y rojo, tomaron "
+    + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
+    + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
+  "evidence.note": {
+    one: "Bindwright pone un revisor de IA en cada pull request. "
+      + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos.",
+    other: "Bindwright pone un revisor de IA en cada pull request. "
+      + "Estos son sus resultados hasta ahora en {count} proyectos cuyos dueños eligieron compartir conteos anónimos.",
+  },
+  "evidence.kind.game": "Juego",
+  "evidence.kind.business-app": "App de negocio",
+  "evidence.kind.developer-tool": "Herramienta para devs",
+  "evidence.kind.mobile-app": "App móvil",
+  "evidence.kind.website": "Sitio web",
+  "evidence.kind.other": "Proyecto",
+  "evidence.story1.was": "El tablero de tareas quedó público, con todas sus notas internas de ingeniería.",
+  "evidence.story1.now": "Revisa la visibilidad del tablero en cada lectura y avisa si es público.",
+  "evidence.story2.was": "Se subieron funciones de 273 líneas, porque la regla de tamaño nunca cargó.",
+  "evidence.story2.now": "Una revisión de tamaño reprueba cualquier pull request con una función demasiado larga.",
+  "evidence.story3.was": "Dos pull requests tardaron 22 y 30 rondas: "
+    + "cada arreglo le daba algo nuevo que marcar a la IA.",
   "evidence.story3.now": "Un hallazgo solo bloquea si el cambio lo causó; los huecos viejos se vuelven issues aparte.",
-  "evidence.story4.where": "Este proyecto",
-  "evidence.story4.was": "Un arreglo que entró a la rama principal nunca regresó a la rama de desarrollo.",
-  "evidence.story4.now": "Un hotfix solo cuenta como terminado cuando ya regresó a la rama de desarrollo.",
-  "evidence.story5.where": "Este proyecto",
-  "evidence.story5.was": "Un pull request se integró con la primera revisión mientras la revisión "
-    + "profunda que había pedido seguía pendiente.",
-  "evidence.story5.now": "Si se pide una revisión profunda, nada se integra hasta que también pase.",
-  "evidence.story6.where": "Este proyecto",
-  "evidence.story6.was": "Un cambio al flujo de revisión, hecho en una rama de feature, reprobó su propia revisión.",
-  "evidence.story6.now": "Los cambios de workflow van primero a la rama principal y luego bajan a desarrollo.",
+  "evidence.story4.was": "Un hotfix integrado en main nunca llegó a develop.",
+  "evidence.story4.now": "Un hotfix cuenta como terminado solo cuando ya volvió a develop.",
+  "evidence.story5.was": "Un pull request se integró con la revisión a fondo que había pedido todavía pendiente.",
+  "evidence.story5.now": "Si se pide una revisión a fondo, nada se integra hasta que pase.",
+  "evidence.story6.was": "Un cambio de workflow hecho en una rama de feature reprobó su propia revisión.",
+  "evidence.story6.now": "Los cambios de workflow van primero a main y luego vuelven a develop.",
 
   "nav.settings": "Ajustes del plugin",
   "asks.more": "Ver todos los ajustes",
@@ -241,6 +248,10 @@ export default {
     + "con unos cuantos puntos porcentuales más de tokens. "
     + "none usa la búsqueda integrada: igual de precisa y más barata, pero más lenta.",
   "settings.code-research.value": "tokensave",
+  "settings.work-language.title": "Idioma de trabajo",
+  "settings.work-language.text": "El idioma de las respuestas, los mensajes de commit y los comentarios del código, "
+    + "inglés o español. Los archivos del setup quedan en inglés: solo el asistente los lee.",
+  "settings.work-language.value": "Español",
   "settings.global-instructions.title": "Instrucciones globales",
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
   "settings.global-instructions.value": "Sí",
@@ -253,6 +264,11 @@ export default {
   "settings.code-style.title": "Perfil de estilo de código",
   "settings.code-style.text": "Aprende cómo escribes código de tus repos, con tu permiso.",
   "settings.code-style.value": "Sí",
+  "settings.reply-style.title": "Estilo de respuesta",
+  "settings.reply-style.text": "Respuestas cortas, claras y fáciles de entender (o al menos lo intenta ;V): "
+    + "primero la respuesta, y una pregunta de seguimiento cuando la necesita. "
+    + "/output-style default lo apaga.",
+  "settings.reply-style.value": "Sí",
 
   "settings.who-works.title": "Quién trabaja en él",
   "settings.who-works.text": "Un equipo recibe reglas de colaboración y un hook de pre-commit.",

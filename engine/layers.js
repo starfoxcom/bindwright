@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { CODE_RESEARCH_TOOLS, TRACKERS, mapRemovedTool } from "./model.js";
 import { MAX_DEPTH, depthOf } from "./setupcode.js";
 import { ANSWERS } from "./bind.js";
-import { decode } from "./update.js";
+import { decode, readState } from "./update.js";
 
 export const SCHEMA = 1;
 export const LOCAL = ".bindwright/local.json";
@@ -26,6 +26,7 @@ const EXTRA_FILES = {
   "code-style": "rules/code-style.md",
   "global-instructions": "CLAUDE.md",
   "push-guard": "hooks/push-guard.py",
+  "reply-style": "output-styles/straight-talk.md",
 };
 // An extra whose file is the person's own (CLAUDE.md) counts as installed only
 // when that file holds its marker on a line of its own, spaces and tabs aside.
@@ -38,6 +39,8 @@ export const MODS = [
 ];
 export const EXTRAS = [...Object.keys(EXTRA_FILES), ...MODS].sort();
 const LEVELS = ["required", "recommended"];
+// The work languages a personal layer may pick; home.py keeps the same list.
+export const LANGUAGES = ["english", "spanish"];
 
 const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -45,6 +48,7 @@ const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x)
 // The settings a layer may hold, each with its test for a valid value.
 export const SETTINGS = {
   codeResearch: (v) => own(CODE_RESEARCH_TOOLS, v),
+  language: (v) => typeof v === "string" && LANGUAGES.includes(v),
   tracker: (v) => typeof v === "string" && TRACKERS.includes(v),
 };
 
@@ -74,7 +78,7 @@ function readExtras(extras, name, isValid, ignored) {
   return out;
 }
 
-// A personal layer: { schema, codeResearch, tracker, extras: { <extra>: true | false } }.
+// A personal layer: { schema, codeResearch, language, tracker, extras: { <extra>: true | false } }.
 function readPersonal(raw, name, file) {
   const layer = { settings: {}, extras: {}, required: [], ignored: [] };
   if (raw === null) return layer;
@@ -201,21 +205,47 @@ export function installedExtras(config) {
   return Object.fromEntries(EXTRAS.map((extra) => [extra, present(extra)]));
 }
 
-// A settings file's JSON, or null when it is missing.
-export function readLayerFile(path, file) {
-  let bytes;
-  try {
-    bytes = readFileSync(path);
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-  const text = decode(bytes, file);
+// A settings file's text, or null when it is missing.
+export function readLayerText(path, file) {
+  const bytes = readState(path, file);
+  return bytes === null ? null : decode(bytes, file);
+}
+
+// The JSON in a settings file's text.
+export function parseLayerText(text, file) {
   if (depthOf(text) > MAX_DEPTH) throw new Error(`${file} nests too deeply`);
   try {
     return JSON.parse(text);
   } catch {
     throw new Error(`${file} is not valid JSON`);
+  }
+}
+
+// A settings file's JSON, or null when it is missing.
+export function readLayerFile(path, file) {
+  const text = readLayerText(path, file);
+  return text === null ? null : parseLayerText(text, file);
+}
+
+// Refuses a project.json that the two engines would rewrite differently: a
+// number other than a plain whole number of up to 15 digits (JSON.stringify
+// and json.dumps spell 1.0, 1e400, -0 and long integers differently), or a key
+// that is a canonical array index, which JavaScript moves to the front of an
+// object. Scans the raw text outside strings, so a string value is never read as a number.
+const JSON_TOKEN = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?[0-9][-+.eE0-9]*)/g;
+const PLAIN_INTEGER = /^(0|-?[1-9][0-9]{0,14})$/;
+const ARRAY_INDEX = /^(0|[1-9][0-9]*)$/;
+
+const unstable = (what) =>
+  new Error(`${ANSWERS} holds ${what} that the two engines would write differently; ` +
+    "edit it by hand first");
+
+export function refuseUnstableJson(text) {
+  for (const [, quoted, colon, number] of text.matchAll(JSON_TOKEN)) {
+    if (number !== undefined && !PLAIN_INTEGER.test(number)) throw unstable(`the number ${number}`);
+    if (colon === undefined) continue;
+    const key = JSON.parse(quoted);
+    if (ARRAY_INDEX.test(key)) throw unstable(`the key "${key}"`);
   }
 }
 

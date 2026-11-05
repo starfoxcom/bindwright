@@ -57,10 +57,19 @@ function makeDirs() {
   fs.mkdirSync(SESSIONS, { recursive: true })
 }
 
+// A wait gives up when the mutex stops changing hands for MUTEX_STUCK_MS (a holder past
+// MUTEX_STALE_MS is broken anyway), or past MUTEX_CAP_MS in all. A line of quick holders, each slowed
+// by a busy disk or a virus scanner, keeps the wait going up to the cap, which stays under the 20 s
+// the mod's hooks give one pcctl call, so a claim the cap ends still answers with its own error.
+const MUTEX_STUCK_MS = 10_000
+const MUTEX_CAP_MS = 15_000
+
 function lock() {
   makeDirs()
   const token = `${process.pid}-${now()}-${Math.random().toString(36).slice(2, 10)}`
-  const deadline = now() + 10_000
+  const giveUp = now() + MUTEX_CAP_MS
+  let lastOwner
+  let lastChange = now()
   for (;;) {
     try {
       fs.mkdirSync(MUTEX)
@@ -73,8 +82,16 @@ function lock() {
       // folder took the path and was stamped first. Not ours either way: try again.
       if (err.code !== 'EEXIST' && err.code !== 'ENOENT') throw err
     }
+    const owner = ownerOf(MUTEX)?.token
+    if (owner !== lastOwner) {
+      lastOwner = owner
+      lastChange = now()
+    }
     breakStale()
-    if (now() > deadline) throw new Error('mutex timeout')
+    if (now() - lastChange > MUTEX_STUCK_MS) {
+      throw new Error(`mutex timeout: one holder kept it for ${MUTEX_STUCK_MS / 1000} s`)
+    }
+    if (now() > giveUp) throw new Error(`mutex timeout: still waiting after ${MUTEX_CAP_MS / 1000} s`)
     sleep(10 + Math.floor(Math.random() * 20))
   }
 }

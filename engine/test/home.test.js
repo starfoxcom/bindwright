@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join, dirname } from "node:path";
@@ -46,8 +46,10 @@ test("a hook installs once, in the launcher form, beside the user's own entries"
     const mine = { matcher: "Bash", hooks: [{ type: "command", command: "my-check" }] };
     writeSettings(dir, { model: "x", hooks: { PreToolUse: [mine] } });
     const file = hookFile(dir, "push-guard.py");
+    // An interpreter PATH does not reach stays an absolute path.
+    const interpreterPath = join(dir, "py", "python3");
     for (let i = 0; i < 2; i++) {
-      const r = home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--matcher", "Bash|PowerShell");
+      const r = home(dir, "install-hook", file, "--python", interpreterPath, "--matcher", "Bash|PowerShell");
       assert.equal(r.status, 0, r.stderr);
     }
     const data = settings(dir);
@@ -55,11 +57,52 @@ test("a hook installs once, in the launcher form, beside the user's own entries"
     assert.equal(data.hooks.PreToolUse.length, 2);
     assert.deepEqual(data.hooks.PreToolUse[0], mine);
     const hook = data.hooks.PreToolUse[1].hooks[0];
-    assert.equal(hook.command, "/usr/bin/python3");
+    assert.equal(hook.command, interpreterPath);
     assert.deepEqual(hook.args.slice(0, 2), ["-I", "-c"]);
     assert.ok(hook.args[3].endsWith("/.claude/hooks/push-guard.py"));
     assert.equal(readFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "utf8"), "print('hi')\n");
     assert.ok(existsSync(settingsPath(dir) + ".bak"));
+  });
+});
+
+function withPath(dirs, fn) {
+  const saved = process.env.PATH;
+  process.env.PATH = [...dirs, saved].join(delimiter);
+  try {
+    return fn();
+  } finally {
+    process.env.PATH = saved;
+  }
+}
+
+function interpreter(dir) {
+  const file = join(dir, process.platform === "win32" ? "python3.exe" : "python3");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, "");
+  chmodSync(file, 0o755);
+  return file;
+}
+
+test("a hook whose interpreter PATH resolves to installs as the bare name", { skip }, () => {
+  withHome((dir) => {
+    const bin = join(dir, "bin");
+    const python3 = interpreter(bin);
+    const file = hookFile(dir, "push-guard.py");
+    withPath([bin], () => {
+      assert.equal(home(dir, "install-hook", file, "--python", python3, "--matcher", "Bash").status, 0);
+    });
+    assert.equal(settings(dir).hooks.PreToolUse[0].hooks[0].command, "python3");
+  });
+});
+
+test("a hook whose interpreter is not on PATH keeps its absolute path", { skip }, () => {
+  withHome((dir) => {
+    const python3 = interpreter(join(dir, "elsewhere"));
+    const file = hookFile(dir, "push-guard.py");
+    withPath([join(dir, "bin")], () => {
+      assert.equal(home(dir, "install-hook", file, "--python", python3, "--matcher", "Bash").status, 0);
+    });
+    assert.equal(settings(dir).hooks.PreToolUse[0].hooks[0].command, python3);
   });
 });
 
@@ -171,15 +214,78 @@ test("add-agent refuses a file that is missing or is not markdown, and writes no
   });
 });
 
+function styleFile(dir, body = "---\nname: Straight Talk\n---\nBe short.\n") {
+  const file = join(dir, "pack", "straight-talk.md");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, body);
+  return file;
+}
+
+test("an output style is copied once and turned on, and an installed copy keeps its edits", { skip }, () => {
+  withHome((dir) => {
+    writeSettings(dir, { outputStyle: "Explanatory", model: "opus" });
+    const file = styleFile(dir);
+    const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+    const first = home(dir, "add-style", file);
+    assert.equal(first.status, 0, first.stderr);
+    assert.deepEqual(first.out,
+      { installed: target, kept_existing: false, outputStyle: "Straight Talk", previous: "Explanatory" });
+    assert.equal(readFileSync(target, "utf8"), readFileSync(file, "utf8"));
+    assert.deepEqual(settings(dir), { outputStyle: "Straight Talk", model: "opus" });
+    writeFileSync(target, "---\nname: Mine\n---\nmine\n");
+    const again = home(dir, "add-style", file).out;
+    assert.deepEqual(again, { installed: target, kept_existing: true, outputStyle: "Mine", previous: "Straight Talk" });
+    assert.equal(readFileSync(target, "utf8"), "---\nname: Mine\n---\nmine\n");
+    writeFileSync(target, "no front matter\n");
+    assert.equal(home(dir, "add-style", file).out.outputStyle, "straight-talk");
+  });
+});
+
+test("a kept output style's name is read as YAML writes it", { skip }, () => {
+  const cases = [
+    ["double quotes", "---\nname: \"My Style\"\n---\nmine\n", "My Style"],
+    ["single quotes", "---\nname: 'My Style'\n---\nmine\n", "My Style"],
+    ["a quote inside the name", "---\nname: Alex's style\n---\nmine\n", "Alex's style"],
+    ["a byte-order mark", "﻿---\nname: Mine\n---\nmine\n", "Mine"],
+  ];
+  for (const [label, body, want] of cases) {
+    withHome((dir) => {
+      const file = styleFile(dir);
+      const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, body);
+      assert.equal(home(dir, "add-style", file).out.outputStyle, want, label);
+    });
+  }
+});
+
+test("add-style refuses a missing, non-markdown or unnamed file, and writes nothing", { skip }, () => {
+  withHome((dir) => {
+    const cases = [
+      ["missing", join(dir, "nope.md"), /Not an output style file/],
+      ["not markdown", hookFile(dir, "style.txt"), /Not an output style file/],
+      ["no name", styleFile(dir, "---\ndescription: x\n---\nBe short.\n"), /has no name/],
+    ];
+    for (const [label, file, error] of cases) {
+      const r = home(dir, "add-style", file);
+      assert.equal(r.status, 1, label);
+      assert.match(r.out.error, error, label);
+    }
+    assert.ok(!existsSync(join(dir, ".claude")));
+  });
+});
+
 test("a settings file that is not valid JSON is never written", { skip }, () => {
   withHome((dir) => {
     writeSettings(dir, "{ broken");
-    for (const args of [["allow", "Read"], ["attribution-off"], ["remove-hook", "x.py"]]) {
+    const calls = [["allow", "Read"], ["attribution-off"], ["remove-hook", "x.py"], ["add-style", styleFile(dir)]];
+    for (const args of calls) {
       const r = home(dir, ...args);
       assert.equal(r.status, 1, args.join(" "));
       assert.match(r.out.error, /not valid JSON/);
     }
     assert.equal(readFileSync(settingsPath(dir), "utf8"), "{ broken");
+    assert.ok(!existsSync(join(dir, ".claude", "output-styles")));
     writeSettings(dir, { hooks: { PreToolUse: {} } });
     assert.match(home(dir, "list-hooks").out.error, /PreToolUse is not a list/);
   });
@@ -191,6 +297,78 @@ test("a missing settings file starts empty, and bad usage is refused", { skip },
     assert.equal(home(dir, "install-hook", hookFile(dir, "x.py"), "--matcher", "Bash").status, 1);
     assert.equal(home(dir, "nonsense").status, 1);
   });
+});
+
+const SPANISH_RULE = "# Work language\n\nWrite commit messages and code comments in Spanish, "
+  + "unless the project's own rules name a language for them.\n";
+const workRule = (dir) => join(dir, ".claude", "rules", "work-language.md");
+const asText = (data) => (typeof data === "string" ? data : JSON.stringify(data));
+
+// One set-language run on its own home, from the settings and rule file the row starts with.
+function checkLanguageRow({ label, name, before, ruleBefore, previous, after, rule, error }) {
+  withHome((dir) => {
+    if (before !== undefined) writeSettings(dir, before);
+    if (ruleBefore !== undefined) {
+      mkdirSync(dirname(workRule(dir)), { recursive: true });
+      writeFileSync(workRule(dir), ruleBefore);
+    }
+    const r = home(dir, "set-language", name);
+    if (error) {
+      assert.equal(r.status, 1, label);
+      assert.match(r.out.error, error, label);
+      assert.equal(readFileSync(settingsPath(dir), "utf8"), asText(before), label);
+      assert.ok(!existsSync(workRule(dir)), label);
+      return;
+    }
+    assert.equal(r.status, 0, `${label}: ${r.stderr}`);
+    assert.deepEqual(r.out, { language: name, previous, rule: rule ? workRule(dir) : null }, label);
+    assert.deepEqual(settings(dir), after, label);
+    assert.equal(existsSync(workRule(dir)), rule, label);
+    if (rule) assert.equal(readFileSync(workRule(dir), "utf8"), SPANISH_RULE, label);
+  });
+}
+
+test("set-language sets the work language, its rule file and the settings key", { skip }, () => {
+  const rows = [
+    {
+      label: "spanish on an empty home",
+      name: "spanish", previous: null, after: { language: "spanish" }, rule: true,
+    },
+    {
+      label: "spanish keeps the other settings keys",
+      name: "spanish", before: { model: "opus" }, previous: null,
+      after: { model: "opus", language: "spanish" }, rule: true,
+    },
+    {
+      label: "spanish again changes no settings value",
+      name: "spanish", before: { model: "opus", language: "spanish" }, previous: "spanish",
+      after: { model: "opus", language: "spanish" }, rule: true,
+    },
+    {
+      label: "spanish rewrites an edited rule file",
+      name: "spanish", ruleBefore: "mine\n", previous: null, after: { language: "spanish" }, rule: true,
+    },
+    {
+      label: "english after spanish drops the key and the rule file",
+      name: "english", before: { model: "opus", language: "spanish" }, ruleBefore: SPANISH_RULE,
+      previous: "spanish", after: { model: "opus" }, rule: false,
+    },
+    {
+      label: "english keeps a language the person set by hand",
+      name: "english", before: { language: "japanese" }, previous: "japanese",
+      after: { language: "japanese" }, rule: false,
+    },
+    {
+      label: "an unknown language is refused and nothing is written",
+      name: "klingon", before: { model: "opus" },
+      error: /Unknown work language: klingon; use english or spanish/,
+    },
+    {
+      label: "a settings file that is not valid JSON is refused and left alone",
+      name: "spanish", before: "{ broken", error: /not valid JSON/,
+    },
+  ];
+  for (const row of rows) checkLanguageRow(row);
 });
 
 test("find-python names a system interpreter", { skip }, () => {

@@ -144,14 +144,31 @@ function carriedForward(messages: readonly SessionMessage[]): { kept: string[]; 
 const indexLine = (text: string) => `- ${text.replace(/\s+/g, ' ').slice(0, INDEX_LINE_CHARS)}...`
 
 // How many of `texts`' first messages repeat the end of `carried`, in order: the tail the engine kept.
-// Only a run at the very start counts. A message cannot be told from a new one by its text, so when the
-// budget moved older tail members to the index, they are carried again rather than guessed at: a
-// message may then show twice, never go missing.
-function keptTail(carried: readonly string[], texts: readonly string[]): number {
+// A carried message cut to fit the budget matches its whole original. Only a run at the very start
+// counts. A message cannot be told from a new one by its text, so when the budget moved older tail
+// members to the index, they are carried again rather than guessed at: a message may then show twice,
+// never go missing.
+function keptTail(carried: readonly string[], texts: readonly string[], budgetChars: number): number {
+  const same = (text: string, i: number) => text === texts[i] || text === fitted(texts[i] ?? '', budgetChars)
   for (let k = Math.min(carried.length, texts.length); k > 0; k--) {
-    if (carried.slice(-k).every((text, i) => text === texts[i])) return k
+    if (carried.slice(-k).every(same)) return k
   }
   return 0
+}
+
+// The note that stands in for the middle of a message too large for the budget.
+const CUT_NOTE_CHARS = 80
+
+// One message larger than the whole budget keeps its start and its end within it, so a huge paste
+// cannot fill the context after every compaction. The recall tool still finds the full text.
+function fitted(text: string, budgetChars: number): string {
+  if (text.length <= budgetChars) return text
+  const half = Math.max(0, Math.floor((budgetChars - CUT_NOTE_CHARS) / 2))
+  const cut = text.length - 2 * half
+  const note = `[... ${cut} characters cut here; recall finds the whole message]`
+  return `${text.slice(0, half)}
+${note}
+${text.slice(text.length - half)}`
 }
 
 // `typed` is the transcript's own list (see transcriptWords); without it the
@@ -167,14 +184,14 @@ export function personWords(
   // from the block. Only that leading run is folded, so a "yes" typed again later is kept. The
   // transcript's list starts after the compaction and has no such run.
   const texts = source.map(stripInjected).filter(Boolean)
-  const fresh = typed ? texts : texts.slice(keptTail(previous.kept, texts))
+  const fresh = typed ? texts : texts.slice(keptTail(previous.kept, texts, budgetChars))
   const all = [...previous.kept, ...fresh]
 
   const kept: string[] = []
   let used = 0
   let cut = all.length
   for (let i = all.length - 1; i >= 0; i--) {
-    const text = all[i] ?? ''
+    const text = kept.length === 0 ? fitted(all[i] ?? '', budgetChars) : all[i] ?? ''
     if (used + text.length > budgetChars && kept.length > 0) break
     kept.unshift(text)
     used += text.length

@@ -250,6 +250,25 @@ test('over budget, the oldest words become an index and later compactions carry 
   expect(second.indexOf(b ?? '')).toBeLessThan(second.indexOf(d ?? ''))
 })
 
+test('one message larger than the whole budget keeps its start and its end, within the budget', async () => {
+  const paste = `START${'x'.repeat(5_000)}END`
+  const words = personWords([said('a short ask'), said(paste)], 1_000)
+  const carried = words.split(PERSON_MARK)[1] ?? ''
+  expect(carried.length).toBeLessThan(1_200)
+  expect(carried).toContain('START')
+  expect(carried).toContain('END')
+  expect(carried).toContain('recall')
+  expect(words).not.toContain(paste)
+})
+
+test('a cut message the engine kept whole beside its summary is carried once at the next compaction', async () => {
+  const paste = `START${'x'.repeat(5_000)}END`
+  const first = personWords([said('a short ask'), said(paste)], 1_000)
+  const second = personWords([said(first), said('a short ask'), said(paste)], 1_000)
+  expect(second.split('a short ask').length - 1).toBe(1)
+  expect(second.split('START').length - 1).toBe(1)
+})
+
 test("a bracket tag the person types is their words; only the mods' tags are dropped", async () => {
   const words = personWords(
     [said('[x] done with the parser'), said('[wip] split the loader\n[tasks] Open: #3'), said('[tasks] Open: #4')],
