@@ -613,7 +613,7 @@ jobs:
         timeout-minutes: 30
         if: steps.pr-head.outputs.head_sha != '' && steps.claude_credits.outcome != 'success'
         continue-on-error: true
-        # Pinned to the v1 tag's resolved SHA (v1.0.213). The bare `@v1` floats.
+        # Pinned to the v1.0.266 release commit. The bare `@v1` floats.
         # Update via
         #   curl -s "https://api.github.com/repos/anthropics/claude-code-action/git/refs/tags/v1" | jq -r '.object.sha'
         # and bump the SHA here AND in `.github/workflows/claude-code-review.yml`
@@ -894,9 +894,8 @@ jobs:
           echo "version=$installed" >> "$GITHUB_OUTPUT"
 
       # Attempt 2b: the fallback model from the settings. Fires on a usage limit,
-      # or when the same-model retry also left no verdict. The CLI the pinned action
-      # bundles is refused for the default fallback (Opus 5.5), so this runs
-      # only on the copy the step above picked. The Evaluate step below owns the
+      # or when the same-model retry also left no verdict. It runs only on the
+      # CLI copy the step above picked. The Evaluate step below owns the
       # outcome, so every attempt continues on error.
       - name: Run Claude (fallback model)
         id: claude_fallback
