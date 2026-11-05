@@ -194,12 +194,6 @@ async function load($: EngineInterface): Promise<void> {
   await publish($)
 }
 
-// After a /clear the new session id has no state file yet: the watches go on from memory.
-async function carryOver($: EngineInterface): Promise<void> {
-  live.isCleared = false
-  await save($)
-}
-
 // Saved at once: an instance loaded by a reload mid-turn reads it from the file.
 async function setTurnRunning($: EngineInterface, isRunning: boolean): Promise<void> {
   if (live.isTurnRunning === isRunning) return
@@ -622,14 +616,25 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
 // a reload runs its start beside the model's next call, and a call that only saw the start under way
 // read the older load's name in the owner file, passed itself on as retired, and went unanswered.
 function startPolling($: EngineInterface): Promise<void> {
-  live.started ??= (async () => {
+  const start = (live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
-    if (live.isCleared) await carryOver($)
+    // After a /clear the new id has no state file yet: the watches go on from memory.
+    if (live.isCleared) await save($).finally(() => (live.isCleared = false))
     else await load($)
-    armPolling($)
-  })().catch(() => undefined)
-  return live.started
+    // A /clear while this start ran began another, which arms the timer instead.
+    if (live.started === start) armPolling($)
+  })().catch(() => undefined))
+  return start
+}
+
+// A /clear goes on under a new session id with no session.start, and the ended session's timer stops:
+// the next hook starts over, claiming the new id and carrying the watches in memory into its file.
+function forgetStart(): void {
+  live.tick?.cancel()
+  live.tick = undefined
+  live.started = undefined
+  live.isCleared = true
 }
 
 // A new interval from the settings file takes over at the next tick of the old one.
@@ -699,17 +704,9 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // A /clear goes on under a new session id with no session.start, and the ended session's timer stops.
-  // The next hook starts over: it claims the new id's owner file and arms a fresh timer, and the watches
-  // in memory carry on into the new id's state file.
   on('session.end', async ($, e, next) => {
     const result = await next(e)
-    if (e.reason === 'clear') {
-      live.tick?.cancel()
-      live.tick = undefined
-      live.started = undefined
-      live.isCleared = true
-    }
+    if (e.reason === 'clear') forgetStart()
     return result
   })
 
