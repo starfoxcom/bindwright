@@ -631,7 +631,8 @@ function startPolling($: EngineInterface): Promise<void> {
 // the ending id still holds, and retirement is read then too: a retired instance never claims the new id.
 const endSession: Hook<'session.end'> = async ($, e, next) => {
   if (e.reason === 'clear') await live.started
-  const isRetiredNow = e.reason === 'clear' && (await isRetired($))
+  // An instance that never started claimed nothing, so it has nothing to be retired from.
+  const isRetiredNow = e.reason === 'clear' && live.started !== undefined && (await isRetired($))
   const result = await next(e)
   if (e.reason !== 'clear') return result
   live.tick?.cancel()

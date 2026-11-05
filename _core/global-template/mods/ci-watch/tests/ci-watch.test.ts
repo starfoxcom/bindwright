@@ -128,6 +128,19 @@ test('a /clear that lands while a reload is still starting keeps the saved watch
   expect(saved.watches?.map((w: Watch) => w.number)).toEqual([7])
 })
 
+test('a reload with no hook yet when a /clear comes takes the new id at its first hook', async ($, on) => {
+  const { seen } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  seen.files.set(OWNER, 'an-older-instance')
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+  seen.session = 's2'
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
+  expect(saved.watches?.map((w: Watch) => w.number)).toEqual([7])
+})
+
 test('a push starts a watch and the session is woken once when it passes', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
