@@ -32,8 +32,10 @@ Run these as separate calls, in parallel:
 - `git status`
 - `git branch --show-current`
 - `git log --oneline -10`
+<!-- TOGGLE:code_host_local:off START -->
 - `git fetch --prune origin`, then `git rev-list --count HEAD..origin/{{DEV_BRANCH}}` (how far behind the current branch is)
 - `gh pr list --author @me --state open`
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:tracker:file START -->
 After the fetch, check each Now item in `ROADMAP.md` that names a branch: it is merged when `git branch --all --merged origin/{{DEV_BRANCH}}` lists the branch, and gone when `git branch --all` no longer does (the prune drops a deleted remote branch, which is how a squash or rebase merge shows). Report each such item with its fix ("R4's branch is gone: mark it done?"), so the roadmap never needs a full re-read to stay true.

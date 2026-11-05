@@ -75,6 +75,7 @@ Run `python3 .claude/scripts/research-adherence.py` from the repo root (`python`
 
 If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
 
+<!-- TOGGLE:code_host_local:off START -->
 ## Commit and PR
 
 Take the first row that matches:
@@ -97,6 +98,12 @@ Take the first row that matches:
 | Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge on 🟢. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
+<!-- TOGGLE:code_host_local:off END -->
+<!-- TOGGLE:code_host_local START -->
+## Save point
+
+Commit the session's work as one save point, or one per finished piece, with the message format in `git.md`. The project lives only on this computer: nothing is pushed, and there is no pull request.
+<!-- TOGGLE:code_host_local END -->
 
 <!-- TOGGLE:tracker:github START -->
 ## Hand-off in the tracker
