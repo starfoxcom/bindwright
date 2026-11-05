@@ -2,8 +2,8 @@
 // many to set up. `node runners-assess.mjs <repo root>` prints one line of JSON: the
 // hardware, whether the shared-PC and runners mods are installed, the repo's workflow
 // jobs, how long the jobs of recent runs waited for a runner and how many ran at once, and
-// the recommended count. Node 18+, no dependencies. When gh cannot list the runs, the job
-// figures are empty and the rest still answers.
+// the recommended count. Node 18.15+ (for statfsSync), no dependencies. When gh cannot
+// list the runs, the job figures are empty and the rest still answers.
 
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync, statfsSync } from "node:fs";
