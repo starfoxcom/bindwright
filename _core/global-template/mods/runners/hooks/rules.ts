@@ -10,6 +10,8 @@
 //              launch the runners and return (a script that starts them in the background, as
 //              below): the button waits for it, up to 30 s, and a command still running then is cut off
 //   stop       the commands (argv each, run in order) the Stop button runs; optional
+//   wsl        optional: the WSL distro the runners live in, and the path of its virtual disk file
+//              (ext4.vhdx). The band then shows the disk's size against the data inside it.
 //
 // Example, a GitHub Actions self-hosted runner on Windows plus Linux runners in WSL:
 //   {
@@ -21,6 +23,7 @@
 //       ['wsl', '--shutdown'],
 //       ['powershell', '-NoProfile', '-Command', 'Stop-Process -Name Runner.Listener -Force'],
 //     ],
+//     wsl: { distro: 'Ubuntu', disk: 'C:/Users/me/AppData/Local/wsl/{id}/ext4.vhdx' },
 //   },
 
 export type Runner = {
@@ -29,6 +32,7 @@ export type Runner = {
   repo?: string
   start?: string[]
   stop?: string[][]
+  wsl?: { distro: string; disk: string }
 }
 
 export const RUNNERS: Runner[] = []

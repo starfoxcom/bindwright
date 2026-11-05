@@ -2,12 +2,14 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
+import { COMPACT_GAP_BYTES, diskText, parseUsedBytes } from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
 import type { RunnerView } from '../types'
 
 // The shipped rules.ts is empty, so the drawn row is tested through the machine's list file, which
 // the tests fake.
 const NOW = Date.UTC(2026, 9, 2, 17, 0, 0)
+const GIB = 1024 ** 3
 const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16)
 const ON: RunnerView = { label: 'runners', isOn: true, online: 4, busy: 1, queued: 2, nextRun: NOW + 3_600_000 }
 
@@ -15,6 +17,13 @@ test('the row names state, online and busy runners, queued runs and the schedule
   expect(rowText(ON, NOW, hhmm)).toBe('runners on · 4 online · 1 busy · 2 queued · next 18:00 (scheduled)')
   expect(rowText({ label: 'runners', isOn: false, online: 0 }, NOW, hhmm)).toBe('runners off · 0 online')
   expect(rowText({ label: 'local', isOn: true }, NOW, hhmm)).toBe('local on')
+})
+
+test('the row ends with the disk size and the data inside it, once both are read', () => {
+  const withDisk: RunnerView = { ...ON, diskBytes: 23 * GIB, usedBytes: 12 * GIB }
+  expect(rowText(withDisk, NOW, hhmm)).toBe(
+    'runners on · 4 online · 1 busy · 2 queued · next 18:00 (scheduled) · disk 23.0 GB (12.0 used, compact)',
+  )
 })
 
 test('a runner started under two minutes ago shows as starting, not offline', () => {
@@ -31,6 +40,29 @@ test('the scheduled time shows in the local zone, or says UTC when the zone is u
   expect(clockTime(nightly, -330)).toBe('08:00')
   expect(clockTime(nightly, 0)).toBe('02:30')
   expect(clockTime(nightly, null)).toBe('02:30 UTC')
+})
+
+test('parseUsedBytes reads the number under the df header, and null for anything else', () => {
+  const cases: [name: string, text: string, bytes: number | null][] = [
+    ['normal output', 'Used\n12345678', 12345678],
+    ['trailing newline', 'Used\n12345678\n', 12345678],
+    ['garbage', 'Used\nnot a number\n', null],
+    ['header only', 'Used\n', null],
+    ['empty', '', null],
+  ]
+  for (const [name, text, bytes] of cases) expect([name, parseUsedBytes(text)]).toEqual([name, bytes])
+})
+
+test('diskText flags compacting from exactly 10 GB of gap, and waits until both fields are read', () => {
+  const diskRow = (diskBytes: number, usedBytes: number): RunnerView => ({ ...ON, diskBytes, usedBytes })
+  const cases: [name: string, row: RunnerView, text: string | undefined][] = [
+    ['the gap under 10 GB', diskRow(20 * GIB, 12 * GIB), 'disk 20.0 GB (12.0 used)'],
+    ['the gap exactly 10 GB', diskRow(12 * GIB + COMPACT_GAP_BYTES, 12 * GIB), 'disk 22.0 GB (12.0 used, compact)'],
+    ['the gap one byte under 10 GB', diskRow(12 * GIB + COMPACT_GAP_BYTES - 1, 12 * GIB), 'disk 22.0 GB (12.0 used)'],
+    ['no data reading', { ...ON, diskBytes: 20 * GIB }, undefined],
+    ['no disk reading', { ...ON, usedBytes: 12 * GIB }, undefined],
+  ]
+  for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
 })
 
 test('a reading keeps a Start or Stop pressed while it was being taken', () => {
