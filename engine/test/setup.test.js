@@ -4,7 +4,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -362,6 +364,39 @@ test("both writers write new files, stage what exists and skip what is staged", 
     assert.equal(read(`${STAGING}both.md`), "old");
     assert.equal(read(`${STAGING}CLAUDE.md`), "old");
   });
+});
+
+// Links each engine's copy of `linkRel` to an empty folder outside the repo, then
+// checks both writers refuse `files` with `message` and write nothing outside.
+// A directory junction needs no admin rights on Windows.
+function refusesLinked(files, linkRel, message) {
+  withTemp((outside) => withTemp((root) => {
+    for (const side of ["js", "py"]) {
+      mkdirSync(dirname(join(root, side, linkRel)), { recursive: true });
+      mkdirSync(join(outside, side));
+      symlinkSync(join(outside, side), join(root, side, linkRel), "junction");
+    }
+    assert.throws(() => applyFiles(files, join(root, "js")), { message });
+    assert.deepEqual(runPython(PY_APPLY, { files, root: join(root, "py") }), { error: message });
+    assert.deepEqual(readdirSync(join(outside, "js")), []);
+    assert.deepEqual(readdirSync(join(outside, "py")), []);
+  }));
+}
+
+test("both writers refuse a write through a linked .claude folder and write nothing", { skip: noPython }, () => {
+  refusesLinked(
+    [[".claude/rules/task-tracking.md", "x"], [".claude/settings.json", "y"]],
+    ".claude",
+    "Refusing to write through a symbolic link: .claude",
+  );
+});
+
+test("both writers name a link deeper down by its own path", { skip: noPython }, () => {
+  refusesLinked(
+    [[".claude/rules/task-tracking.md", "x"]],
+    ".claude/rules",
+    "Refusing to write through a symbolic link: .claude/rules",
+  );
 });
 
 const run = (cmd, args) => spawnSync(cmd, args, { cwd: repo, encoding: "utf8" });
