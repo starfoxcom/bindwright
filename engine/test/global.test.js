@@ -31,10 +31,12 @@ test("every setup offers the global additions, the memory index and the push gua
   const files = await globalFiles((a) => { a.project.name = "shop-app"; });
   assert.deepEqual(
     [...files.keys()],
-    ["CLAUDE.md.additions", "agents/builder.md", "hooks/push-guard.py", "memory/MEMORY.md"],
+    ["CLAUDE.md.additions", "agents/builder.md", "hooks/push-guard.py", "memory/MEMORY.md",
+      "output-styles/straight-talk.md"],
   );
   assert.equal(files.get("hooks/push-guard.py"), canonical("hooks/push-guard.py"));
   assert.equal(files.get("agents/builder.md"), canonical("agents/builder.md"));
+  assert.equal(files.get("output-styles/straight-talk.md"), canonical("output-styles/straight-talk.md"));
   assert.match(files.get("memory/MEMORY.md"), /^# shop-app /);
 });
 

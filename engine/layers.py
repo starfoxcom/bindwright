@@ -20,6 +20,7 @@ EXTRA_FILES = {
     "code-style": "rules/code-style.md",
     "global-instructions": "CLAUDE.md",
     "push-guard": "hooks/push-guard.py",
+    "reply-style": "output-styles/straight-talk.md",
 }
 # An extra whose file is the person's own (CLAUDE.md) counts as installed only
 # when that file holds its marker on a line of its own, spaces and tabs aside.
