@@ -46,6 +46,8 @@ const RETRY_GAP_IN_MILLISECONDS = 60 * 1000;
 // A batch's PRs with all their comments can take three minutes on a busy repo; the send
 // runs detached at session start, so nobody waits on it.
 const GH_TIMEOUT_IN_MILLISECONDS = 10 * 60 * 1000;
+// A batch's PRs with every review comment run to several MiB, past Node's 1 MiB default.
+const GH_OUTPUT_LIMIT_IN_BYTES = 256 * 1024 * 1024;
 const POST_TIMEOUT_IN_MILLISECONDS = 2000;
 const DEEP_LABEL = "needs-deep-review";
 const BOT_LOGINS = new Set(["claude", "claude[bot]"]);
@@ -248,6 +250,7 @@ async function runGhJson(args, cwd) {
   const { stdout } = await execFileAsync("gh", args, {
     cwd,
     timeout: GH_TIMEOUT_IN_MILLISECONDS,
+    maxBuffer: GH_OUTPUT_LIMIT_IN_BYTES,
     windowsHide: true,
     encoding: "utf8",
   });
