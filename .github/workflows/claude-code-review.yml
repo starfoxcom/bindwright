@@ -1268,9 +1268,13 @@ jobs:
         if: steps.credits-answer.outputs.ok != 'yes'
         # Pinned to the v1.0.266 release commit. The bare `@v1` floats.
         # Update via
-        #   curl -s "https://api.github.com/repos/anthropics/claude-code-action/git/refs/tags/v1" | jq -r '.object.sha'
-        # confirm the diff, then bump here AND in `.github/workflows/claude.yml`
-        # in the same hotfix: both tiers carry the same pin.
+        #   gh api repos/anthropics/claude-code-action/git/ref/tags/v1 --jq '.object.type + " " + .object.sha'
+        # and, when the type is `tag` (an annotated tag), peel it to its commit:
+        #   gh api repos/anthropics/claude-code-action/git/tags/<sha> --jq .object.sha
+        # Confirm the diff, then bump the SHA here. Both tiers carry the same pin,
+        # but this file always ships in a PR of its own, so the pin in
+        # `.github/workflows/claude.yml` moves in a separate PR, and the two
+        # templates follow in another.
         uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d  # v1 (v1.0.266)
         continue-on-error: true
         with:
