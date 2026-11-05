@@ -35,7 +35,7 @@ With Git and at least one of Node 18 or later or Python 3.8 or later in place, p
 
 **Plain mode.** When `git config user.name` prints nothing or `gh auth status` fails, ask first: "Have you used Git and GitHub before?", with "Not really" first. On "Not really", word every later question and message in everyday words, with no term such as branch, pull request, CI, remote or repo left unexplained; recommend the safe answers (just me, mine, private, AI credit kept out); and offer "Just this computer" first where step 3 asks where the code lives. With both commands working, skip the question.
 
-**Git identity.** Git signs every commit with a name and an email, and refuses to commit without them. When `git config user.name` or `git config user.email` prints nothing, ask for the name and the email to sign the project's history with (any address the user is happy to have in it), and on a yes set them with `git config --global user.name "<name>"` and `git config --global user.email "<email>"`. Without them, say that the first commit will fail until they are set, and how.
+**Git identity.** Git signs every commit with a name and an email, and refuses to commit without them. When `git config user.name` or `git config user.email` prints nothing, ask only for the one that is missing (for the email, any address the user is happy to have in the history), say it is set for every project on this computer, and on a yes set it with `git config --global user.name "<name>"` or `git config --global user.email "<email>"`. Never change one that is already set. Without them, say that the first commit will fail until they are set, and how.
 
 ## 1. Check the argument and the repo
 
