@@ -719,7 +719,23 @@ jobs:
           # The verdict floor for Evaluate: no review attempt of this run
           # starts before this moment, and a run this one replaced was
           # cancelled when this run was created, well before this job began.
-          echo "floor=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          # It is GitHub's time, from the Date header of an API reply, since
+          # the comments it is compared with carry GitHub's times: a runner
+          # clock ahead of GitHub's would hide this run's verdict, one behind
+          # would let an older verdict count. The runner's clock is the
+          # fallback only when no reply comes, and "Post the review" catches
+          # one that runs ahead.
+          stamp=$(gh api -i rate_limit 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p') || true
+          stamp="${stamp%%$'\n'*}"
+          floor=""
+          if [ -n "$stamp" ]; then
+            floor=$(date -u -d "$stamp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || floor=""
+          fi
+          if [ -z "$floor" ]; then
+            echo "::warning::Could not read GitHub's time; the verdict floor is the runner's clock"
+            floor=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          fi
+          echo "floor=$floor" >> "$GITHUB_OUTPUT"
 
           # A deep review asked for on an earlier push is owed again on this
           # head: the deep check waits on every head while the label is on.
@@ -1268,9 +1284,12 @@ jobs:
         if: steps.credits-answer.outputs.ok != 'yes'
         # Pinned to the v1.0.266 release commit. The bare `@v1` floats.
         # Update via
-        #   curl -s "https://api.github.com/repos/anthropics/claude-code-action/git/refs/tags/v1" | jq -r '.object.sha'
-        # confirm the diff, then bump here AND in `.github/workflows/claude.yml`
-        # in the same hotfix: both tiers carry the same pin.
+        #   gh api repos/anthropics/claude-code-action/git/ref/tags/v1 --jq '.object.type + " " + .object.sha'
+        # and, when the type is `tag` (an annotated tag), peel it to its commit:
+        #   gh api repos/anthropics/claude-code-action/git/tags/<sha> --jq .object.sha
+        # Confirm the diff, then bump the SHA here. Both tiers carry the same pin,
+        # but this file always ships in a PR of its own, so the pin in
+        # `.github/workflows/claude.yml` moves in a separate PR.
         uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d  # v1 (v1.0.266)
         continue-on-error: true
         with:
@@ -1661,9 +1680,10 @@ jobs:
           posted_at=$(retry post_once "$review" review)
           echo "posted_at=$posted_at" >> "$GITHUB_OUTPUT"
           echo "::notice::Posted the $STAGE review"
-          # The floor, the start of Evaluate's window, is the runner's time:
-          # a runner clock ahead of GitHub's would put the review before it,
-          # and Evaluate would read no verdict. Fail loudly instead.
+          # The floor, the start of Evaluate's window, is GitHub's time, or the
+          # runner's when GitHub's could not be read: a runner clock ahead of
+          # GitHub's would then put the review before it, and Evaluate would
+          # read no verdict. Fail loudly instead.
           if [[ "$posted_at" < "$FLOOR" ]]; then
             echo "::error::GitHub dates the review ($posted_at) before this run's floor ($FLOOR): the runner's clock is ahead of GitHub's, so Evaluate cannot see it. Fix the runner's clock, then re-run all jobs."
             exit 1
@@ -1761,8 +1781,18 @@ jobs:
           # only from comments posted between the floor and this moment, so a
           # re-run of Evaluate alone cannot pick up a later comment. Never
           # before GitHub's time for the posted review, so a runner clock
-          # behind GitHub's still keeps it in the window.
-          DONE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # behind GitHub's still keeps it in the window. GitHub's time, as
+          # for the floor, with the runner's clock as the fallback.
+          stamp=$(gh api -i rate_limit 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p') || true
+          stamp="${stamp%%$'\n'*}"
+          DONE=""
+          if [ -n "$stamp" ]; then
+            DONE=$(date -u -d "$stamp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || DONE=""
+          fi
+          if [ -z "$DONE" ]; then
+            echo "::warning::Could not read GitHub's time; the end of the verdict window is the runner's clock"
+            DONE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          fi
           if [[ "$POSTED_AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] && [[ "$POSTED_AT" > "$DONE" ]]; then
             DONE="$POSTED_AT"
           fi
@@ -1951,12 +1981,40 @@ jobs:
         run: rm -rf .review-gate
 
       - uses: actions/checkout@v6
+        id: gate-files
         with:
           ref: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
           path: .review-gate
           persist-credentials: false
           sparse-checkout: .github/scripts/
           sparse-checkout-cone-mode: false
+
+      # Every later step runs inside `.review-gate` and calls the gate script
+      # from it, so without that checkout none of them can read or write the
+      # gate. This one says so plainly instead: it marks the Review gate as
+      # failed with its own title, from the workspace, and fails the job.
+      - name: Fail the gate when its files are missing
+        # Not on a cancelled run: a newer push cancels this one, and its gate
+        # write must not land over the newer run's.
+        if: ${{ !cancelled() && steps.gate-files.outcome != 'success' }}
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "::error::The review gate's own files could not be checked out, so the routine verdict cannot be read or written: failing closed. Re-run the workflow."
+          id=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=Review%20gate&per_page=100" \
+            --jq '[.check_runs[] | select(.name == "Review gate") | .id] | max // empty' 2> /dev/null || true)
+          # A failed lookup can print an error body instead of an id.
+          case "$id" in *[!0-9]*) id= ;; esac
+          if [ -z "$id" ] || ! gh api -X PATCH "repos/$REPO/check-runs/$id" \
+            -f status=completed -f conclusion=failure \
+            -f "output[title]=🔴 The review gate's files could not be checked out" \
+            -f "output[summary]=Evaluate review outcome could not check out the gate script, so it could not read the routine verdict. Re-run the workflow." > /dev/null; then
+            echo "::warning::Could not mark the Review gate check as failed; it stays unresolved, which also blocks the merge"
+          fi
+          exit 1
 
       # Gathers the facts; never fails on a verdict, so the next two steps
       # both see them. If this step dies, both read the routine tier as an
@@ -2039,7 +2097,7 @@ jobs:
       # With `checks: two`, a failed write to the not-yet-required gate must
       # not turn this job, the older required check, red.
       - name: Update the Review gate
-        if: always()
+        if: always() && steps.gate-files.outcome == 'success'
         continue-on-error: ${{ needs.init-gate.outputs.checks == 'two' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2062,7 +2120,7 @@ jobs:
             --order "${{ github.run_id }}.${{ github.run_attempt }}.1" "${ARGS[@]}"
 
       - name: Resolve routine verdict
-        if: always()
+        if: always() && steps.gate-files.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEWER: ${{ needs.claude-review.outputs.reviewer }}
