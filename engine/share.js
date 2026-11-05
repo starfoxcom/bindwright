@@ -67,7 +67,7 @@ function layerFile(name, root, config) {
   throw new Error(`Unknown layer "${name}": use personal or local`);
 }
 
-// Merges `choices` ({ codeResearch, tracker, extras: { <extra>: true |
+// Merges `choices` ({ codeResearch, language, tracker, extras: { <extra>: true |
 // false } }, null removing a key) into one person's layer. Only what the
 // layers use is kept: anything they ignore is dropped and listed, so the file
 // holds nothing but known names, true and false, and both twins write it

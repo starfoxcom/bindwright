@@ -34,6 +34,8 @@ MODS = [
 ]
 EXTRAS = sorted(list(EXTRA_FILES) + MODS, key=_code_units)
 LEVELS = ["required", "recommended"]
+# The work languages a personal layer may pick; home.py keeps the same list.
+LANGUAGES = ["english", "spanish"]
 
 
 def _text(v):
@@ -42,6 +44,7 @@ def _text(v):
 
 SETTINGS = {
     "codeResearch": lambda v: _text(v) and v in CODE_RESEARCH_TOOLS,
+    "language": lambda v: _text(v) and v in LANGUAGES,
     "tracker": lambda v: _text(v) and v in TRACKERS,
 }
 
