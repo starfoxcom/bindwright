@@ -23,7 +23,15 @@ Pick the engine: the first of these that runs.
 1. `node --version` works: the engine is `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`.
 2. `python3 --version` or `python --version` reports 3.8 or later: the engine is that interpreter with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
 
-With neither, tell the user setup needs Node or Python 3.8+, and stop.
+With neither, tell the user setup needs Node or Python 3.8+ to write its files, and stop. A `python` that only opens the Microsoft Store does not count.
+
+Then check `git --version`. Without Git, tell the user in plain words that setup needs it: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it. Then stop.
+
+For either stop, give the install route for the user's system, offer to run it on a yes, and say to open a new terminal and run `/bindwright:setup` again once it is in:
+
+- **Windows:** `winget install --id Git.Git -e`, `winget install --id OpenJS.NodeJS.LTS -e`, or `winget install --id Python.Python.3.12 -e`.
+- **macOS:** `xcode-select --install` for Git, `brew install node` or `brew install python` (or the installers from nodejs.org and python.org).
+- **Linux:** the system's package manager, for example `sudo apt install git nodejs` or `sudo apt install git python3`.
 
 ## 1. Check the argument and the repo
 
