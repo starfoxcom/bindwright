@@ -352,7 +352,22 @@ jobs:
           CHECKS: ${{ steps.gate.outputs.checks }}
           HEAD_SHA: ${{ steps.pr-head.outputs.head_sha }}
         run: |
-          echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          # GitHub's time, from the Date header of an API reply, since the
+          # comments it is compared with carry GitHub's times: a runner clock
+          # ahead of GitHub's would hide this run's verdict and let a later
+          # attempt post a second one, one behind would let an older verdict
+          # count. The runner's clock only when no reply comes.
+          stamp=$(gh api -i rate_limit 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p') || true
+          stamp="${stamp%%$'\n'*}"
+          at=""
+          if [ -n "$stamp" ]; then
+            at=$(date -u -d "$stamp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || at=""
+          fi
+          if [ -z "$at" ]; then
+            echo "::warning::Could not read GitHub's time; the verdict floor is the runner's clock"
+            at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          fi
+          echo "at=$at" >> "$GITHUB_OUTPUT"
           if [ "$CHECKS" = "two" ]; then
             CHECK_ID=$(gh api \
               "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?check_name=Claude%20On-Demand&per_page=100" \
@@ -527,7 +542,18 @@ jobs:
 
           out="$RUNNER_TEMP/claude-credits-output.json"
           status=0
-          since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # GitHub's time, as for the floor, with the runner's clock as the
+          # fallback.
+          stamp=$(GH_TOKEN="$bot_token" gh api -i rate_limit 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p') || true
+          stamp="${stamp%%$'\n'*}"
+          since=""
+          if [ -n "$stamp" ]; then
+            since=$(date -u -d "$stamp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || since=""
+          fi
+          if [ -z "$since" ]; then
+            echo "::warning::Could not read GitHub's time; the credits run's verdict window starts at the runner's clock"
+            since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          fi
           # A time limit, so a release that hangs ends as a broken run (see the
           # routine workflow): a verdict it posted still stands, otherwise the
           # subscription steps take over.
@@ -615,9 +641,12 @@ jobs:
         continue-on-error: true
         # Pinned to the v1.0.266 release commit. The bare `@v1` floats.
         # Update via
-        #   curl -s "https://api.github.com/repos/anthropics/claude-code-action/git/refs/tags/v1" | jq -r '.object.sha'
-        # and bump the SHA here AND in `.github/workflows/claude-code-review.yml`
-        # in one hotfix: both tiers carry the same pin.
+        #   gh api repos/anthropics/claude-code-action/git/ref/tags/v1 --jq '.object.type + " " + .object.sha'
+        # and, when the type is `tag` (an annotated tag), peel it to its commit:
+        #   gh api repos/anthropics/claude-code-action/git/tags/<sha> --jq .object.sha
+        # Confirm the diff, then bump the SHA here. Both tiers carry the same pin,
+        # but `.github/workflows/claude-code-review.yml` always ships in a PR of
+        # its own, so its pin moves in a separate PR.
         uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d  # v1 (v1.0.266)
         # The token goes in both as a `with:` input and as an env var, the
         # upstream workaround for credential loss in tag mode.
