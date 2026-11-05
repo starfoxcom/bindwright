@@ -39,6 +39,10 @@ const live = {
   rechecked: new Map<string, number>(),
   /** The load's one start: claim, sweep, load, poll. Every hook awaits it, so none acts mid-claim. */
   started: undefined as Promise<void> | undefined,
+  /** The poll timer, cancelled when a /clear ends the session it was armed in. */
+  tick: undefined as { cancel: () => void } | undefined,
+  /** A /clear ended the session: the next start carries the watches in memory into the new id's file. */
+  isCleared: false,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -188,6 +192,12 @@ async function load($: EngineInterface): Promise<void> {
   live.watches = saved?.watches ?? []
   live.isTurnRunning = Boolean(saved?.isTurnRunning)
   await publish($)
+}
+
+// After a /clear the new session id has no state file yet: the watches go on from memory.
+async function carryOver($: EngineInterface): Promise<void> {
+  live.isCleared = false
+  await save($)
 }
 
 // Saved at once: an instance loaded by a reload mid-turn reads it from the file.
@@ -615,7 +625,8 @@ function startPolling($: EngineInterface): Promise<void> {
   live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
-    await load($)
+    if (live.isCleared) await carryOver($)
+    else await load($)
     armPolling($)
   })().catch(() => undefined)
   return live.started
@@ -632,6 +643,7 @@ function armPolling($: EngineInterface): void {
     }
     await poll($).catch(() => undefined)
   })
+  live.tick = tick
 }
 
 // The settings file at the session's start, before any tool call: the settings module follows it from
@@ -684,6 +696,20 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'ci-watch', description: 'The PRs this session watches', argumentHint: HINT })
     // A new start runs no turn yet, whatever a session that ended mid-turn saved.
     await setTurnRunning($, false)
+    return result
+  })
+
+  // A /clear goes on under a new session id with no session.start, and the ended session's timer stops.
+  // The next hook starts over: it claims the new id's owner file and arms a fresh timer, and the watches
+  // in memory carry on into the new id's state file.
+  on('session.end', async ($, e, next) => {
+    const result = await next(e)
+    if (e.reason === 'clear') {
+      live.tick?.cancel()
+      live.tick = undefined
+      live.started = undefined
+      live.isCleared = true
+    }
     return result
   })
 

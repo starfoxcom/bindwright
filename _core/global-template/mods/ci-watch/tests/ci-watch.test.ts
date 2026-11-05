@@ -61,6 +61,34 @@ test('no checks reported is never a pass; the time limit wakes with what is stuc
   expect(wakeText(stuck)).toContain('review')
 })
 
+test('after a /clear the watch keeps polling under the new session id and wakes it', async ($, on) => {
+  // The engine stops the ended session's timers at a /clear; the process goes on under a new id.
+  let clears = 0
+  on('clock.every', { ms: POLL_MS }, async ($, e, next) => {
+    const clearsBefore = clears
+    const result = await next(e)
+    if (clears !== clearsBefore) throw new Error('the session ended')
+    return result
+  })
+  const { seen, clock } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  await clock.advance(POLL_MS)
+
+  clears++
+  seen.session = 's2'
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
+
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
+  expect(saved.watches?.[0]?.checks).toEqual({ build: 'pass' })
+  expect(saved.watches?.[0]?.outcome).toBe('passed')
+})
+
 test('a push starts a watch and the session is woken once when it passes', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
