@@ -240,17 +240,9 @@ h1 {
 }
 .mods-dot[aria-current="true"] { background: var(--accent); }
 
-/* Steps count on across both groups: 1 on your computer, 2-3 in each project. */
-.install-groups {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 28px;
-  counter-reset: step;
-}
-.install-groups .command-steps { counter-reset: none; margin-top: 18px; }
-.install-group { padding-top: 24px; border-top: 1px solid var(--rule); }
-.install-group h3 {
-  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
-}
-.asks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
+/* One column: two numbered steps, then what setup asks. */
+.install .command-steps, .asks { max-width: 720px; }
+.asks { display: grid; gap: 20px; margin-top: 32px; }
 .ask-list { padding-top: 22px; border-top: 1px solid var(--rule); }
 .ask-list h3 { font-size: 17px; font-weight: 650; }
 .ask-list p { margin-top: 8px; font-size: 15px; color: var(--text-2); }
@@ -310,11 +302,21 @@ h1 {
   flex: 1; min-width: 0; font: 400 14px/1.5 "Fragment Mono", ui-monospace, monospace;
   overflow-wrap: anywhere; user-select: all;
 }
-/* The desktop app's way in, under the one terminal step: no number, quieter text. */
-.install-alt { margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--rule); }
-.install-alt p { font-size: 15px; color: var(--text-2); }
-.install-alt b { display: block; color: var(--text); }
-.install-alt span { display: block; margin-top: 6px; }
+/* The desktop app's way in, folded under the computer step; its chevron turns when open. */
+.install-alt { margin-top: 12px; }
+.install-alt summary {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none;
+  font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2);
+}
+.install-alt summary::-webkit-details-marker { display: none; }
+.install-alt summary:hover { color: var(--text); }
+.install-alt summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.install-alt summary::after {
+  content: ""; width: 6px; height: 6px; border-right: 1.5px solid; border-bottom: 1.5px solid;
+  transform: rotate(45deg); transition: transform 150ms ease;
+}
+.install-alt[open] summary::after { transform: rotate(-135deg); }
+.install-alt p { margin-top: 4px; font-size: 15px; color: var(--text-2); }
 .install-alt .install-line code { font-size: 13px; }
 
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
@@ -395,7 +397,6 @@ footer {
   .stories td { padding: 0; border: 0; }
   .stories tr { padding: 14px 0; border-top: 1px solid var(--rule); }
   .stories .now { margin-top: 6px; }
-  .install-groups, .asks { grid-template-columns: minmax(0, 1fr); }
   .out-body { display: block; height: auto; }
   .tree { overflow: visible; padding: 6px 0; border-right: 0; }
   .tree .dir, .tree .file { min-height: 40px; padding-top: 10px; padding-bottom: 10px; }
