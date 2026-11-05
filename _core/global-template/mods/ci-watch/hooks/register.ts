@@ -1,5 +1,5 @@
 import { atom, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Hook, Register } from 'claude-code'
 
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from './command'
@@ -39,11 +39,10 @@ const live = {
   rechecked: new Map<string, number>(),
   /** The load's one start: claim, sweep, load, poll. Every hook awaits it, so none acts mid-claim. */
   started: undefined as Promise<void> | undefined,
-  /** The poll timer, cancelled when a /clear ends the session it was armed in. */
+  /** The poll timer; a /clear stops it, then sets isCleared (carry the watches into the new id's file)
+   * or, in an instance a reload retired, isRetiredForGood (the new id has no owner file to say so). */
   tick: undefined as { cancel: () => void } | undefined,
-  /** A /clear ended the session: the next start carries the watches in memory into the new id's file. */
   isCleared: false,
-  /** Retired when a /clear moved the id on: the new id has no owner file to say so, so memory does. */
   isRetiredForGood: false,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
@@ -614,17 +613,14 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
   return due.map(w => wakeText(w, now, redStreak(rounds[`${w.repo}#${w.number}`])))
 }
 
-// A hot reload starts the module over without a new session.start: the next
-// turn or tool call reloads the saved watches and restarts polling. Each hook waits for the same start:
-// a reload runs its start beside the model's next call, and a call that only saw the start under way
-// read the older load's name in the owner file, passed itself on as retired, and went unanswered.
+// A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.
+// Each hook awaits the same start, so none reads the owner file mid-claim and passes itself on as retired.
+// A start a /clear overtook stops; after a /clear the watches go on from memory into the new id's file.
 function startPolling($: EngineInterface): Promise<void> {
   const start = (live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
-    // A /clear while this start ran began another, which loads and arms in its place.
     if (live.started !== start) return
-    // After a /clear the new id has no state file yet: the watches go on from memory.
     if (live.isCleared) await save($).finally(() => (live.isCleared = false))
     else await load($)
     if (live.started === start) armPolling($)
@@ -632,13 +628,17 @@ function startPolling($: EngineInterface): Promise<void> {
   return start
 }
 
-// A /clear goes on under a new session id with no session.start, and the ended session's timer stops:
-// the next hook starts over, claiming the new id and carrying the watches in memory into its file.
-function forgetStart(): void {
+// A /clear moves the session to a new id and stops its timer. Retirement is read under the ending id,
+// so an instance a reload retired stays retired and never claims the new one.
+const endSession: Hook<'session.end'> = async ($, e, next) => {
+  const isRetiredNow = e.reason === 'clear' && (await isRetired($))
+  const result = await next(e)
+  if (e.reason !== 'clear') return result
   live.tick?.cancel()
   live.tick = undefined
-  live.started = undefined
-  live.isCleared = true
+  if (isRetiredNow) live.isRetiredForGood = true
+  else [live.started, live.isCleared] = [undefined, true]
+  return result
 }
 
 // A new interval from the settings file takes over at the next tick of the old one.
@@ -708,15 +708,7 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // Read under the ending id: an instance a reload retired stays retired, so it never claims the new id.
-  on('session.end', async ($, e, next) => {
-    const isRetiredNow = e.reason === 'clear' && (await isRetired($))
-    const result = await next(e)
-    if (e.reason !== 'clear') return result
-    if (isRetiredNow) live.isRetiredForGood = true
-    else forgetStart()
-    return result
-  })
+  on('session.end', endSession)
 
   // startPolling first: a freshly loaded instance claims the owner file before any check.
   on('turn.start', async ($, e, next) => {
