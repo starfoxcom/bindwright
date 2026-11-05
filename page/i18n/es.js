@@ -65,10 +65,11 @@ export default {
   "install.switch.cli": "Claude Code CLI",
   "install.switch.desktop": "App de escritorio",
   "install.plugin.title": "En tu computadora, una vez",
-  "install.plugin.text": "Agrega los comandos /bindwright a todos tus proyectos. No necesita Git.",
+  "install.plugin.text": "Agrega los comandos /bindwright a todos tus proyectos, listos en esta "
+    + "sesión. No necesita Git.",
   "install.setup.title": "En cada proyecto",
-  "install.setup.text": "Abre Claude Code en la carpeta del proyecto y ejecuta la configuración. Hace unas preguntas y no "
-    + "cambia nada sin tu sí.",
+  "install.setup.text": "Abre Claude Code en la carpeta del proyecto y ejecuta la configuración. "
+    + "Hace unas preguntas y no cambia nada sin tu sí.",
   "install.desktop.open.title": "Abre tu proyecto",
   "install.desktop.open.text": "En la pestaña Code, inicia una sesión nueva en la carpeta de tu proyecto.",
   "install.desktop.install.title": "Instala Bindwright",
@@ -79,15 +80,15 @@ export default {
     + "extraKnownMarketplaces y \"bindwright@bindwright\": true en enabledPlugins de "
     + "~/.claude/settings.json, sin tocar lo demás.",
   "install.desktop.setup.title": "Ejecuta la configuración",
-  "install.desktop.setup.text": "Inicia otra sesión nueva en la misma carpeta, para que cargue el plugin, y ejecuta esto. En tus "
-    + "siguientes proyectos, solo haces este paso.",
+  "install.desktop.setup.text": "Inicia otra sesión nueva en la misma carpeta, para que cargue el "
+    + "plugin, y ejecuta esto. En tus siguientes proyectos, solo haces este paso.",
   "asks.computer.title": "Se pregunta una vez en tu computadora",
-  "asks.computer.text": "Búsqueda de código, reglas de trabajo compartidas, una protección contra force push, un modelo "
-    + "ayudante barato para el código, tu estilo de código y los mods. Cámbialos después con "
-    + "/bindwright:setup global.",
+  "asks.computer.text": "Búsqueda de código, reglas de trabajo compartidas, una protección contra "
+    + "force push, un modelo ayudante barato para el código, tu estilo de código y los mods. "
+    + "Cámbialos después con /bindwright:setup global.",
   "asks.project.title": "Se pregunta en cada proyecto",
-  "asks.project.text": "Quién trabaja en él, si es privado o público, qué revisiones corren, cómo trabaja el asistente y "
-    + "dónde vive el plan.",
+  "asks.project.text": "Quién trabaja en él, si es privado o público, qué revisiones corren, cómo "
+    + "trabaja el asistente y dónde vive el plan.",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
 
   "copy.command": "Copiar comando",
