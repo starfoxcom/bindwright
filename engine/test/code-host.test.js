@@ -31,13 +31,17 @@ const PASSING_MENTIONS = [
   "commit messages and PR descriptions", "there is no pull request",
 ];
 const HOST_STEP = /\bPRs?\b|pull request|\bgh (pr|run|issue|api|repo)\b|origin\/|git (push|fetch)|\bCI\b/;
-const LEFT_OUT = /PULL_REQUEST_TEMPLATE|ISSUE_TEMPLATE|CODEOWNERS|review-tiers\.md|tracker\.md|review-gate\.yml|review-guide\.md/;
+const LEFT_OUT = new RegExp([
+  "PULL_REQUEST_TEMPLATE", "ISSUE_TEMPLATE", "CODEOWNERS",
+  "review-tiers\\.md", "tracker\\.md", "review-gate\\.yml", "review-guide\\.md",
+].join("|"));
 
 function offending(files, pattern) {
   const found = [];
   for (const [path, text] of files) {
     text.split("\n").forEach((line, i) => {
-      if (pattern.test(line) && !PASSING_MENTIONS.some((ok) => line.includes(ok))) found.push(`${path}:${i + 1}: ${line}`);
+      const passing = PASSING_MENTIONS.some((ok) => line.includes(ok));
+      if (pattern.test(line) && !passing) found.push(`${path}:${i + 1}: ${line}`);
     });
   }
   return found;
