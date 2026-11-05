@@ -947,6 +947,45 @@ jobs:
             actions: read
           allowed_bots: "claude"
 
+      # The action rewrites the tracking comment of an attempt that failed with
+      # its error heading but keeps the body, verdict line included. The gate
+      # never reads such a comment; this strikes its verdict lines and says so,
+      # so a person reading the PR does not take it for a verdict either.
+      - name: Mark errored attempts as no verdict
+        if: always() && steps.floor.outputs.at != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr-head.outputs.pr_number }}
+          FLOOR: ${{ steps.floor.outputs.at }}
+        run: |
+          set -o pipefail
+          timeout -k 10 120 gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "claude[bot]" and .created_at >= env.FLOOR)
+              | select(.body | startswith("**Claude encountered an error")) | .id' > "$RUNNER_TEMP/errored.txt"
+          body="$RUNNER_TEMP/errored-body.md"
+          while read -r id; do
+            [ -n "$id" ] || continue
+            gh api "repos/$REPO/issues/comments/$id" --jq .body > "$body" || continue
+            # Exits 1 when the comment is already marked, so it is left alone.
+            if python3 -I - "$body" <<'PY'
+          import sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read().rstrip("\n")
+          NOTE = "**No verdict:** this attempt did not finish, so the Review gate does not count it."
+          if NOTE in text:
+              sys.exit(1)
+          lines = [f"~~{line.strip()}~~" if line.strip()[:1] in ("🟢", "🔴") else line
+                   for line in text.split("\n")]
+          open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n\n" + NOTE + "\n")
+          PY
+            then
+              timeout -k 10 60 gh api -X PATCH "repos/$REPO/issues/comments/$id" -F "body=@$body" > /dev/null \
+                || echo "::warning::Could not mark errored comment $id as no verdict"
+            fi
+          done < "$RUNNER_TEMP/errored.txt"
+
       # Whatever happened: a self-hosted runner keeps the workspace for later
       # jobs, and the local repo goes with this job's temp folder.
       - name: Point origin back at GitHub
