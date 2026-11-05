@@ -7,7 +7,7 @@ import re
 
 from model import CODE_RESEARCH_TOOLS, TRACKERS, map_removed_tool
 from setupcode import MAX_DEPTH, _depth, _not_json
-from update import ANSWERS, _code_units
+from update import ANSWERS, _code_units, read_state
 
 SCHEMA = 1
 LOCAL = ".bindwright/local.json"
@@ -212,10 +212,8 @@ def installed_extras(config):
 
 def _read_layer_text(path, file):
     # A settings file's text, or None when it is missing.
-    try:
-        with open(path, "rb") as f:
-            raw = f.read()
-    except FileNotFoundError:
+    raw = read_state(path, file)
+    if raw is None:
         return None
     try:
         return raw.decode("utf-8")

@@ -5,7 +5,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync } from "node:fs";
+import {
+  mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, symlinkSync, cpSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -254,6 +256,28 @@ test("a write through a symbolic link is refused before anything is written", ne
   }
 });
 
+test("a write through a linked .claude folder is refused, naming the folder", needsLinks, async () => {
+  const outside = mkdtempSync(join(tmpdir(), "update-outside-"));
+  try {
+    let target;
+    const { out, status, repo } = await update((r) => {
+      // The file reads as the old render through the link, so it would take the new text.
+      target = older(r.read(RULE));
+      r.pristine.files[RULE] = target;
+      r.write(RULE, target);
+      cpSync(r.at(".claude"), outside, { recursive: true });
+      rmSync(r.at(".claude"), { recursive: true, force: true });
+      symlinkSync(outside, r.at(".claude"), "junction");
+    });
+    assert.equal(status, 1);
+    assert.equal(out.error, "Refusing to write through a symbolic link: .claude");
+    assert.equal(readFileSync(join(outside, "rules", "task-tracking.md"), "utf8"), target);
+    assert.equal(JSON.parse(repo.read(PRISTINE)).version, "0.0.1");
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test("a linked pristine.json is refused, not written through", needsLinks, async () => {
   const outside = mkdtempSync(join(tmpdir(), "update-outside-"));
   try {
@@ -318,6 +342,15 @@ test("a repo that was never set up is refused", needsPython, async () => {
   const { out, status } = await update((r) => rmSync(r.at(".bindwright/project.json")));
   assert.equal(status, 1);
   assert.match(out.error, /was not set up with \/bindwright:setup/);
+});
+
+test("a state file that is a folder is refused with the same words in both engines", needsPython, async () => {
+  const { out, status } = await update((r) => {
+    rmSync(r.at(".bindwright/project.json"));
+    mkdirSync(r.at(".bindwright/project.json"));
+  });
+  assert.equal(status, 1);
+  assert.equal(out.error, ".bindwright/project.json cannot be read (it is a folder)");
 });
 
 test("a saved path outside the repo is refused before anything is written", needsPython, async () => {

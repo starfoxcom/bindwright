@@ -17,6 +17,14 @@ function fail(msg) {
   throw new Error(`Invalid setup code: ${msg}`);
 }
 
+// Numbers are doubles, as JSON.parse and layers.py read them. A number past the
+// double range is infinite in both, so it is refused rather than carried on.
+const TOO_LARGE = "it holds a number too large to read";
+const finiteNumbers = (_key, value) => {
+  if (typeof value === "number" && !Number.isFinite(value)) fail(TOO_LARGE);
+  return value;
+};
+
 // The deepest bracket nesting outside JSON strings.
 export function depthOf(text) {
   let depth = 0;
@@ -131,8 +139,9 @@ export function decodeSetupCode(code) {
   if (depthOf(text) > MAX_DEPTH) fail("it nests too deeply");
   let answers;
   try {
-    answers = JSON.parse(text);
-  } catch {
+    answers = JSON.parse(text, finiteNumbers);
+  } catch (err) {
+    if (!(err instanceof SyntaxError)) throw err;
     fail("it does not hold UTF-8 JSON");
   }
   if (answers === null || typeof answers !== "object" || Array.isArray(answers)) fail("the answers must be an object");
