@@ -248,6 +248,10 @@ export default {
     + "con unos cuantos puntos porcentuales más de tokens. "
     + "none usa la búsqueda integrada: igual de precisa y más barata, pero más lenta.",
   "settings.code-research.value": "tokensave",
+  "settings.work-language.title": "Idioma de trabajo",
+  "settings.work-language.text": "El idioma de las respuestas, los mensajes de commit y los comentarios del código, "
+    + "inglés o español. Los archivos del setup quedan en inglés: solo el asistente los lee.",
+  "settings.work-language.value": "Español",
   "settings.global-instructions.title": "Instrucciones globales",
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
   "settings.global-instructions.value": "Sí",
