@@ -19,7 +19,7 @@ The plugin sends nothing about you or your code. The version check asks for one 
 
 ## Needs
 
-Git, and Node or Python 3.8 or later to run the setup engine. The optional extras (global instructions, a push guard for every project, the builder agent, a code-style profile, a plain reply style and mods for `~/.claude`) are each asked once with a yes or no, and the work language (English or Spanish) once too, all saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without a yes.
+Git, and Node 18 or Python 3.8 or later to run the setup engine; setup says what is missing and how to install it on your system. The optional extras (global instructions, a push guard for every project, the builder agent, a code-style profile, a plain reply style and mods for `~/.claude`) are each asked once with a yes or no, and the work language (English or Spanish) once too, all saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without a yes.
 
 ## License
 
