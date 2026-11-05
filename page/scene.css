@@ -18,17 +18,17 @@
 }
 
 .stage .caption {
-  max-width: 1012px; margin-inline: auto;
+  max-width: 727px; margin-inline: auto;
   font-size: clamp(18px, 3.1cqi, 34px); font-weight: 750; font-stretch: 110%; letter-spacing: -0.015em;
 }
 .stage .caption b { color: var(--accent); font-weight: 750; margin-right: .3em; }
 .stage .caption.in { animation: scene-cap 520ms cubic-bezier(.2,.8,.2,1) both; }
 @keyframes scene-cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
 
-/* Terminal window: up to the common terminal width, with the cards in a row under it. */
+/* Terminal window: the common width (the hero split column), with the cards in a row under it. */
 /* Every terminal is one height, the tallest any scene needs; almost square on phones (below). */
 .stage .term {
-  width: 100%; max-width: 1012px; margin: 2cqi auto 0; height: 620px;
+  width: 100%; max-width: 727px; margin: 2cqi auto 0; height: 620px;
   display: flex; flex-direction: column;
   background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
   box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
@@ -162,10 +162,10 @@
 .stage .card.on .note div:nth-child(3) { transition-delay: 500ms; }
 .stage .note b { color: var(--accent); font-weight: 400; }
 
-/* A split stage: the terminal above a side panel whose rows fly in from the left as they
-   arrive. */
+/* A split stage: the terminal at the common width beside a side panel whose rows fly in
+   from the left as they arrive. Below 900px the panel goes under the terminal. */
 .stage.split {
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;
+  display: grid; grid-template-columns: minmax(0, 727px) minmax(0, 1fr); gap: 2cqi;
   width: 100%; margin: 20px 0 0;
 }
 .stage.split .term { margin: 0 auto; }
@@ -197,6 +197,9 @@
 .stage.split .row-label { font-weight: 650; }
 @keyframes lands-fly { from { opacity: 0; transform: translateX(-24px); filter: blur(4px); } }
 
+@media (max-width: 900px) {
+  .stage.split { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}
 /* The mods pane keeps about seven transcript lines above its band. */
 .stage.mods-stage .pane { flex: 1 0 auto; min-height: 10.5em; }
 @container (max-width: 640px) {

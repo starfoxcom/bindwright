@@ -63,7 +63,10 @@ header nav:first-of-type { margin-left: auto; }
 
 main { max-width: 1360px; margin: 0 auto; padding: 36px 40px 64px; }
 
+/* Wide screens: the pitch beside the scene, whose column holds the common terminal width. */
 @media (min-width: 1340px) {
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 727px); gap: 48px; align-items: center; }
+  .hero .stage { margin-top: 0; }
   .hero h1 { font-size: clamp(40px, 3.8vw, 64px); }
 }
 
@@ -194,6 +197,7 @@ h1 {
 .mods-more a { color: var(--accent); text-underline-offset: 4px; }
 
 /* The mods: the selected mod's card on top, the terminal between its arrows, the dots under it. */
+.stage.mods-stage { width: min(100%, 835px); }
 .mods-stage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px 14px; }
 .mods-carousel, .mods-dots { grid-column: 2; min-width: 0; }
 .mods-carousel .mod-card { padding: 0; border-top: 0; }
