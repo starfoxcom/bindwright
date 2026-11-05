@@ -166,11 +166,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       </div>
       <div class="stat">
         <span class="stat-num stat-accent" data-total="firstTry" data-count="0">0</span>
-        <p class="stat-label" data-t="evidence.firstTry.label">passed the first review, deep review included, with nothing to fix</p>
+        <p class="stat-label" data-t="evidence.firstTry.label">passed on the first try, deep review included, with nothing to fix</p>
       </div>
       <div class="stat">
         <span class="stat-num stat-warn" data-total="fixed" data-count="0">0</span>
-        <p class="stat-label" data-t="evidence.fixed.label">were held back 1 to 5 rounds until a problem the reviewer caught was fixed</p>
+        <p class="stat-label" data-t="evidence.fixed.label">were held back 1 to 5 rounds until the problem was fixed</p>
       </div>
       <div class="stat">
         <span class="stat-num stat-red" data-total="stalled" data-count="0">0</span>
@@ -183,44 +183,17 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <ul class="legend" id="legend"></ul>
     </div>
     <p class="chart-title" data-t="evidence.stories">Mistakes that became rules</p>
-    <ul class="stories">
-      <li class="story">
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story1.was">The project's task board was made public, with every internal engineering note on it.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story1.now">It checks the board's visibility on every read and warns you when it's public.</b>
-      </li>
-      <li class="story">
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story2.was">A change shipped functions 273 lines long, because the rule that limits function size never loaded.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story2.now">A size check runs on every pull request and fails any function that grows too long.</b>
-      </li>
-      <li class="story">
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story3.was">Two pull requests took 22 and 30 review rounds, since every fix gave the reviewer something new to flag.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story3.now">A finding blocks only when the change caused it; older gaps become their own issues.</b>
-      </li>
-      <li class="story">
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story4.was">A fix merged into the main branch never made it back to the development branch.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story4.now">A hotfix only counts as done once it's merged back into the development branch.</b>
-      </li>
-      <li class="story">
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story5.was">A pull request merged on its first review while the deeper review it had asked for was still pending.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story5.now">Once a deeper review is asked for, nothing merges until it passes too.</b>
-      </li>
-      <li class="story">
-        <span class="story-label" data-t="evidence.wrong">What went wrong</span>
-        <span class="was" data-t="evidence.story6.was">A change to the review workflow, made on a feature branch, failed its own review check.</span>
-        <span class="story-label" data-t="evidence.now">What Bindwright does now</span>
-        <b data-t="evidence.story6.now">Workflow changes go to the main branch first, then flow back to development.</b>
-      </li>
-    </ul>
+    <table class="stories">
+      <thead><tr><th data-t="evidence.wrong">What went wrong</th><th data-t="evidence.now">What Bindwright does now</th></tr></thead>
+      <tbody>
+        <tr><td class="was" data-t="evidence.story1.was">The task board went public, internal engineering notes and all.</td><td class="now" data-t="evidence.story1.now">Checks the board's visibility on every read and warns when it's public.</td></tr>
+        <tr><td class="was" data-t="evidence.story2.was">Functions 273 lines long shipped, because the size rule never loaded.</td><td class="now" data-t="evidence.story2.now">A size check fails any pull request with an overlong function.</td></tr>
+        <tr><td class="was" data-t="evidence.story3.was">Two pull requests took 22 and 30 rounds: every fix gave the reviewer something new to flag.</td><td class="now" data-t="evidence.story3.now">A finding blocks only when the change caused it; older gaps become their own issues.</td></tr>
+        <tr><td class="was" data-t="evidence.story4.was">A hotfix merged into main never reached develop.</td><td class="now" data-t="evidence.story4.now">A hotfix counts as done only once it's back in develop.</td></tr>
+        <tr><td class="was" data-t="evidence.story5.was">A pull request merged with the deeper review it had asked for still pending.</td><td class="now" data-t="evidence.story5.now">Once a deeper review is asked for, nothing merges until it passes.</td></tr>
+        <tr><td class="was" data-t="evidence.story6.was">A workflow change made on a feature branch failed its own check.</td><td class="now" data-t="evidence.story6.now">Workflow changes land on main first, then flow back to develop.</td></tr>
+      </tbody>
+    </table>
   </section>
 
   <section class="mods" id="mods" aria-labelledby="mods-title">
