@@ -5,7 +5,8 @@ name: Release plugin
 # tools/pack_plugin.py, which reads the files git stores, so it has the bytes
 # the release PR computed; the job refuses to upload a zip whose SHA-256
 # differs from the one .claude-plugin/marketplace.json pins at that tag,
-# because the marketplace would refuse it on every machine anyway.
+# because the marketplace would refuse it on every machine anyway. The same
+# files then go to the `plugin` branch, which the plugin directory follows.
 
 on:
   release:
@@ -76,3 +77,40 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
           ZIP: ${{ steps.build.outputs.zip }}
         run: gh release upload "$TAG" "$ZIP" --clobber --repo "$GITHUB_REPOSITORY"
+
+      # The plugin directory listing follows the `plugin` branch, whose root
+      # is the packed plugin of the newest release: the same files as the zip,
+      # one commit per release on top of the last.
+      - name: Publish the packed plugin to the plugin branch
+        if: steps.market.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          ZIP: ${{ steps.build.outputs.zip }}
+        run: |
+          set -euo pipefail
+          zip_path="$GITHUB_WORKSPACE/$ZIP"
+          dir="$RUNNER_TEMP/plugin-branch"
+          url="https://github.com/$GITHUB_REPOSITORY"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git init -q "$dir"
+          cd "$dir"
+          if git -c http.extraheader="$auth" ls-remote --exit-code -q "$url" refs/heads/plugin >/dev/null; then
+            git -c http.extraheader="$auth" fetch -q --depth 1 "$url" plugin
+            git checkout -q -b plugin FETCH_HEAD
+            git rm -rq --ignore-unmatch .
+          else
+            git checkout -q --orphan plugin
+          fi
+          unzip -q "$zip_path" -d .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "::notice::The plugin branch already holds $TAG's plugin"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "chore(release): plugin $TAG"
+          git -c http.extraheader="$auth" push -q "$url" plugin:plugin
+          echo "::notice::The plugin branch now holds $TAG's plugin"
