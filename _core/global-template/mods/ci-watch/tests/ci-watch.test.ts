@@ -132,11 +132,12 @@ test('a reload with no hook yet when a /clear comes takes the new id at its firs
   const { seen } = world(on)
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   seen.isReadable = true
+  // The older instance owns the session and has saved its watch.
   seen.files.set(OWNER, 'an-older-instance')
+  seen.files.set(STATE, JSON.stringify({ watches: [{ ...BASE, id: 'w1' }], isTurnRunning: false }))
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
   seen.session = 's2'
   await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
-  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
   expect(saved.watches?.map((w: Watch) => w.number)).toEqual([7])
 })

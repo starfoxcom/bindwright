@@ -39,10 +39,9 @@ const live = {
   rechecked: new Map<string, number>(),
   /** The load's one start: claim, sweep, load, poll. Every hook awaits it, so none acts mid-claim. */
   started: undefined as Promise<void> | undefined,
-  /** The poll timer; a /clear stops it, then sets isCleared (carry the watches into the new id's file)
-   * or, in an instance a reload retired, isRetiredForGood (the new id has no owner file to say so). */
+  /** Poll timer; a /clear stops it, notes the ended id for load, and retires a retired instance for good. */
   tick: undefined as { cancel: () => void } | undefined,
-  isCleared: false,
+  endedId: undefined as string | undefined,
   isRetiredForGood: false,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
@@ -177,9 +176,9 @@ async function save($: EngineInterface): Promise<void> {
 
 type Saved = { watches?: Watch[]; isTurnRunning?: boolean }
 
-async function readState($: EngineInterface): Promise<Saved | undefined> {
+async function readState($: EngineInterface, path?: string): Promise<Saved | undefined> {
   try {
-    return JSON.parse(String(await $.fs.read(await statePath($)))) as Saved
+    return JSON.parse(String(await $.fs.read(path ?? (await statePath($))))) as Saved
   } catch {
     return undefined
   }
@@ -189,8 +188,10 @@ async function readSaved($: EngineInterface): Promise<Watch[] | undefined> {
   return (await readState($))?.watches
 }
 
+// After a /clear the new id has no state file until its first save: the ended id's file stands in.
 async function load($: EngineInterface): Promise<void> {
-  const saved = await readState($)
+  const ended = live.endedId && (await statePath($)).replace(/[^/]+\.json$/, `${live.endedId}.json`)
+  const saved = (await readState($)) ?? (ended ? await readState($, ended) : undefined)
   live.watches = saved?.watches ?? []
   live.isTurnRunning = Boolean(saved?.isTurnRunning)
   await publish($)
@@ -615,13 +616,11 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
 
 // A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.
 // Each hook awaits the same start, so none reads the owner file mid-claim and passes itself on as retired.
-// After a /clear the watches go on from memory into the new id's file.
 function startPolling($: EngineInterface): Promise<void> {
   const start = (live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
-    if (live.isCleared) await save($).finally(() => (live.isCleared = false))
-    else await load($)
+    await load($)
     if (live.started === start) armPolling($)
   })().catch(() => undefined))
   return start
@@ -630,14 +629,15 @@ function startPolling($: EngineInterface): Promise<void> {
 // A /clear moves the session to a new id and stops its timer; a start under way finishes first, under the
 // ending id, where retirement is read too (only for an instance that started, the only kind that claimed).
 const endSession: Hook<'session.end'> = async ($, e, next) => {
-  if (e.reason === 'clear') await live.started
-  const isRetiredNow = e.reason === 'clear' && live.started !== undefined && (await isRetired($))
+  if (e.reason !== 'clear') return next(e)
+  await live.started
+  const isRetiredNow = live.started !== undefined && (await isRetired($))
+  live.endedId = e.sessionId
   const result = await next(e)
-  if (e.reason !== 'clear') return result
   live.tick?.cancel()
   live.tick = undefined
   if (isRetiredNow) live.isRetiredForGood = true
-  else [live.started, live.isCleared] = [undefined, true]
+  else live.started = undefined
   return result
 }
 
