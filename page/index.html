@@ -284,8 +284,14 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="install" id="install" aria-labelledby="install-title">
     <h2 id="install-title" data-t="install.title">Install</h2>
-    <p class="command-how" data-t="install.how">Once on your computer, then once in each project.</p>
-    <ol class="command-steps">
+    <div class="install-switch" role="tablist" aria-label="Where you use Claude Code"
+      data-t-attr="aria-label:install.switch.label" data-active="cli">
+      <button type="button" role="tab" id="install-tab-cli" aria-selected="true"
+        aria-controls="install-cli" data-t="install.switch.cli">Claude Code CLI</button>
+      <button type="button" role="tab" id="install-tab-desktop" aria-selected="false" tabindex="-1"
+        aria-controls="install-desktop" data-t="install.switch.desktop">Desktop app</button>
+    </div>
+    <ol class="command-steps" id="install-cli" role="tabpanel" aria-labelledby="install-tab-cli">
       <li>
         <p class="command-sub"><b data-t="install.plugin.title">On your computer, once</b>
           <span data-t="install.plugin.text">Adds the /bindwright commands to every project. Needs no Git.</span></p>
@@ -304,10 +310,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
               <path d="M20 6 9 17l-5-5"/>
             </svg>
           </button></div>
-        <details class="install-alt">
-          <summary data-t="install.desktop.title">Using the Claude desktop app?</summary>
-          <p data-t="install.desktop.text">/plugin does not run there. Paste this into a Code tab chat instead, then start a new session.</p>
-          <div class="install-line"><code data-t="install.desktop.prompt">Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.</code>
+      </li>
+      <li>
+        <p class="command-sub"><b data-t="install.setup.title">In each project</b>
+          <span data-t="install.setup.text">Open Claude Code in the project's folder and run setup. It asks a few questions and changes nothing without your yes.</span></p>
+        <div class="install-line"><code>/bindwright:setup</code>
           <button class="icon-copy" type="button" aria-label="Copy command" data-copy
             data-t-attr="aria-label:command.copy">
             <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
@@ -322,11 +329,35 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
               <path d="M20 6 9 17l-5-5"/>
             </svg>
           </button></div>
-        </details>
+      </li>
+    </ol>
+    <ol class="command-steps" id="install-desktop" role="tabpanel" aria-labelledby="install-tab-desktop" hidden>
+      <li>
+        <p class="command-sub"><b data-t="install.desktop.open.title">Open your project</b>
+          <span data-t="install.desktop.open.text">In the Code tab, start a new session in your project's folder.</span></p>
       </li>
       <li>
-        <p class="command-sub"><b data-t="install.setup.title">In each project</b>
-          <span data-t="install.setup.text">Open Claude Code in the project's folder and run setup. It asks a few questions and changes nothing without your yes.</span></p>
+        <p class="command-sub"><b data-t="install.desktop.install.title">Install Bindwright</b>
+          <span data-t="install.desktop.install.text">Paste this and send it, then wait until Claude says it is done. Needs no Git.</span></p>
+        <div class="install-line"><code data-t="install.desktop.prompt">Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.</code>
+          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
+      </li>
+      <li>
+        <p class="command-sub"><b data-t="install.desktop.setup.title">Run the setup</b>
+          <span data-t="install.desktop.setup.text">Start another new session in the same folder, so the plugin loads, and run this. In your next projects, this is the only step.</span></p>
         <div class="install-line"><code>/bindwright:setup</code>
           <button class="icon-copy" type="button" aria-label="Copy command" data-copy
             data-t-attr="aria-label:command.copy">

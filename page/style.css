@@ -302,21 +302,23 @@ h1 {
   flex: 1; min-width: 0; font: 400 14px/1.5 "Fragment Mono", ui-monospace, monospace;
   overflow-wrap: anywhere; user-select: all;
 }
-/* The desktop app's way in, folded under the computer step; its chevron turns when open. */
-.install-alt { margin-top: 12px; }
-.install-alt summary {
-  display: inline-flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; list-style: none;
-  font: 600 14px/1 "Hubot Sans", sans-serif; color: var(--text-2);
+/* Claude Code CLI or the desktop app: two equal halves, the thumb slides under the chosen one. */
+.install-switch {
+  position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; margin-top: 18px; padding: 4px;
+  border-radius: 999px; background: var(--panel);
 }
-.install-alt summary::-webkit-details-marker { display: none; }
-.install-alt summary:hover { color: var(--text); }
-.install-alt summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.install-alt summary::after {
-  content: ""; width: 6px; height: 6px; border-right: 1.5px solid; border-bottom: 1.5px solid;
-  transform: rotate(45deg); transition: transform 150ms ease;
+.install-switch::before {
+  content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
+  border-radius: 999px; background: var(--accent); transition: transform 200ms ease;
 }
-.install-alt[open] summary::after { transform: rotate(-135deg); }
-.install-alt p { margin-top: 4px; font-size: 15px; color: var(--text-2); }
+.install-switch[data-active="desktop"]::before { transform: translateX(100%); }
+.install-switch button {
+  position: relative; min-height: 40px; padding: 0 18px; font: 600 14px/1 "Hubot Sans", sans-serif;
+  color: var(--text-2); background: none; border: 0; border-radius: 999px; cursor: pointer;
+}
+.install-switch button[aria-selected="true"] { color: var(--on-accent); }
+.install-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .install-switch::before { transition: none; } }
 .install-alt .install-line code { font-size: 13px; }
 
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }

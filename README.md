@@ -20,11 +20,16 @@ In Claude Code, once per computer:
 /plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
 ```
 
-In the Claude desktop app, where `/plugin` does not run, paste this into a Code tab chat instead, then start a new session once Claude says it is done (if `/bindwright:setup` is not there yet, give it a minute and start one more):
+In the Claude desktop app, where `/plugin` does not run:
 
-```
-Install the Bindwright plugin for me: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If the claude command is not found, add the same marketplace (named bindwright, a url source at that address) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in my user settings file, ~/.claude/settings.json, keeping everything else in it.
-```
+1. Open the Code tab and start a new session in your project's folder.
+2. Paste this and send it. Wait until Claude says it is done.
+
+   ```
+   Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.
+   ```
+
+3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
 
 Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. Then, in each project, open Claude Code in the project's folder and run:
 
