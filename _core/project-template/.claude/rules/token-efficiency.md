@@ -64,3 +64,7 @@ An approaching auto-compaction is no reason to stop, wrap up or close the sessio
 Without a hand-off that carries the work across a compaction (the `compact-handoff` mod is one), keep the task list current as the context fills, so the compaction's summary starts from where the work stands.
 
 When responses slow down or degrade, the same file keeps getting re-read, or system reminders pile up, stop and reframe from the task list rather than push on.
+
+## Scratch and build output
+
+Scratch files, test copies and captures go in the session's scratchpad, or in the project's git-ignored build folder, never in a fixed folder such as `C:/tmp` or `/tmp`. The CLI deletes a session's scratchpad together with its transcript once both are older than `cleanupPeriodDays`, so anything worth keeping moves into the project before the session ends.
