@@ -615,12 +615,11 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
 
 // A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.
 // Each hook awaits the same start, so none reads the owner file mid-claim and passes itself on as retired.
-// A start a /clear overtook stops; after a /clear the watches go on from memory into the new id's file.
+// After a /clear the watches go on from memory into the new id's file.
 function startPolling($: EngineInterface): Promise<void> {
   const start = (live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
-    if (live.started !== start) return
     if (live.isCleared) await save($).finally(() => (live.isCleared = false))
     else await load($)
     if (live.started === start) armPolling($)
@@ -628,9 +627,10 @@ function startPolling($: EngineInterface): Promise<void> {
   return start
 }
 
-// A /clear moves the session to a new id and stops its timer. Retirement is read under the ending id,
-// so an instance a reload retired stays retired and never claims the new one.
+// A /clear moves the session to a new id and stops its timer. A start under way finishes first, while
+// the ending id still holds, and retirement is read then too: a retired instance never claims the new id.
 const endSession: Hook<'session.end'> = async ($, e, next) => {
+  if (e.reason === 'clear') await live.started
   const isRetiredNow = e.reason === 'clear' && (await isRetired($))
   const result = await next(e)
   if (e.reason !== 'clear') return result

@@ -108,6 +108,26 @@ test('after a reload and a /clear, the instance the reload retired leaves the ne
   expect(seen.files.has('C:/Users/me/.claude/mods-data/ci-watch/s2.json')).toBe(false)
 })
 
+test('a /clear that lands while a reload is still starting keeps the saved watches', async ($, on) => {
+  const { seen } = world(on)
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  seen.isReadable = true
+  seen.files.set(STATE, JSON.stringify({ watches: [{ ...BASE, id: 'w1' }], isTurnRunning: false }))
+  // The reload's start is inside its first folder make when the /clear comes; the id moves after it.
+  let ended: Promise<unknown> | undefined
+  seen.duringMkdir = () => {
+    seen.duringMkdir = undefined
+    ended = $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never).then(() => {
+      seen.session = 's2'
+    })
+  }
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  await ended
+  await $.turn.start({ turnId: 't2', prompt: 'work' } as never)
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s2.json') ?? '{}')
+  expect(saved.watches?.map((w: Watch) => w.number)).toEqual([7])
+})
+
 test('a push starts a watch and the session is woken once when it passes', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
