@@ -7,10 +7,9 @@ Bindwright sets a repo up for agentic coding: the rules, session skills, guard h
 In a Claude Code session, once per computer:
 
 ```
-/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
+/plugin marketplace add starfoxcom/bindwright
+/plugin install bindwright@bindwright
 ```
-
-In the Claude desktop app, where `/plugin` does not run, the page's Install section has a line to paste into the chat instead.
 
 ## Use
 
