@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **Where session scratch goes** (#531). `token-efficiency.md` asks every session to keep scratch files, test copies and captures in its scratchpad or the project's git-ignored build folder, never a fixed folder such as `C:/tmp`, since the CLI deletes a session's scratchpad with its transcript after `cleanupPeriodDays`.
+
 ### Changed
 
 - **Install with one command, with no Git, and from the desktop app** (#631). The install command adds the marketplace from its address on the project's site, so installing needs no Git, and the page's Install section switches its steps between the CLI and the desktop app, where `/plugin` does not run: there a line pasted into the chat installs the plugin.
@@ -13,6 +17,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The routine review posts from a job apart from its reviewers** (#456, #460). The review attempts run with a read-only job token, and a second job checks the review again with the gate's reader and posts it, so no reviewer process shares a job whose token can write checks. A run whose PR has a newer head posts nothing, a deep-review request with automatic escalation off is posted only when one is owed, every GitHub call in the repair step has a time limit, and the CLI installs into a home folder of the job's own.
+
+- **The deep review posts once, after every attempt** (#458). The deep attempts post nothing: each returns its review as structured output, the workflow checks it with the gate's reader, and one step posts the first readable review as the review app. A crashed, hung or late attempt can no longer leave a second verdict that buries the first, and a run whose PR has a newer head posts nothing.
 
 ## [v2.1.0] — 2026-11-05
 
