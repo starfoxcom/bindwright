@@ -69,6 +69,12 @@ PRISTINE = ".bindwright/pristine.json"
 # change them.
 VERBATIM = (".claude/hooks/", ".github/scripts/")
 
+# Files that only run on GitHub, left out when the code lives elsewhere.
+GITHUB_ONLY = (
+    ".github/workflows/", ".github/ISSUE_TEMPLATE/", ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/CODEOWNERS.template", ".github/review-gate.yml", ".github/review-guide.md", ".github/review-checks/",
+)
+
 
 def _included(path, a, flags):
     adv = a["advanced"]
@@ -80,6 +86,10 @@ def _included(path, a, flags):
     if path.startswith(".claude/rules/architecture/"):
         return False
     if path.startswith(".claude/skills/architecture-graph/"):
+        return False
+    # Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
+    # `.template` sources match too; the scripts and the size-check folder run anywhere.
+    if not flags["code_host_github"] and path.startswith(GITHUB_ONLY):
         return False
     by_file = {
         "CONTRIBUTING.md": a["team"],

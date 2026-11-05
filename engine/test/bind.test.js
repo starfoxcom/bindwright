@@ -6,8 +6,11 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind, STAGING, ANSWERS } from "../bind.js";
-import { defaults, flagsFor, valuesFor, DEFERRED, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES } from "../model.js";
+import {
+  defaults, expandAnswers, flagsFor, valuesFor, DEFERRED, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES,
+} from "../model.js";
 import { listCore } from "../list-core.js";
+import { withoutGithub } from "./code-host.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const readFile = async (p) => readFileSync(join(repo, p), "utf8");
@@ -165,7 +168,9 @@ test("rules carry no stale model names or polling loops", async () => {
 test("every flag is read by a template or by bind.js", () => {
   const templates = coreFiles.map((f) => readFileSync(join(repo, "_core/project-template", f), "utf8")).join("\n");
   const bindSource = readFileSync(join(repo, "engine/bind.js"), "utf8");
-  for (const name of Object.keys(flagsFor(defaults()))) {
+  // "other" ships the GitHub text, and bind.js picks the files by code_host_github alone.
+  const unread = new Set(["code_host_other"]);
+  for (const name of Object.keys(flagsFor(defaults())).filter((flag) => !unread.has(flag))) {
     const used = templates.includes(`TOGGLE:${name} `) || templates.includes(`TOGGLE:${name}:off `) || bindSource.includes(`flags.${name}`);
     assert.ok(used, `flag "${name}" controls nothing`);
   }
@@ -1037,4 +1042,34 @@ test("a board names a GitHub owner and a number, nothing else", async () => {
     a.advanced.trackerProject = board;
     await assert.rejects(run(a), /trackerProject must be null/, board);
   }
+});
+
+test("a code host without GitHub ships no GitHub-only files", async () => {
+  assert.ok((await run(defaults({ team: true }))).has(".github/workflows/size-check.yml"));
+  for (const host of ["local", "other"]) {
+    const files = await run(withoutGithub(defaults({ team: true }), host));
+    assertClean(files);
+    const kept = [".github/scripts/", ".github/size-check/"];
+    const onGithub = [...files.keys()].filter((path) => path.startsWith(".github/"));
+    assert.deepEqual(onGithub.filter((path) => !kept.some((dir) => path.startsWith(dir))), [], host);
+    assert.ok(files.has(".github/scripts/size_check.py"), host);
+    assert.ok(files.has(".github/size-check/exceptions.txt"), host);
+  }
+});
+
+test("a local project's git rules teach save points and name no pull-request commands", async () => {
+  const local = (await run(withoutGithub(defaults(), "local"))).get(".claude/rules/git.md");
+  assert.match(local, /^## Save points$/m);
+  assert.doesNotMatch(local, /gh pr (create|merge)/);
+  const other = (await run(withoutGithub(defaults(), "other"))).get(".claude/rules/git.md");
+  assert.doesNotMatch(other, /^## Save points$/m);
+  assert.match(other, /gh pr create/);
+});
+
+test("answers saved before the code-host question bind as github", async () => {
+  const saved = defaults({ team: true });
+  delete saved.advanced.codeHost;
+  const expanded = expandAnswers(saved);
+  assert.equal(expanded.advanced.codeHost, "github");
+  assert.deepEqual(await run(expanded), await run(defaults({ team: true })));
 });

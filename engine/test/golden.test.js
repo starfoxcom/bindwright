@@ -10,8 +10,10 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind } from "../bind.js";
 import { python } from "./python.js";
+import { withoutGithub } from "./code-host.js";
 import {
   defaults, LICENSES, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES, MERGE_STYLES, HOOK_LOCATIONS, DENY_PROFILES, TRACKERS,
+  CODE_HOSTS,
 } from "../model.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,6 +55,7 @@ function oneAtATime() {
         }
       }
       for (const key of switches) cases.push({ ...clone(base), advanced: { ...base.advanced, [key]: !base.advanced[key] } });
+      for (const codeHost of ["local", "other"]) cases.push(withoutGithub(clone(base), codeHost));
       for (const license of Object.keys(LICENSES)) {
         if (license !== base.project.license) cases.push({ ...clone(base), project: { ...base.project, license } });
       }
@@ -107,6 +110,8 @@ function seeded(count) {
     a.advanced.publicRoadmap = a.advanced.tracker === "github" && bool() ? "starfoxcom/roadmap" : null;
     a.advanced.trackerRepo = a.advanced.tracker === "github" && bool() ? "starfoxcom/tracker" : null;
     a.advanced = withTool(a.advanced, a.advanced.codeResearch);
+    a.advanced.codeHost = pick(CODE_HOSTS);
+    if (a.advanced.codeHost !== "github") withoutGithub(a, a.advanced.codeHost);
     return a;
   });
 }
@@ -191,6 +196,24 @@ function refused() {
   return edits.map((edit) => { const a = defaults(); const whole = edit(a); return whole === undefined ? a : whole; });
 }
 
+// Both engines bind each answers object; a refusal comes back as its message.
+async function bindResult(answers) {
+  try {
+    return { files: [...(await bind(clone(answers), { readFile, coreFiles, year: 2026, version: "2.0.0" })).entries()] };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+// One Python run binds every case, in order: each result is { files } or { error }.
+function pythonBind(cases) {
+  const out = spawnSync(python, [join(engine, "bind.py"), "--batch"], {
+    input: JSON.stringify(cases.map((answers) => ({ answers, year: 2026, version: "2.0.0" }))), encoding: "utf8", maxBuffer: 1 << 30,
+  });
+  assert.equal(out.status, 0, out.stderr);
+  return JSON.parse(out.stdout);
+}
+
 // First differing file and line, so a failure names what to fix.
 function firstDifference(js, py) {
   const jsKeys = js.map(([k]) => k);
@@ -209,22 +232,13 @@ function firstDifference(js, py) {
 
 test("the Python engine binds exactly what the JS engine binds", { skip: !python && "needs Python 3.8+" }, async () => {
   const cases = [...oneAtATime(), ...seeded(40), ...refused()];
-  const out = spawnSync(python, [join(engine, "bind.py"), "--batch"], {
-    input: JSON.stringify(cases.map((answers) => ({ answers, year: 2026, version: "2.0.0" }))), encoding: "utf8", maxBuffer: 1 << 30,
-  });
-  assert.equal(out.status, 0, out.stderr);
-  const results = JSON.parse(out.stdout);
+  const results = pythonBind(cases);
   assert.equal(results.length, cases.length);
 
   let bound = 0;
   for (const [i, answers] of cases.entries()) {
     const label = `case ${i}: ${JSON.stringify(answers)}`;
-    let js;
-    try {
-      js = { files: [...(await bind(clone(answers), { readFile, coreFiles, year: 2026, version: "2.0.0" })).entries()] };
-    } catch (err) {
-      js = { error: err.message };
-    }
+    const js = await bindResult(answers);
     const py = results[i];
     if (js.error || py.error) {
       assert.equal(py.error, js.error, label);
@@ -235,4 +249,46 @@ test("the Python engine binds exactly what the JS engine binds", { skip: !python
   }
   assert.ok(bound > 150, `only ${bound} cases bound; the rest were refused`);
   assert.equal(cases.length - bound, refused().length, "every refused case is one of the bad answers");
+});
+
+// Named code-host answers. Each row's answers either bind (refusal is null) or
+// are refused with exactly that message, in both engines.
+const refusedWith = (msg) => `Invalid answers: ${msg}`;
+const withField = (codeHost, field, value) => {
+  const a = withoutGithub(defaults(), codeHost);
+  a.advanced[field] = value;
+  return a;
+};
+const CODE_HOST_ROWS = [
+  ["a valid local answer is accepted", withoutGithub(defaults(), "local"), null],
+  ["a valid other answer is accepted", withoutGithub(defaults(), "other"), null],
+  ["a github answer keeps the GitHub parts", defaults(), null],
+  ["local with AI review on is refused", withField("local", "aiReview", true),
+    refusedWith('codeHost "local" has no GitHub Actions: aiReview must be false')],
+  ["local with deep escalation on is refused", withField("local", "deepEscalation", true),
+    refusedWith('codeHost "local" has no GitHub Actions: deepEscalation must be false')],
+  ["local with the github tracker is refused", withField("local", "tracker", "github"),
+    refusedWith('codeHost "local" keeps the work state in files: tracker must be "file"')],
+  ["local with a project board is refused", withField("local", "trackerProject", "owner/6"),
+    refusedWith('codeHost "local" has no GitHub Projects board: trackerProject must be null')],
+  ["local with a tracker repo is refused", withField("local", "trackerRepo", "owner/tracker"),
+    refusedWith('codeHost "local" has no GitHub issues repo: trackerRepo must be null')],
+  ["other with a public roadmap is refused", withField("other", "publicRoadmap", "owner/roadmap"),
+    refusedWith('codeHost "other" has no GitHub public roadmap: publicRoadmap must be null')],
+  ["other with a project board is refused", withField("other", "trackerProject", "owner/6"),
+    refusedWith('codeHost "other" has no GitHub Projects board: trackerProject must be null')],
+  ["an unknown code host is refused", withField("github", "codeHost", "gitlab"),
+    refusedWith('unknown code host "gitlab"')],
+  ["a code host left out is refused", (() => { const a = defaults(); delete a.advanced.codeHost; return a; })(),
+    refusedWith('unknown code host "undefined"')],
+];
+
+test("code-host answers: both engines accept or refuse each named row the same way", { skip: !python && "needs Python 3.8+" }, async () => {
+  const results = pythonBind(CODE_HOST_ROWS.map(([, answers]) => answers));
+  for (const [i, [name, answers, refusal]] of CODE_HOST_ROWS.entries()) {
+    const js = await bindResult(answers);
+    assert.equal(js.error ?? null, refusal, `${name} (js)`);
+    assert.equal(results[i].error ?? null, refusal, `${name} (py)`);
+    if (refusal === null) assert.equal(firstDifference(js.files, results[i].files), null, name);
+  }
 });

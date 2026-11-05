@@ -52,6 +52,9 @@ export const DENY_PROFILES = ["standard", "strict"];
 // board when trackerProject names one), or the repo's hand-off file and
 // ROADMAP.md.
 export const TRACKERS = ["github", "file"];
+// Where the code lives: on GitHub, only on this computer (no account), or on
+// another host. "local" and "other" leave out every GitHub-only file.
+export const CODE_HOSTS = ["github", "local", "other"];
 // "<owner>/<number>" of a GitHub Projects board. The owner lands in gh
 // command lines, so it is held to GitHub's own name rule.
 const TRACKER_PROJECT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[1-9][0-9]{0,5}$/;
@@ -102,6 +105,9 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       shippedTextPaths: null,
       // Add-on: a CI check that fails on any new code-size breach.
       codeSizeCheck: true,
+      // "github" keeps the GitHub parts; "local" and "other" have no GitHub, so no
+      // Actions, no board and no GitHub-hosted tracker (checkCodeHost).
+      codeHost: "github",
       tracker: "github",
       // "<owner>/<number>" when tracker is "github" and the project has a
       // board; null keeps project status in a pinned issue instead.
@@ -121,6 +127,21 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
 
 function check(cond, msg) {
   if (!cond) throw new Error(`Invalid answers: ${msg}`);
+}
+
+const unset = (value) => value === null || value === undefined;
+
+// A code host without GitHub: the answers that need GitHub must be off.
+function checkCodeHost(adv) {
+  check(CODE_HOSTS.includes(adv.codeHost), `unknown code host ${quoted(adv.codeHost)}`);
+  if (adv.codeHost === "github") return;
+  const host = `codeHost "${adv.codeHost}"`;
+  check(adv.aiReview === false, `${host} has no GitHub Actions: aiReview must be false`);
+  check(adv.deepEscalation === false, `${host} has no GitHub Actions: deepEscalation must be false`);
+  check(adv.tracker === "file", `${host} keeps the work state in files: tracker must be "file"`);
+  check(unset(adv.trackerProject), `${host} has no GitHub Projects board: trackerProject must be null`);
+  check(unset(adv.trackerRepo), `${host} has no GitHub issues repo: trackerRepo must be null`);
+  check(unset(adv.publicRoadmap), `${host} has no GitHub public roadmap: publicRoadmap must be null`);
 }
 
 const QUOTE_MAX = 40;
@@ -196,6 +217,7 @@ export function validate(saved) {
       /^[^"\\\x00-\x1f\x7f]{1,200}$/.test(g) && g.trim() === g)),
   "shippedTextPaths must be null or a non-empty list of globs "
   + "without quotes, backslashes, line breaks or outer spaces");
+  checkCodeHost(adv);
   check(TRACKERS.includes(adv.tracker), `unknown tracker ${quoted(adv.tracker)}`);
   if (adv.tracker === "github") {
     check(adv.trackerProject === null ||
@@ -260,6 +282,9 @@ export function flagsFor(a) {
     branching_model_gitflow: adv.branching === "gitflow",
     branching_model_trunk: adv.branching === "trunk",
     default_branch_is_dev: adv.branching === "gitflow" && adv.devIsDefault,
+    code_host_github: adv.codeHost === "github",
+    code_host_local: adv.codeHost === "local",
+    code_host_other: adv.codeHost === "other",
     guard_hooks_repo: adv.hookLocation === "repo",
     attribution_guard: adv.attributionGuard,
     deny_list_strict: adv.denyProfile === "strict",
