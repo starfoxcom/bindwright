@@ -161,19 +161,24 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <p class="preview-note" id="evidence-note"></p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="reviewed" data-count="0">0</span>
-        <p class="stat-label" data-t="evidence.reviewed">pull requests checked by the AI reviewer before they merged</p>
+        <span class="stat-num" data-total="checked" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.checked.label">pull requests checked by the AI reviewer before they merged</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="fixed" data-count="0">0</span>
-        <p class="stat-label" data-t="evidence.stopped">had a problem the reviewer caught and were held back until it was fixed</p>
+        <span class="stat-num stat-accent" data-total="firstTry" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.firstTry.label">passed the first review, deep review included, with nothing to fix</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-total="deep" data-count="0">0</span>
-        <p class="stat-label" data-t="evidence.deep">touched risky code, like security or saved data, and got a second, deeper review</p>
+        <span class="stat-num stat-warn" data-total="fixed" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.fixed.label">were held back 1 to 5 rounds until a problem the reviewer caught was fixed</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="stalled" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.stalled.label">took 6 rounds or more, where the session stops to research a simpler fix</p>
       </div>
     </div>
-    <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many had a problem caught</p>
+    <p class="evidence-detail" id="evidence-detail"></p>
+    <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many rounds each took to pass</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
     </div>

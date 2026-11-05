@@ -175,18 +175,23 @@ export default {
   "mods.scene.usage-guard.save": "Guardé tu trabajo en curso y hice pausa hasta el reinicio.",
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
   "evidence.title": "Lo que ha detectado en proyectos reales hasta ahora",
-  "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
-  "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
-  "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "
-    + "y recibieron una segunda revisión más a fondo",
-  "evidence.chart": "Por proyecto: pull requests revisados y cuántos tenían un problema detectado",
+  "evidence.checked.label": "pull requests que la IA revisó antes de integrarse",
+  "evidence.firstTry.label": "pasaron la primera revisión, incluida la revisión a fondo, sin nada que corregir",
+  "evidence.fixed.label": "se detuvieron de 1 a 5 rondas hasta corregir un problema que la IA detectó",
+  "evidence.stalled.label": "tomaron 6 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
+  "evidence.chart": "Por proyecto: pull requests revisados y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",
   "evidence.wrong": "Qué salió mal",
   "evidence.now": "Qué hace Bindwright ahora",
   "evidence.checked": { one: "{count} revisado", other: "{count} revisados" },
-  "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
-  "evidence.legend.passed": "pasaron la revisión",
-  "evidence.legend.fixed": "tenían un problema, corregido antes de integrarse",
+  "evidence.firstTry": "{percent}% a la primera",
+  "evidence.legend.passed": "pasaron la primera revisión",
+  "evidence.legend.fixed": "corregidos en 1 a 5 rondas",
+  "evidence.legend.stalled": "tomaron 6 rondas o más",
+  "evidence.detail": "Cada pull request detenido tomó {rounds} rondas de corrección en promedio. "
+    + "{deep} de los revisados tocaban código riesgoso, como seguridad o datos guardados, "
+    + "y también recibieron una revisión más a fondo. Los cambios solo de documentación no pasan "
+    + "por la revisión: {skipped} de los {merged} pull requests integrados.",
   "evidence.note": {
     one: "Bindwright pone un revisor de IA en cada pull request. "
       + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos.",

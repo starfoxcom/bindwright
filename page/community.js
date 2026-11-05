@@ -20,11 +20,11 @@ function counterUrl() {
 const isCount = (value) => Number.isInteger(value) && value >= 0;
 
 // The counter's answer, or null when it is not the shape the chart draws.
-function checked(total) {
-  const fields = ["projects", "checked", "caught", "deep"];
+function validated(total) {
+  const fields = ["projects", "checked", "caught", "deep", "merged", "stalled", "rounds"];
   if (!total || !fields.every((field) => isCount(total[field])) || !Array.isArray(total.top)) return null;
   const top = total.top.filter((p) => KINDS.includes(p?.kind) && isCount(p.checked) && p.checked > 0
-    && isCount(p.caught) && p.caught <= p.checked);
+    && isCount(p.caught) && p.caught <= p.checked && isCount(p.stalled) && p.stalled <= p.caught);
   return { ...total, top };
 }
 
@@ -37,23 +37,21 @@ function labelled(top) {
     seen[project.kind] = (seen[project.kind] ?? 0) + 1;
     const name = t(`evidence.kind.${project.kind}`);
     const label = totals[project.kind] > 1 ? `${name} ${seen[project.kind]}` : name;
-    return { label, reviewed: project.checked, fixed: project.caught };
+    return { label, checked: project.checked, caught: project.caught, stalled: project.stalled };
   });
 }
 
 async function load() {
   const response = await fetch(counterUrl(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!response.ok) return null;
-  const total = checked(await response.json());
+  const total = validated(await response.json());
   if (!total || total.projects === 0 || total.top.length === 0) return null;
-  return {
-    projects: total.projects, reviewed: total.checked, fixed: total.caught, deep: total.deep,
-    rows: labelled(total.top),
-  };
+  const { projects, checked, caught, deep, merged, stalled, rounds } = total;
+  return { projects, checked, caught, deep, merged, stalled, rounds, rows: labelled(total.top) };
 }
 
 /**
- * The shared totals and top rows, `{ projects, reviewed, fixed, deep, rows }`, or null.
- * Each row is `{ label, reviewed, fixed }`, ready for bars.js.
+ * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled,
+ * rounds, rows }`, or null. Each row is `{ label, checked, caught, stalled }`, for bars.js.
  */
 export const shared = load().catch(() => null);

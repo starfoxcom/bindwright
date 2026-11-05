@@ -66,9 +66,13 @@ export default {
   "mods.scene.usage-guard.resume": "Limit reset. Resuming where it stopped.",
 
   "evidence.checked": { one: "{count} checked", other: "{count} checked" },
-  "evidence.caught": { one: "{count} caught", other: "{count} caught" },
-  "evidence.legend.passed": "passed the review",
-  "evidence.legend.fixed": "had a problem caught, fixed before merging",
+  "evidence.firstTry": "{percent}% first try",
+  "evidence.legend.passed": "passed the first review",
+  "evidence.legend.fixed": "fixed in 1 to 5 rounds",
+  "evidence.legend.stalled": "took 6 rounds or more",
+  "evidence.detail": "Each held-back pull request took {rounds} fix rounds on average. {deep} of the checked ones "
+    + "touched risky code, like security or saved data, and also got a deeper review. Docs-only changes skip "
+    + "the review: {skipped} of the {merged} merged pull requests.",
   "evidence.note": {
     one: "Bindwright puts an AI reviewer on every pull request. "
       + "These are its results so far in {count} project whose owner chose to share anonymous counts.",

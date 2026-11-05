@@ -1,6 +1,6 @@
 // The evidence section's counts, all from the projects whose owners chose to share them:
-// the three totals count up once and a bar per project grows with its reviewed pull
-// requests, split by whether the review passed or caught a problem. The counts stay
+// the four totals count up once and a bar per project grows with its checked pull
+// requests, split by how many review rounds they took. The counts stay
 // hidden until the counter answers with at least one project. Each animation starts as
 // its block enters the view, while it fades in; reduced motion shows the final state.
 import { t } from "./i18n/index.js";
@@ -10,6 +10,7 @@ import { PARTS, el, projectRow } from "./bars.js";
 
 const counts = document.getElementById("evidence-counts");
 const note = document.getElementById("evidence-note");
+const detail = document.getElementById("evidence-detail");
 const stats = counts.querySelector(".stats");
 const chart = document.getElementById("projects");
 const legend = document.getElementById("legend");
@@ -49,14 +50,30 @@ export function onEnter(node, start) {
   observer.observe(node);
 }
 
+// The four big numbers: checked, then passed first try, fixed in a few rounds and stalled.
+function totalsOf(total) {
+  return {
+    checked: total.checked,
+    firstTry: total.checked - total.caught,
+    fixed: total.caught - total.stalled,
+    stalled: total.stalled,
+  };
+}
+
 function show(total) {
-  for (const name of ["reviewed", "fixed", "deep"]) {
+  for (const [name, value] of Object.entries(totalsOf(total))) {
     const node = stats.querySelector(`[data-total="${name}"]`);
-    node.dataset.count = String(total[name]);
-    node.textContent = String(total[name]);
+    node.dataset.count = String(value);
+    node.textContent = String(value);
   }
   note.textContent = t("evidence.note", { count: total.projects });
-  const largest = Math.max(...total.rows.map((row) => row.reviewed));
+  detail.textContent = t("evidence.detail", {
+    rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
+    deep: total.deep,
+    skipped: total.merged - total.checked,
+    merged: total.merged,
+  });
+  const largest = Math.max(...total.rows.map((row) => row.checked));
   chart.replaceChildren(...total.rows.map((row, index) => projectRow(row, index, largest)));
   legend.replaceChildren(...PARTS.map(legendItem));
   counts.hidden = false;
