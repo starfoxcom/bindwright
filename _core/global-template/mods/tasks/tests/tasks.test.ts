@@ -20,10 +20,21 @@ type World = {
   /** The engine refuses the command name, as it does a built-in's. */
   isCommandRefused?: boolean
   clock?: ReturnType<typeof mock.clock>
+  /** The session id of the moment; a /clear changes it. */
+  session: string
 }
 
 function world(on: On): World {
-  const seen: World = { files: new Map(), nextId: 1, listed: [], runs: [], old: [], commands: [], opened: [] }
+  const seen: World = {
+    files: new Map(),
+    nextId: 1,
+    listed: [],
+    runs: [],
+    old: [],
+    commands: [],
+    opened: [],
+    session: 'sess-a',
+  }
   seen.clock = mock.clock(on, { now: Date.UTC(2026, 9, 2, 19, 0, 0) })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   const key = (path: string) => path.replaceAll('\\', '/')
@@ -49,7 +60,7 @@ function world(on: On): World {
     }
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('session.id', () => ({ value: 'sess-a' }))
+  on('session.id', () => ({ value: seen.session }))
   on('session.root', () => ({ value: 'C:/Repos/x' }))
   on('fs.list', ($, e) => {
     const dir = e.path?.replaceAll('\\', '/') ?? ''
@@ -507,6 +518,22 @@ test('a refused command name never stops the rest of the session start', async (
   seen.files.set('C:/Users/me/.claude/mods-data/tasks/old.json', JSON.stringify({ ...old, tasks: [task] }))
   await $.session.start({ cwd: 'C:/Repos/x' } as never)
   expect(mirror(seen).carried?.map(task => task.id)).toEqual(['7'])
+})
+
+test("after a /clear, the new session carries the old one's leftovers at its first prompt", async ($, on) => {
+  const seen = world(on)
+  on('session.end', ($, e) => ({ sessionId: e.sessionId }))
+  await $.session.start({ cwd: 'C:/Repos/x' } as never)
+  await turn($)
+  await create($, 'left open')
+  await $.turn.complete({ turnId: 't', answer: '', durationMs: 1, isAborted: false, reason: 'done' } as never)
+  await $.session.end({ reason: 'clear', sessionId: 'sess-a' } as never)
+  // The same process goes on under a new id, with no session.start.
+  seen.session = 'sess-b'
+  const answer = (await $.prompt.submit({ text: 'hi' } as never)) as never as { context?: string[] }
+  const carried = JSON.parse(seen.files.get(`${DIR}/sess-b.json`) ?? '{}').carried ?? []
+  expect(carried.map((task: { subject: string }) => task.subject)).toEqual(['left open'])
+  expect((answer.context ?? []).join(' ')).toContain('left open')
 })
 
 test("a finished session's leftovers are carried over once, never into every later session", async ($, on) => {
