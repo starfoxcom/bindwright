@@ -463,10 +463,12 @@ jobs:
     needs: [triage, init-gate, project-triggers, project-checks]
     if: needs.triage.outputs.run_review == 'true'
     runs-on: ${{ fromJSON(needs.init-gate.outputs.runner_labels || '["ubuntu-latest"]') }}
-    # The review attempts run here, with a token that can only read: the
-    # reviewer processes never share a job with one that can write checks,
-    # statuses or comments. The first review the gate can read goes to the
-    # Post review job below, which checks it again and posts it.
+    # The review attempts run here, with a job token that can only read: the
+    # reviewer processes never share a job whose token can write checks,
+    # statuses or comments. (They still read the PR with the review app's own
+    # token, as the official action's reviewer does; the tool lists below are
+    # what keeps them from writing with it.) The first review the gate can
+    # read goes to the Post review job below, which checks it again and posts it.
     # `reviewer` is the model whose attempt wrote the verdict, for the gate's
     # summary. The job name and a green primary step cannot tell (the primary
     # continues on error). Models, effort and the turn cap come from the gate
@@ -1748,12 +1750,20 @@ jobs:
           # A run whose PR has a newer head posts nothing: its cancellation can
           # still be under way, and a comment it posted now would land inside
           # the newer run's verdict window.
+          # Each try prints only on success: a failed `gh api` prints its error
+          # body on stdout, which must never reach the comparison.
+          read_head() {
+            local out
+            out=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha) || return 1
+            printf '%s' "$out"
+          }
           head_is_current() {
             local now
-            now=$(retry gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha) || {
+            now=$(retry read_head) || now=""
+            if [[ ! "$now" =~ ^[0-9a-f]{40}$ ]]; then
               echo "::error::Could not read the PR's head commit, so whether this run is still current is unknown"
               exit 1
-            }
+            fi
             [ "$now" = "$HEAD_SHA" ]
           }
           # This run attempt's mark, hidden in each comment under its first
