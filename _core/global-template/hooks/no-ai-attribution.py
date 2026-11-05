@@ -62,9 +62,9 @@ AI = (r"(?:" + CLAUDE + "|" + ANTHROPIC + r"|ai|llm|assistant|copilot|codex|chat
       r"cursor" + _Z + r"(?:ai|ide|agent))")
 AN = r"(?:an?" + _Z + r")?"
 
-# The Attribution workflow (.github/workflows/attribution.yml on main) imports
-# ATTRIBUTION and strip_paths from develop's copy of this file: keep both names,
-# and keep importing it free of side effects (main() runs only as a script).
+# Bindwright's own Attribution workflow imports ATTRIBUTION and strip_paths from
+# this file: keep both names, and keep importing it free of side effects (main()
+# runs only as a script).
 ATTRIBUTION = re.compile(
     "|".join([
         # Co-Authored-By naming an AI; a human co-author passes.
