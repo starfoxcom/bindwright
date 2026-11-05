@@ -3,10 +3,11 @@
 # GameProject's proven shape: the routine review's structured trigger comment
 # (claude-code-review.yml Step 4.B) is posted with the review app's
 # installation token, not GITHUB_TOKEN (whose comments start no workflow) —
-# author = `claude[bot]`. So is the action's own progress comment. Body content
-# distinguishes the two cleanly:
+# author = `claude[bot]`. The action posts a progress comment as `claude[bot]`
+# only in tag mode, which no attempt here uses; the filter below still rejects
+# one, so such a comment can never start a deep run:
 #   • Trigger comment body STARTS with `@claude review this PR — depth pass`.
-#   • Progress comment body is `Claude Code is working…` and contains
+#   • A progress comment body starts `Claude Code is working…` and holds
 #     `@claude` only inside backticks — never the literal substring
 #     `@claude review this PR`.
 #
@@ -53,7 +54,7 @@ jobs:
     # phrase `@claude review this PR` (not just `@claude review`). Matches
     # the structured trigger format the routine review posts (Step 4.B in
     # claude-code-review.yml).
-    # Anchor the bot-loop guard to startsWith — the action's progress comment
+    # Anchor the bot-loop guard to startsWith — a tag-mode progress comment
     # body STARTS with "Claude Code is working"; legitimate escalation
     # comments may quote the phrase when discussing the filter itself (e.g.
     # listing invariants for the deep tier to verify). Using `!contains` here would
@@ -120,8 +121,8 @@ jobs:
     name: On-demand deep review (@claude)
     needs: authorize
     if: needs.authorize.outputs.allowed == 'true'
-    # Job-level concurrency, entered only by approved requests: the action's
-    # own progress comment ("Claude Code is working…") and anyone without
+    # Job-level concurrency, entered only by approved requests: a progress
+    # comment ("Claude Code is working…") and anyone without
     # write access never reach it, so they cannot cancel the deep review in
     # flight. The fallback to `github.run_id` keeps the group unique for
     # non-PR/issue events.
@@ -699,23 +700,23 @@ jobs:
           show_full_output: false
           additional_permissions: |
             actions: read
+          # Allow the routine review's `claude[bot]` to trigger this workflow: the
+          # routine tier is the caller for deep-review escalations.
           allowed_bots: "claude"
           # The PR's base, where the action restores the config files from:
           # on a comment event it would otherwise take the default branch.
           base_branch: ${{ steps.pr-head.outputs.base_ref }}
           # A prompt puts the action in agent mode: no tracking comment, and the
           # review comes back as structured output for "Post the deep review".
+          # This action has no `system_prompt:` input. Claude Code loads
+          # `CLAUDE.md` + `.claude/rules/*.md` from the checkout (the base
+          # branch's copies), the brief file carries the request's per-PR focus
+          # and the pointer to the project's review guide, if any, and the
+          # prompt below holds the binary verdict rule.
           prompt: |
             Brief file: ${{ runner.temp }}/deep-brief.md
 
             ${{ env.DEEP_REVIEW_PROMPT }}
-          # Allow the routine review's `claude[bot]` to trigger this workflow: the
-          # routine tier is the caller for deep-review escalations.
-          # This action has no `system_prompt:` input. Claude Code loads
-          # `CLAUDE.md` + `.claude/rules/*.md` from the checkout, the
-          # structured `@claude` comment from the routine review gives the
-          # per-PR focus, invariants and the binary verdict rule, and the
-          # system prompt points to the project's review guide, if any.
 
       # Whether the first attempt counts is what the gate reads in its answer: it
       # posted nothing, so one that returned no readable review hands over
