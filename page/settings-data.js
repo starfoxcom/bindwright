@@ -53,7 +53,7 @@ export const COMPUTER = [
   {
     id: "reply-style",
     title: "Reply style",
-    text: "Short, plain chat replies, answer first (still an AI talking ;V). /output-style default turns it off.",
+    text: "Short, plain replies that are easy to follow (or at least it tries ;V): the answer first, and a follow-up question when it needs one. /output-style default turns it off.",
     value: "Yes",
     keys: ["extra:reply-style"],
   },

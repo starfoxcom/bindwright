@@ -261,8 +261,9 @@ export default {
   "settings.code-style.text": "Aprende cómo escribes código de tus repos, con tu permiso.",
   "settings.code-style.value": "Sí",
   "settings.reply-style.title": "Estilo de respuesta",
-  "settings.reply-style.text": "Respuestas cortas y claras en el chat, primero la respuesta "
-    + "(igual habla una IA ;V). /output-style default lo apaga.",
+  "settings.reply-style.text": "Respuestas cortas, claras y fáciles de entender (o al menos lo intenta ;V): "
+    + "primero la respuesta, y una pregunta de seguimiento cuando la necesita. "
+    + "/output-style default lo apaga.",
   "settings.reply-style.value": "Sí",
 
   "settings.who-works.title": "Quién trabaja en él",
