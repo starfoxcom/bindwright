@@ -198,6 +198,24 @@ test("an output style is copied once and turned on, and an installed copy keeps 
   });
 });
 
+test("a kept output style's name is read as YAML writes it", { skip }, () => {
+  const cases = [
+    ["double quotes", "---\nname: \"My Style\"\n---\nmine\n", "My Style"],
+    ["single quotes", "---\nname: 'My Style'\n---\nmine\n", "My Style"],
+    ["a quote inside the name", "---\nname: Alex's style\n---\nmine\n", "Alex's style"],
+    ["a byte-order mark", "﻿---\nname: Mine\n---\nmine\n", "Mine"],
+  ];
+  for (const [label, body, want] of cases) {
+    withHome((dir) => {
+      const file = styleFile(dir);
+      const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, body);
+      assert.equal(home(dir, "add-style", file).out.outputStyle, want, label);
+    });
+  }
+});
+
 test("add-style refuses a missing, non-markdown or unnamed file, and writes nothing", { skip }, () => {
   withHome((dir) => {
     const cases = [

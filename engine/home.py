@@ -262,8 +262,12 @@ def _style_name(text):
         if line.strip() == "---":
             return None
         key, sep, value = line.partition(":")
-        if sep and key.strip() == "name" and value.strip():
-            return value.strip()
+        value = value.strip()
+        # YAML may quote the value: one matching pair of quotes is not part of the name.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1].strip()
+        if sep and key.strip() == "name" and value:
+            return value
     return None
 
 
@@ -271,7 +275,7 @@ def add_style(home, file):
     name = os.path.basename(file)
     if not (name.endswith(".md") and os.path.isfile(file)):
         raise HomeError("Not an output style file (an existing .md file): " + file)
-    with open(file, encoding="utf-8") as fh:
+    with open(file, encoding="utf-8-sig") as fh:
         text = fh.read()
     if _style_name(text) is None:
         raise HomeError("The output style has no name in its front matter: " + file)
@@ -281,7 +285,7 @@ def add_style(home, file):
     # name is the one turned on: the CLI names a style without one after its file.
     kept = os.path.exists(target)
     if kept:
-        with open(target, encoding="utf-8") as fh:
+        with open(target, encoding="utf-8-sig") as fh:
             text = fh.read()
     else:
         _atomic_write(target, text)
