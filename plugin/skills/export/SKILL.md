@@ -15,7 +15,7 @@ This skill writes the team's half of the setup into `.bindwright/project.json`, 
 
 ## 2. Read the current setup
 
-Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` works, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, say the export needs Node or Python 3.8+, and stop.
+Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, say the export needs Node 18 or later, or Python 3.8 or later, and stop.
 
 Run it with `--settings <repo root>`. It prints one line of JSON: `settings` (each with its `value`, the layer it came `from`, and whether the project `required` it), `extras` (each with the project's rating and this person's choice), `installed` (which extras this machine has), `drift` and `ignored`. On `{"error": "..."}`, show the message and stop.
 
