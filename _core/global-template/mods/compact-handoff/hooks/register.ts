@@ -144,18 +144,18 @@ function carriedForward(messages: readonly SessionMessage[]): { kept: string[]; 
 const indexLine = (text: string) => `- ${text.replace(/\s+/g, ' ').slice(0, INDEX_LINE_CHARS)}...`
 
 // How many of `texts`' first messages repeat the end of `carried`, in order: the tail the engine kept.
-// Only a run at the very start counts. A message cannot be told from a new one by its text, so when the
-// budget moved older tail members to the index, they are carried again rather than guessed at: a
-// message may then show twice, never go missing.
-function keptTail(carried: readonly string[], texts: readonly string[]): number {
+// A carried message cut to fit the budget matches its whole original. Only a run at the very start
+// counts. A message cannot be told from a new one by its text, so when the budget moved older tail
+// members to the index, they are carried again rather than guessed at: a message may then show twice,
+// never go missing.
+function keptTail(carried: readonly string[], texts: readonly string[], budgetChars: number): number {
+  const same = (text: string, i: number) => text === texts[i] || text === fitted(texts[i] ?? '', budgetChars)
   for (let k = Math.min(carried.length, texts.length); k > 0; k--) {
-    if (carried.slice(-k).every((text, i) => text === texts[i])) return k
+    if (carried.slice(-k).every(same)) return k
   }
   return 0
 }
 
-// `typed` is the transcript's own list (see transcriptWords); without it the
-// compaction's message list is used, which misses prompts typed mid-turn.
 // The note that stands in for the middle of a message too large for the budget.
 const CUT_NOTE_CHARS = 80
 
@@ -171,6 +171,8 @@ ${note}
 ${text.slice(text.length - half)}`
 }
 
+// `typed` is the transcript's own list (see transcriptWords); without it the
+// compaction's message list is used, which misses prompts typed mid-turn.
 export function personWords(
   messages: readonly SessionMessage[],
   budgetChars: number,
@@ -182,7 +184,7 @@ export function personWords(
   // from the block. Only that leading run is folded, so a "yes" typed again later is kept. The
   // transcript's list starts after the compaction and has no such run.
   const texts = source.map(stripInjected).filter(Boolean)
-  const fresh = typed ? texts : texts.slice(keptTail(previous.kept, texts))
+  const fresh = typed ? texts : texts.slice(keptTail(previous.kept, texts, budgetChars))
   const all = [...previous.kept, ...fresh]
 
   const kept: string[] = []
