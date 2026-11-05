@@ -7,6 +7,7 @@ export default {
     + "trabajas desde el primer mensaje.",
   "skip.link": "Ir a la instalación",
   "nav.site": "Sitio",
+  "nav.home": "Inicio",
   "nav.github": "GitHub",
   "nav.language": "Idioma",
   "hero.title": "Deja de explicarle tu proyecto a Claude cada vez.",
