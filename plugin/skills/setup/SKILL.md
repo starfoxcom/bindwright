@@ -113,7 +113,13 @@ Only when sharing is on and `counts.mjs status` lists no entry for this repo roo
 
 - **What kind of project is this?** The page lists the top projects by kind only, as in "Game project 2". Game, business app, developer tool, mobile app, website, other, or "leave this project out".
 
-Save it with `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" project <repo root> <kind>`, the kind written `game`, `business-app`, `developer-tool`, `mobile-app`, `website` or `other`, or `none` to leave it out, which is remembered so no later run asks again. Counting starts now: pull requests merged before today are not sent.
+Save it with `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" project <repo root> <kind>`, the kind written `game`, `business-app`, `developer-tool`, `mobile-app`, `website` or `other`, or `none` to leave it out, which is remembered so no later run asks again. The counts cover the project's past pull requests too, sent with the first daily send.
+
+Then, for a kind other than `none`, run `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" history <repo root>`. Only when it prints `"overLimit": true` (more than 500 merged pull requests, the most one send carries), ask:
+
+- **This project has more than 500 merged pull requests. Send the older ones too, in daily batches of up to 500?** "Yes" sends the oldest first, one batch a day, until it catches up. "No" sends only the newest 500 and never the older ones.
+
+Save it with `counts.mjs backfill <repo root> on` (or `off`). On `{"error": ...}`, skip the question: the newest 500 go out.
 
 ## 4. Write the files
 

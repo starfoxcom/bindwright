@@ -1,8 +1,11 @@
-// Bindwright's opt-in review counts. `send <repo root>` runs at session start:
-// at most once a day per repo it counts the user's merged pull requests since
-// the last send and posts the four counts to the counter. The other commands
-// (`share on|off`, `project <root> <kind>`, `status`) keep the answer in
-// <config>/bindwright/counts.json. Node 18+, no dependencies; failures change nothing.
+// Bindwright's opt-in review counts. `send <repo root>` runs at session start: at
+// most once a day per repo it counts the user's merged pull requests and posts the
+// four counts to the counter. A repo's count covers its whole history, from GitHub's
+// first day. A history past one send's cap goes out one batch a day: oldest first
+// when backfill is on, otherwise only the newest batch is sent. The other commands
+// (`share on|off`, `project <root> <kind>`, `backfill <root> on|off`, `history <root>`,
+// `status`) keep the answer in <config>/bindwright/counts.json. Node 18+, no
+// dependencies; failures change nothing.
 
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -25,10 +28,26 @@ export const KINDS = Object.freeze([
 /** The kind answer that leaves a repo out of the counts; it is remembered, so nobody asks again. */
 export const LEFT_OUT = "none";
 
+/** Where a repo's history starts: no PR on GitHub is older, so it starts before every one. */
+export const HISTORY_START = "2008-01-01T00:00:00.000Z";
+
 const DEFAULT_COUNTER_URL = "https://bindwright-counter.starfoxcom.workers.dev";
-const MAX_PER_COUNT = 1000;
+// The most PRs one send carries. A count past it is capped, and a batch holds at most this many.
+const BATCH_CAP = 500;
+const MAX_PER_COUNT = BATCH_CAP;
+// GitHub search returns at most this many results for one query. The listings ask for all of
+// them, so a history past BATCH_CAP is visible as past it.
+const SEARCH_LIMIT = 1000;
+// A batch ends at the 450th merge of a full listing, so PRs created later but merged
+// inside the batch still fit under the cap.
+const PROBE_INDEX = 449;
+const SECOND_IN_MILLISECONDS = 1000;
 const RETRY_GAP_IN_MILLISECONDS = 60 * 1000;
-const GH_TIMEOUT_IN_MILLISECONDS = 20 * 1000;
+// A batch's PRs with all their comments can take three minutes on a busy repo; the send
+// runs detached at session start, so nobody waits on it.
+const GH_TIMEOUT_IN_MILLISECONDS = 10 * 60 * 1000;
+// A batch's PRs with every review comment run to several MiB, past Node's 1 MiB default.
+const GH_OUTPUT_LIMIT_IN_BYTES = 256 * 1024 * 1024;
 const POST_TIMEOUT_IN_MILLISECONDS = 2000;
 const DEEP_LABEL = "needs-deep-review";
 const BOT_LOGINS = new Set(["claude", "claude[bot]"]);
@@ -37,6 +56,10 @@ const LIST_ITEM = /^\s*([-+]|\*\s|\d+[.)])/;
 const VERDICT_LINE = /^[\s*_#>]*(🟢|🔴)[\s*_]*(LGTM|Blocking)/i;
 const ALREADY_SENT = /already sent/;
 const PROJECT_ID = /^[0-9a-f]{32}$/;
+const USAGE = [
+  "usage: share on|off | project <root> <kind> | backfill <root> on|off",
+  "| history <root> | status | send <root>",
+].join(" ");
 
 const execFileAsync = promisify(execFile);
 
@@ -162,8 +185,11 @@ export function setShare(file, value) {
   return { share: state.share };
 }
 
-/** Adds a repo with a new random id, or sets the kind of one added; `none` leaves it out. */
-export function setProject(file, root, kind, now = () => new Date()) {
+/**
+ * Adds a repo with a new random id that counts its whole history, or sets the kind of
+ * one added; `none` leaves it out.
+ */
+export function setProject(file, root, kind) {
   if (!root) return fail("project takes a repo root and a kind");
   if (kind !== LEFT_OUT && !KINDS.includes(kind)) {
     return fail(`kind must be one of: ${[...KINDS, LEFT_OUT].join(", ")}`);
@@ -172,7 +198,8 @@ export function setProject(file, root, kind, now = () => new Date()) {
   const key = repoKey(root);
   const entry = state.projects[key] ?? {
     id: randomBytes(16).toString("hex"),
-    since: now().toISOString(),
+    since: HISTORY_START,
+    backfill: false,
     lastSendDay: null,
     failedAt: null,
   };
@@ -180,6 +207,21 @@ export function setProject(file, root, kind, now = () => new Date()) {
   state.projects[key] = entry;
   writeState(file, state);
   return { project: key, kind };
+}
+
+/**
+ * Turns backfill on or off for a repo added with `project`. On, a history past one
+ * send goes out oldest batch first; off, only the newest batch is sent.
+ */
+export function setBackfill(file, root, value) {
+  if (value !== "on" && value !== "off") return fail("backfill takes on or off");
+  const key = repoKey(root);
+  const state = readState(file);
+  const entry = state.projects[key];
+  if (!entry) return fail("no project for this repo: add it with project <root> <kind> first");
+  entry.backfill = value === "on";
+  writeState(file, state);
+  return { project: key, backfill: entry.backfill };
 }
 
 /** Whether the question was answered, the share switch, and each repo's kind and last send. */
@@ -197,10 +239,10 @@ export function statusOf(file) {
   };
 }
 
-function prListArgs(since) {
+function prListArgs(search, fields) {
   return [
     "pr", "list", "--state", "merged", "--author", "@me",
-    "--search", `merged:>=${since}`, "--json", "number,labels,comments", "--limit", "1000",
+    "--search", search, "--json", fields, "--limit", String(SEARCH_LIMIT),
   ];
 }
 
@@ -208,10 +250,105 @@ async function runGhJson(args, cwd) {
   const { stdout } = await execFileAsync("gh", args, {
     cwd,
     timeout: GH_TIMEOUT_IN_MILLISECONDS,
+    maxBuffer: GH_OUTPUT_LIMIT_IN_BYTES,
     windowsHide: true,
     encoding: "utf8",
   });
   return JSON.parse(stdout);
+}
+
+// The merged PRs a search returns, as the given --json fields. A reply that is not a list throws.
+async function listPrs(search, fields, cwd, ghJson) {
+  const prs = await ghJson(prListArgs(search, fields), cwd);
+  if (!Array.isArray(prs)) throw new Error("gh did not return a list");
+  return prs;
+}
+
+// Whether a search holds at most BATCH_CAP PRs, so one batch can carry all of them.
+async function fitsInBatch(search, cwd, ghJson) {
+  const prs = await listPrs(search, "number", cwd, ghJson);
+  return prs.length <= BATCH_CAP;
+}
+
+// The merge times of a listing, oldest first.
+function oldestFirst(prs) {
+  return prs.map((pr) => pr.mergedAt).sort((a, b) => Date.parse(a) - Date.parse(b));
+}
+
+// The positions to try as a batch end: the probe position, then halved toward the first.
+function* probePositions() {
+  for (let index = PROBE_INDEX; index >= 0; index = Math.floor((index - 1) / 2)) yield index;
+}
+
+// The oldest batch: from the start of the history to a merge time in the listing of the
+// oldest-created PRs, which holds the earliest merges.
+async function oldestBatch({ since, cwd, ghJson }) {
+  const listed = await listPrs(`merged:>=${since} sort:created-asc`, "mergedAt", cwd, ghJson);
+  const times = oldestFirst(listed);
+  for (const index of probePositions()) {
+    const end = times[index];
+    const search = `merged:${since}..${end}`;
+    if (await fitsInBatch(search, cwd, ghJson)) {
+      return {
+        from: Date.parse(since),
+        to: Date.parse(end),
+        search,
+        nextSince: new Date(Date.parse(end) + SECOND_IN_MILLISECONDS).toISOString(),
+      };
+    }
+  }
+  return null;
+}
+
+// The newest batch: from a probe position's merge time up to now. Older merges are skipped.
+async function newestBatch({ listed, current, cwd, ghJson }) {
+  const newestFirst = oldestFirst(listed).reverse();
+  for (const index of probePositions()) {
+    const start = newestFirst[index];
+    const search = `merged:>=${start}`;
+    if (await fitsInBatch(search, cwd, ghJson)) {
+      return {
+        from: Date.parse(start),
+        to: current.getTime(),
+        search,
+        nextSince: current.toISOString(),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * The merged PRs one send covers: `{ from, to, search, nextSince }`, with the times in
+ * epoch ms, a gh search that selects exactly those PRs, and the `since` the repo takes
+ * once the send is accepted. A history under the cap is one window from `since` to now.
+ * Past the cap, `backfill` takes the oldest batch and otherwise the newest. Null when no
+ * batch under the cap is found.
+ */
+export async function planWindow({ since, current, backfill, ghJson = runGhJson, cwd }) {
+  const listed = await listPrs(`merged:>=${since}`, "mergedAt", cwd, ghJson);
+  if (listed.length <= BATCH_CAP) {
+    return {
+      from: Date.parse(since),
+      to: current.getTime(),
+      search: `merged:>=${since}`,
+      nextSince: current.toISOString(),
+    };
+  }
+  return backfill
+    ? oldestBatch({ since, cwd, ghJson })
+    : newestBatch({ listed, current, cwd, ghJson });
+}
+
+/**
+ * Whether a repo's merged PRs since its start are more than one batch holds, so the
+ * question whether to send the history in batches is worth asking.
+ */
+export async function historyOf({ root, stateFile, ghJson = runGhJson }) {
+  const key = repoKey(root);
+  const since = readState(stateFile).projects[key]?.since ?? HISTORY_START;
+  const prs = await listPrs(`merged:>=${since}`, "number", key, ghJson);
+  return { overLimit: prs.length > BATCH_CAP };
 }
 
 async function postJson(url, body) {
@@ -233,21 +370,24 @@ function isDue(entry, current) {
 
 // What the counter's answer changes in the repo's entry. A 409 means an earlier
 // send of this window was counted though its answer was lost: counting resumes
-// where the counter's count stops. A 429 saying the project already sent today
-// keeps `since`, so those PRs go in the next send.
-function outcomeChange(outcome, { queryTime, today, failedAt }) {
-  if (outcome?.status === 200) return { since: queryTime, lastSendDay: today, failedAt: null };
+// one second after the counter's count stops, since a window's end is inclusive.
+// A 429 saying the project already sent today keeps `since`, so those PRs go in the next send.
+function outcomeChange(outcome, { batch, today, failedAt }) {
+  if (outcome?.status === 200) {
+    return { since: batch.nextSince, lastSendDay: today, failedAt: null };
+  }
   if (outcome?.status === 409 && Number.isSafeInteger(outcome.coveredTo)) {
-    return { since: new Date(outcome.coveredTo).toISOString(), failedAt: null };
+    const resume = new Date(outcome.coveredTo + SECOND_IN_MILLISECONDS);
+    return { since: resume.toISOString(), failedAt: null };
   }
   if (outcome?.status === 429 && ALREADY_SENT.test(outcome.error)) return { lastSendDay: today };
   return { failedAt };
 }
 
 /**
- * The daily send for one repo. It changes the state only through `changeProject`,
- * after each outcome. `ghJson(args, cwd)`, `post(url, body)` and `now()` are
- * injectable so tests run without gh or the network.
+ * The daily send for one repo: the next batch of its merged PRs (see `planWindow`). It
+ * changes the state only through `changeProject`, after each outcome. `ghJson(args, cwd)`,
+ * `post(url, body)` and `now()` are injectable so tests run without gh or the network.
  */
 export async function send({
   root,
@@ -263,25 +403,35 @@ export async function send({
   const current = now();
   if (!entry?.kind || !isDue(entry, current)) return;
   const today = localDay(current);
-  const queryTime = current.toISOString();
-  const prs = await ghJson(prListArgs(entry.since), key).catch(() => null);
-  if (!Array.isArray(prs)) return;
+  const batch = await planWindow({
+    since: entry.since,
+    current,
+    backfill: entry.backfill === true,
+    ghJson,
+    cwd: key,
+  }).catch(() => null);
+  if (!batch) return;
+  const prs = await listPrs(batch.search, "number,labels,comments", key, ghJson).catch(() => null);
+  if (!prs) return;
   const counts = countPrs(prs);
   if (Object.values(counts).every((count) => count === 0)) {
-    return changeProject(stateFile, key, { since: queryTime, lastSendDay: today });
+    return changeProject(stateFile, key, { since: batch.nextSince, lastSendDay: today });
   }
-  const sendWindow = { from: Date.parse(entry.since), to: current.getTime() };
-  const body = { project: entry.id, kind: entry.kind, ...counts, ...sendWindow };
+  const body = { project: entry.id, kind: entry.kind, ...counts, from: batch.from, to: batch.to };
   const outcome = await post(url, body).catch(() => null);
-  const change = outcomeChange(outcome, { queryTime, today, failedAt: current.getTime() });
+  const change = outcomeChange(outcome, { batch, today, failedAt: current.getTime() });
   return changeProject(stateFile, key, change);
 }
 
 function command([name, ...args], file) {
   if (name === "share") return setShare(file, args[0]);
   if (name === "project") return setProject(file, args[0], args[1]);
+  if (name === "backfill") return setBackfill(file, args[0], args[1]);
+  if (name === "history") {
+    return historyOf({ root: args[0], stateFile: file }).catch((error) => fail(error.message));
+  }
   if (name === "status") return statusOf(file);
-  return fail("usage: share on|off | project <root> <kind> | status | send <root>");
+  return fail(USAGE);
 }
 
 async function main(argv) {
@@ -291,7 +441,7 @@ async function main(argv) {
     await send({ root: argv[1], stateFile, url: counterUrl(process.env) }).catch(() => {});
     return;
   }
-  const result = command(argv, stateFile);
+  const result = await command(argv, stateFile);
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exitCode = "error" in result ? 1 : 0;
 }
