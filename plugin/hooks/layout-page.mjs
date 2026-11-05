@@ -22,6 +22,23 @@ export function pageCheckScript() {
 }
 
 async function runLayoutCheck() {
+  // Scripts fill in text after the load event (translations, counters), so the page is read
+  // once it has stopped changing: 300 ms without a DOM change, 3 s at most.
+  await new Promise((done) => {
+    let quiet = setTimeout(finish, 300);
+    const cap = setTimeout(finish, 3000);
+    const observer = new MutationObserver(() => {
+      clearTimeout(quiet);
+      quiet = setTimeout(finish, 300);
+    });
+    observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
+    function finish() {
+      observer.disconnect();
+      clearTimeout(quiet);
+      clearTimeout(cap);
+      done();
+    }
+  });
   await document.fonts.ready;
   // Two frames let the layout settle after the fonts swap in, before any box is read.
   await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
@@ -75,7 +92,16 @@ function overflowsItsBox(el) {
   const deliberate =
     ["auto", "scroll", "hidden"].includes(style.overflowX) || style.textOverflow === "ellipsis";
   if (style.display === "inline" || deliberate || !hasDirectText(el)) return false;
-  return el.scrollWidth > el.clientWidth + 1;
+  // The element's own text against its box: scrollWidth would also count decoration, such as a
+  // rotated pseudo-element chevron that pokes a pixel past the edge.
+  const box = el.getBoundingClientRect();
+  const range = document.createRange();
+  return [...el.childNodes].some((node) => {
+    if (node.nodeType !== Node.TEXT_NODE || node.textContent.trim() === "") return false;
+    range.selectNodeContents(node);
+    const text = range.getBoundingClientRect();
+    return text.right > box.right + 1 || text.left < box.left - 1;
+  });
 }
 
 function measure(el) {

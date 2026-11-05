@@ -21,7 +21,8 @@ const DEFAULT_HEIGHT = 900;
 // A broken page could flood the log, so each width lists this many findings and counts the rest.
 const REPORT_LIMIT = 20;
 const LOAD_TIMEOUT_MS = 15000;
-const PORT_TIMEOUT_MS = 10000;
+// A browser's first start on a fresh machine (a CI runner) takes over 10 s; later ones are quick.
+const PORT_TIMEOUT_MS = 30000;
 const CALL_TIMEOUT_MS = 30000;
 // How long the browser gets to close itself before it is killed.
 const CLOSE_GRACE_MS = 2000;
@@ -195,6 +196,12 @@ async function readDevToolsPort(userDataDir, browser) {
   while (Date.now() < deadline) {
     if (browser.spawnError) {
       throw new Error(`could not start the browser: ${browser.spawnError.message}`);
+    }
+    // A browser that dies at once (a wrong BROWSER_PATH, a missing library) never writes the
+    // file. Exit code 0 is a launcher handing off to the browser process (Edge on Windows).
+    const { exitCode, signalCode } = browser.child;
+    if ((exitCode !== null && exitCode !== 0) || signalCode !== null) {
+      throw new Error(`the browser exited at start (${exitCode ?? signalCode})`);
     }
     const lines = existsSync(file) ? readFileSync(file, "utf8").split(/\r?\n/) : [];
     if (lines[0] && lines[1]) return { port: lines[0], path: lines[1] };

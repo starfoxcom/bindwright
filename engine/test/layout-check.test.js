@@ -90,6 +90,19 @@ function runCheck(body) {
   }
 }
 
+test("a browser that exits at start is reported at once, not after the start wait", () => {
+  // Node is no browser: it refuses the browser flags and exits straight away.
+  const started = Date.now();
+  const run = spawnSync(process.execPath, [CLI, "https://example.com/"], {
+    encoding: "utf8",
+    timeout: SPAWN_TIMEOUT_MS,
+    env: { ...process.env, BROWSER_PATH: process.execPath },
+  });
+  assert.equal(run.status, 2, run.stdout + run.stderr);
+  assert.match(run.stderr, /the browser exited at start/);
+  assert.ok(Date.now() - started < 15000, "it waited for the DevTools port anyway");
+});
+
 test("a clean two-column page passes at 390 and 1280", { skip: SKIP }, () => {
   const run = runCheck(CLEAN_TWO_COLUMN);
   assert.equal(run.status, 0, run.stdout + run.stderr);
@@ -124,6 +137,15 @@ test("text inside a faded-out box does not count as overlapping", { skip: SKIP }
     .replace('height:80px">Second box text', 'height:80px;opacity:0"><span>Second box text</span>');
   assert.notEqual(faded, OVERLAPPING_BOXES);
   const run = runCheck(faded);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+});
+
+test("a rotated chevron poking past its button is not overflowing text", { skip: SKIP }, () => {
+  const chevron =
+    "<style>button::after{content:'';display:inline-block;width:6px;height:6px;" +
+    "margin-left:8px;border-right:2px solid;border-bottom:2px solid;transform:rotate(45deg)}" +
+    "button{display:inline-flex;padding:0;border:0}</style><button>Show the files</button>";
+  const run = runCheck(chevron);
   assert.equal(run.status, 0, run.stdout + run.stderr);
 });
 
