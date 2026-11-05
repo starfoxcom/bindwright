@@ -3,7 +3,17 @@
 
 import os
 
-from layers import LOCAL, PERSONAL, SCHEMA, SETTINGS, _read_layer_file, resolve_layers
+from layers import (
+    LOCAL,
+    PERSONAL,
+    SCHEMA,
+    SETTINGS,
+    _parse_layer_text,
+    _read_layer_file,
+    _read_layer_text,
+    refuse_unstable_json,
+    resolve_layers,
+)
 from update import ANSWERS, _code_units
 
 
@@ -32,11 +42,13 @@ def export_setup(root, choices, state_json):
     extras = choices.get("extras", {})
     required = choices.get("required", [])
     path = os.path.join(root, *ANSWERS.split("/"))
-    answers = _read_layer_file(path, ANSWERS, keep_ints=True)
-    if answers is None:
+    text = _read_layer_text(path, ANSWERS)
+    if text is None:
         raise ValueError("%s is missing: this repo was not set up with /bindwright:setup" % ANSWERS)
+    answers = _parse_layer_text(text, ANSWERS, keep_ints=True)
     if not isinstance(answers, dict):
         raise ValueError("%s must hold a JSON object" % ANSWERS)
+    refuse_unstable_json(text)
     setup = {"schema": SCHEMA, "extras": extras, "required": required}
     _refuse("export", resolve_layers(project=dict(answers, setup=setup))["ignored"])
     out = {k: v for k, v in answers.items() if k != "setup"}
