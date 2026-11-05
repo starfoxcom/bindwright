@@ -8,9 +8,15 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [v2.2.0] — 2026-11-05
 
-v2.2.0 makes Bindwright installable with one command, with no Git and from the Claude desktop app, and gets it ready for the plugin directory. It also makes each review tier post exactly one verdict, checked by the gate's reader before it is posted.
+v2.2.0 opens Bindwright to people new to programming: setup works for a project without GitHub, says in plain words which tools are missing and how to get them, and installs with one command, with no Git and from the Claude desktop app. It also gets the plugin ready for the plugin directory and makes each review tier post exactly one verdict, checked by the gate's reader before it is posted.
 
 ### Added
+
+- **Setup for a project without GitHub** (#631, #633). Setup first asks where the code lives: GitHub, just this computer, or another site (GitLab, Bitbucket and the like), saved as `advanced.codeHost` (`github`, the default, `local` or `other`). For `local` and `other` the AI reviews are off and the work state lives in the hand-off file; no board, private tracker repo, public roadmap, `.github/` workflows, issue and PR templates or review settings are written, and both engines refuse answers that need GitHub. A just-this-computer project is one person's: `git.md` gets a "Save points" section in plain words instead of branches and pull requests, and the other shipped files drop their branch, CI, push and pull-request steps. Another site gets `.claude/rules/code-host.md`, which says how to read each GitHub step there and lists the GitHub-only parts left out. Answers saved before this release read as `github`.
+
+- **Plain words for first-time users** (#633). With no Git name or GitHub sign-in, setup asks "Have you used Git and GitHub before?"; "Not really" words the rest plainly and recommends the safe answers, and setup sets the Git name and email on a yes when they are missing.
+
+- **Setup says what is missing and how to get it** (#627, #630). Setup checks for Git before it looks for the repo and stops with a plain explanation when Git, Node or Python is missing, with the install route for the user's system (winget on Windows, `xcode-select` or Homebrew on macOS, the package manager on Linux), which it offers to run.
 
 - **The packed plugin on its own branch** (#421). Each published release also writes the packed plugin to a `plugin` branch, the layout the plugin directory installs from, and the plugin gains an icon and an install line for its listing.
 
