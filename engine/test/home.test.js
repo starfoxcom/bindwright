@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join, dirname } from "node:path";
@@ -60,6 +60,47 @@ test("a hook installs once, in the launcher form, beside the user's own entries"
     assert.ok(hook.args[3].endsWith("/.claude/hooks/push-guard.py"));
     assert.equal(readFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "utf8"), "print('hi')\n");
     assert.ok(existsSync(settingsPath(dir) + ".bak"));
+  });
+});
+
+function withPath(dirs, fn) {
+  const saved = process.env.PATH;
+  process.env.PATH = [...dirs, saved].join(delimiter);
+  try {
+    return fn();
+  } finally {
+    process.env.PATH = saved;
+  }
+}
+
+function interpreter(dir) {
+  const file = join(dir, process.platform === "win32" ? "python3.exe" : "python3");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, "");
+  chmodSync(file, 0o755);
+  return file;
+}
+
+test("a hook whose interpreter PATH resolves to installs as the bare name", { skip }, () => {
+  withHome((dir) => {
+    const bin = join(dir, "bin");
+    const python3 = interpreter(bin);
+    const file = hookFile(dir, "push-guard.py");
+    withPath([bin], () => {
+      assert.equal(home(dir, "install-hook", file, "--python", python3, "--matcher", "Bash").status, 0);
+    });
+    assert.equal(settings(dir).hooks.PreToolUse[0].hooks[0].command, "python3");
+  });
+});
+
+test("a hook whose interpreter is not on PATH keeps its absolute path", { skip }, () => {
+  withHome((dir) => {
+    const python3 = interpreter(join(dir, "elsewhere"));
+    const file = hookFile(dir, "push-guard.py");
+    withPath([join(dir, "bin")], () => {
+      assert.equal(home(dir, "install-hook", file, "--python", python3, "--matcher", "Bash").status, 0);
+    });
+    assert.equal(settings(dir).hooks.PreToolUse[0].hooks[0].command, python3);
   });
 });
 
