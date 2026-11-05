@@ -11,11 +11,23 @@ export const KINDS = Object.freeze([
   "other",
 ]);
 
-/** The four counts a send carries, in the order the page shows them. */
-export const FIELDS = Object.freeze(["checked", "caught", "deep", "merged"]);
+/** The four PR counts a send carries, in the order the page shows them. */
+const PR_COUNTS = Object.freeze(["checked", "caught", "deep", "merged"]);
+
+/** The counts a send carries, each a whole number from 0 to MAX_PER_SEND. */
+export const FIELDS = Object.freeze([...PR_COUNTS, "stalled"]);
+
+/** Every count a send carries: FIELDS, plus the red review rounds, which have their own cap. */
+const COUNT_FIELDS = [...FIELDS, "rounds"];
 
 /** Upper bound for one field in one send. A send covers the days since the last one. */
 export const MAX_PER_SEND = 500;
+
+/** Upper bound for the red review rounds in one send: 500 PRs at a 50-round ceiling each. */
+export const MAX_ROUNDS_PER_SEND = MAX_PER_SEND * 50;
+
+/** Red review rounds at which a PR counts as stalled: the review rules stop to research a simpler way. */
+export const STALL_ROUNDS = 6;
 
 /** A project may send again only this long after its last accepted send. */
 export const MIN_SEND_GAP_IN_MILLISECONDS = 20 * 60 * 60 * 1000;
@@ -33,7 +45,7 @@ const PROJECT_ID = /^[0-9a-f]{32}$/;
 /** The window a send covers: pull requests merged from `from` up to `to`, in epoch milliseconds. */
 export const WINDOW = Object.freeze(["from", "to"]);
 
-const ALLOWED_KEYS = new Set(["project", "kind", ...FIELDS, ...WINDOW]);
+const ALLOWED_KEYS = new Set(["project", "kind", ...COUNT_FIELDS, ...WINDOW]);
 
 /**
  * Checks a parsed send and returns either `{ ok: true, send }` with the
@@ -42,7 +54,7 @@ const ALLOWED_KEYS = new Set(["project", "kind", ...FIELDS, ...WINDOW]);
  *
  * ```js
  * checkSend({ project: "0f…", kind: "game", checked: 3, caught: 1, deep: 0, merged: 2,
- *   from: 1793750400000, to: 1793836800000 });
+ *   stalled: 0, rounds: 1, from: 1793750400000, to: 1793836800000 });
  * ```
  */
 export function checkSend(body) {
@@ -61,19 +73,33 @@ export function checkSend(body) {
   }
 
   const counts = {};
-  for (const field of FIELDS) {
+  for (const field of COUNT_FIELDS) {
     const value = body[field];
-    if (!Number.isInteger(value) || value < 0 || value > MAX_PER_SEND) {
-      return refuse(`${field} must be a whole number from 0 to ${MAX_PER_SEND}`);
+    const limit = field === "rounds" ? MAX_ROUNDS_PER_SEND : MAX_PER_SEND;
+    if (!Number.isInteger(value) || value < 0 || value > limit) {
+      return refuse(`${field} must be a whole number from 0 to ${limit}`);
     }
     counts[field] = value;
   }
-  if (counts.caught > counts.checked || counts.deep > counts.checked) {
-    return refuse("caught and deep cannot exceed checked");
-  }
-  if (FIELDS.every((field) => counts[field] === 0)) return refuse("nothing to add");
+  const contradiction = contradictionOf(counts);
+  if (contradiction !== null) return refuse(contradiction);
+  if (PR_COUNTS.every((field) => counts[field] === 0)) return refuse("nothing to add");
   const { project, kind, from, to } = body;
   return { ok: true, send: { project, kind, ...counts, from, to } };
+}
+
+// The first reason two counts of one send contradict each other, or null when they agree.
+function contradictionOf(counts) {
+  if (counts.caught > counts.checked || counts.deep > counts.checked) {
+    return "caught and deep cannot exceed checked";
+  }
+  if (counts.stalled > counts.caught) return "stalled cannot exceed caught";
+  if (counts.rounds < counts.caught) return "rounds cannot be fewer than caught";
+  if (counts.rounds < STALL_ROUNDS * counts.stalled) {
+    return `rounds must be at least ${STALL_ROUNDS} for each stalled PR`;
+  }
+  if (counts.caught === 0 && counts.rounds > 0) return "rounds need a caught PR";
+  return null;
 }
 
 /** The country code Cloudflare derived from the request, or "XX" when unknown. */

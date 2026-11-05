@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS projects (
   caught    INTEGER NOT NULL DEFAULT 0,
   deep      INTEGER NOT NULL DEFAULT 0,
   merged    INTEGER NOT NULL DEFAULT 0,
+  stalled   INTEGER NOT NULL DEFAULT 0,  -- PRs with STALL_ROUNDS or more red review rounds (rules.js)
+  rounds    INTEGER NOT NULL DEFAULT 0,  -- red review rounds, summed over the checked PRs
   last_send INTEGER NOT NULL,  -- milliseconds since the epoch
   covered_to INTEGER NOT NULL  -- end of the newest counted window, milliseconds since the epoch
 );
