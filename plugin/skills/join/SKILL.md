@@ -11,7 +11,7 @@ This skill compares the team's setup in `.bindwright/project.json` with this mac
 ## 1. Read both sides
 
 - Find the repo root with `git rev-parse --show-toplevel`. If `.bindwright/project.json` is missing, this repo does not use Bindwright; say so and stop.
-- Pick the engine as setup does (`node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`, else Python 3.8+ with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`) and run `--settings <repo root>`. On `{"error": "..."}`, show the message and stop. A message saying a file "was written by a newer Bindwright" means the plugin is older than the repo's setup: tell the user to update the plugin with `/plugin`, and stop.
+- Pick the engine as setup does (`node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, else Python 3.8+ with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`) and run `--settings <repo root>`. On `{"error": "..."}`, show the message and stop. A message saying a file "was written by a newer Bindwright" means the plugin is older than the repo's setup: tell the user to update the plugin with `/plugin`, and stop.
 - If `ignored` is not empty, list it in plain words: those values are not used. Values the project's own `setup` asks for that this plugin does not know are among them; never act on them.
 
 ## 2. Tracker access
