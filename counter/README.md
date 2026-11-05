@@ -17,7 +17,7 @@ One row per project: a random 32-character id the plugin makes once per repo, th
 
 All in `src/rules.js`:
 
-- Each count is a whole number from 0 to 1000 per send, and `caught` and `deep` never exceed `checked`.
+- Each count is a whole number from 0 to 500 per send, and `caught` and `deep` never exceed `checked`.
 - A project sends at most once every 20 hours, and a window that overlaps one already counted is refused, so a send whose answer was lost and is sent again never counts twice.
 - At most 200 new projects a day across all senders.
 - Five sends a minute per IP through Cloudflare's rate limiter (`wrangler.jsonc`); the Worker never stores the IP.
