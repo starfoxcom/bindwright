@@ -42,6 +42,31 @@ test('ten simultaneous claims: exactly one seat, nine in line, no duplicates', a
   assert.ok(!s.line.some(e => e.session === s.seat.session))
 })
 
+test('a claim waits out a mutex that keeps changing hands past ten seconds, and is recorded', async () => {
+  const sb = sandbox()
+  sb.register('a')
+  // Holders that hand the mutex on every 400 ms for 12 s: never stale, never free.
+  const churn = `
+    const fs = require('fs'), path = require('path')
+    const mutex = path.join(process.argv[1], '.mutex')
+    fs.mkdirSync(mutex)
+    const end = Date.now() + 12000
+    for (let i = 0; Date.now() < end; i++) {
+      fs.writeFileSync(path.join(mutex, 'owner'), 'holder-' + i)
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400)
+    }
+    fs.rmSync(mutex, { recursive: true, force: true })
+  `
+  const holder = spawn(process.execPath, ['-e', churn, sb.dir])
+  const holderDone = new Promise(resolve => holder.on('close', resolve))
+  await new Promise(resolve => setTimeout(resolve, 300))
+  const claim = await sb.runAsync('claim', 'a', 'build')
+  await holderDone
+  assert.strictEqual(claim.code, 0)
+  assert.ok(claim.out.granted)
+  assert.strictEqual(sb.state().seat.session, 'a')
+})
+
 test('a fresh install: asking where the state lives makes the folders the heartbeats are written in', () => {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shared-pc-')), 'not-made-yet')
   const env = { ...process.env, SHARED_PC_DIR: dir }
