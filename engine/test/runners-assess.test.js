@@ -65,7 +65,8 @@ const countRows = [
     "# top\njobs:\n\n  # the build\n  build:\n    # runs-on: self-hosted\n\n    runs-on: ubuntu-latest\n",
     { jobs: 1, selfHosted: 0 }],
   ["nested keys under a job are not jobs",
-    "jobs:\n  build:\n    runs-on: self-hosted\n    strategy:\n      matrix:\n        os: [a]\n    steps:\n      - name: x\n",
+    "jobs:\n  build:\n    runs-on: self-hosted\n    strategy:\n      matrix:\n        os: [a]\n"
+      + "    steps:\n      - name: x\n",
     { jobs: 1, selfHosted: 1 }],
   ["four-space indentation counts the same",
     "jobs:\n    build:\n        runs-on: self-hosted\n    test:\n        runs-on: ubuntu-latest\n",
