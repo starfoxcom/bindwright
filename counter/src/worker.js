@@ -1,6 +1,7 @@
 // The opt-in review counter behind the Bindwright page.
 //
-//   POST /increment  {project, kind, checked, caught, deep, merged, from, to}  adds one send
+//   POST /increment  {project, kind, checked, caught, deep, merged, stalled, rounds, from, to}
+//                    adds one send
 //   GET  /total      the sums, projects per country and the top projects
 //
 // Sends come from the plugin of users who said yes at setup; the page reads

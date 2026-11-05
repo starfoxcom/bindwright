@@ -1,6 +1,6 @@
 // Bindwright's opt-in review counts. `send <repo root>` runs at session start: at
 // most once a day per repo it counts the user's merged pull requests and posts the
-// four counts to the counter. A repo's count covers its whole history, from GitHub's
+// review counts to the counter. A repo's count covers its whole history, from GitHub's
 // first day. A history past one send's cap goes out one batch a day: oldest first
 // when backfill is on, otherwise only the newest batch is sent. The other commands
 // (`share on|off`, `project <root> <kind>`, `backfill <root> on|off`, `history <root>`,
@@ -35,6 +35,10 @@ const DEFAULT_COUNTER_URL = "https://bindwright-counter.starfoxcom.workers.dev";
 // The most PRs one send carries. A count past it is capped, and a batch holds at most this many.
 const BATCH_CAP = 500;
 const MAX_PER_COUNT = BATCH_CAP;
+// Room for 500 PRs at a 50-round ceiling each: the most red rounds one send carries.
+export const MAX_ROUNDS = BATCH_CAP * 50;
+// Red review rounds that stall a PR: the review rules stop to research a simpler way.
+export const STALL_ROUNDS = 6;
 // GitHub search returns at most this many results for one query. The listings ask for all of
 // them, so a history past BATCH_CAP is visible as past it.
 const SEARCH_LIMIT = 1000;
@@ -53,7 +57,10 @@ const DEEP_LABEL = "needs-deep-review";
 const BOT_LOGINS = new Set(["claude", "claude[bot]"]);
 const ESCALATION_REQUEST = /@claude review/i;
 const LIST_ITEM = /^\s*([-+]|\*\s|\d+[.)])/;
-const VERDICT_LINE = /^[\s*_#>]*(🟢|🔴)[\s*_]*(LGTM|Blocking)/i;
+// The deep review's comment, as the review gate tells it apart: its job summary or its plain comment.
+const DEEP_SUMMARY = /^\s*(\*\*Claude finished|## Deep review)/;
+// A verdict line: leading markup, an optional "Verdict" label, then the glyph and its word.
+const VERDICT_LINE = /^[\s*_#>]*(?:Verdict[\s*_]*:?[\s*_]*)?(🟢|🔴)[\s*_]*(LGTM|Blocking|Approved)/i;
 const ALREADY_SENT = /already sent/;
 const PROJECT_ID = /^[0-9a-f]{32}$/;
 const USAGE = [
@@ -100,12 +107,33 @@ function verdictOf(text) {
   return verdict;
 }
 
-function verdictsOf(pr) {
+function botComments(pr) {
   return (pr.comments ?? [])
     .filter((comment) => BOT_LOGINS.has(comment.author?.login))
-    .filter((comment) => !ESCALATION_REQUEST.test(comment.body ?? ""))
-    .map((comment) => verdictOf(comment.body ?? ""))
-    .filter((verdict) => verdict !== null);
+    .filter((comment) => !ESCALATION_REQUEST.test(comment.body ?? ""));
+}
+
+// The verdicts of each review round, oldest first. A routine comment opens a round; the
+// deep summary of the same push joins the open round, or opens one when none is open.
+function roundsOf(pr) {
+  const rounds = [];
+  for (const comment of botComments(pr)) {
+    const body = comment.body ?? "";
+    const verdict = verdictOf(body);
+    if (verdict === null) continue;
+    if (rounds.length === 0 || !DEEP_SUMMARY.test(body)) rounds.push([]);
+    rounds.at(-1).push(verdict);
+  }
+  return rounds;
+}
+
+// Each count capped at its limit: `rounds` at MAX_ROUNDS, the rest at BATCH_CAP.
+function capped(counts) {
+  const entries = Object.entries(counts).map(([name, n]) => {
+    const limit = name === "rounds" ? MAX_ROUNDS : MAX_PER_COUNT;
+    return [name, Math.min(n, limit)];
+  });
+  return Object.fromEntries(entries);
 }
 
 function hasDeepLabel(pr) {
@@ -113,25 +141,29 @@ function hasDeepLabel(pr) {
 }
 
 /**
- * Counts the four review numbers of merged PRs, as `gh pr list --json
- * number,labels,comments` returns them. Each count is capped at MAX_PER_COUNT.
+ * Counts the review numbers of merged PRs, as `gh pr list --json
+ * number,labels,comments` returns them. A PR with a verdict is checked; each of its red
+ * review rounds adds to `rounds`, it is caught with one and stalled with STALL_ROUNDS.
+ * Each count is capped at MAX_PER_COUNT, and `rounds` at MAX_ROUNDS.
  *
  * ```js
  * countPrs([{ labels: [], comments: [{ author: { login: "claude" }, body: "🟢 LGTM" }] }]);
- * // { checked: 1, caught: 0, deep: 0, merged: 1 }
+ * // { checked: 1, caught: 0, deep: 0, merged: 1, stalled: 0, rounds: 0 }
  * ```
  */
 export function countPrs(prs) {
-  const counts = { checked: 0, caught: 0, deep: 0, merged: prs.length };
+  const counts = { checked: 0, caught: 0, deep: 0, merged: prs.length, stalled: 0, rounds: 0 };
   for (const pr of prs) {
-    const verdicts = verdictsOf(pr);
-    if (verdicts.length === 0) continue;
+    const rounds = roundsOf(pr);
+    if (rounds.length === 0) continue;
+    const redRounds = rounds.filter((verdicts) => verdicts.includes("red")).length;
     counts.checked += 1;
-    if (verdicts.includes("red")) counts.caught += 1;
+    if (redRounds > 0) counts.caught += 1;
+    if (redRounds >= STALL_ROUNDS) counts.stalled += 1;
+    counts.rounds += redRounds;
     if (hasDeepLabel(pr)) counts.deep += 1;
   }
-  const capped = Object.entries(counts).map(([name, n]) => [name, Math.min(n, MAX_PER_COUNT)]);
-  return Object.fromEntries(capped);
+  return capped(counts);
 }
 
 function readJson(file) {

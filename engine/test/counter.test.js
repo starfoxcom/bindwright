@@ -13,6 +13,7 @@ import {
   MAX_BODY_IN_BYTES,
   MAX_NEW_PROJECTS_PER_DAY,
   MAX_PER_SEND,
+  MAX_ROUNDS_PER_SEND,
   MIN_SEND_GAP_IN_MILLISECONDS,
   checkSend,
 } from "../../counter/src/rules.js";
@@ -77,7 +78,8 @@ function rowOf(database, id) {
 
 function send(fields = {}) {
   return {
-    project: PROJECT, kind: "game", checked: 4, caught: 1, deep: 1, merged: 3, from: NOON - DAY, to: NOON,
+    project: PROJECT, kind: "game", checked: 4, caught: 1, deep: 1, merged: 3,
+    stalled: 0, rounds: 2, from: NOON - DAY, to: NOON,
     ...fields,
   };
 }
@@ -94,6 +96,7 @@ async function run(request, { store, rateLimiter, time = NOON }) {
 
 test("checkSend accepts a valid send and refuses each bad field", () => {
   assert.equal(checkSend(send()).ok, true);
+  assert.equal(checkSend(send({ caught: 2, stalled: 1, rounds: 6 })).ok, true, "a stalled PR");
   const refused = [
     ["not an object", []],
     ["unknown field", send({ repo: "secret" })],
@@ -105,26 +108,42 @@ test("checkSend accepts a valid send and refuses each bad field", () => {
     ["one above the cap", send({ checked: MAX_PER_SEND + 1 })],
     ["caught above checked", send({ checked: 1, caught: 2 })],
     ["deep above checked", send({ checked: 1, deep: 2 })],
-    ["all zero", send({ checked: 0, caught: 0, deep: 0, merged: 0 })],
+    ["all zero", send({ checked: 0, caught: 0, deep: 0, merged: 0, stalled: 0, rounds: 0 })],
     ["no window", { ...send(), from: undefined }],
     ["window ending before it starts", send({ from: NOON, to: NOON - 1 })],
     ["window as text", send({ to: String(NOON) })],
+    ["stalled above caught", send({ caught: 1, stalled: 2, rounds: 12 })],
+    ["rounds fewer than caught", send({ caught: 2, rounds: 1 })],
+    ["rounds fewer than six per stalled PR", send({ caught: 2, stalled: 2, rounds: 11 })],
+    ["rounds above their cap", send({ rounds: MAX_ROUNDS_PER_SEND + 1 })],
+    ["rounds with caught at 0", send({ caught: 0, deep: 0, rounds: 1 })],
   ];
   for (const [name, body] of refused) assert.equal(checkSend(body).ok, false, name);
-  assert.equal(checkSend(send({ checked: MAX_PER_SEND, merged: MAX_PER_SEND })).ok, true, "cap");
+  const atCap = send({
+    checked: MAX_PER_SEND, caught: MAX_PER_SEND, merged: MAX_PER_SEND,
+    stalled: MAX_PER_SEND, rounds: MAX_ROUNDS_PER_SEND,
+  });
+  assert.equal(checkSend(atCap).ok, true, "cap");
 });
 
 test("a send adds to the totals, and /total reports kinds and counts only", async () => {
   const { store } = newStore();
   assert.equal((await run(post(send()), { store })).status, 200);
-  assert.equal((await run(post(send({ project: OTHER, kind: "website", checked: 9 })), { store })).status, 200);
+  const stalling = send({
+    project: OTHER, kind: "website", checked: 9, caught: 2, stalled: 1, rounds: 8,
+  });
+  assert.equal((await run(post(stalling), { store })).status, 200);
 
   const total = await run(new Request("https://counter.test/total"), { store });
   assert.equal(total.status, 200);
   assert.equal(total.response.headers.get("access-control-allow-origin"), "*");
   assert.equal(total.body.projects, 2);
   assert.equal(total.body.checked, 13);
-  assert.deepEqual(total.body.top[0], { kind: "website", checked: 9, caught: 1, deep: 1, merged: 3 });
+  assert.equal(total.body.stalled, 1);
+  assert.equal(total.body.rounds, 10);
+  assert.deepEqual(total.body.top[0], {
+    kind: "website", checked: 9, caught: 2, deep: 1, merged: 3, stalled: 1, rounds: 8,
+  });
   assert.equal(JSON.stringify(total.body).includes(PROJECT), false, "project ids stay private");
 });
 
