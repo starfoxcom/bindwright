@@ -43,6 +43,8 @@ const live = {
   tick: undefined as { cancel: () => void } | undefined,
   /** A /clear ended the session: the next start carries the watches in memory into the new id's file. */
   isCleared: false,
+  /** Retired when a /clear moved the id on: the new id has no owner file to say so, so memory does. */
+  isRetiredForGood: false,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -142,6 +144,7 @@ async function claimOwner($: EngineInterface): Promise<void> {
 }
 
 export async function isRetired($: EngineInterface): Promise<boolean> {
+  if (live.isRetiredForGood) return true
   try {
     const owner = String(await $.fs.read(await ownerPath($))).trim()
     return owner !== '' && owner !== INSTANCE
@@ -619,10 +622,11 @@ function startPolling($: EngineInterface): Promise<void> {
   const start = (live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
+    // A /clear while this start ran began another, which loads and arms in its place.
+    if (live.started !== start) return
     // After a /clear the new id has no state file yet: the watches go on from memory.
     if (live.isCleared) await save($).finally(() => (live.isCleared = false))
     else await load($)
-    // A /clear while this start ran began another, which arms the timer instead.
     if (live.started === start) armPolling($)
   })().catch(() => undefined))
   return start
@@ -704,9 +708,13 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  // Read under the ending id: an instance a reload retired stays retired, so it never claims the new id.
   on('session.end', async ($, e, next) => {
+    const isRetiredNow = e.reason === 'clear' && (await isRetired($))
     const result = await next(e)
-    if (e.reason === 'clear') forgetStart()
+    if (e.reason !== 'clear') return result
+    if (isRetiredNow) live.isRetiredForGood = true
+    else forgetStart()
     return result
   })
 
