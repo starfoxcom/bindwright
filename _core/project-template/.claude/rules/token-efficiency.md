@@ -19,6 +19,7 @@ When the `builder` agent is installed (`~/.claude/agents/builder.md`), hand it e
 
 For a job that changes a web page, add the layout check to the brief's test command: `node <plugin folder>/hooks/layout-check.mjs <page URL>`, where the plugin folder is the `installPath` of `bindwright` in `~/.claude/plugins/installed_plugins.json`. It opens the page headless at phone and desktop width and fails on overlapping elements, text that overflows its box and sideways scroll, the misses a builder cannot see; it needs Node 22+ and Chrome, Chromium or Edge. Mark a deliberate overlap with `data-layout-ignore`.
 
+<!-- TOGGLE:code_host_local:off START -->
 ## Watching CI
 
 After every push, watch the PR's checks; never use `gh run watch`. When the `ci-watch` mod is loaded, it watches the PR after `git push` or `gh pr create` and wakes the session once all checks settle; follow the mod and start no second watcher. Otherwise use the **Monitor tool** where it exists:
@@ -53,6 +54,8 @@ Diffs of only Markdown, images and fonts outside the always-reviewed paths (the 
 
 Approval to open the PR covers this merge. A PR that changes `.github/workflows/claude-code-review.yml` gets no AI review in CI; it merges only as `review-tiers.md` § PRs that edit the review workflow describes.
 <!-- TOGGLE:github_actions_paths_ignore_auto_merge END -->
+
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Long sessions
 

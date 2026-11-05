@@ -7,6 +7,12 @@ import { validate, flagsFor, choicesFor, valuesFor, CHOICE_OPTIONS, DEFERRED, LI
 
 const CORE = "_core/project-template/";
 
+// Files that only run on GitHub, left out when the code lives elsewhere.
+const GITHUB_ONLY = [
+  ".github/workflows/", ".github/ISSUE_TEMPLATE/", ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/CODEOWNERS.template", ".github/review-gate.yml", ".github/review-guide.md", ".github/review-checks/",
+];
+
 // Files a repo often already has. They land in STAGING and the tailoring
 // step merges them instead of the zip overwriting the user's copy.
 const MERGE_TARGETS = new Set([
@@ -42,12 +48,16 @@ function included(path, a, flags) {
   if (path.startsWith("precommit/")) return false;
   if (path.startsWith(".claude/rules/architecture/")) return false;
   if (path.startsWith(".claude/skills/architecture-graph/")) return false;
+  // Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
+  // `.template` sources match too; the scripts and the size-check folder run anywhere.
+  if (!flags.code_host_github && GITHUB_ONLY.some((p) => path.startsWith(p))) return false;
   const byFile = {
     "CONTRIBUTING.md": a.team,
     ".github/CODEOWNERS.template": a.team,
     ".github/PULL_REQUEST_TEMPLATE.md": a.team || a.client,
     "LICENSE.template": flags.license_file,
     ".claude/rules/collaboration.md": a.team,
+    ".claude/rules/code-host.md": flags.code_host_other,
     ".claude/rules/confidentiality.md": adv.confidentiality,
     ".claude/rules/clean-room.md": adv.cleanRoom,
     ".claude/rules/shipped-text.md": adv.plainWriting,

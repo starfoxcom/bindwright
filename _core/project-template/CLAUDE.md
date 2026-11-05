@@ -8,19 +8,29 @@ Guidance for Claude Code in this repository. Rules in `.claude/rules/` load on t
 
 - **Stack:** {{LANGUAGE_AND_FRAMEWORK}}
 - **Repo:** {{REPO_URL}}
+<!-- TOGGLE:code_host_local START -->
+- **Save points:** each piece of work that works is a commit on `{{MAIN_BRANCH}}`, and the project lives only on this computer. See `.claude/rules/git.md`.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 <!-- TOGGLE:branching_model_gitflow START -->
 - **Branches:** `{{MAIN_BRANCH}}` holds tagged releases; `{{DEV_BRANCH}}` is where work lands. See `.claude/rules/git.md`.
 <!-- TOGGLE:branching_model_gitflow END -->
 <!-- TOGGLE:branching_model_trunk START -->
 - **Branches:** short-lived branches merge into `{{MAIN_BRANCH}}`; release commits are tagged. See `.claude/rules/git.md`.
 <!-- TOGGLE:branching_model_trunk END -->
+<!-- TOGGLE:code_host_local:off END -->
 - **Commands:** lint `{{LINT_COMMAND}}`, type check `{{TYPECHECK_COMMAND}}`, test `{{TEST_COMMAND}}`.
 
 <!-- TOGGLE:tracker:github START -->
 Work is tracked in GitHub issues: `.claude/rules/tracker.md` says where each item's state lives and how to read and update it.
 <!-- TOGGLE:tracker:github END -->
 <!-- TOGGLE:tracker:file START -->
+<!-- TOGGLE:code_host_local START -->
+Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/session-close` keeps it current and `/session-start` reads it.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/session-close` keeps it current; `/session-start` checks it against git.
+<!-- TOGGLE:code_host_local:off END -->
 <!-- TOGGLE:tracker:file END -->
 
 ## Language
@@ -38,7 +48,12 @@ Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RE
 
 - **Start:** `/session-start` reads the current state, proposes a plan and waits for approval before changing code.
 - **During:** track multi-step work per `.claude/rules/task-tracking.md`.
+<!-- TOGGLE:code_host_local START -->
+- **End:** `/session-close` checks what is really finished and makes the save point.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - **End:** `/session-close` checks what is really finished, commits, and opens or merges the PR.
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:lazy_rules_folder START -->
 ## Rules loaded on demand

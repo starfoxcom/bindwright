@@ -1,11 +1,16 @@
 ---
 name: session-close
-description: Close a work session. Verifies what is really finished, commits, opens or merges the PR, cleans up branches and hands off to the next session. Use when the maintainer asks for it, or when every task of the session is done; never just because the context is filling up.
+description: Close a work session. Verifies what is really finished, commits, lands the work, cleans up and hands off to the next session. Use when the maintainer asks for it, or when every task of the session is done; never just because the context is filling up.
 ---
 
 # /session-close
 
+<!-- TOGGLE:code_host_local START -->
+Run the steps in order without asking between them. Stop and ask only before throwing away work that is not in a save point. If `.claude/rules/visual.md` exists and this session changed what people see, do not call that work done until the maintainer has confirmed the visual check.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 Run the steps in order without asking between them. Stop and ask only before a force-push, deleting a branch that holds unmerged work, or rewriting history someone else has pulled. If `.claude/rules/visual.md` exists and this session changed what people see, do not push until the maintainer has confirmed the visual check.
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:definition_of_done_verification START -->
 ## Verify what is done
@@ -38,7 +43,12 @@ The hand-off names roadmap items by id (`R4`) and never copies their text.
 Next id: R8
 
 ## Now
+<!-- TOGGLE:code_host_local START -->
+- R5 Checkout page
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - R5 Checkout page (branch feature/checkout)
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Next
 - R6 Saved carts
@@ -49,7 +59,12 @@ Next id: R8
 
 Edit only the lines for items this session touched:
 
+<!-- TOGGLE:code_host_local START -->
+- An item whose work started moves to Now. Now holds at most five items; ask which one waits when a sixth would join.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - An item whose work started gets the branch in brackets and moves to Now. Now holds at most five items; ask which one waits when a sixth would join.
+<!-- TOGGLE:code_host_local:off END -->
 - A finished item is deleted here and added to `CHANGELOG.md` in the same commit.
 - A new item takes the `Next id`, which then goes up by one. Ids are never reused.
 
@@ -75,6 +90,7 @@ Run `python3 .claude/scripts/research-adherence.py` from the repo root (`python`
 
 If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
 
+<!-- TOGGLE:code_host_local:off START -->
 ## Commit and PR
 
 Take the first row that matches:
@@ -97,6 +113,12 @@ Take the first row that matches:
 | Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge on 🟢. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
+<!-- TOGGLE:code_host_local:off END -->
+<!-- TOGGLE:code_host_local START -->
+## Save point
+
+Commit the session's work as one save point, or one per finished piece, with the message format in `git.md`. The project lives only on this computer: nothing is pushed, and there is no pull request.
+<!-- TOGGLE:code_host_local END -->
 
 <!-- TOGGLE:tracker:github START -->
 ## Hand-off in the tracker
@@ -126,4 +148,9 @@ Rewrite `.bindwright/handoff.md`. It stays in this checkout, out of git: the fir
 
 ## Last message
 
+<!-- TOGGLE:code_host_local START -->
+> **Session closed.** Everything is in a save point. Start a fresh conversation for the next session.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 > **Session closed.** Everything is committed; [PR #N merged and branches deleted | branch pushed, PR #N waiting on checks | work committed locally on `<branch>`]. Start a fresh conversation for the next session.
+<!-- TOGGLE:code_host_local:off END -->

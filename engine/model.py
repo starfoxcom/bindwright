@@ -56,6 +56,9 @@ DENY_PROFILES = ["standard", "strict"]
 # board when trackerProject names one), or the repo's hand-off file and
 # ROADMAP.md.
 TRACKERS = ["github", "file"]
+# Where the code lives: on GitHub, only on this computer (no account), or on
+# another host. "local" and "other" leave out every GitHub-only file.
+CODE_HOSTS = ["github", "local", "other"]
 # "<owner>/<number>" of a GitHub Projects board. The owner lands in gh
 # command lines, so it is held to GitHub's own name rule.
 TRACKER_PROJECT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[1-9][0-9]{0,5}")
@@ -158,6 +161,9 @@ def defaults(team=False, client=False, private=None):
             "shippedTextPaths": None,
             # Add-on: a CI check that fails on any new code-size breach.
             "codeSizeCheck": True,
+            # "github" keeps the GitHub parts; "local" and "other" have no GitHub, so no
+            # Actions, no board and no GitHub-hosted tracker (_check_code_host).
+            "codeHost": "github",
             "tracker": "github",
             # "<owner>/<number>" when tracker is "github" and the project has a
             # board; None keeps project status in a pinned issue instead.
@@ -256,6 +262,9 @@ def validate(saved):
     _check(paths is None or (isinstance(paths, list) and len(paths) > 0 and all(_glob_ok(g) for g in paths)),
            "shippedTextPaths must be null or a non-empty list of globs "
            "without quotes, backslashes, line breaks or outer spaces")
+    _check_code_host(adv)
+    _check(not (a["team"] and adv["codeHost"] == "local"),
+           'codeHost "local" is one person on one computer: team must be false')
     _check_tracker(get(adv, "tracker"), get(adv, "trackerProject"))
     _check_repos(get(adv, "tracker"), get(adv, "publicRoadmap"), get(adv, "trackerRepo"))
     return a
@@ -285,6 +294,26 @@ def _check_tracker(tracker, board):
                'a GitHub user or organization name and the board\'s number')
     else:
         _check(board is None or board is UNDEFINED, 'trackerProject is only for tracker "github"')
+
+
+def _unset(value):
+    return value is None or value is UNDEFINED
+
+
+def _check_code_host(adv):
+    host = adv.get("codeHost", UNDEFINED)
+    _check(isinstance(host, str) and host in CODE_HOSTS, 'unknown code host %s' % quoted(host))
+    if host == "github":
+        return
+    label = 'codeHost "%s"' % host
+    _check(adv["aiReview"] is False, label + " has no GitHub Actions: aiReview must be false")
+    _check(adv["deepEscalation"] is False, label + " has no GitHub Actions: deepEscalation must be false")
+    _check(adv.get("tracker", UNDEFINED) == "file", label + ' keeps the work state in files: tracker must be "file"')
+    _check(_unset(adv.get("trackerProject", UNDEFINED)),
+           label + " has no GitHub Projects board: trackerProject must be null")
+    _check(_unset(adv.get("trackerRepo", UNDEFINED)), label + " has no GitHub issues repo: trackerRepo must be null")
+    _check(_unset(adv.get("publicRoadmap", UNDEFINED)),
+           label + " has no GitHub public roadmap: publicRoadmap must be null")
 
 
 def _given(d, key):
@@ -342,6 +371,9 @@ def flags_for(a):
         "branching_model_gitflow": adv["branching"] == "gitflow",
         "branching_model_trunk": adv["branching"] == "trunk",
         "default_branch_is_dev": adv["branching"] == "gitflow" and adv["devIsDefault"],
+        "code_host_github": adv["codeHost"] == "github",
+        "code_host_local": adv["codeHost"] == "local",
+        "code_host_other": adv["codeHost"] == "other",
         "guard_hooks_repo": adv["hookLocation"] == "repo",
         "attribution_guard": adv["attributionGuard"],
         "deny_list_strict": adv["denyProfile"] == "strict",

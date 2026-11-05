@@ -298,6 +298,10 @@ export default {
   "settings.visual-steps.title": "Cambios visuales en pasos chicos",
   "settings.visual-steps.text": "Lo que la gente ve cambia un paso revisado a la vez.",
   "settings.visual-steps.value": "Activada",
+  "settings.code-host.title": "Dónde vive el código",
+  "settings.code-host.text": "GitHub, solo esta computadora u otro sitio. Solo esta computadora no necesita cuenta; "
+    + "otro sitio recibe las partes de GitHub para adaptarlas.",
+  "settings.code-host.value": "GitHub",
   "settings.work-state.title": "Dónde se sigue el trabajo",
   "settings.work-state.text": "Un tablero de GitHub, solo issues, o un archivo de traspaso en el repo.",
   "settings.work-state.value": "Tablero de GitHub",

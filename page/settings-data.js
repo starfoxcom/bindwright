@@ -146,6 +146,14 @@ export const PROJECT = [
     engine: [{ flags: {}, key: "advanced.uiRule", value: true }],
   },
   {
+    id: "code-host",
+    title: "Where the code lives",
+    text: "GitHub, just this computer, or another site. Just this computer needs no account; "
+      + "another site gets the GitHub parts to adapt.",
+    value: "GitHub",
+    keys: ["advanced.codeHost"],
+  },
+  {
     id: "work-state",
     title: "Where work is tracked",
     text: "A GitHub board, issues only, or a hand-off file in the repo.",
