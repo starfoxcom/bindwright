@@ -82,6 +82,7 @@ GitHub works here when the repo's remote is on GitHub and `gh auth status` works
 - **Where should the plan and the work state live?**
   - A GitHub board with the issues, plus a short hand-off note between sessions (recommended): `"tracker": "github"`, `"handoffFile": true`, and a board as below.
   - GitHub issues only, with the project's status in a pinned issue: `"tracker": "github"`, `"handoffFile": true`, no board.
+  - A GitHub board with the issues and no hand-off note, for those who want nothing in the checkout between sessions: `"tracker": "github"`, `"handoffFile": false`, and a board as below.
   - A detailed hand-off file and a roadmap in the repo, no GitHub: `"tracker": "file"`.
 
 **Public code.** With either GitHub choice, read the repo's visibility (`gh repo view --json visibility -q .visibility`). When it is `PUBLIC`, its issues are public too, whatever the board's setting, so ask:
