@@ -11,6 +11,7 @@ Standard library, Python 3.8+.
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
     python engine/home.py add-agent FILE
+    python engine/home.py add-style FILE      (copies the output style, turns it on)
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -252,6 +253,46 @@ def add_agent(home, file):
     return {"installed": target, "kept_existing": kept}
 
 
+def _style_name(text):
+    """The `name:` of an output style's front matter, or None without one."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return None
+        key, sep, value = line.partition(":")
+        if sep and key.strip() == "name" and value.strip():
+            return value.strip()
+    return None
+
+
+def add_style(home, file):
+    name = os.path.basename(file)
+    if not (name.endswith(".md") and os.path.isfile(file)):
+        raise HomeError("Not an output style file (an existing .md file): " + file)
+    with open(file, encoding="utf-8") as fh:
+        text = fh.read()
+    if _style_name(text) is None:
+        raise HomeError("The output style has no name in its front matter: " + file)
+    path, data = _load(home)
+    target = os.path.normpath(os.path.join(_claude(home), "output-styles", name))
+    # An installed style may carry the user's own edits, so it stays, and its own
+    # name is the one turned on: the CLI names a style without one after its file.
+    kept = os.path.exists(target)
+    if kept:
+        with open(target, encoding="utf-8") as fh:
+            text = fh.read()
+    else:
+        _atomic_write(target, text)
+    style = _style_name(text) or os.path.splitext(name)[0]
+    previous = data.get("outputStyle")
+    if previous != style:
+        data["outputStyle"] = style
+        _save(path, data)
+    return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
+
+
 def _option(argv, name):
     if name not in argv:
         return None
@@ -285,6 +326,8 @@ def run(argv):
         return add_mod(home, one)
     if cmd == "add-agent" and one:
         return add_agent(home, one)
+    if cmd == "add-style" and one:
+        return add_style(home, one)
     raise HomeError("Usage: see the top of engine/home.py")
 
 
