@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The routine review posts from a job apart from its reviewers** (#456, #460). The review attempts run with a read-only job token, and a second job checks the review again with the gate's reader and posts it, so no reviewer process shares a job whose token can write checks. A run whose PR has a newer head posts nothing, a deep-review request with automatic escalation off is posted only when one is owed, every GitHub call in the repair step has a time limit, and the CLI installs into a home folder of the job's own.
+
 ## [v2.1.0] — 2026-11-05
 
 v2.1.0 adds two computer choices to setup (a plain reply style and the work language), opt-in review counts from real projects that feed the page's evidence, a helper that sets up local CI runners, and a layout check for visual work. It also fixes how the bundled mods follow a `/clear`, and closes gaps in the review gate and the two engines.
