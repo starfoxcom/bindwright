@@ -275,7 +275,6 @@ h1 {
 .icon-copy.pulse { animation: pulse 240ms ease; }
 @keyframes pulse { 50% { transform: scale(1.06); } }
 
-.command-how { max-width: 640px; margin-top: 6px; font-size: 15px; color: var(--text-2); }
 .icon-copy {
   position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
   color: var(--text-2); cursor: pointer; background: var(--key); border: 0; border-radius: 10px;
@@ -323,7 +322,6 @@ h1 {
 .install-switch button[aria-selected="true"] { color: var(--on-accent); }
 .install-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .install-switch::before { transition: none; } }
-.install-alt .install-line code { font-size: 13px; }
 
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
 
