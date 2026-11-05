@@ -52,6 +52,9 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a recursive grep of a repo folder", bash("grep -rn foo src/"), "fallback"],
     ["a recursive grep of the repo itself", bash("grep -rn foo ."), "fallback"],
     ["a recursive grep of a folder outside", bash(`grep -rn foo "${scratch}"`), null],
+    // Unquoted, as PowerShell spells it: on Windows the path keeps its backslashes.
+    ["an unquoted search of a folder outside", bash(`rg foo ${scratch}`), null],
+    ["an unquoted search of a repo folder", bash(`rg foo ${join(root, "src")}`), "fallback"],
     ["a cd outside, then a grep of the current folder", bash(`cd "${scratch}" && grep -rn foo .`), null],
     ["a pattern with a slash is not taken for a path", bash(`rg "a/b" "${scratch}"`), null],
     ["git grep searches the repo", bash("git grep -n foo"), "fallback"],

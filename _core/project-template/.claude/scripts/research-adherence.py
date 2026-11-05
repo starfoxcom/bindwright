@@ -61,8 +61,10 @@ def is_outside(path, root):
 
 def path_arguments(head):
     """The words of a search command that name a file or folder."""
+    # Not POSIX mode, which reads a backslash as an escape and would turn D:\scratch into
+    # D:scratch; quotes stay on the words, and resolve() strips them.
     try:
-        words = shlex.split(head, posix=True)
+        words = shlex.split(head, posix=False)
     except ValueError:
         words = head.split()
     if words[:2] == ["git", "grep"]:
