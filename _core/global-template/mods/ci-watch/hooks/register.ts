@@ -627,11 +627,10 @@ function startPolling($: EngineInterface): Promise<void> {
   return start
 }
 
-// A /clear moves the session to a new id and stops its timer. A start under way finishes first, while
-// the ending id still holds, and retirement is read then too: a retired instance never claims the new id.
+// A /clear moves the session to a new id and stops its timer; a start under way finishes first, under the
+// ending id, where retirement is read too (only for an instance that started, the only kind that claimed).
 const endSession: Hook<'session.end'> = async ($, e, next) => {
   if (e.reason === 'clear') await live.started
-  // An instance that never started claimed nothing, so it has nothing to be retired from.
   const isRetiredNow = e.reason === 'clear' && live.started !== undefined && (await isRetired($))
   const result = await next(e)
   if (e.reason !== 'clear') return result
