@@ -25,6 +25,8 @@ Pick the engine: the first of these that runs.
 
 With neither, tell the user setup needs Node or Python 3.8+, and stop.
 
+**Plain mode.** When `git config user.name` prints nothing or `gh auth status` fails, ask first: "Have you used Git and GitHub before?", with "Not really" first. On "Not really", word every later question and message in everyday words, with no term such as branch, pull request, CI, remote or repo left unexplained; recommend the safe answers (just me, mine, private, AI credit kept out); and offer "Just this computer" first where step 3 asks where the code lives. With both commands working, skip the question.
+
 ## 1. Check the argument and the repo
 
 - **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on and a work language that changed, and for each one that turned off, say what stays installed and how to remove it (`python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" remove-hook <name>` for a guard; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent; delete `~/.claude/rules/code-style.md` for the code-style profile; `/output-style default` for the reply style, whose file in `~/.claude/output-styles/` can stay; `counts.mjs share off` for the counts, which stops every send). When sharing just turned on and the repo root holds `.bindwright/pristine.json` with no entry in `counts.mjs status`, ask this repo's kind as step 3 says; other set-up repos are asked at their next `/bindwright:update`. Then stop.
@@ -65,6 +67,7 @@ Read what the repo can answer first: the project name is the repo folder's name,
 
 Ask with the question tool, in two rounds. Round one:
 
+- **Where does the code live?** GitHub, just this computer, or another site (GitLab, Bitbucket and the like). Recommend GitHub when the remote is on GitHub, and just this computer in plain mode or when there is no remote. Just this computer needs no account: the project's history stays in this folder, so say to keep a backup of it. For another site, say in one line that only GitHub is supported so far: setup writes the parts that work anywhere, and the session adapts the GitHub-only parts it lists. Save `codeHost` as `github`, `local` or `other`. For `local` and `other`, the AI reviews and the board need GitHub: round two offers only the size check, and "Where the work state lives" is the hand-off file (`"tracker": "file"`), asked nothing.
 - **Who works on it?** Just me, or a team.
 - **Whose project is it?** Mine, or someone else's (a client or an employer).
 - **Private or public?** Private, or public. Recommend private for someone else's project, public otherwise.
@@ -143,6 +146,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "uiRule": true,
     "handoffFile": true,
     "codeResearch": "<the computer's code-search tool>",
+    "codeHost": "github",
     "tracker": "github",
     "trackerProject": "<owner>/<number> or null",
     "trackerRepo": "<owner>/<name> or null",
