@@ -145,7 +145,9 @@ Write the body to a file and pass `--body-file <path>`. Inline bodies get trunca
 
 No empty sections and no generic testing checklist. The body carries what the diff cannot show.
 
+<!-- TOGGLE:code_host_github START -->
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.
+<!-- TOGGLE:code_host_github END -->
 
 ---
 <!-- TOGGLE:code_host_local:off END -->

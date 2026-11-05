@@ -18,7 +18,12 @@ Fine to keep: your role and scope, how you work with this client, and pointers t
 If the client needs a record of AI-assisted work:
 
 - Session transcripts under `~/.claude/projects/<slug>/*.jsonl` are the source; keep them exportable.
+<!-- TOGGLE:code_host_github START -->
 - Each PR lists the AI-assisted changes in its description (the PR template has the section).
+<!-- TOGGLE:code_host_github END -->
+<!-- TOGGLE:code_host_github:off START -->
+- Each commit message lists the AI-assisted changes in it.
+<!-- TOGGLE:code_host_github:off END -->
 - Follow the client's own convention for marking AI-generated commits. Add no attribution lines unless the client asks for them.
 
 ## One machine, several clients

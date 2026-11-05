@@ -61,7 +61,12 @@ For every commit that touches shipped artifacts:
 - [ ] No reference-title names in code comments, doc comments, XML doc class entries, JSON `_comment` fields, or any string literal. Run `grep -i '<reference-title-name>\|<studio-name>' <staged files>` — must return empty.
 - [ ] Numerical data (RGB tuples, angles, timing values, named constants) is reauthored — never byte-identical to a reference-title source file.
 - [ ] No reference-title asset files in the shipped tree.
+<!-- TOGGLE:code_host_local START -->
+- [ ] The commit message does not name reference titles in shipped-artifact context.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - [ ] Commit message and PR description do not name reference titles in shipped-artifact context.
+<!-- TOGGLE:code_host_local:off END -->
 
 For research / design docs: the rules don't apply (these aren't shipped). Speak freely about reference-title patterns there.
 

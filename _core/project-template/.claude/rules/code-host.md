@@ -26,7 +26,7 @@ The other rules and skills name GitHub's tools. Read each one as the same step o
 
 These need GitHub, so setup did not write them. Set one up on this host only when the user asks for it:
 
-- **The size check in CI.** `.github/scripts/size_check.py` runs anywhere: add a step that runs `python .github/scripts/size_check.py` to the host's pipeline, or run it before each push.
+- **The size check in CI.** `code-size.md` names `.github/workflows/size-check.yml`, which setup did not write. `.github/scripts/size_check.py` runs anywhere: add a step that runs `python .github/scripts/size_check.py` to the host's pipeline, or run it before each push.
 - **AI reviews on every PR.** They run as GitHub Actions; no template exists for other hosts yet.
 - **Issue and PR templates.** Each host reads its own folder (`.gitlab/` on GitLab, `.gitea/` on Gitea and Forgejo); copy the wording there if the user wants them.
 - **The issue board.** The work state lives in `ROADMAP.md` and the hand-off file instead, which need no host.
