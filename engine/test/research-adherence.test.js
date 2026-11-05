@@ -60,6 +60,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a pattern with a slash is not taken for a path", bash(`rg "a/b" "${scratch}"`), null],
     ["git grep searches the repo", bash("git grep -n foo"), "fallback"],
     ["cd - returns to the repo", bash(`cd "${scratch}" && ls && cd - && grep -rn foo src/`), "fallback"],
+    ["cd - with a redirect returns to the repo",
+      bash(`cd "${scratch}" && cd - >/dev/null && grep -rn foo src/`), "fallback"],
     ["popd returns to the repo", bash(`pushd "${scratch}" && ls && popd && grep -rn foo src/`), "fallback"],
     ["a marked bypass", bash("grep -rn foo src/ # TOKENSAVE_BYPASS: regex"), "bypass"],
     ["a filter on another command's output", bash("git log | grep fix"), null],

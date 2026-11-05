@@ -30,6 +30,7 @@ GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
+REDIRECT = re.compile(r"^\d*[<>]")
 
 
 def unquote_separators(command):
@@ -96,8 +97,11 @@ def shell_search(command, root):
         if moved:
             # The repo root is the folder such a move most likely returns to, and reading it so
             # keeps the search counted, the side that never flatters the figure.
-            back = moved.group(1).lower() == "popd" or moved.group(2) in RETURN_TARGETS
-            base = root if back else resolve(moved.group(2), base)
+            # Redirects (`cd - >/dev/null`) are not the target; the first other word is.
+            words = [w for w in (moved.group(2) or "").split() if not REDIRECT.match(w)]
+            target = words[0] if words else None
+            back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
+            base = root if back else resolve(" ".join(words), base)
             continue
         if NON_CODE.search(head):
             continue
