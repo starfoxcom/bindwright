@@ -18,17 +18,17 @@ Two kinds of choices, and the user always hears which is which:
 
 ## 0. Pick the engine and read the saved choices
 
-Check the tools first, all three before saying anything: `git --version`, `node --version` (18 or later counts) and `python3 --version` or `python --version` (3.8 or later counts; a `python` that only opens the Microsoft Store does not). Setup needs Git, and Node or Python to run its engine.
+Check all three tools before saying anything: `git --version`, `node --version` (18 or later counts) and `python3 --version` or `python --version` (3.8 or later counts; a `python` that only opens the Microsoft Store does not). Setup needs Git, and Node or Python to run its engine: one of the two is enough.
 
-When something is missing, name everything missing in one plain message: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it; Node or Python runs the setup itself. Then give the install for the user's system:
+When Git is missing, or neither Node 18 or later nor Python 3.8 or later is there, name what is missing (Git, an engine, or both) in one plain message: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it; Node or Python runs the setup itself. Then give the install for the user's system:
 
-- **Windows:** offer to run it on a yes: `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements`, and the same form with `Python.Python.3.12` when Python is missing (the hooks and the computer extras run on it) and with `OpenJS.NodeJS.LTS` when Node is missing (the mods and the review counts run on it).
-- **macOS:** offer to run it on a yes: `xcode-select --install` for Git (it opens the system's own installer), and `brew install node` when Homebrew is there, otherwise the installer from nodejs.org.
+- **Windows:** offer to run it on a yes: `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements`, and the same form with `Python.Python.3.12` when Python is not there (it runs the engine, the hooks and the computer extras) and with `OpenJS.NodeJS.LTS` when neither engine is there.
+- **macOS:** offer to run it on a yes: `xcode-select --install`. It opens the system's own installer and brings both Git and Python, which is enough for the engine.
 - **Linux:** give the command for the user to run in their own terminal, since it asks for their password: `sudo apt install -y git python3` (`sudo dnf install -y git python3` on Fedora). The distributions' own `nodejs` package can be too old for the engine.
 
 Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app, or start `claude` again in a new terminal), and to run `/bindwright:setup` again. Stop here.
 
-With every tool in place, pick the engine, the first of these that runs:
+With Git and at least one of Node 18 or later or Python 3.8 or later in place, pick the engine, the first of these that runs:
 
 1. Node 18 or later: the engine is `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`.
 2. Python 3.8 or later: the engine is that interpreter with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
