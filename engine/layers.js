@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { CODE_RESEARCH_TOOLS, TRACKERS, mapRemovedTool } from "./model.js";
 import { MAX_DEPTH, depthOf } from "./setupcode.js";
 import { ANSWERS } from "./bind.js";
-import { decode } from "./update.js";
+import { decode, readState } from "./update.js";
 
 export const SCHEMA = 1;
 export const LOCAL = ".bindwright/local.json";
@@ -203,13 +203,8 @@ export function installedExtras(config) {
 
 // A settings file's JSON, or null when it is missing.
 export function readLayerFile(path, file) {
-  let bytes;
-  try {
-    bytes = readFileSync(path);
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
+  const bytes = readState(path, file);
+  if (bytes === null) return null;
   const text = decode(bytes, file);
   if (depthOf(text) > MAX_DEPTH) throw new Error(`${file} nests too deeply`);
   try {

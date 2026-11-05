@@ -87,7 +87,8 @@ test("the extras list matches the mods setup ships, plus the five file extras", 
 });
 
 // A repo and a config folder with the given files; missing ones are left out.
-function scene({ personal, project, local, claudeMd, installed = [] }) {
+// `repoPaths` maps a repo path to its text, or to null for a folder.
+function scene({ personal, project, local, claudeMd, installed = [], repoPaths = {} }) {
   const root = mkdtempSync(join(tmpdir(), "bw-layers-"));
   const repo = join(root, "repo");
   const config = join(root, "config");
@@ -95,11 +96,15 @@ function scene({ personal, project, local, claudeMd, installed = [] }) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, typeof text === "string" || Buffer.isBuffer(text) ? text : JSON.stringify(text));
   };
-  mkdirSync(join(repo, ".bindwright"), { recursive: true });
+  mkdirSync(repo, { recursive: true });
   if (personal !== undefined) put(join(config, "bindwright", "settings.json"), personal);
   if (project !== undefined) put(join(repo, ".bindwright", "project.json"), project);
   if (local !== undefined) put(join(repo, ".bindwright", "local.json"), local);
   if (claudeMd !== undefined) put(join(config, "CLAUDE.md"), claudeMd);
+  for (const [path, text] of Object.entries(repoPaths)) {
+    if (text === null) mkdirSync(join(repo, ...path.split("/")), { recursive: true });
+    else put(join(repo, ...path.split("/")), text);
+  }
   for (const path of installed) mkdirSync(join(config, ...path.split("/")), { recursive: true });
   return { root, repo, config };
 }
@@ -150,6 +155,16 @@ test("a personal layer cannot pick the custom tool, which only the project can d
 test("a project that saved a removed tool resolves it as custom, in both engines", needsPython, () => {
   const out = both({ project: answers({ codeResearch: "codegraph" }) });
   assert.deepEqual(out.settings.codeResearch, { value: "custom", from: "project", required: false });
+});
+
+test("a state file that is a folder is refused with the same words in both engines", needsPython, () => {
+  const out = both({ repoPaths: { ".bindwright/project.json": null } });
+  assert.equal(out.error, ".bindwright/project.json cannot be read (it is a folder)");
+});
+
+test("a state folder that is a file is refused with the same words in both engines", needsPython, () => {
+  const out = both({ repoPaths: { ".bindwright": "not a folder\n" } });
+  assert.equal(out.error, ".bindwright/project.json cannot be read (a folder above it is a file)");
 });
 
 test("broken files fail alike in both engines", needsPython, () => {

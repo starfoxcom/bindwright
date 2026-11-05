@@ -4,7 +4,7 @@
 // templates. update.py is the Python twin; a test runs both on the same cases.
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
@@ -122,17 +122,40 @@ export function decode(bytes, what) {
   }
 }
 
+// Why a file cannot be read, in the words update.py and layers.py share.
+const UNREADABLE = {
+  EISDIR: "it is a folder",
+  ENOTDIR: "a folder above it is a file",
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+};
+
+// True when a folder above `path` is a file.
+function fileAbove(path) {
+  for (let above = dirname(path); above !== dirname(above); above = dirname(above)) {
+    if (statSync(above, { throwIfNoEntry: false })?.isFile()) return true;
+  }
+  return false;
+}
+
+// The bytes of a file, or null when it is missing. Any other failure to read
+// it is refused with the file's name and the reason.
+export function readState(path, file) {
+  try {
+    return readFileSync(path);
+  } catch (err) {
+    if (err.code === "ENOENT" && !fileAbove(path)) return null;
+    // Windows reports a path under a file as ENOENT, which means ENOTDIR here.
+    const code = err.code === "ENOENT" ? "ENOTDIR" : err.code;
+    throw new Error(`${file} cannot be read (${UNREADABLE[code] ?? code ?? "unknown error"})`);
+  }
+}
+
 // The repo's text at a path with \r\n turned into \n, or null when it has none.
 function reader(root) {
   return (path) => {
-    let bytes;
-    try {
-      bytes = readFileSync(join(root, ...path.split("/")));
-    } catch (err) {
-      if (err.code === "ENOENT") return null;
-      throw err;
-    }
-    return decode(bytes, path).replace(/\r\n/g, "\n");
+    const bytes = readState(join(root, ...path.split("/")), path);
+    return bytes === null ? null : decode(bytes, path).replace(/\r\n/g, "\n");
   };
 }
 
