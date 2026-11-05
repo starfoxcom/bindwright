@@ -13,7 +13,6 @@ import { python } from "./python.js";
 import { withoutGithub } from "./code-host.js";
 import {
   defaults, LICENSES, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES, MERGE_STYLES, HOOK_LOCATIONS, DENY_PROFILES, TRACKERS,
-  CODE_HOSTS,
 } from "../model.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -82,7 +81,7 @@ function oneAtATime() {
 }
 
 // Mixed settings from a fixed seed, so a failure always reproduces.
-function seeded(count) {
+function seeded(count, codeHost = "github") {
   let s = 0x5eed;
   const rand = () => {
     s = (s + 0x6d2b79f5) | 0;
@@ -110,8 +109,7 @@ function seeded(count) {
     a.advanced.publicRoadmap = a.advanced.tracker === "github" && bool() ? "starfoxcom/roadmap" : null;
     a.advanced.trackerRepo = a.advanced.tracker === "github" && bool() ? "starfoxcom/tracker" : null;
     a.advanced = withTool(a.advanced, a.advanced.codeResearch);
-    a.advanced.codeHost = pick(CODE_HOSTS);
-    if (a.advanced.codeHost !== "github") withoutGithub(a, a.advanced.codeHost);
+    if (codeHost !== "github") withoutGithub(a, codeHost);
     return a;
   });
 }
@@ -231,7 +229,7 @@ function firstDifference(js, py) {
 }
 
 test("the Python engine binds exactly what the JS engine binds", { skip: !python && "needs Python 3.8+" }, async () => {
-  const cases = [...oneAtATime(), ...seeded(40), ...refused()];
+  const cases = [...oneAtATime(), ...seeded(40), ...seeded(10, "local"), ...seeded(10, "other"), ...refused()];
   const results = pythonBind(cases);
   assert.equal(results.length, cases.length);
 

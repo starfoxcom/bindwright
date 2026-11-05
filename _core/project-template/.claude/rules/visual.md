@@ -15,7 +15,12 @@ Build a visual feature in this order, checking each step before the next:
 5. Live updates when the data or route changes.
 6. Tests and cleanup.
 
+<!-- TOGGLE:code_host_local START -->
+When a step fails, the problem is in that step, and the previous one is the rollback point. Never bundle several visual systems into one step.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 When a step fails, the problem is in that step, and the previous one is the rollback point. Never bundle several visual systems into one PR.
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:code_host_local START -->
 ## Check it before moving on

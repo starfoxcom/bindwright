@@ -25,7 +25,12 @@ Guidance for Claude Code in this repository. Rules in `.claude/rules/` load on t
 Work is tracked in GitHub issues: `.claude/rules/tracker.md` says where each item's state lives and how to read and update it.
 <!-- TOGGLE:tracker:github END -->
 <!-- TOGGLE:tracker:file START -->
+<!-- TOGGLE:code_host_local START -->
+Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/session-close` keeps it current and `/session-start` reads it.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/session-close` keeps it current; `/session-start` checks it against git.
+<!-- TOGGLE:code_host_local:off END -->
 <!-- TOGGLE:tracker:file END -->
 
 ## Language

@@ -147,16 +147,26 @@ No empty sections and no generic testing checklist. The body carries what the di
 
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.
 
-<!-- TOGGLE:code_host_local:off END -->
 ---
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Dead code does not ship
 
+<!-- TOGGLE:code_host_local START -->
+Code with no remaining caller is deleted in the same save point that orphaned it. Check with the project's lint or dead-code tool, then judge the result: a symbol reached only through reflection, dependency injection, bindings or serialization is not dead. If a tool reports a false positive, record the exception where the tool reads it instead of silencing the tool.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 Code with no remaining caller is deleted in the same PR that orphaned it. Check with the project's lint or dead-code tool, then judge the result: a symbol reached only through reflection, dependency injection, bindings or serialization is not dead. If a tool reports a false positive, record the exception where the tool reads it instead of silencing the tool.
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Definition of done
 
+<!-- TOGGLE:code_host_local START -->
+A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient.
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:precommit_hooks_scaffold START -->
 ---
