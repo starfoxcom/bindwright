@@ -57,7 +57,8 @@ const DEEP_LABEL = "needs-deep-review";
 const BOT_LOGINS = new Set(["claude", "claude[bot]"]);
 const ESCALATION_REQUEST = /@claude review/i;
 const LIST_ITEM = /^\s*([-+]|\*\s|\d+[.)])/;
-const DEEP_SUMMARY = /^\s*\*\*Claude finished/;
+// The deep review's comment, as the review gate tells it apart: its job summary or its plain comment.
+const DEEP_SUMMARY = /^\s*(\*\*Claude finished|## Deep review)/;
 // A verdict line: leading markup, an optional "Verdict" label, then the glyph and its word.
 const VERDICT_LINE = /^[\s*_#>]*(?:Verdict[\s*_]*:?[\s*_]*)?(🟢|🔴)[\s*_]*(LGTM|Blocking|Approved)/i;
 const ALREADY_SENT = /already sent/;
