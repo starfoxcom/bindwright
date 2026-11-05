@@ -218,14 +218,14 @@ h1 {
 .mods-carousel .mod-card .setting-value { margin-top: 18px; font-size: 15px; }
 .mods-viewer { display: contents; }
 #mods-prev { grid-area: 1 / 2; }
-.mods-viewer .term { grid-area: 1 / 3; margin: 0; }
+.stage .mods-viewer .term { grid-area: 1 / 3; margin: 0; }
 #mods-next { grid-area: 1 / 4; }
 .mods-dots { grid-area: 2 / 3; min-width: 0; }
 @media (max-width: 900px) {
   .stage.mods-stage { width: min(100%, 835px); grid-template-columns: auto minmax(0, 1fr) auto; }
   .mods-carousel { grid-area: 1 / 2; padding-right: 0; }
   #mods-prev { grid-area: 2 / 1; }
-  .mods-viewer .term { grid-area: 2 / 2; }
+  .stage .mods-viewer .term { grid-area: 2 / 2; }
   #mods-next { grid-area: 2 / 3; }
   .mods-dots { grid-area: 3 / 2; }
 }
