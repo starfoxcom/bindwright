@@ -52,6 +52,7 @@ const LONG = "Invalid setup code: it is too long";
 const B64 = "Invalid setup code: the part after the prefix is not base64url";
 const JSON_ = "Invalid setup code: it does not hold UTF-8 JSON";
 const DEEP = "Invalid setup code: it nests too deeply";
+const TOO_LARGE = "Invalid setup code: it holds a number too large to read";
 const OBJECT = "Invalid setup code: the answers must be an object";
 const BAD = [
   [123, START], [null, START], ["", START], ["bw2-e30", START], ["BW1-e30", START],
@@ -61,6 +62,7 @@ const BAD = [
   [codeOf(Buffer.from([0xff])), JSON_], [codeOf(Buffer.from([0xed, 0xa0, 0x80])), JSON_],
   [codeOf(Buffer.from([0xc0, 0xaf])), JSON_],
   [codeOf("\ufeff\ufeff{}"), JSON_], [codeOf('{"a":NaN}'), JSON_], [codeOf("Infinity"), JSON_],
+  [codeOf(`{"team":${"1".repeat(5000)}}`), TOO_LARGE],
   [codeOf('{"a":1,}'), JSON_], [codeOf("{'a':1}"), JSON_], [codeOf('{"a":"\t"}'), JSON_], [codeOf("{}\u00a0"), JSON_],
   [codeOf("[".repeat(65) + "]".repeat(65)), DEEP], [codeOf('{"a":'.repeat(65) + "1" + "}".repeat(65)), DEEP],
   [codeOf("[]"), OBJECT], [codeOf("null"), OBJECT], [codeOf("1"), OBJECT], [codeOf('"x"'), OBJECT],

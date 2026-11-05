@@ -320,6 +320,15 @@ test("a repo that was never set up is refused", needsPython, async () => {
   assert.match(out.error, /was not set up with \/bindwright:setup/);
 });
 
+test("a state file that is a folder is refused with the same words in both engines", needsPython, async () => {
+  const { out, status } = await update((r) => {
+    rmSync(r.at(".bindwright/project.json"));
+    mkdirSync(r.at(".bindwright/project.json"));
+  });
+  assert.equal(status, 1);
+  assert.equal(out.error, ".bindwright/project.json cannot be read (it is a folder)");
+});
+
 test("a saved path outside the repo is refused before anything is written", needsPython, async () => {
   const { out, status, repo } = await update((r) => {
     r.pristine.files["../escape.md"] = "x\n";
