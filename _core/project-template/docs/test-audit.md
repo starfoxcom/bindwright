@@ -39,6 +39,16 @@ A seeded sweep stays when it covers input a boundary table cannot list (codecs, 
 
 ## Landing the changes
 
+<!-- TOGGLE:code_host_local START -->
+- Small save points, one list or one area at a time, each with the full suite green.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - Small PRs, one list or one area at a time, each with the full suite green.
+<!-- TOGGLE:code_host_local:off END -->
+<!-- TOGGLE:code_host_local START -->
+- Record the findings (counts per rule, what was deleted or folded, the borderline calls) in the commit message or a dated note, so the next audit starts from them.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - Record the findings (counts per rule, what was deleted or folded, the borderline calls) in the PR body or a dated note, so the next audit starts from them.
+<!-- TOGGLE:code_host_local:off END -->
 - Checking rule 1 (does each test guard something a user would notice) means reading every test. Do it area by area, after the mechanical lists land.
