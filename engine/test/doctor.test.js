@@ -182,7 +182,7 @@ test("an old CLI is named only with mods installed and the session's version kno
 
 // The hooks check reads <config>/settings.json. Each row is one settings file:
 // `ok` says whether the check passes, and `program` is the one it must name.
-const absentProgram = join(tmpdir(), "no-such-tool-530", "tool.exe");
+const absentProgram = join(tmpdir(), "no-such-tool-folder", "tool.exe");
 const hooksJson = (hook) => JSON.stringify({
   hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", ...hook }] }] },
 });
@@ -191,10 +191,15 @@ const hookRows = [
   ["an exec-form hook whose program exists", hooksJson({ command: process.execPath, args: ["-e", ""] }), true],
   ["an exec-form hook whose absolute program is missing",
     hooksJson({ command: absentProgram, args: [] }), false, absentProgram],
-  ["a shell-form hook whose bare name is not on PATH",
-    hooksJson({ command: "no-such-tool-530 --check" }), false, "no-such-tool-530"],
+  ["an exec-form hook whose bare name is not on PATH",
+    hooksJson({ command: "no-such-tool", args: [] }), false, "no-such-tool"],
+  ["a shell-form hook whose absolute program is missing",
+    hooksJson({ command: `"${absentProgram}" --check` }), false, absentProgram],
+  ["a shell-form hook that opens with a builtin is not judged",
+    hooksJson({ command: 'cd "$CLAUDE_PROJECT_DIR" && npm test' }), true],
+  ["a shell-form hook that opens with an assignment is not judged", hooksJson({ command: "FOO=1 tool" }), true],
   ["a shell-form hook run through sh -c is not judged", hooksJson({ command: 'sh -c "exit 0"' }), true],
-  ["a shell-form hook with a variable in its program is not judged", hooksJson({ command: "$HOME/tool-530" }), true],
+  ["a shell-form hook with a variable in its program is not judged", hooksJson({ command: "$HOME/tool" }), true],
   ["settings without hooks", '{"model": "x"}', true],
   ["settings that are not JSON", "{", true],
 ];

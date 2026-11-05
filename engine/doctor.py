@@ -239,10 +239,11 @@ def _program(hook):
         return None
     if "args" in hook:
         program = command
-    elif command.strip(JS_WHITESPACE).startswith(("sh -c", "bash -c")):
-        return None
     else:
+        # A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
         program = _first_word(command)
+        if not _is_absolute(program):
+            return None
     if not program or "$" in program or "%" in program:
         return None
     return program

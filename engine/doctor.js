@@ -231,9 +231,9 @@ function programOf(hook) {
   if (typeof hook.command !== "string") return null;
   let program = hook.command;
   if (!("args" in hook)) {
-    const text = program.trim();
-    if (text.startsWith("sh -c") || text.startsWith("bash -c")) return null;
+    // A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
     program = firstWord(program);
+    if (!isAbsolute(program)) return null;
   }
   return program && !program.includes("$") && !program.includes("%") ? program : null;
 }
