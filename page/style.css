@@ -240,7 +240,7 @@ h1 {
 }
 .mods-dot[aria-current="true"] { background: var(--accent); }
 
-/* Steps count on across both groups: 1-2 on your computer, 3-4 in each project. */
+/* Steps count on across both groups: 1 on your computer, 2-3 in each project. */
 .install-groups {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 28px;
   counter-reset: step;
@@ -310,6 +310,12 @@ h1 {
   flex: 1; min-width: 0; font: 400 14px/1.5 "Fragment Mono", ui-monospace, monospace;
   overflow-wrap: anywhere; user-select: all;
 }
+/* The desktop app's way in, under the one terminal step: no number, quieter text. */
+.install-alt { margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--rule); }
+.install-alt p { font-size: 15px; color: var(--text-2); }
+.install-alt b { display: block; color: var(--text); }
+.install-alt span { display: block; margin-top: 6px; }
+.install-alt .install-line code { font-size: 13px; }
 
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
 

@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Install with one command, with no Git, and from the desktop app** (#631). The install command adds the marketplace from its address on the project's site, so installing needs no Git, and the page and README give desktop-app users a line to paste into the chat, since `/plugin` does not run there.
+
 ## [v2.1.0] — 2026-11-05
 
 v2.1.0 adds two computer choices to setup (a plain reply style and the work language), opt-in review counts from real projects that feed the page's evidence, a helper that sets up local CI runners, and a layout check for visual work. It also fixes how the bundled mods follow a `/clear`, and closes gaps in the review gate and the two engines.

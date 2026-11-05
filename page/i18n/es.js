@@ -61,15 +61,21 @@ export default {
   "files.hide": "Ocultar los archivos",
   "command.copy": "Copiar comando",
   "install.title": "Instalar",
-  "install.how": "Dos comandos una vez en tu computadora, y luego uno en cada proyecto. Pega cada uno en "
+  "install.how": "Un comando una vez en tu computadora, y luego uno en cada proyecto. Pega cada uno en "
     + "Claude Code, presiona Enter y espera a que termine antes del siguiente.",
   "install.computer": "En tu computadora, una vez",
-  "install.market.title": "Dile a Claude Code de dónde viene Bindwright.",
-  "install.market.text": "Esto agrega el marketplace de Bindwright, una lista desde la que Claude Code puede "
-    + "instalar. Todavía no instala nada.",
   "install.plugin.title": "Instala Bindwright.",
-  "install.plugin.text": "Esto agrega los comandos /bindwright a todos los proyectos de tu computadora, más "
-    + "un aviso una vez al día cuando algo esté desactualizado. Todavía no cambia ningún proyecto.",
+  "install.plugin.text": "Esto agrega el marketplace de Bindwright, la lista desde la que Claude Code lo instala, "
+    + "y los comandos /bindwright en todos los proyectos de tu computadora, más un aviso una vez al día cuando "
+    + "algo esté desactualizado. Todavía no cambia ningún proyecto, y no necesita Git.",
+  "install.desktop.title": "En la app de escritorio de Claude",
+  "install.desktop.text": "Ahí /plugin no funciona. Pega esto en un chat de la pestaña Code, y abre una sesión nueva "
+    + "cuando Claude diga que terminó. Si /bindwright:setup todavía no aparece, espera un minuto y abre otra.",
+  "install.desktop.prompt": "Instálame el plugin Bindwright: ejecuta claude plugin install bindwright "
+    + "--marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json en la terminal. "
+    + "Si no encuentra el comando claude, agrega ese mismo marketplace (llamado bindwright, una fuente url con "
+    + "esa dirección) en extraKnownMarketplaces y \"bindwright@bindwright\": true en enabledPlugins de mi archivo "
+    + "de configuración de usuario, ~/.claude/settings.json, sin tocar lo demás.",
   "install.project": "En cada proyecto",
   "install.open.title": "Abre Claude Code en la carpeta del proyecto.",
   "install.open.text": "La configuración escribe en la carpeta donde está abierto Claude Code.",

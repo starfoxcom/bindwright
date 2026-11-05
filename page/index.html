@@ -284,34 +284,15 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="install" id="install" aria-labelledby="install-title">
     <h2 id="install-title" data-t="install.title">Install</h2>
-    <p class="command-how" data-t="install.how">Two commands once on your computer, then one in each project. Paste each into Claude Code, press Enter and let it finish before the next.</p>
+    <p class="command-how" data-t="install.how">One command once on your computer, then one in each project. Paste each into Claude Code, press Enter and let it finish before the next.</p>
     <div class="install-groups">
     <div class="install-group">
     <h3 data-t="install.computer">On your computer, once</h3>
     <ol class="command-steps">
       <li>
-        <p class="command-sub"><b data-t="install.market.title">Tell Claude Code where Bindwright comes from.</b>
-          <span data-t="install.market.text">This adds Bindwright's marketplace, a list Claude Code can install from. It installs nothing yet.</span></p>
-        <div class="install-line"><code>/plugin marketplace add starfoxcom/bindwright</code>
-          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
-            data-t-attr="aria-label:command.copy">
-            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <rect x="8" y="8" width="14" height="14" rx="2"/>
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-            </svg>
-            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <path d="M20 6 9 17l-5-5"/>
-            </svg>
-          </button></div>
-      </li>
-      <li>
         <p class="command-sub"><b data-t="install.plugin.title">Install Bindwright.</b>
-          <span data-t="install.plugin.text">This adds the /bindwright commands to every project on your computer, plus a once-a-day note when something is out of date. It changes no project yet.</span></p>
-        <div class="install-line"><code>/plugin install bindwright@bindwright</code>
+          <span data-t="install.plugin.text">This adds Bindwright's marketplace, the list Claude Code installs it from, and the /bindwright commands in every project on your computer, plus a once-a-day note when something is out of date. It changes no project yet, and it needs no Git.</span></p>
+        <div class="install-line"><code>/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json</code>
           <button class="icon-copy" type="button" aria-label="Copy command" data-copy
             data-t-attr="aria-label:command.copy">
             <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
@@ -328,6 +309,25 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           </button></div>
       </li>
     </ol>
+    <div class="install-alt">
+      <p><b data-t="install.desktop.title">In the Claude desktop app</b>
+        <span data-t="install.desktop.text">/plugin does not run there. Paste this into a Code tab chat instead, and start a new session once Claude says it is done. If /bindwright:setup is not there yet, give it a minute and start one more.</span></p>
+      <div class="install-line"><code data-t="install.desktop.prompt">Install the Bindwright plugin for me: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If the claude command is not found, add the same marketplace (named bindwright, a url source at that address) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in my user settings file, ~/.claude/settings.json, keeping everything else in it.</code>
+        <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+          data-t-attr="aria-label:command.copy">
+          <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true">
+            <rect x="8" y="8" width="14" height="14" rx="2"/>
+            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          </svg>
+          <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true">
+            <path d="M20 6 9 17l-5-5"/>
+          </svg>
+        </button></div>
+    </div>
     </div>
     <div class="install-group">
     <h3 data-t="install.project">In each project</h3>
