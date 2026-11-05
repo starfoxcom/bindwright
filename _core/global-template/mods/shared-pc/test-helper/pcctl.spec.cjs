@@ -50,6 +50,7 @@ test('a claim waits out a mutex that keeps changing hands past ten seconds, and 
     const fs = require('fs'), path = require('path')
     const mutex = path.join(process.argv[1], '.mutex')
     fs.mkdirSync(mutex)
+    console.log('held')
     const end = Date.now() + 12000
     for (let i = 0; Date.now() < end; i++) {
       fs.writeFileSync(path.join(mutex, 'owner'), 'holder-' + i)
@@ -59,7 +60,8 @@ test('a claim waits out a mutex that keeps changing hands past ten seconds, and 
   `
   const holder = spawn(process.execPath, ['-e', churn, sb.dir])
   const holderDone = new Promise(resolve => holder.on('close', resolve))
-  await new Promise(resolve => setTimeout(resolve, 300))
+  // The claim starts only once the holder has the mutex, however slowly each process starts.
+  await new Promise(resolve => holder.stdout.once('data', resolve))
   const claim = await sb.runAsync('claim', 'a', 'build')
   await holderDone
   assert.strictEqual(claim.code, 0)

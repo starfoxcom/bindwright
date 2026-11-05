@@ -57,11 +57,12 @@ function makeDirs() {
   fs.mkdirSync(SESSIONS, { recursive: true })
 }
 
-// A wait gives up only when the mutex stops changing hands for MUTEX_STUCK_MS (a holder past
-// MUTEX_STALE_MS is broken anyway), or past MUTEX_CAP_MS in all. A long line of quick holders, each
-// slowed by a busy disk or a virus scanner, keeps the wait going, so its claim is never lost.
+// A wait gives up when the mutex stops changing hands for MUTEX_STUCK_MS (a holder past
+// MUTEX_STALE_MS is broken anyway), or past MUTEX_CAP_MS in all. A line of quick holders, each slowed
+// by a busy disk or a virus scanner, keeps the wait going up to the cap, which stays under the 20 s
+// the mod's hooks give one pcctl call, so a claim the cap ends still answers with its own error.
 const MUTEX_STUCK_MS = 10_000
-const MUTEX_CAP_MS = 120_000
+const MUTEX_CAP_MS = 15_000
 
 function lock() {
   makeDirs()
