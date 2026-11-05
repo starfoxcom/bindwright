@@ -14,6 +14,10 @@ export type RunnerView = {
   startedAt?: number
   /** Stop was pressed while a job ran; the next press stops anyway. */
   isConfirming?: boolean
+  /** The size of the WSL virtual disk file, in bytes. */
+  diskBytes?: number
+  /** The data inside the WSL distro, in bytes (df's Used). */
+  usedBytes?: number
 }
 
 /** The settings pane's own state: the last refusal per field, shown under that field. */
