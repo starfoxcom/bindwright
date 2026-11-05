@@ -69,6 +69,27 @@ function copyInstallLine(event) {
   copyBoxText(button, code, code.textContent);
 }
 
+// The install switch: Claude Code CLI or the desktop app, each tab showing its own steps.
+const installTabs = [$("install-tab-cli"), $("install-tab-desktop")];
+
+function pickInstallTab(tab) {
+  for (const each of installTabs) {
+    const isPicked = each === tab;
+    each.setAttribute("aria-selected", String(isPicked));
+    each.tabIndex = isPicked ? 0 : -1;
+    $(each.getAttribute("aria-controls")).hidden = !isPicked;
+  }
+  tab.parentElement.dataset.active = tab === installTabs[0] ? "cli" : "desktop";
+}
+
+// Arrow keys move between the two tabs, as a tab list expects.
+function onInstallTabKey(event) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  const other = installTabs.find((tab) => tab !== event.currentTarget);
+  pickInstallTab(other);
+  other.focus();
+}
+
 function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props);
   node.append(...children);
@@ -194,4 +215,8 @@ $("tree").addEventListener("click", (event) => {
 $("browse").addEventListener("click", () => setBrowse($("files").hidden));
 $("back-files").addEventListener("click", () => setReading(false));
 $("install").addEventListener("click", copyInstallLine);
+for (const tab of installTabs) {
+  tab.addEventListener("click", () => pickInstallTab(tab));
+  tab.addEventListener("keydown", onInstallTabKey);
+}
 loadResults();

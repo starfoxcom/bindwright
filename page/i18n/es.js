@@ -61,31 +61,34 @@ export default {
   "files.hide": "Ocultar los archivos",
   "command.copy": "Copiar comando",
   "install.title": "Instalar",
-  "install.how": "Dos comandos una vez en tu computadora, y luego uno en cada proyecto. Pega cada uno en "
-    + "Claude Code, presiona Enter y espera a que termine antes del siguiente.",
-  "install.computer": "En tu computadora, una vez",
-  "install.market.title": "Dile a Claude Code de dónde viene Bindwright.",
-  "install.market.text": "Esto agrega el marketplace de Bindwright, una lista desde la que Claude Code puede "
-    + "instalar. Todavía no instala nada.",
-  "install.plugin.title": "Instala Bindwright.",
-  "install.plugin.text": "Esto agrega los comandos /bindwright a todos los proyectos de tu computadora, más "
-    + "un aviso una vez al día cuando algo esté desactualizado. Todavía no cambia ningún proyecto.",
-  "install.project": "En cada proyecto",
-  "install.open.title": "Abre Claude Code en la carpeta del proyecto.",
-  "install.open.text": "La configuración escribe en la carpeta donde está abierto Claude Code.",
-  "install.setup.title": "Ejecuta la configuración.",
-  "install.setup.text": "Hace unas preguntas y luego escribe los archivos que encajan. Nada de lo que ya tienes "
-    + "cambia sin tu sí.",
+  "install.switch.label": "Dónde usas Claude Code",
+  "install.switch.cli": "Claude Code CLI",
+  "install.switch.desktop": "App de escritorio",
+  "install.plugin.title": "En tu computadora, una vez",
+  "install.plugin.text": "Agrega los comandos /bindwright a todos tus proyectos, listos en esta "
+    + "sesión. No necesita Git.",
+  "install.setup.title": "En cada proyecto",
+  "install.setup.text": "Abre Claude Code en la carpeta del proyecto y ejecuta la configuración. "
+    + "Hace unas preguntas y no cambia nada sin tu sí.",
+  "install.desktop.open.title": "Abre tu proyecto",
+  "install.desktop.open.text": "En la pestaña Code, inicia una sesión nueva en la carpeta de tu proyecto.",
+  "install.desktop.install.title": "Instala Bindwright",
+  "install.desktop.install.text": "Pega esto y envíalo, y espera a que Claude diga que terminó. No necesita Git.",
+  "install.desktop.prompt": "Instálame el plugin Bindwright: ejecuta claude plugin install bindwright --marketplace "
+    + "https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json en la terminal. Si no "
+    + "encuentra claude, agrega ese marketplace (llamado bindwright, con origen url) en "
+    + "extraKnownMarketplaces y \"bindwright@bindwright\": true en enabledPlugins de "
+    + "~/.claude/settings.json, sin tocar lo demás.",
+  "install.desktop.setup.title": "Ejecuta la configuración",
+  "install.desktop.setup.text": "Inicia otra sesión nueva en la misma carpeta, para que cargue el "
+    + "plugin, y ejecuta esto. En tus siguientes proyectos, solo haces este paso.",
   "asks.computer.title": "Se pregunta una vez en tu computadora",
-  "asks.computer.text": "Qué herramienta de búsqueda de código usar, si agregar las reglas de trabajo de "
-    + "Bindwright a todos los proyectos, un guardia contra force push en todos los proyectos, si un "
-    + "modelo ayudante barato escribe el código que planea el modelo principal, si aprender tu estilo de "
-    + "código del código que escribiste a mano y qué mods agregar. "
-    + "Cámbialas después con /bindwright:setup global.",
+  "asks.computer.text": "Búsqueda de código, reglas de trabajo compartidas, una protección contra "
+    + "force push, un modelo ayudante barato para el código, tu estilo de código y los mods. "
+    + "Cámbialos después con /bindwright:setup global.",
   "asks.project.title": "Se pregunta en cada proyecto",
-  "asks.project.text": "Quién trabaja en él, de quién es, si es privado o público, si el crédito de la IA "
-    + "queda fuera de los commits, qué revisiones corren, cómo escribe y trabaja el asistente, y dónde vive "
-    + "el plan: un tablero de GitHub, issues o un archivo de traspaso.",
+  "asks.project.text": "Quién trabaja en él, si es privado o público, qué revisiones corren, cómo "
+    + "trabaja el asistente y dónde vive el plan.",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
 
   "copy.command": "Copiar comando",

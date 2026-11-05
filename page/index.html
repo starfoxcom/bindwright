@@ -11,7 +11,7 @@
 <link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/">
 <link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/bindwright/page/">
 <!-- /alternates -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='4' fill='%2380d08f'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Crect width='1024' height='1024' rx='224' fill='%2316191d'/%3E%3Cpath d='M340 240H220V784H340M684 240H804V784H684' fill='none' stroke='%2380d08f' stroke-width='88' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='432' y='352' width='160' height='320' rx='36' fill='%2380d08f'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link
@@ -283,62 +283,39 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
   </section>
 
   <section class="install" id="install" aria-labelledby="install-title">
+    <div class="install-head">
     <h2 id="install-title" data-t="install.title">Install</h2>
-    <p class="command-how" data-t="install.how">Two commands once on your computer, then one in each project. Paste each into Claude Code, press Enter and let it finish before the next.</p>
-    <div class="install-groups">
-    <div class="install-group">
-    <h3 data-t="install.computer">On your computer, once</h3>
-    <ol class="command-steps">
-      <li>
-        <p class="command-sub"><b data-t="install.market.title">Tell Claude Code where Bindwright comes from.</b>
-          <span data-t="install.market.text">This adds Bindwright's marketplace, a list Claude Code can install from. It installs nothing yet.</span></p>
-        <div class="install-line"><code>/plugin marketplace add starfoxcom/bindwright</code>
-          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
-            data-t-attr="aria-label:command.copy">
-            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <rect x="8" y="8" width="14" height="14" rx="2"/>
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-            </svg>
-            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <path d="M20 6 9 17l-5-5"/>
-            </svg>
-          </button></div>
-      </li>
-      <li>
-        <p class="command-sub"><b data-t="install.plugin.title">Install Bindwright.</b>
-          <span data-t="install.plugin.text">This adds the /bindwright commands to every project on your computer, plus a once-a-day note when something is out of date. It changes no project yet.</span></p>
-        <div class="install-line"><code>/plugin install bindwright@bindwright</code>
-          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
-            data-t-attr="aria-label:command.copy">
-            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <rect x="8" y="8" width="14" height="14" rx="2"/>
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-            </svg>
-            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <path d="M20 6 9 17l-5-5"/>
-            </svg>
-          </button></div>
-      </li>
-    </ol>
+    <div class="install-switch" role="tablist" aria-label="Where you use Claude Code"
+      data-t-attr="aria-label:install.switch.label" data-active="cli">
+      <button type="button" role="tab" id="install-tab-cli" aria-selected="true"
+        aria-controls="install-cli" data-t="install.switch.cli">Claude Code CLI</button>
+      <button type="button" role="tab" id="install-tab-desktop" aria-selected="false" tabindex="-1"
+        aria-controls="install-desktop" data-t="install.switch.desktop">Desktop app</button>
     </div>
-    <div class="install-group">
-    <h3 data-t="install.project">In each project</h3>
-    <ol class="command-steps">
+    </div>
+    <ol class="command-steps" id="install-cli" role="tabpanel" aria-labelledby="install-tab-cli">
       <li>
-        <p class="command-sub"><b data-t="install.open.title">Open Claude Code in the project's folder.</b>
-          <span data-t="install.open.text">Setup writes into the folder Claude Code is open in.</span></p>
+        <p class="command-sub"><b data-t="install.plugin.title">On your computer, once</b>
+          <span data-t="install.plugin.text">Adds the /bindwright commands to every project, ready in this session. Needs no Git.</span></p>
+        <div class="install-line"><code>/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json</code>
+          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
       </li>
       <li>
-        <p class="command-sub"><b data-t="install.setup.title">Run the setup.</b>
-          <span data-t="install.setup.text">It asks a few questions, then writes the files that fit. Nothing you already have changes without your yes.</span></p>
+        <p class="command-sub"><b data-t="install.setup.title">In each project</b>
+          <span data-t="install.setup.text">Open Claude Code in the project's folder and run setup. It asks a few questions and changes nothing without your yes.</span></p>
         <div class="install-line"><code>/bindwright:setup</code>
           <button class="icon-copy" type="button" aria-label="Copy command" data-copy
             data-t-attr="aria-label:command.copy">
@@ -356,16 +333,58 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           </button></div>
       </li>
     </ol>
-    </div>
-    </div>
+    <ol class="command-steps" id="install-desktop" role="tabpanel" aria-labelledby="install-tab-desktop" hidden>
+      <li>
+        <p class="command-sub"><b data-t="install.desktop.open.title">Open your project</b>
+          <span data-t="install.desktop.open.text">In the Code tab, start a new session in your project's folder.</span></p>
+      </li>
+      <li>
+        <p class="command-sub"><b data-t="install.desktop.install.title">Install Bindwright</b>
+          <span data-t="install.desktop.install.text">Paste this and send it, then wait until Claude says it is done. Needs no Git.</span></p>
+        <div class="install-line"><code data-t="install.desktop.prompt">Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.</code>
+          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
+      </li>
+      <li>
+        <p class="command-sub"><b data-t="install.desktop.setup.title">Run the setup</b>
+          <span data-t="install.desktop.setup.text">Start another new session in the same folder, so the plugin loads, and run this. In your next projects, this is the only step.</span></p>
+        <div class="install-line"><code>/bindwright:setup</code>
+          <button class="icon-copy" type="button" aria-label="Copy command" data-copy
+            data-t-attr="aria-label:command.copy">
+            <svg class="ico-copy" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <rect x="8" y="8" width="14" height="14" rx="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <svg class="ico-check" viewBox="0 0 24 24" width="18" height="18" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </button></div>
+      </li>
+    </ol>
     <div class="asks">
       <div class="ask-list">
         <h3 data-t="asks.computer.title">Asked once on your computer</h3>
-        <p data-t="asks.computer.text">Which code-search tool to use, whether to add Bindwright's working rules to every project, a guard against force pushes in every project, whether a cheap helper model writes the code the main model plans, whether to learn your coding style from code you wrote by hand, and which mods to add. Change them later with /bindwright:setup global.</p>
+        <p data-t="asks.computer.text">Code search, shared working rules, a force-push guard, a cheap helper model for code, your coding style and mods. Change them later with /bindwright:setup global.</p>
       </div>
       <div class="ask-list">
         <h3 data-t="asks.project.title">Asked in every project</h3>
-        <p data-t="asks.project.text">Who works on it, whose it is, private or public, whether AI credit stays out of commits, which checks run, how the assistant writes and works, and where the plan lives: a GitHub board, issues or a hand-off file.</p>
+        <p data-t="asks.project.text">Who works on it, private or public, which checks run, how the assistant works, and where the plan lives.</p>
       </div>
     </div>
     <p class="asks-more"><a href="settings/" data-t="asks.more">See every setting</a></p>

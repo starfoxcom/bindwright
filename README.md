@@ -17,11 +17,21 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 In Claude Code, once per computer:
 
 ```
-/plugin marketplace add starfoxcom/bindwright
-/plugin install bindwright@bindwright
+/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
 ```
 
-It needs Git, and Node 18 or Python 3.8 or later; setup says what is missing and how to install it. Then, in each project, open Claude Code in the project's folder and run:
+In the Claude desktop app, where `/plugin` does not run:
+
+1. Open the Code tab and start a new session in your project's folder.
+2. Paste this and send it. Wait until Claude says it is done.
+
+   ```
+   Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.
+   ```
+
+3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
+
+Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. Then, in each project, open Claude Code in the project's folder and run:
 
 ```
 /bindwright:setup
