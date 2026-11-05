@@ -9,6 +9,7 @@ Bindwright sets a repo up for agentic coding: the rules, session skills, guard h
 - `/bindwright:code-style` reads code you wrote by hand, in your local repos and your GitHub account, with your permission, and saves a short profile of how you write code, with the weak spots brought up to current practice, which every session then follows.
 - `/bindwright:update` brings a set-up repo up to the plugin's current templates and keeps your edits.
 - `/bindwright:export` records which extras the team expects; `/bindwright:join` brings a teammate's machine in line after cloning.
+- `/bindwright:runners` checks your computer and the repo's CI, recommends how many local CI runners to set up (or none), and installs the ones you pick.
 
 A notice at session start, at most once a day, says when the repo or the plugin is behind.
 

@@ -1,13 +1,14 @@
 # Python twin of update.js: /bindwright:update's three-way merge of each repo
 # file against the last bind's render. Standard library only, Python 3.8+.
 
+import errno
 import json
 import os
 import shutil
 import subprocess
 import tempfile
 
-from apply import _safe
+from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
 from model import expand_answers
 
@@ -19,11 +20,6 @@ PRISTINE = ".bindwright/pristine.json"
 OUTCOMES = [
     "updated", "merged", "added", "staged", "unchanged", "conflict", "owned", "deleted", "removed", "removed_edited",
 ]
-
-
-def _code_units(s):
-    # JavaScript compares strings by UTF-16 code unit, which big-endian bytes order alike.
-    return s.encode("utf-16-be", "surrogatepass")
 
 
 def repo_files(rendered):
@@ -109,14 +105,49 @@ def git_merge(ours, base, theirs):
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def _unreadable_reason(path, err):
+    # Windows opens a folder for reading as a permission error, so a folder is told apart by its path.
+    if isinstance(err, IsADirectoryError) or (os.name == "nt" and os.path.isdir(path)):
+        return "it is a folder"
+    if isinstance(err, NotADirectoryError):
+        return "a folder above it is a file"
+    if isinstance(err, PermissionError):
+        return "permission denied"
+    return errno.errorcode.get(err.errno, "unknown error")
+
+
+def _file_above(path):
+    above = os.path.dirname(path)
+    while above != os.path.dirname(above):
+        if os.path.isfile(above):
+            return True
+        above = os.path.dirname(above)
+    return False
+
+
+def read_state(path, file):
+    """The bytes of a file, or None when it is missing. Any other failure to read
+    it is refused with the file's name and the reason, as readState in update.js."""
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        # Windows reports a path under a file as missing, so a missing file with a file above it is unreadable.
+        if not _file_above(path):
+            return None
+        raise ValueError("%s cannot be read (a folder above it is a file)" % file)
+    except OSError as err:
+        raise ValueError("%s cannot be read (%s)" % (file, _unreadable_reason(path, err)))
+
+
 def _reader(root):
     def read(path):
-        try:
-            # newline="" keeps a lone \r, so only \r\n becomes \n, as in update.js.
-            with open(os.path.join(root, *path.split("/")), encoding="utf-8", newline="") as f:
-                return f.read().replace("\r\n", "\n")
-        except FileNotFoundError:
+        raw = read_state(os.path.join(root, *path.split("/")), path)
+        if raw is None:
             return None
+        try:
+            # Only \r\n becomes \n, as in update.js: a lone \r stays.
+            return raw.decode("utf-8").replace("\r\n", "\n")
         except UnicodeDecodeError:
             raise ValueError("%s is not UTF-8 text" % path)
     return read
@@ -147,10 +178,9 @@ def run_update(root, bind_with, version, state_json):
         return os.path.join(root, *path.split("/"))
 
     # Every check before the first write, so a refusal leaves the repo as it was.
-    targets = [path for path, _ in plan["write"]] + [PRISTINE]
-    links = [path for path in targets if os.path.islink(at(path))]
-    if links:
-        raise ValueError("Refusing to write through a symbolic link: " + ", ".join(links))
+    # A staged copy that already exists is skipped, not written, so it is not checked.
+    fresh_staged = [path for path, _ in plan["stage"] if not os.path.lexists(at(path))]
+    refuse_links(root, [path for path, _ in plan["write"]] + [PRISTINE] + fresh_staged)
     skipped = [path[len(STAGING):] for path, _ in plan["stage"] if os.path.lexists(at(path))]
     files = plan["pristine"]["files"]
     for path in skipped:

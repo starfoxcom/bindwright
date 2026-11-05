@@ -32,6 +32,39 @@ function write(target, text) {
   writeFileSync(target, text, { encoding: "utf8", flag: "wx" });
 }
 
+// lstat without following a link; null when the path does not exist, or a part
+// above it is a file (nothing can sit below a file).
+function lstatOrNull(target) {
+  try {
+    return lstatSync(target, { throwIfNoEntry: false }) ?? null;
+  } catch (err) {
+    if (err.code === "ENOTDIR") return null;
+    throw err;
+  }
+}
+
+// The first symbolic link on the way to `path`, from the repo root down, as a
+// repo-relative path with forward slashes; null when there is none. A part that
+// does not exist ends the walk. Python's islink misses Windows junctions, so
+// apply.py checks the reparse tag as well; both must agree.
+export function linkedPath(root, path) {
+  const parts = path.split("/");
+  for (let depth = 1; depth <= parts.length; depth++) {
+    const stat = lstatOrNull(join(root, ...parts.slice(0, depth)));
+    if (stat === null) return null;
+    if (stat.isSymbolicLink()) return parts.slice(0, depth).join("/");
+  }
+  return null;
+}
+
+// Refuses when any of `paths`, or a part of one, is a symbolic link. Each linked
+// part is named once, sorted, so the message is the same in both engines.
+export function refuseLinks(root, paths) {
+  const linked = [...new Set(paths.map((path) => linkedPath(root, path)))];
+  const links = linked.filter((link) => link !== null).sort();
+  if (links.length) throw new Error(`Refusing to write through a symbolic link: ${links.join(", ")}`);
+}
+
 // files: [[path, text], ...]. Returns { written, staged, skipped }, each a
 // list of the given paths; a staged file sits at STAGING + path. With
 // `adopt` (a repo that has its own setup), every file outside .bindwright/
@@ -39,6 +72,7 @@ function write(target, text) {
 export function applyFiles(files, root, { adopt = false } = {}) {
   const bad = files.map(([path]) => path).filter((path) => !safe(path));
   if (bad.length) throw new Error(`Refusing to write outside the repo: ${bad.join(", ")}`);
+  refuseLinks(root, files.flatMap(([path]) => [path, STAGING + path]));
   const result = { written: [], staged: [], skipped: [] };
   const at = (path) => join(root, ...path.split("/"));
   for (const [path, text] of files) {
