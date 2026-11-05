@@ -1266,7 +1266,7 @@ jobs:
         # A hang counts as a failure, so the backup still runs.
         timeout-minutes: 30
         if: steps.credits-answer.outputs.ok != 'yes'
-        # Pinned to the v1 tag's resolved SHA (v1.0.213). The bare `@v1` floats.
+        # Pinned to the v1.0.266 release commit. The bare `@v1` floats.
         # Update via
         #   curl -s "https://api.github.com/repos/anthropics/claude-code-action/git/refs/tags/v1" | jq -r '.object.sha'
         # confirm the diff, then bump here AND in `.github/workflows/claude.yml`
