@@ -11,10 +11,12 @@
 > _Replace this section with the actual setup steps. Examples below — pick what fits your stack._
 
 ```bash
+<!-- TOGGLE:code_host_local:off START -->
 # Clone
 git clone https://github.com/{{REPO_URL}}.git
 cd $(basename {{REPO_URL}})
 
+<!-- TOGGLE:code_host_local:off END -->
 # Install dependencies
 # (substitute the right command for your stack)
 

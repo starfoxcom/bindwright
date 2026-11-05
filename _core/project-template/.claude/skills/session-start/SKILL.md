@@ -19,7 +19,12 @@ Planning only. Change no files and create no branches in this turn.
 <!-- TOGGLE:handoff_file END -->
 <!-- TOGGLE:tracker:file START -->
 - The single `{{PROJECT_NAME_UPPER}}-CONTEXT_*.md` at the repo root: the last session's hand-off. It outranks anything re-derived from git. If there are none or several, say so first.
+<!-- TOGGLE:code_host_local START -->
+- `ROADMAP.md`, its Now section first.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - `ROADMAP.md`, its Now section first; its branches are checked in step 2.
+<!-- TOGGLE:code_host_local:off END -->
 <!-- TOGGLE:tracker:file END -->
 - `.bindwright/session-steps.md` if it exists: its "Extra start steps" run after the git checks below.
 
