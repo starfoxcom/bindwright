@@ -167,6 +167,24 @@ def _pre_tool_use(data, path):
     return _section(_section(data, "hooks", dict, path), "PreToolUse", list, path)
 
 
+def _same_file(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _hook_command(python):
+    """The bare name PATH resolves to `python`, else `python` unchanged."""
+    if not os.path.isabs(python):
+        return python
+    for name in ("python3", "python"):
+        found = shutil.which(name)
+        if found and _same_file(found, python):
+            return name
+    return python
+
+
 def install_hook(home, file, python, matcher):
     name = os.path.basename(file)
     if not name.endswith(".py"):
@@ -179,8 +197,9 @@ def install_hook(home, file, python, matcher):
     _drop(entries, name)
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
+    # A bare name follows PATH, so the hook survives the install it came from moving.
     entries.append({"matcher": matcher, "hooks": [{
-        "type": "command", "command": python,
+        "type": "command", "command": _hook_command(python),
         "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
     }]})
     _save(path, data)

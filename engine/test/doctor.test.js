@@ -67,13 +67,13 @@ test("the CLI version is read from the session's own agent name", () => {
 test("a healthy repo passes every check", needsPython, async () => {
   const report = await doctor();
   assert.equal(report.problems, 0, JSON.stringify(failing(report)));
-  const ids = ["state", "version", "guards", "staged", "settings", "extras", "cli"];
+  const ids = ["state", "hooks", "version", "guards", "staged", "settings", "extras", "cli"];
   assert.deepEqual(report.checks.map((c) => c.id), ids);
 });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
   const broken = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), "{"));
-  assert.deepEqual(broken.checks.map((c) => c.id), ["state"]);
+  assert.deepEqual(broken.checks.map((c) => c.id), ["state", "hooks"]);
   assert.match(broken.checks[0].say, /project\.json is not valid JSON/);
   assert.match(broken.checks[0].fix, /git checkout -- \.bindwright\//);
   const invalid = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), '{"team": 1}'));
@@ -179,3 +179,45 @@ test("an old CLI is named only with mods installed and the session's version kno
   };
   assert.equal((await doctor(guardHook, "claude-code_2-1-286_agent")).problems, 0, "a guard hook only");
 });
+
+// The hooks check reads <config>/settings.json. Each row is one settings file:
+// `ok` says whether the check passes, and `program` is the one it must name.
+const absentProgram = join(tmpdir(), "no-such-tool-folder", "tool.exe");
+const hooksJson = (hook) => JSON.stringify({
+  hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", ...hook }] }] },
+});
+const hookRows = [
+  ["no settings file", null, true],
+  ["an exec-form hook whose program exists", hooksJson({ command: process.execPath, args: ["-e", ""] }), true],
+  ["an exec-form hook whose absolute program is missing",
+    hooksJson({ command: absentProgram, args: [] }), false, absentProgram],
+  ["an exec-form hook whose bare name is not on PATH",
+    hooksJson({ command: "no-such-tool", args: [] }), false, "no-such-tool"],
+  ["a shell-form hook whose absolute program is missing",
+    hooksJson({ command: `"${absentProgram}" --check` }), false, absentProgram],
+  ["a shell-form hook that opens with a builtin is not judged",
+    hooksJson({ command: 'cd "$CLAUDE_PROJECT_DIR" && npm test' }), true],
+  ["a shell-form hook that opens with an assignment is not judged", hooksJson({ command: "FOO=1 tool" }), true],
+  ["a shell-form hook run through sh -c is not judged", hooksJson({ command: 'sh -c "exit 0"' }), true],
+  ["a shell-form hook with a variable in its program is not judged", hooksJson({ command: "$HOME/tool" }), true],
+  ["settings without hooks", '{"model": "x"}', true],
+  ["settings that are not JSON", "{", true],
+];
+
+for (const [name, text, ok, program] of hookRows) {
+  test(`the hooks check: ${name}`, needsPython, async () => {
+    const withSettings = ({ config }) => {
+      if (text === null) return;
+      mkdirSync(config, { recursive: true });
+      writeFileSync(join(config, "settings.json"), text);
+    };
+    const hooks = (await doctor(withSettings)).checks.find((c) => c.id === "hooks");
+    assert.equal(hooks.ok, ok, hooks.say);
+    if (!ok) {
+      assert.equal(hooks.say, `Some hooks start a program this computer does not have: ${program}. `
+        + "Those hooks fail on every call.");
+      assert.equal(hooks.fix,
+        "Run /bindwright:setup again to reinstall them, or fix the paths in the settings file named.");
+    }
+  });
+}
