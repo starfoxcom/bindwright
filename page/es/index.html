@@ -157,69 +157,43 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">Lo que ha detectado en proyectos reales hasta ahora</h2>
-    <p class="preview-note" data-t="evidence.note">Bindwright pone un revisor de IA en cada pull request. Estos son sus resultados hasta ahora en tres proyectos.</p>
+    <div id="evidence-counts" hidden>
+    <p class="preview-note" id="evidence-note"></p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="reviewed" data-count="993">993</span>
-        <p class="stat-label" data-t="evidence.reviewed">pull requests que la IA revisó antes de integrarse</p>
+        <span class="stat-num" data-total="checked" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.checked.label">pull requests que la IA revisó antes de integrarse</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="fixed" data-count="319">319</span>
-        <p class="stat-label" data-t="evidence.stopped">tenían un problema que la IA detectó y se detuvieron hasta corregirlo</p>
+        <span class="stat-num stat-accent" data-total="firstTry" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.firstTry.label">pasaron a la primera, incluida la revisión a fondo, sin nada que corregir</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-count="583">583</span>
-        <p class="stat-label" data-t="evidence.deep">tocaban código riesgoso, como seguridad o datos guardados, y recibieron una segunda revisión más a fondo</p>
+        <span class="stat-num stat-warn" data-total="fixed" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.fixed.label">se detuvieron de 1 a 5 rondas hasta corregir el problema</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="stalled" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.stalled.label">tomaron 6 rondas o más, donde la sesión se detiene a buscar una corrección más simple</p>
       </div>
     </div>
-    <p class="chart-title" data-t="evidence.chart">Por proyecto: pull requests revisados y cuántos tenían un problema detectado</p>
+    <p class="evidence-detail" id="evidence-detail"></p>
+    <p class="chart-title" data-t="evidence.chart">Por proyecto: pull requests revisados y cuántas rondas tomó cada uno en pasar</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
+    </div>
     <p class="chart-title" data-t="evidence.stories">Errores que se volvieron reglas</p>
-    <ul class="stories">
-      <li class="story">
-        <span class="chip" data-t="evidence.story1.where">GameProject</span>
-        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
-        <span class="was" data-t="evidence.story1.was">El tablero de tareas del proyecto quedó público, con cada nota interna de ingeniería.</span>
-        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
-        <b data-t="evidence.story1.now">Revisa la visibilidad del tablero en cada lectura y te avisa si es público.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story2.where">Este proyecto</span>
-        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
-        <span class="was" data-t="evidence.story2.was">Un cambio subió funciones de 273 líneas porque la regla que limita su tamaño nunca se cargó.</span>
-        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
-        <b data-t="evidence.story2.now">Una revisión de tamaño corre en cada pull request y falla si una función crece demasiado.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story3.where">Este proyecto</span>
-        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
-        <span class="was" data-t="evidence.story3.was">Dos pull requests tardaron 22 y 30 rondas de revisión, porque cada arreglo le daba al revisor algo nuevo que señalar.</span>
-        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
-        <b data-t="evidence.story3.now">Un hallazgo solo bloquea si el cambio lo causó; los huecos viejos se vuelven issues aparte.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story4.where">Este proyecto</span>
-        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
-        <span class="was" data-t="evidence.story4.was">Un arreglo que entró a la rama principal nunca regresó a la rama de desarrollo.</span>
-        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
-        <b data-t="evidence.story4.now">Un hotfix solo cuenta como terminado cuando ya regresó a la rama de desarrollo.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story5.where">Este proyecto</span>
-        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
-        <span class="was" data-t="evidence.story5.was">Un pull request se integró con la primera revisión mientras la revisión profunda que había pedido seguía pendiente.</span>
-        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
-        <b data-t="evidence.story5.now">Si se pide una revisión profunda, nada se integra hasta que también pase.</b>
-      </li>
-      <li class="story">
-        <span class="chip" data-t="evidence.story6.where">Este proyecto</span>
-        <span class="story-label" data-t="evidence.wrong">Qué salió mal</span>
-        <span class="was" data-t="evidence.story6.was">Un cambio al flujo de revisión, hecho en una rama de feature, reprobó su propia revisión.</span>
-        <span class="story-label" data-t="evidence.now">Qué hace Bindwright ahora</span>
-        <b data-t="evidence.story6.now">Los cambios de workflow van primero a la rama principal y luego bajan a desarrollo.</b>
-      </li>
-    </ul>
+    <table class="stories">
+      <thead><tr><th data-t="evidence.wrong">Qué salió mal</th><th data-t="evidence.now">Qué hace Bindwright ahora</th></tr></thead>
+      <tbody>
+        <tr><td class="was" data-t="evidence.story1.was">El tablero de tareas quedó público, con todas sus notas internas de ingeniería.</td><td class="now" data-t="evidence.story1.now">Revisa la visibilidad del tablero en cada lectura y avisa si es público.</td></tr>
+        <tr><td class="was" data-t="evidence.story2.was">Se subieron funciones de 273 líneas, porque la regla de tamaño nunca cargó.</td><td class="now" data-t="evidence.story2.now">Una revisión de tamaño reprueba cualquier pull request con una función demasiado larga.</td></tr>
+        <tr><td class="was" data-t="evidence.story3.was">Dos pull requests tardaron 22 y 30 rondas: cada arreglo le daba algo nuevo que marcar a la IA.</td><td class="now" data-t="evidence.story3.now">Un hallazgo solo bloquea si el cambio lo causó; los huecos viejos se vuelven issues aparte.</td></tr>
+        <tr><td class="was" data-t="evidence.story4.was">Un hotfix integrado en main nunca llegó a develop.</td><td class="now" data-t="evidence.story4.now">Un hotfix cuenta como terminado solo cuando ya volvió a develop.</td></tr>
+        <tr><td class="was" data-t="evidence.story5.was">Un pull request se integró con la revisión a fondo que había pedido todavía pendiente.</td><td class="now" data-t="evidence.story5.now">Si se pide una revisión a fondo, nada se integra hasta que pase.</td></tr>
+        <tr><td class="was" data-t="evidence.story6.was">Un cambio de workflow hecho en una rama de feature reprobó su propia revisión.</td><td class="now" data-t="evidence.story6.now">Los cambios de workflow van primero a main y luego vuelven a develop.</td></tr>
+      </tbody>
+    </table>
   </section>
 
   <section class="mods" id="mods" aria-labelledby="mods-title">

@@ -12,6 +12,10 @@ Bindwright sets a repo up for agentic coding: the rules, session skills, guard h
 
 A notice at session start, at most once a day, says when the repo or the plugin is behind.
 
+## Privacy
+
+The plugin sends nothing about you or your code. The version check asks for one version number a day; review counts are off unless you say yes at setup, and then send only a random id, a project kind, six numbers (review counts and red review rounds) and the time span they cover, once a day; the counter also keeps the country Cloudflare reads from the connection. The full list of network calls is in the [README](https://github.com/starfoxcom/bindwright#privacy).
+
 ## Needs
 
 Git, and Node or Python 3.8 or later to run the setup engine. The optional extras (global instructions, a push guard for every project, the builder agent, a code-style profile and mods for `~/.claude`) are each asked once with a yes or no, saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without one.
