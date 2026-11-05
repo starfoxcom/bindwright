@@ -169,10 +169,9 @@ jobs:
       # The workflow token (it can write checks) is not left in .git/config:
       # the credits reviewer reads files next to it while acting on PR
       # content. Fetches pass the token per command. The review action steps
-      # later write their own bot token into the origin URL; that is the
-      # action's own setup and predates this file. The action's fetch of the
-      # PR branch before that reads a local copy (see the step before the
-      # attempts), so it needs no login on a private repo.
+      # later write their own bot token into the origin URL before their one
+      # fetch (the base branch, for their config restore); that is the
+      # action's own setup and predates this file.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -184,8 +183,9 @@ jobs:
       # and `-diff` or `binary` hides a file's text from a diff.
       # .git/info/attributes outranks every .gitattributes and is shared by
       # the worktree made below. On a review event this checkout already is
-      # the PR's merge ref, so it is redone under the override; the action's
-      # later checkout of the PR branch then writes its files the same way.
+      # the PR's merge ref, so it is redone under the override; the checkout
+      # of the PR head before the review attempts then writes its files the
+      # same way.
       - name: Override the PR's git attributes
         run: |
           mkdir -p .git/info
@@ -207,15 +207,15 @@ jobs:
             echo "head_sha=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          read -r HEAD_SHA BASE_SHA HEAD_REF < <(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '"\(.head.sha) \(.base.sha) \(.head.ref)"')
-          if [ -z "$HEAD_SHA" ] || [ -z "$BASE_SHA" ]; then
+          read -r HEAD_SHA BASE_SHA BASE_REF < <(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '"\(.head.sha) \(.base.sha) \(.base.ref)"')
+          if [ -z "$HEAD_SHA" ] || [ -z "$BASE_SHA" ] || [ -z "$BASE_REF" ]; then
             echo "::error::Could not resolve the head and base commits of PR $PR_NUMBER"
             exit 1
           fi
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
           # The order stamp for this run's gate writes: the moment this job
           # started, in nanoseconds, not the run id. Each approved request
           # joins the review group above and cancels the run in flight, so
@@ -637,43 +637,24 @@ jobs:
           PYEOF
           ANSWER_FROM="$out" bash "$RUNNER_TEMP/deep-answer.sh"
 
-      # Each review action attempt fetches the PR branch from origin before
-      # it writes its own token into the origin URL, and revokes that token
-      # when it ends. The checkout above left no login, so on a private repo
-      # the first fetch fails, and a retry's fetch carries the revoked token
-      # and fails on any repo. The workflow token (it can write checks) must
-      # not go into .git/config: the reviewer can read that file and post a
-      # comment. So origin points at a local bare repo that shares this
-      # checkout's objects and holds only the PR's head commit, under the
-      # names the action fetches (the branch, and the pull ref for a fork).
-      # The attempts fetch from it with no network and no token; the step
-      # after them points origin back at GitHub. Each attempt starts with no
-      # branch checked out: a fork PR's fetch writes into a local branch of
-      # the PR's branch name, and git refuses that for the checked-out one.
-      - name: Serve the PR branch to the review action locally
-        id: pr-origin
+      # The review action, run with a prompt, reviews the checkout as it finds
+      # it and checks nothing out itself. On a comment event this checkout is
+      # the default branch's tip and on a review event the PR's merge ref, so
+      # the PR's head commit goes in first (the gate step fetched it when it
+      # was not local yet). The action then puts the base branch's config
+      # files over it. A failure here skips every attempt, which fails closed.
+      - name: Check out the PR head for the review action
+        id: pr-checkout
         if: steps.brief.outcome == 'success' && steps.claude_credits.outcome != 'success'
-        continue-on-error: true
         env:
-          PR_NUMBER: ${{ steps.pr-head.outputs.pr_number }}
           HEAD_SHA: ${{ steps.pr-head.outputs.head_sha }}
-          HEAD_REF: ${{ steps.pr-head.outputs.head_ref }}
-        run: |
-          origin="$RUNNER_TEMP/pr-origin.git"
-          rm -rf "$origin"
-          git init --quiet --bare "$origin"
-          echo "$(git rev-parse --absolute-git-dir)/objects" > "$origin/objects/info/alternates"
-          git -C "$origin" update-ref "refs/heads/$HEAD_REF" "$HEAD_SHA"
-          git -C "$origin" update-ref "refs/pull/$PR_NUMBER/head" "$HEAD_SHA"
-          echo "url=$origin" >> "$GITHUB_OUTPUT"
-          git remote set-url origin "$origin"
-          git checkout --quiet --detach
+        run: git checkout --quiet --detach "$HEAD_SHA"
 
       - name: Run Claude
         id: claude_attempt_1
         # A hang counts as a failure, so the retry and the fallback still run.
         timeout-minutes: 30
-        if: steps.brief.outcome == 'success' && steps.claude_credits.outcome != 'success'
+        if: steps.pr-checkout.outcome == 'success'
         continue-on-error: true
         # Pinned to the v1.0.266 release commit. The bare `@v1` floats.
         # Update via
@@ -719,6 +700,9 @@ jobs:
           additional_permissions: |
             actions: read
           allowed_bots: "claude"
+          # The PR's base, where the action restores the config files from:
+          # on a comment event it would otherwise take the default branch.
+          base_branch: ${{ steps.pr-head.outputs.base_ref }}
           # A prompt puts the action in agent mode: no tracking comment, and the
           # review comes back as structured output for "Post the deep review".
           prompt: |
@@ -787,16 +771,6 @@ jobs:
         if: steps.posted-1.outputs.posted == 'no'
         run: sleep 90
 
-      # The attempt before left its revoked token in the origin URL and the
-      # PR branch checked out. Same for the next attempt below.
-      - name: Serve the PR branch locally again
-        if: steps.posted-1.outputs.posted == 'no' && steps.pr-origin.outcome == 'success'
-        env:
-          ORIGIN: ${{ steps.pr-origin.outputs.url }}
-        run: |
-          git remote set-url origin "$ORIGIN"
-          git checkout --quiet --detach
-
       # Attempt 2a: same-model retry, when the first attempt left no verdict
       # and hit no usage limit.
       - name: Run Claude (retry, same model)
@@ -818,6 +792,9 @@ jobs:
           additional_permissions: |
             actions: read
           allowed_bots: "claude"
+          # The PR's base, where the action restores the config files from:
+          # on a comment event it would otherwise take the default branch.
+          base_branch: ${{ steps.pr-head.outputs.base_ref }}
           # A prompt puts the action in agent mode: no tracking comment, and the
           # review comes back as structured output for "Post the deep review".
           prompt: |
@@ -843,15 +820,6 @@ jobs:
           else
             echo "posted=no" >> "$GITHUB_OUTPUT"
           fi
-
-      # After the retry's check, which decides whether the fallback runs.
-      - name: Serve the PR branch locally for the fallback
-        if: steps.posted-2.outputs.posted == 'no' && steps.pr-origin.outcome == 'success'
-        env:
-          ORIGIN: ${{ steps.pr-origin.outputs.url }}
-        run: |
-          git remote set-url origin "$ORIGIN"
-          git checkout --quiet --detach
 
       # The fallback's CLI: the stable channel's release, one that has had time
       # in the field, so a newest release that installs but then breaks does
@@ -955,6 +923,9 @@ jobs:
           additional_permissions: |
             actions: read
           allowed_bots: "claude"
+          # The PR's base, where the action restores the config files from:
+          # on a comment event it would otherwise take the default branch.
+          base_branch: ${{ steps.pr-head.outputs.base_ref }}
           # A prompt puts the action in agent mode: no tracking comment, and the
           # review comes back as structured output for "Post the deep review".
           prompt: |
@@ -1059,10 +1030,10 @@ jobs:
           retry post_once
           echo "::notice::Posted the $STAGE attempt's deep review"
 
-      # Whatever happened: a self-hosted runner keeps the workspace for later
-      # jobs, and the local repo goes with this job's temp folder.
+      # Whatever happened: the review action leaves its revoked token in the
+      # origin URL, and a self-hosted runner keeps the workspace for later jobs.
       - name: Point origin back at GitHub
-        if: always() && steps.pr-origin.outcome == 'success'
+        if: always() && steps.pr-checkout.outcome == 'success'
         run: git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
 
       - name: Evaluate deep-tier verdict
@@ -1073,16 +1044,13 @@ jobs:
         # through the Checks API, so they stay on the PR's head even though
         # this run was started by a comment.
         #
-        # A deep verdict comment is the review action's finished tracking
-        # comment ("**Claude finished …") or the credits run's comment headed
-        # "## Deep review"; the script never mistakes a routine comment for
-        # one. Stale-comment floor: only comments posted at or after this
+        # The deep verdict comment is the one "Post the deep review" posted,
+        # headed "## Deep review"; the script never mistakes a routine comment
+        # for one. Stale-comment floor: only comments posted at or after this
         # run's review started (the "Mark the start of the review" step) count,
         # so neither a prior push's 🟢 nor one from a run this one cancelled
-        # can stand in for this run (an attempt can end without posting: max
-        # turns, a gh failure, a network blip mid-comment). No attempt that ran
-        # to the end is an error; a comment without a 🔴/🟢 line is a missing
-        # verdict. Both fail closed.
+        # can stand in for this run. No review posted by this run is an error;
+        # a comment without a 🔴/🟢 line is a missing verdict. Both fail closed.
         if: always() && steps.pr-head.outputs.head_sha != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1091,7 +1059,7 @@ jobs:
           GATE: ${{ steps.gate.outputs.script }}
           CHECKS: ${{ steps.gate.outputs.checks }}
           FLOOR: ${{ steps.floor.outputs.at }}
-          # The model whose attempt completed, for the check summaries: the job
+          # The model whose review was posted, for the check summaries: the job
           # name and a green first step cannot tell (every attempt continues on
           # error).
           REVIEWER: ${{ steps.post.outcome != 'success' && 'none' || steps.claude_credits.outcome == 'success' && format('{0} {1} (API credits)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-1.outputs.posted == 'yes' && format('{0} {1}', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-2.outputs.posted == 'yes' && format('{0} {1} (retry)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-3.outputs.posted == 'yes' && format('{0} {1} (fallback)', steps.gate.outputs.deep_fallback_model, steps.gate.outputs.deep_fallback_effort) || 'none' }}
@@ -1110,12 +1078,12 @@ jobs:
             REVIEWER=none
           fi
 
-          # No attempt that ran to the end means no verdict of this run's,
+          # No review posted by this run means no verdict of this run's,
           # whatever the comments say: a run this one cancelled can post its
           # own just as it dies.
           DEEP=error
           if [ "$REVIEWER" = "none" ]; then
-            echo "::error::No deep review attempt ran to the end"
+            echo "::error::This run posted no deep review"
           elif [ -z "$FLOOR" ]; then
             echo "::error::The review's start time is unknown — refusing to evaluate the verdict without a stale-comment floor"
           elif gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" > "$RUNNER_TEMP/deep-comments.json"; then
