@@ -25,7 +25,7 @@ export class D1Store {
    */
   async addSend({ send, country, timeInMilliseconds, gapInMilliseconds, maxNewPerDay }) {
     const day = dayOf(timeInMilliseconds);
-    const counts = FIELDS.map((field) => send[field]);
+    const counts = [...FIELDS, "rounds"].map((field) => send[field]);
     const [, , upsert] = await this._database.batch([
       this._database.prepare("DELETE FROM new_projects WHERE day < ?1").bind(day),
       this._database
@@ -38,10 +38,11 @@ export class D1Store {
         .bind(day, send.project, maxNewPerDay),
       this._database
         .prepare(
-          `INSERT INTO projects (id, kind, country, checked, caught, deep, merged, last_send, covered_to)
-           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?12
+          `INSERT INTO projects (id, kind, country, checked, caught, deep, merged, stalled, rounds,
+                                 last_send, covered_to)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?14
            WHERE EXISTS (SELECT 1 FROM projects WHERE id = ?1)
-              OR EXISTS (SELECT 1 FROM new_projects WHERE day = ?9 AND id = ?1)
+              OR EXISTS (SELECT 1 FROM new_projects WHERE day = ?11 AND id = ?1)
            ON CONFLICT (id) DO UPDATE SET
              kind = excluded.kind,
              country = excluded.country,
@@ -49,9 +50,11 @@ export class D1Store {
              caught = caught + excluded.caught,
              deep = deep + excluded.deep,
              merged = merged + excluded.merged,
+             stalled = stalled + excluded.stalled,
+             rounds = rounds + excluded.rounds,
              last_send = excluded.last_send,
              covered_to = excluded.covered_to
-           WHERE projects.last_send <= excluded.last_send - ?10 AND projects.covered_to <= ?11`,
+           WHERE projects.last_send <= excluded.last_send - ?12 AND projects.covered_to <= ?13`,
         )
         .bind(send.project, send.kind, country, ...counts, timeInMilliseconds, day, gapInMilliseconds,
           send.from, send.to),
@@ -72,7 +75,8 @@ export class D1Store {
       this._database.prepare(
         `SELECT COUNT(*) AS projects, COALESCE(SUM(checked), 0) AS checked,
                 COALESCE(SUM(caught), 0) AS caught, COALESCE(SUM(deep), 0) AS deep,
-                COALESCE(SUM(merged), 0) AS merged
+                COALESCE(SUM(merged), 0) AS merged, COALESCE(SUM(stalled), 0) AS stalled,
+                COALESCE(SUM(rounds), 0) AS rounds
          FROM projects`,
       ),
       this._database.prepare(
@@ -80,7 +84,7 @@ export class D1Store {
       ),
       this._database
         .prepare(
-          `SELECT kind, checked, caught, deep, merged FROM projects
+          `SELECT kind, checked, caught, deep, merged, stalled, rounds FROM projects
            ORDER BY checked DESC, merged DESC LIMIT ?1`,
         )
         .bind(topProjects),
