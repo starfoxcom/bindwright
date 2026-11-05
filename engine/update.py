@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 
-from apply import _safe
+from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
 from model import expand_answers
 
@@ -19,11 +19,6 @@ PRISTINE = ".bindwright/pristine.json"
 OUTCOMES = [
     "updated", "merged", "added", "staged", "unchanged", "conflict", "owned", "deleted", "removed", "removed_edited",
 ]
-
-
-def _code_units(s):
-    # JavaScript compares strings by UTF-16 code unit, which big-endian bytes order alike.
-    return s.encode("utf-16-be", "surrogatepass")
 
 
 def repo_files(rendered):
@@ -147,10 +142,9 @@ def run_update(root, bind_with, version, state_json):
         return os.path.join(root, *path.split("/"))
 
     # Every check before the first write, so a refusal leaves the repo as it was.
-    targets = [path for path, _ in plan["write"]] + [PRISTINE]
-    links = [path for path in targets if os.path.islink(at(path))]
-    if links:
-        raise ValueError("Refusing to write through a symbolic link: " + ", ".join(links))
+    # A staged copy that already exists is skipped, not written, so it is not checked.
+    fresh_staged = [path for path, _ in plan["stage"] if not os.path.lexists(at(path))]
+    refuse_links(root, [path for path, _ in plan["write"]] + [PRISTINE] + fresh_staged)
     skipped = [path[len(STAGING):] for path, _ in plan["stage"] if os.path.lexists(at(path))]
     files = plan["pristine"]["files"]
     for path in skipped:

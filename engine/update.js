@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
 import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
-import { safe } from "./apply.js";
+import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
 
 // The rendered repo files under the paths they belong at, as the pristine
@@ -167,9 +167,9 @@ export async function runUpdate(root, { bindWith, version }) {
   const owned = ownedPatterns(read(OWNED) ?? "");
   const plan = planUpdate(rendered, pristine, { readRepo: read, owned, merge: gitMerge, version });
   // Every check before the first write, so a refusal leaves the repo as it was.
-  const targets = [...plan.write.map(([path]) => path), PRISTINE];
-  const links = targets.filter((path) => entry(root, path) === "link");
-  if (links.length) throw new Error(`Refusing to write through a symbolic link: ${links.join(", ")}`);
+  // A staged copy that already exists is skipped, not written, so it is not checked.
+  const freshStaged = plan.stage.map(([path]) => path).filter((path) => entry(root, path) === null);
+  refuseLinks(root, [...plan.write.map(([path]) => path), PRISTINE, ...freshStaged]);
   const skipped = plan.stage.filter(([path]) => entry(root, path) !== null).map(([path]) => path.slice(STAGING.length));
   for (const path of skipped) {
     // The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.

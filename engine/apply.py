@@ -6,12 +6,16 @@
 
 import os
 import re
+import stat
 
 # The folder bind.py stages merge targets in; a test keeps the two in step.
 STAGING = ".bindwright/incoming/"
 
 # Relative paths of plain segments only: no drive, root, backslash, "." or "..".
 _SEGMENT = re.compile(r"[^/\\:\x00-\x1f]+")
+
+# IO_REPARSE_TAG_MOUNT_POINT, the tag of a Windows junction.
+_JUNCTION_TAG = 0xA0000003
 
 
 class ApplyError(ValueError):
@@ -21,6 +25,40 @@ class ApplyError(ValueError):
 def _safe(path):
     parts = path.split("/")
     return all(_SEGMENT.fullmatch(p) is not None and p not in (".", "..") for p in parts)
+
+
+def _code_units(s):
+    # JavaScript compares strings by UTF-16 code unit, which big-endian bytes order alike.
+    return s.encode("utf-16-be", "surrogatepass")
+
+
+def _is_link(info):
+    """A symbolic link, or a Windows junction, which os.path.islink does not report."""
+    return stat.S_ISLNK(info.st_mode) or getattr(info, "st_reparse_tag", 0) == _JUNCTION_TAG
+
+
+def linked_path(root, path):
+    """The first symbolic link on the way to `path`, from the repo root down, as a
+    repo-relative path with forward slashes; None when there is none. A part that
+    does not exist ends the walk, since nothing below it can exist either."""
+    parts = path.split("/")
+    for depth in range(1, len(parts) + 1):
+        try:
+            info = os.lstat(os.path.join(root, *parts[:depth]))
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+        if _is_link(info):
+            return "/".join(parts[:depth])
+    return None
+
+
+def refuse_links(root, paths):
+    """Raises ApplyError when any of `paths`, or a part of one, is a symbolic link.
+    Each linked part is named once, sorted by UTF-16 code unit as the JS engine sorts."""
+    linked = {link for link in (linked_path(root, path) for path in paths) if link is not None}
+    if linked:
+        names = sorted(linked, key=_code_units)
+        raise ApplyError("Refusing to write through a symbolic link: " + ", ".join(names))
 
 
 def _write(target, text):
@@ -37,6 +75,7 @@ def apply_files(files, root, adopt=False):
     bad = [path for path, _ in files if not _safe(path)]
     if bad:
         raise ApplyError("Refusing to write outside the repo: " + ", ".join(bad))
+    refuse_links(root, [p for path, _ in files for p in (path, STAGING + path)])
     result = {"written": [], "staged": [], "skipped": []}
 
     def at(path):
