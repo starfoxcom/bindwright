@@ -1,5 +1,5 @@
-// Anonymous counts from people who chose to share them, read from the counter (counter/
-// in the repo) for the evidence chart. Each project shows as its kind only, numbered when
+// Anonymous counts from the projects whose owners chose to share them, read from the
+// counter (counter/ in the repo) for the evidence section. Each project shows as its kind only, numbered when
 // a kind repeats. `shared` resolves to null while the counter is down, slow or empty.
 import { t } from "./i18n/index.js";
 
@@ -37,7 +37,7 @@ function labelled(top) {
     seen[project.kind] = (seen[project.kind] ?? 0) + 1;
     const name = t(`evidence.kind.${project.kind}`);
     const label = totals[project.kind] > 1 ? `${name} ${seen[project.kind]}` : name;
-    return { label, reviewed: project.checked, fixed: project.caught, isShared: true };
+    return { label, reviewed: project.checked, fixed: project.caught };
   });
 }
 
@@ -54,6 +54,6 @@ async function load() {
 
 /**
  * The shared totals and top rows, `{ projects, reviewed, fixed, deep, rows }`, or null.
- * Each row is `{ label, reviewed, fixed, isShared }`, ready for bars.js.
+ * Each row is `{ label, reviewed, fixed }`, ready for bars.js.
  */
 export const shared = load().catch(() => null);

@@ -157,24 +157,26 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">Lo que ha detectado en proyectos reales hasta ahora</h2>
-    <p class="preview-note" id="evidence-note" data-t="evidence.note">Bindwright pone un revisor de IA en cada pull request. Estos son sus resultados hasta ahora en tres proyectos.</p>
+    <div id="evidence-counts" hidden>
+    <p class="preview-note" id="evidence-note"></p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="reviewed" data-count="993">993</span>
+        <span class="stat-num" data-total="reviewed" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.reviewed">pull requests que la IA revisó antes de integrarse</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="fixed" data-count="319">319</span>
+        <span class="stat-num stat-red" data-total="fixed" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.stopped">tenían un problema que la IA detectó y se detuvieron hasta corregirlo</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-total="deep" data-count="583">583</span>
+        <span class="stat-num stat-accent" data-total="deep" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.deep">tocaban código riesgoso, como seguridad o datos guardados, y recibieron una segunda revisión más a fondo</p>
       </div>
     </div>
     <p class="chart-title" data-t="evidence.chart">Por proyecto: pull requests revisados y cuántos tenían un problema detectado</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
+    </div>
     <p class="chart-title" data-t="evidence.stories">Errores que se volvieron reglas</p>
     <ul class="stories">
       <li class="story">

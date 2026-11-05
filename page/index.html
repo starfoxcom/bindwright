@@ -157,24 +157,26 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 
   <section class="evidence" id="evidence" aria-labelledby="evidence-title">
     <h2 id="evidence-title" data-t="evidence.title">What it caught in real projects so far</h2>
-    <p class="preview-note" id="evidence-note" data-t="evidence.note">Bindwright puts an AI reviewer on every pull request. These are its results so far in three projects.</p>
+    <div id="evidence-counts" hidden>
+    <p class="preview-note" id="evidence-note"></p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="reviewed" data-count="993">993</span>
+        <span class="stat-num" data-total="reviewed" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.reviewed">pull requests checked by the AI reviewer before they merged</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="fixed" data-count="319">319</span>
+        <span class="stat-num stat-red" data-total="fixed" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.stopped">had a problem the reviewer caught and were held back until it was fixed</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-accent" data-total="deep" data-count="583">583</span>
+        <span class="stat-num stat-accent" data-total="deep" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.deep">touched risky code, like security or saved data, and got a second, deeper review</p>
       </div>
     </div>
     <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many had a problem caught</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
+    </div>
     <p class="chart-title" data-t="evidence.stories">Mistakes that became rules</p>
     <ul class="stories">
       <li class="story">

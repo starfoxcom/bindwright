@@ -175,8 +175,6 @@ export default {
   "mods.scene.usage-guard.save": "Guardé tu trabajo en curso y hice pausa hasta el reinicio.",
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
   "evidence.title": "Lo que ha detectado en proyectos reales hasta ahora",
-  "evidence.note": "Bindwright pone un revisor de IA en cada pull request. "
-    + "Estos son sus resultados hasta ahora en tres proyectos.",
   "evidence.reviewed": "pull requests que la IA revisó antes de integrarse",
   "evidence.stopped": "tenían un problema que la IA detectó y se detuvieron hasta corregirlo",
   "evidence.deep": "tocaban código riesgoso, como seguridad o datos guardados, "
@@ -185,22 +183,16 @@ export default {
   "evidence.stories": "Errores que se volvieron reglas",
   "evidence.wrong": "Qué salió mal",
   "evidence.now": "Qué hace Bindwright ahora",
-  "evidence.project.game": "GameProject",
-  "evidence.project.this": "Este proyecto",
-  "evidence.project.business": "BusinessApp",
   "evidence.checked": { one: "{count} revisado", other: "{count} revisados" },
   "evidence.caught": { one: "{count} detectado", other: "{count} detectados" },
   "evidence.legend.passed": "pasaron la revisión",
   "evidence.legend.fixed": "tenían un problema, corregido antes de integrarse",
-  "evidence.note.shared": {
+  "evidence.note": {
     one: "Bindwright pone un revisor de IA en cada pull request. "
-      + "Estos son sus resultados hasta ahora en {count} proyecto, "
-      + "{shared} de ellos compartidos de forma anónima por quienes lo usan.",
+      + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos.",
     other: "Bindwright pone un revisor de IA en cada pull request. "
-      + "Estos son sus resultados hasta ahora en {count} proyectos, "
-      + "{shared} de ellos compartidos de forma anónima por quienes lo usan.",
+      + "Estos son sus resultados hasta ahora en {count} proyectos cuyos dueños eligieron compartir conteos anónimos.",
   },
-  "evidence.shared": "compartido",
   "evidence.kind.game": "Juego",
   "evidence.kind.business-app": "App de negocio",
   "evidence.kind.developer-tool": "Herramienta para devs",
