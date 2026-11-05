@@ -18,14 +18,26 @@ const PANE_PROPS = {
   view: {},
 } as never
 
-function world(on: On, tasks: TaskRow[], updatedAt = NOW, carried: TaskRow[] = []) {
+// The session of the moment (a /clear changes it), other sessions' lists by id, and the clock.
+type Live = { session: string; others?: Record<string, TaskRow[]>; clock?: ReturnType<typeof mock.clock> }
+
+function world(
+  on: On,
+  tasks: TaskRow[],
+  updatedAt = NOW,
+  carried: TaskRow[] = [],
+  live: Live = { session: 'sess-a' },
+) {
   const opened: string[] = []
-  mock.clock(on, { now: NOW })
+  live.clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
-  on('session.id', () => ({ value: 'sess-a' }))
+  on('session.id', () => ({ value: live.session }))
   on('session.root', () => ({ value: 'C:/Repos/x' }))
   on('fs.read', ($, e) => {
-    if (e.path.replaceAll('\\', '/') !== MIRROR) throw new Error('ENOENT')
+    const path = e.path.replaceAll('\\', '/')
+    const other = live.others?.[path.slice(path.lastIndexOf('/') + 1, -'.json'.length)]
+    if (other) return { value: JSON.stringify({ session: live.session, updatedAt: NOW, turn: 1, tasks: other }) }
+    if (path !== MIRROR) throw new Error('ENOENT')
     return {
       value: JSON.stringify({ session: 'sess-a', updatedAt: NOW, changedAt: updatedAt, turn: 3, tasks, carried }),
     }
@@ -133,6 +145,18 @@ test('open tasks come first, finished ones newest first', () => {
     { id: '3', subject: 'c', status: 'in_progress' },
   ]
   expect(ordered(rows).map(t => t.id)).toEqual(['3', '4', '2', '1'])
+})
+
+test("after a /clear the band shows the new session's list, not the old one's", async ($, on) => {
+  const fresh: TaskRow = { id: '1', subject: 'Fresh work', status: 'in_progress' }
+  const live: Live = { session: 'sess-a', others: { 'sess-b': [fresh] } }
+  world(on, LIST, NOW, [], live)
+  await start($)
+  const band = await $.ui.mount({ plugin: 'tasks', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
+  expect(await band.find({ type: 'Text', text: /guards mod/ })).toBeDefined()
+  live.session = 'sess-b'
+  await live.clock?.advance(2_000)
+  expect(await band.find({ type: 'Text', text: /Fresh work/ })).toBeDefined()
 })
 
 test('the carried-over line stays until this session makes a list, however long that takes', async ($, on) => {

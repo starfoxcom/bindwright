@@ -12,7 +12,7 @@ const REFRESH_MS = 2_000
 const LINGER_MS = 5 * 60_000
 export const PANE = 'tasks'
 const view = atom({ plugin: 'tasks', key: 'view' } as const, null)
-const ctx = { file: '', isStarted: false }
+const ctx = { isStarted: false }
 
 async function mirrorPath($: Engine): Promise<string> {
   const configured = await $.env.get('CLAUDE_CONFIG_DIR')
@@ -21,9 +21,11 @@ async function mirrorPath($: Engine): Promise<string> {
 }
 
 async function refresh($: Engine): Promise<void> {
+  // Looked up on every refresh: after a /clear the process goes on under a new session id.
+  const file = await mirrorPath($)
   let mirror: { tasks?: TaskRow[]; changedAt?: number; carried?: TaskRow[] } = {}
   try {
-    mirror = JSON.parse(String(await $.fs.read(ctx.file)))
+    mirror = JSON.parse(String(await $.fs.read(file)))
   } catch {
     // No mirror yet: this session has made no task list.
   }
@@ -234,7 +236,6 @@ function kindGroup(ui: Ui, group: (typeof KINDS)[number], tasks: readonly TaskRo
 export async function startView($: Engine): Promise<void> {
   if (ctx.isStarted) return
   ctx.isStarted = true
-  ctx.file = await mirrorPath($)
   await refresh($)
   $.clock.every(REFRESH_MS, () => void refresh($).catch(() => undefined))
 }

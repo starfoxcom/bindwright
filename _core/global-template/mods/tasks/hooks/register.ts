@@ -74,6 +74,8 @@ const live: {
   promptedAt?: number
   // The last turn's end left background work or a scheduled wake that will wake the session (Stop event).
   hasEngineWake: boolean
+  // The session the carry-over last ran for: a /clear changes the session with no session.start.
+  carriedFor?: string
 } = {
   turn: 0,
   hasEngineWake: false,
@@ -222,6 +224,15 @@ async function carryOver($: EngineInterface): Promise<void> {
   await saveMirror($, mirror)
 }
 
+// The carry-over, once per session: at its start, or at the first prompt of a session a /clear began,
+// by which time the session before it has marked its end.
+async function carryOverOnce($: EngineInterface): Promise<void> {
+  const session = await $.session.id()
+  if (live.carriedFor === session) return
+  live.carriedFor = session
+  await carryOver($).catch(() => undefined)
+}
+
 // Writes only the stamp file, for the session id of the moment: a timer a hot reload left behind,
 // or one still running after /clear, stamps the live session and never touches a task list.
 async function stampAlive($: EngineInterface): Promise<void> {
@@ -311,7 +322,7 @@ function registerLifecycle(on: On): void {
     const sweep = ['node', `${$.plugin.root}/${SWEEP_SCRIPT}`, dir, await $.session.id(), ...days]
     await $.process.run(sweep, { timeoutMs: 20_000 }).catch(() => undefined)
     await clearEngineStore($).catch(() => undefined)
-    await carryOver($).catch(() => undefined)
+    await carryOverOnce($)
     await startAlive($)
     return result
   })
@@ -372,6 +383,7 @@ function registerPrompts(on: On): void {
     // The person's own prompt, typed or from the phone: the keep-going count starts over.
     if (e.origin?.kind === 'composer' || e.origin?.kind === 'bridge') live.idlePrompts = 0
     if (live.isTurnRunning) return next(e)
+    await carryOverOnce($)
     const mirror = await mirrorOf($)
     const notes: string[] = []
     if (!mirror.isCarryNoted && mirror.carried?.length) {
