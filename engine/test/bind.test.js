@@ -447,7 +447,8 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   const settings = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8"));
   const entry = settings.hooks.PreToolUse[0].hooks[0];
-  assert.equal(entry.command, exe);
+  // The bare name when PATH resolves it to this interpreter, else the absolute path.
+  assert.ok([exe, "python3", "python"].includes(entry.command), entry.command);
   assert.ok(Array.isArray(entry.args), "exec form, so no shell expands the path");
   const runHook = (root, input) => spawnSync(entry.command, entry.args.map((s) => s.split(home).join(root)), { input, encoding: "utf8" });
   // "deny" is exit 2; "ask" is exit 0 with an ask decision on stdout; "allow" is a silent exit 0.
