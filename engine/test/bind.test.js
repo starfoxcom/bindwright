@@ -168,9 +168,7 @@ test("rules carry no stale model names or polling loops", async () => {
 test("every flag is read by a template or by bind.js", () => {
   const templates = coreFiles.map((f) => readFileSync(join(repo, "_core/project-template", f), "utf8")).join("\n");
   const bindSource = readFileSync(join(repo, "engine/bind.js"), "utf8");
-  // "other" ships the GitHub text, and bind.js picks the files by code_host_github alone.
-  const unread = new Set(["code_host_other"]);
-  for (const name of Object.keys(flagsFor(defaults())).filter((flag) => !unread.has(flag))) {
+  for (const name of Object.keys(flagsFor(defaults()))) {
     const used = templates.includes(`TOGGLE:${name} `) || templates.includes(`TOGGLE:${name}:off `) || bindSource.includes(`flags.${name}`);
     assert.ok(used, `flag "${name}" controls nothing`);
   }
@@ -1055,6 +1053,15 @@ test("a code host without GitHub ships no GitHub-only files", async () => {
     assert.ok(files.has(".github/scripts/size_check.py"), host);
     assert.ok(files.has(".github/size-check/exceptions.txt"), host);
   }
+});
+
+test("only a project on another code host gets the note on adapting the GitHub steps", async () => {
+  const note = ".claude/rules/code-host.md";
+  assert.ok(!(await run(defaults())).has(note));
+  assert.ok(!(await run(withoutGithub(defaults(), "local"))).has(note));
+  const other = (await run(withoutGithub(defaults(), "other"))).get(note);
+  assert.match(other, /^## Reading the other rules here$/m);
+  assert.match(other, /^## Left out of this setup$/m);
 });
 
 test("a local project's git rules teach save points and name no pull-request commands", async () => {

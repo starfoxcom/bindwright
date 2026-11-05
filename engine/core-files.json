@@ -13,6 +13,7 @@
   ".claude/rules/architecture/mvc.md",
   ".claude/rules/clean-code.md",
   ".claude/rules/clean-room.md",
+  ".claude/rules/code-host.md",
   ".claude/rules/code-size.md",
   ".claude/rules/collaboration.md",
   ".claude/rules/confidentiality.md",
