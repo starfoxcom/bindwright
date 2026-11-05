@@ -197,11 +197,16 @@ h1 {
 .mods-more { margin-top: 28px; font-size: 15px; }
 .mods-more a { color: var(--accent); text-underline-offset: 4px; }
 
-/* The carousel beside the terminal: one card at a time, with its arrows and dots under it. */
-.mods-carousel {
-  display: flex; flex-direction: column; justify-content: space-between; gap: 16px; min-width: 0;
-}
-.mods-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* The mods: the selected mod's card on top, the terminal between its arrows, the dots under it. */
+.mods-stage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px 14px; }
+.mods-carousel, .mods-dots { grid-column: 2; min-width: 0; }
+.mods-carousel .mod-card { padding: 0; border-top: 0; }
+.mods-viewer { display: contents; }
+.mods-viewer .term { grid-row: 2; grid-column: 2; margin: 0; }
+#mods-prev { grid-row: 2; grid-column: 1; }
+#mods-next { grid-row: 2; grid-column: 3; }
+.mods-carousel { grid-row: 1; }
+.mods-dots { grid-row: 3; }
 .mods-step {
   width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--rule); background: none;
   color: var(--text); font-size: 22px; line-height: 1; cursor: pointer;
@@ -382,6 +387,8 @@ footer {
 
 @media (max-width: 560px) {
   .changes ul { grid-template-columns: minmax(0, 1fr); }
+  .mods-stage { column-gap: 6px; }
+  .mods-step { width: 30px; height: 30px; font-size: 18px; }
   /* Phones: each project's name and count sit above a full-width bar. */
   .project {
     grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name count" "track track";

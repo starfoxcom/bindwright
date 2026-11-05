@@ -200,7 +200,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
   <section class="mods" id="mods" aria-labelledby="mods-title">
     <h2 id="mods-title" data-t="mods.title">Mods</h2>
     <p class="mods-lede" data-t="mods.lede">Optional add-ons for Claude Code that show live status and keep long sessions on track. Pick the ones you want during setup.</p>
-    <div class="stage split flip mods-stage" id="mods-stage">
+    <div class="stage mods-stage" id="mods-stage">
       <div class="mods-carousel" id="mods-carousel">
         <!-- mods:cards -->
         <ul class="mod-cards">
@@ -261,14 +261,10 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
           </li>
         </ul>
         <!-- /mods:cards -->
-        <div class="mods-controls">
-          <button class="mods-step" id="mods-prev" type="button" aria-label="Previous mod"
-            data-t-attr="aria-label:mods.prev">&lsaquo;</button>
-          <div class="mods-dots" id="mods-dots"></div>
-          <button class="mods-step" id="mods-next" type="button" aria-label="Next mod"
-            data-t-attr="aria-label:mods.next">&rsaquo;</button>
-        </div>
       </div>
+      <div class="mods-viewer">
+        <button class="mods-step" id="mods-prev" type="button" aria-label="Previous mod"
+          data-t-attr="aria-label:mods.prev">&lsaquo;</button>
       <div class="term" role="img" aria-label="A terminal showing the selected mod at work"
         data-t-attr="aria-label:mods.term.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
@@ -278,6 +274,10 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <div class="input"><span class="p">&gt;</span><span><span class="typed"></span><span class="caret"></span></span></div>
         <div class="hint">? for shortcuts</div>
       </div>
+        <button class="mods-step" id="mods-next" type="button" aria-label="Next mod"
+          data-t-attr="aria-label:mods.next">&rsaquo;</button>
+      </div>
+      <div class="mods-dots" id="mods-dots"></div>
     </div>
     <p class="mods-more"><a href="settings/#mods" data-t="mods.more">See every mod and its default</a></p>
   </section>
