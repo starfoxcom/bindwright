@@ -46,8 +46,10 @@ test("a hook installs once, in the launcher form, beside the user's own entries"
     const mine = { matcher: "Bash", hooks: [{ type: "command", command: "my-check" }] };
     writeSettings(dir, { model: "x", hooks: { PreToolUse: [mine] } });
     const file = hookFile(dir, "push-guard.py");
+    // An interpreter PATH does not reach stays an absolute path.
+    const interpreterPath = join(dir, "py", "python3");
     for (let i = 0; i < 2; i++) {
-      const r = home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--matcher", "Bash|PowerShell");
+      const r = home(dir, "install-hook", file, "--python", interpreterPath, "--matcher", "Bash|PowerShell");
       assert.equal(r.status, 0, r.stderr);
     }
     const data = settings(dir);
@@ -55,7 +57,7 @@ test("a hook installs once, in the launcher form, beside the user's own entries"
     assert.equal(data.hooks.PreToolUse.length, 2);
     assert.deepEqual(data.hooks.PreToolUse[0], mine);
     const hook = data.hooks.PreToolUse[1].hooks[0];
-    assert.equal(hook.command, "/usr/bin/python3");
+    assert.equal(hook.command, interpreterPath);
     assert.deepEqual(hook.args.slice(0, 2), ["-I", "-c"]);
     assert.ok(hook.args[3].endsWith("/.claude/hooks/push-guard.py"));
     assert.equal(readFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "utf8"), "print('hi')\n");
