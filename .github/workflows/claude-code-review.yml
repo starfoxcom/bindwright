@@ -1951,12 +1951,38 @@ jobs:
         run: rm -rf .review-gate
 
       - uses: actions/checkout@v6
+        id: gate-files
         with:
           ref: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
           path: .review-gate
           persist-credentials: false
           sparse-checkout: .github/scripts/
           sparse-checkout-cone-mode: false
+
+      # Every later step runs inside `.review-gate` and calls the gate script
+      # from it, so without that checkout none of them can read or write the
+      # gate. This one says so plainly instead: it marks the Review gate as
+      # failed with its own title, from the workspace, and fails the job.
+      - name: Fail the gate when its files are missing
+        if: always() && steps.gate-files.outcome != 'success'
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "::error::The review gate's own files could not be checked out, so the routine verdict cannot be read or written: failing closed. Re-run the workflow."
+          id=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=Review%20gate&per_page=100" \
+            --jq '[.check_runs[] | select(.name == "Review gate") | .id] | max // empty' 2> /dev/null || true)
+          # A failed lookup can print an error body instead of an id.
+          case "$id" in *[!0-9]*) id= ;; esac
+          if [ -z "$id" ] || ! gh api -X PATCH "repos/$REPO/check-runs/$id" \
+            -f status=completed -f conclusion=failure \
+            -f "output[title]=🔴 The review gate's files could not be checked out" \
+            -f "output[summary]=Evaluate review outcome could not check out the gate script, so it could not read the routine verdict. Re-run the workflow." > /dev/null; then
+            echo "::warning::Could not mark the Review gate check as failed; it stays unresolved, which also blocks the merge"
+          fi
+          exit 1
 
       # Gathers the facts; never fails on a verdict, so the next two steps
       # both see them. If this step dies, both read the routine tier as an
@@ -2039,7 +2065,7 @@ jobs:
       # With `checks: two`, a failed write to the not-yet-required gate must
       # not turn this job, the older required check, red.
       - name: Update the Review gate
-        if: always()
+        if: always() && steps.gate-files.outcome == 'success'
         continue-on-error: ${{ needs.init-gate.outputs.checks == 'two' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -2062,7 +2088,7 @@ jobs:
             --order "${{ github.run_id }}.${{ github.run_attempt }}.1" "${ARGS[@]}"
 
       - name: Resolve routine verdict
-        if: always()
+        if: always() && steps.gate-files.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEWER: ${{ needs.claude-review.outputs.reviewer }}
