@@ -22,7 +22,7 @@ Check the tools first, all three before saying anything: `git --version`, `node 
 
 When something is missing, name everything missing in one plain message: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it; Node or Python runs the setup itself. Then give the install for the user's system:
 
-- **Windows:** offer to run it on a yes: `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements`, and the same form with `OpenJS.NodeJS.LTS` when neither Node nor Python is there.
+- **Windows:** offer to run it on a yes: `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements`, and the same form with `Python.Python.3.12` when Python is missing (the hooks and the computer extras run on it) and with `OpenJS.NodeJS.LTS` when Node is missing (the mods and the review counts run on it).
 - **macOS:** offer to run it on a yes: `xcode-select --install` for Git (it opens the system's own installer), and `brew install node` when Homebrew is there, otherwise the installer from nodejs.org.
 - **Linux:** give the command for the user to run in their own terminal, since it asks for their password: `sudo apt install -y git python3` (`sudo dnf install -y git python3` on Fedora). The distributions' own `nodejs` package can be too old for the engine.
 
