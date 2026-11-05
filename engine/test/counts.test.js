@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 import {
   HISTORY_START,
   KINDS,
+  MAX_ROUNDS,
+  STALL_ROUNDS,
   countPrs,
   counterUrl,
   historyOf,
@@ -21,7 +23,11 @@ import {
   setShare,
   statusOf,
 } from "../../plugin/hooks/counts.mjs";
-import { KINDS as COUNTER_KINDS } from "../../counter/src/rules.js";
+import {
+  KINDS as COUNTER_KINDS,
+  MAX_ROUNDS_PER_SEND,
+  STALL_ROUNDS as COUNTER_STALL_ROUNDS,
+} from "../../counter/src/rules.js";
 
 const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "hooks", "counts.mjs");
 const SEND_URL = "http://127.0.0.1:8787/increment";
@@ -54,36 +60,71 @@ const pr = (comments = [], labels = [], { number = 1, mergedAt = noon(2) } = {})
 });
 const GREEN_PR = pr([green]);
 
+// The counts of one PR set: merged is 1 and every other count 0 unless told otherwise.
+const counted = (fields) => ({ checked: 0, caught: 0, deep: 0, merged: 1, stalled: 0, rounds: 0, ...fields });
+const reds = (count) => Array.from({ length: count }, () => red);
+// The deep tier's job summary opens with its own heading, then its verdict line.
+const deepSummary = (verdictLine) => comment(`**Claude finished the deep review**\n\n${verdictLine}`);
+
 const countRows = [
-  ["no merged PRs counts nothing", [], { checked: 0, caught: 0, deep: 0, merged: 0 }],
-  ["a merged PR without a review counts only as merged", [pr()], { checked: 0, caught: 0, deep: 0, merged: 1 }],
-  ["a green verdict counts as checked", [pr([green])], { checked: 1, caught: 0, deep: 0, merged: 1 }],
+  ["no merged PRs counts nothing", [], counted({ merged: 0 })],
+  ["a merged PR without a review counts only as merged", [pr()], counted({})],
+  ["a green verdict counts as checked", [pr([green])], counted({ checked: 1 })],
   ["a red verdict later followed by green counts as caught", [pr([red, green])],
-    { checked: 1, caught: 1, deep: 0, merged: 1 }],
+    counted({ checked: 1, caught: 1, rounds: 1 })],
   ["the last verdict line of a comment decides", [pr([comment("🔴 Blocking\n🟢 LGTM")])],
-    { checked: 1, caught: 0, deep: 0, merged: 1 }],
+    counted({ checked: 1 })],
   ["a list item with a glyph is not a verdict", [pr([comment("- 🔴 Blocking: nit\n🟢 LGTM")])],
-    { checked: 1, caught: 0, deep: 0, merged: 1 }],
+    counted({ checked: 1 })],
   ["numbered list items alone give no verdict", [pr([comment("1. 🔴 Blocking\n2. 🟢 LGTM")])],
-    { checked: 0, caught: 0, deep: 0, merged: 1 }],
+    counted({})],
   ["an escalation request does not count", [pr([comment("@claude review this PR: 🔴 Blocking before")])],
-    { checked: 0, caught: 0, deep: 0, merged: 1 }],
+    counted({})],
   ["a comment from another author does not count", [pr([comment("🔴 Blocking", "someone")])],
-    { checked: 0, caught: 0, deep: 0, merged: 1 }],
-  ["the claude[bot] login counts", [pr([comment("🟢 LGTM", "claude[bot]")])],
-    { checked: 1, caught: 0, deep: 0, merged: 1 }],
-  ["a verdict without its glyph does not count", [pr([comment("LGTM")])],
-    { checked: 0, caught: 0, deep: 0, merged: 1 }],
+    counted({})],
+  ["the claude[bot] login counts", [pr([comment("🟢 LGTM", "claude[bot]")])], counted({ checked: 1 })],
+  ["a verdict without its glyph does not count", [pr([comment("LGTM")])], counted({})],
   ["a verdict in the middle of a sentence does not count", [pr([comment("Earlier I wrote 🟢 LGTM")])],
-    { checked: 0, caught: 0, deep: 0, merged: 1 }],
+    counted({})],
+  ["a Verdict label before the glyph counts", [pr([comment("**Verdict: 🔴 Blocking — reason.**")])],
+    counted({ checked: 1, caught: 1, rounds: 1 })],
+  ["a Verdict label with its colon bolded counts", [pr([comment("**Verdict:** 🟢 LGTM")])],
+    counted({ checked: 1 })],
+  ["Approved counts as the green word", [pr([comment("🟢 **Approved.**")])], counted({ checked: 1 })],
+  ["a finding heading with a glyph is not a verdict", [pr([comment("### 🔴 Finding — x")])],
+    counted({})],
+  ["an invariant heading with a glyph later on is not a verdict",
+    [pr([comment("### Invariant 2 — stale entries — 🔴 REAL GAP")])], counted({})],
   ["a deep label on a checked PR counts as deep", [pr([green], [DEEP])],
-    { checked: 1, caught: 0, deep: 1, merged: 1 }],
+    counted({ checked: 1, deep: 1 })],
   ["a red deep review counts as caught and deep", [pr([red], [DEEP])],
-    { checked: 1, caught: 1, deep: 1, merged: 1 }],
-  ["a deep label without a verdict does not count", [pr([], [DEEP])],
-    { checked: 0, caught: 0, deep: 0, merged: 1 }],
+    counted({ checked: 1, caught: 1, deep: 1, rounds: 1 })],
+  ["a deep label without a verdict does not count", [pr([], [DEEP])], counted({})],
+  ["a red routine round with a green deep summary is one red round", [pr([red, deepSummary("🟢 LGTM")])],
+    counted({ checked: 1, caught: 1, rounds: 1 })],
+  ["a green routine round with a red deep summary is one red round",
+    [pr([green, deepSummary("🔴 Blocking: the parser drops the last field")], [DEEP])],
+    counted({ checked: 1, caught: 1, deep: 1, rounds: 1 })],
+  ["a deep summary with no routine before it opens a round",
+    [pr([deepSummary("🔴 Blocking: nit"), green])],
+    counted({ checked: 1, caught: 1, rounds: 1 })],
+  ["a green routine round with a green deep summary has no red round",
+    [pr([green, deepSummary("🟢 LGTM")])], counted({ checked: 1 })],
+  ["five red rounds then green is caught, not stalled", [pr([...reds(5), green])],
+    counted({ checked: 1, caught: 1, rounds: 5 })],
+  ["six red rounds then green is stalled", [pr([...reds(6), green])],
+    counted({ checked: 1, caught: 1, stalled: 1, rounds: 6 })],
+  ["error and request comments open no round",
+    [pr([red, comment("**Claude encountered an error** while reviewing"), comment("@claude review this PR")])],
+    counted({ checked: 1, caught: 1, rounds: 1 })],
+  ["red rounds add up across PRs",
+    [pr([red, green], [], { number: 1 }), pr([...reds(2), green], [], { number: 2 })],
+    counted({ checked: 2, caught: 2, merged: 2, rounds: 3 })],
   ["each count caps at the batch size of 500", Array.from({ length: 501 }, () => pr([green], [DEEP])),
-    { checked: 500, caught: 0, deep: 500, merged: 500 }],
+    counted({ checked: 500, deep: 500, merged: 500 })],
+  ["rounds cap at 25000, the most one send carries",
+    Array.from({ length: 501 }, () => pr([...reds(50), green])),
+    counted({ checked: 500, caught: 500, stalled: 500, merged: 500, rounds: 25000 })],
 ];
 
 for (const [name, prs, expected] of countRows) {
@@ -92,6 +133,11 @@ for (const [name, prs, expected] of countRows) {
 
 test("the plugin offers exactly the kinds the counter accepts", () => {
   assert.deepEqual(KINDS, COUNTER_KINDS);
+});
+
+test("the plugin's stall and round limits are the counter's", () => {
+  assert.equal(STALL_ROUNDS, COUNTER_STALL_ROUNDS);
+  assert.equal(MAX_ROUNDS, MAX_ROUNDS_PER_SEND);
 });
 
 test("the counter URL is the live Worker unless BINDWRIGHT_COUNTER_URL names another base", () => {
@@ -248,7 +294,7 @@ test("an accepted send moves since and the day forward", () => inScene(async (s)
     url: SEND_URL,
     body: {
       project: ID, kind: "game", checked: 1, caught: 0, deep: 0, merged: 1,
-      from: noon(1).getTime(), to: when.getTime(),
+      stalled: 0, rounds: 0, from: noon(1).getTime(), to: when.getTime(),
     },
   }]);
   assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString(), lastSendDay: "2026-11-03" }));
@@ -258,6 +304,14 @@ test("a project the counter already has today keeps since and marks the day", ()
   seedState(s);
   await sendAt(s, noon(3), fakeGh([GREEN_PR]), fakeCounter(ALREADY_SENT));
   assert.deepEqual(projectOf(s), projectEntry({ lastSendDay: "2026-11-03" }));
+}));
+
+test("a send carries the stalled PRs and the red rounds", () => inScene(async (s) => {
+  seedState(s);
+  const counter = fakeCounter(OK);
+  await sendAt(s, noon(3), fakeGh([pr([...reds(6), green])]), counter);
+  assert.equal(counter.posts[0].body.stalled, 1);
+  assert.equal(counter.posts[0].body.rounds, 6);
 }));
 
 const refusals = [
@@ -425,7 +479,7 @@ test("a history of one batch goes out in one send, from GitHub's first day to no
     url: SEND_URL,
     body: {
       project: projectOf(s).id, kind: "game", checked: CAP, caught: 0, deep: 0, merged: CAP,
-      from: Date.parse(HISTORY_START), to: noon(3).getTime(),
+      stalled: 0, rounds: 0, from: Date.parse(HISTORY_START), to: noon(3).getTime(),
     },
   }]);
 }));
