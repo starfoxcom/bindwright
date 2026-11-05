@@ -1964,7 +1964,9 @@ jobs:
       # gate. This one says so plainly instead: it marks the Review gate as
       # failed with its own title, from the workspace, and fails the job.
       - name: Fail the gate when its files are missing
-        if: always() && steps.gate-files.outcome != 'success'
+        # Not on a cancelled run: a newer push cancels this one, and its gate
+        # write must not land over the newer run's.
+        if: ${{ !cancelled() && steps.gate-files.outcome != 'success' }}
         working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ github.token }}
