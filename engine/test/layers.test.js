@@ -152,6 +152,14 @@ test("a personal layer cannot pick the custom tool, which only the project can d
   assert.deepEqual(out.ignored, ["personal: codeResearch", "local: codeResearch"]);
 });
 
+test("a work language is kept when known, and an unknown one is listed, in both engines", needsPython, () => {
+  const known = both({ personal: { language: "spanish" }, project: answers({}) });
+  assert.deepEqual(known.settings.language, { value: "spanish", from: "personal", required: false });
+  const unknown = both({ personal: { language: "klingon" }, project: answers({}) });
+  assert.equal(unknown.settings.language, undefined);
+  assert.deepEqual(unknown.ignored, ["personal: language"]);
+});
+
 test("a project that saved a removed tool resolves it as custom, in both engines", needsPython, () => {
   const out = both({ project: answers({ codeResearch: "codegraph" }) });
   assert.deepEqual(out.settings.codeResearch, { value: "custom", from: "project", required: false });

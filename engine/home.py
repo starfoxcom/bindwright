@@ -12,6 +12,7 @@ Standard library, Python 3.8+.
     python engine/home.py add-mod DIR
     python engine/home.py add-agent FILE
     python engine/home.py add-style FILE      (copies the output style, turns it on)
+    python engine/home.py set-language NAME   (the work language: english or spanish)
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -44,6 +45,15 @@ CANDIDATES = (
     [["python"], ["python3"], ["py", "-3"]]
     + [["python3.%d" % n] for n in range(13, 7, -1)]
     + [["/usr/bin/python3"], ["/usr/local/bin/python3"], ["/opt/homebrew/bin/python3"]]
+)
+
+# The work languages engine/layers.py accepts (its LANGUAGES): keep the two lists alike.
+LANGUAGES = ["english", "spanish"]
+# The rule file for a work language other than English; %s is the language's name.
+WORK_LANGUAGE_RULE = (
+    "# Work language\n\n"
+    "Write commit messages and code comments in %s, "
+    "unless the project's own rules name a language for them.\n"
 )
 
 
@@ -316,6 +326,31 @@ def add_style(home, file):
     return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
 
 
+def _work_language_rule(home):
+    return os.path.abspath(os.path.join(_claude(home), "rules", "work-language.md"))
+
+
+def set_language(home, name):
+    if name not in LANGUAGES:
+        raise HomeError("Unknown work language: %s; use %s" % (name, " or ".join(LANGUAGES)))
+    path, data = _load(home)
+    previous = data.get("language")
+    rule = _work_language_rule(home)
+    if name == "english":
+        # A language the person set by hand, such as "japanese", is theirs to keep.
+        if previous in LANGUAGES:
+            del data["language"]
+            _save(path, data)
+        if os.path.exists(rule):
+            os.remove(rule)
+        return {"language": name, "previous": previous, "rule": None}
+    if previous != name:
+        data["language"] = name
+        _save(path, data)
+    _atomic_write(rule, WORK_LANGUAGE_RULE % name.capitalize())
+    return {"language": name, "previous": previous, "rule": rule}
+
+
 def _option(argv, name):
     if name not in argv:
         return None
@@ -325,6 +360,18 @@ def _option(argv, name):
     value = argv[i]
     del argv[i - 1:i + 1]
     return value
+
+
+# The commands that take one name, each run as command(home, name).
+NAMED_COMMANDS = {
+    "remove-hook": remove_hook,
+    "allow": lambda home, rule: set_allow(home, rule, True),
+    "disallow": lambda home, rule: set_allow(home, rule, False),
+    "add-mod": add_mod,
+    "add-agent": add_agent,
+    "add-style": add_style,
+    "set-language": set_language,
+}
 
 
 def run(argv):
@@ -337,20 +384,12 @@ def run(argv):
         return find_python()
     if cmd == "install-hook" and one and python and matcher:
         return install_hook(home, one, python, matcher)
-    if cmd == "remove-hook" and one:
-        return remove_hook(home, one)
     if cmd == "list-hooks" and not args:
         return list_hooks(home)
-    if cmd in ("allow", "disallow") and one:
-        return set_allow(home, one, cmd == "allow")
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
-    if cmd == "add-mod" and one:
-        return add_mod(home, one)
-    if cmd == "add-agent" and one:
-        return add_agent(home, one)
-    if cmd == "add-style" and one:
-        return add_style(home, one)
+    if cmd in NAMED_COMMANDS and one:
+        return NAMED_COMMANDS[cmd](home, one)
     raise HomeError("Usage: see the top of engine/home.py")
 
 

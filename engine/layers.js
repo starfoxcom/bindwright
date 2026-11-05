@@ -39,6 +39,8 @@ export const MODS = [
 ];
 export const EXTRAS = [...Object.keys(EXTRA_FILES), ...MODS].sort();
 const LEVELS = ["required", "recommended"];
+// The work languages a personal layer may pick; home.py keeps the same list.
+export const LANGUAGES = ["english", "spanish"];
 
 const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
@@ -46,6 +48,7 @@ const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x)
 // The settings a layer may hold, each with its test for a valid value.
 export const SETTINGS = {
   codeResearch: (v) => own(CODE_RESEARCH_TOOLS, v),
+  language: (v) => typeof v === "string" && LANGUAGES.includes(v),
   tracker: (v) => typeof v === "string" && TRACKERS.includes(v),
 };
 
@@ -75,7 +78,7 @@ function readExtras(extras, name, isValid, ignored) {
   return out;
 }
 
-// A personal layer: { schema, codeResearch, tracker, extras: { <extra>: true | false } }.
+// A personal layer: { schema, codeResearch, language, tracker, extras: { <extra>: true | false } }.
 function readPersonal(raw, name, file) {
   const layer = { settings: {}, extras: {}, required: [], ignored: [] };
   if (raw === null) return layer;

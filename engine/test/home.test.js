@@ -299,6 +299,78 @@ test("a missing settings file starts empty, and bad usage is refused", { skip },
   });
 });
 
+const SPANISH_RULE = "# Work language\n\nWrite commit messages and code comments in Spanish, "
+  + "unless the project's own rules name a language for them.\n";
+const workRule = (dir) => join(dir, ".claude", "rules", "work-language.md");
+const asText = (data) => (typeof data === "string" ? data : JSON.stringify(data));
+
+// One set-language run on its own home, from the settings and rule file the row starts with.
+function checkLanguageRow({ label, name, before, ruleBefore, previous, after, rule, error }) {
+  withHome((dir) => {
+    if (before !== undefined) writeSettings(dir, before);
+    if (ruleBefore !== undefined) {
+      mkdirSync(dirname(workRule(dir)), { recursive: true });
+      writeFileSync(workRule(dir), ruleBefore);
+    }
+    const r = home(dir, "set-language", name);
+    if (error) {
+      assert.equal(r.status, 1, label);
+      assert.match(r.out.error, error, label);
+      assert.equal(readFileSync(settingsPath(dir), "utf8"), asText(before), label);
+      assert.ok(!existsSync(workRule(dir)), label);
+      return;
+    }
+    assert.equal(r.status, 0, `${label}: ${r.stderr}`);
+    assert.deepEqual(r.out, { language: name, previous, rule: rule ? workRule(dir) : null }, label);
+    assert.deepEqual(settings(dir), after, label);
+    assert.equal(existsSync(workRule(dir)), rule, label);
+    if (rule) assert.equal(readFileSync(workRule(dir), "utf8"), SPANISH_RULE, label);
+  });
+}
+
+test("set-language sets the work language, its rule file and the settings key", { skip }, () => {
+  const rows = [
+    {
+      label: "spanish on an empty home",
+      name: "spanish", previous: null, after: { language: "spanish" }, rule: true,
+    },
+    {
+      label: "spanish keeps the other settings keys",
+      name: "spanish", before: { model: "opus" }, previous: null,
+      after: { model: "opus", language: "spanish" }, rule: true,
+    },
+    {
+      label: "spanish again changes no settings value",
+      name: "spanish", before: { model: "opus", language: "spanish" }, previous: "spanish",
+      after: { model: "opus", language: "spanish" }, rule: true,
+    },
+    {
+      label: "spanish rewrites an edited rule file",
+      name: "spanish", ruleBefore: "mine\n", previous: null, after: { language: "spanish" }, rule: true,
+    },
+    {
+      label: "english after spanish drops the key and the rule file",
+      name: "english", before: { model: "opus", language: "spanish" }, ruleBefore: SPANISH_RULE,
+      previous: "spanish", after: { model: "opus" }, rule: false,
+    },
+    {
+      label: "english keeps a language the person set by hand",
+      name: "english", before: { language: "japanese" }, previous: "japanese",
+      after: { language: "japanese" }, rule: false,
+    },
+    {
+      label: "an unknown language is refused and nothing is written",
+      name: "klingon", before: { model: "opus" },
+      error: /Unknown work language: klingon; use english or spanish/,
+    },
+    {
+      label: "a settings file that is not valid JSON is refused and left alone",
+      name: "spanish", before: "{ broken", error: /not valid JSON/,
+    },
+  ];
+  for (const row of rows) checkLanguageRow(row);
+});
+
 test("find-python names a system interpreter", { skip }, () => {
   const r = spawnSync(python, [join(engine, "home.py"), "find-python"], { encoding: "utf8" });
   const out = JSON.parse(r.stdout);

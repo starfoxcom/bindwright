@@ -4,7 +4,8 @@
 //
 // Each entry: id (kebab-case), title, text (what it changes, one short line), value (the
 // default setup picks), keys (the engine answers it covers: "team", "project.name",
-// "extra:<name>" for a file setup adds, and "mods" for the mods entry).
+// "extra:<name>" for a file setup adds, "setting:<name>" for a computer setting the answers do
+// not hold, and "mods" for the mods entry).
 // An optional engine list holds { flags, key, value } checks against defaults(flags).
 // An optional links map turns each named tool in the text into a link to its project.
 // Plain text only: no "&" and no "<" in any string.
@@ -21,6 +22,14 @@ export const COMPUTER = [
     links: {
       tokensave: "https://github.com/aovestdipaperino/tokensave",
     },
+  },
+  {
+    id: "work-language",
+    title: "Work language",
+    text: "The language replies, commit messages and code comments come in, English or Spanish. "
+      + "The setup's own files stay in English: only the assistant reads them.",
+    value: "English",
+    keys: ["setting:language"],
   },
   {
     id: "global-instructions",

@@ -168,6 +168,17 @@ test("remember keeps only what the layers use, and lists what it dropped", needs
   assert.deepEqual(seen.dropped, ["personal: 10", "personal: 2", "personal: extras.ci-watch", "personal: x"]);
 });
 
+test("remember keeps a known work language, and refuses an unknown one", needsPython, () => {
+  const kept = both((run, s) =>
+    run(["--remember", s.repo, "--layer", "personal"], JSON.stringify({ language: "spanish" })));
+  assert.deepEqual(JSON.parse(kept.personal), { language: "spanish", schema: 1 });
+  assert.deepEqual(kept.seen.dropped, []);
+  const refused = both((run, s) =>
+    run(["--remember", s.repo, "--layer", "personal"], JSON.stringify({ language: "klingon" })));
+  assert.equal(refused.seen.error, "Cannot remember: personal: language");
+  assert.equal(refused.personal, null);
+});
+
 test("an export that requires a removed tool is not refused, in both engines", needsPython, () => {
   const { seen, files } = both((run, s) => {
     const saved = { ...ANSWERS, advanced: { ...ANSWERS.advanced, codeResearch: "codegraph" } };
