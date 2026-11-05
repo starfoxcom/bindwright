@@ -1273,8 +1273,7 @@ jobs:
         #   gh api repos/anthropics/claude-code-action/git/tags/<sha> --jq .object.sha
         # Confirm the diff, then bump the SHA here. Both tiers carry the same pin,
         # but this file always ships in a PR of its own, so the pin in
-        # `.github/workflows/claude.yml` moves in a separate PR, and the two
-        # templates follow in another.
+        # `.github/workflows/claude.yml` moves in a separate PR.
         uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d  # v1 (v1.0.266)
         continue-on-error: true
         with:
