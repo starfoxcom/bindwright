@@ -24,6 +24,10 @@ cd $(basename {{REPO_URL}})
 
 ## Development
 
+<!-- TOGGLE:code_host_local START -->
+The project lives on this computer, with its history kept as save points (commits) on `{{MAIN_BRANCH}}`. See `.claude/rules/git.md`.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - **Production branch:** `{{MAIN_BRANCH}}` (stable releases)
 <!-- TOGGLE:branching_model_gitflow START -->
 - **Development branch:** `{{DEV_BRANCH}}` (work in progress; work branches start here)
@@ -32,6 +36,7 @@ cd $(basename {{REPO_URL}})
 - **Branching model:** {{GITFLOW_OR_TRUNK}}
 
 See `.claude/rules/git.md` for the commit and branch conventions.
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Testing
 
@@ -41,6 +46,7 @@ See `.claude/rules/git.md` for the commit and branch conventions.
 
 > _Sketch the directory tree once it stabilizes. Don't write it before the code is real — it'll rot._
 
+<!-- TOGGLE:code_host_local:off START -->
 ## Contributing
 
 <!-- TOGGLE:contributing_md START -->
@@ -50,6 +56,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the contributor guide.
 <!-- TOGGLE:contributing_md:off START -->
 Open an issue describing the change you want to make before opening a PR.
 <!-- TOGGLE:contributing_md:off END -->
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:license_file START -->
 ## License

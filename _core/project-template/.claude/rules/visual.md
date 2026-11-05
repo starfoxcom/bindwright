@@ -17,6 +17,17 @@ Build a visual feature in this order, checking each step before the next:
 
 When a step fails, the problem is in that step, and the previous one is the rollback point. Never bundle several visual systems into one PR.
 
+<!-- TOGGLE:code_host_local START -->
+## Check it before moving on
+
+1. Make a save point (`git.md` § Save points) and run the tests plus a headless start. Report and stop.
+2. The maintainer checks the visuals.
+3. On a regression, keep iterating.
+4. Once the maintainer confirms, move on to the next slice.
+
+Silence is not approval. A visual slice is not done until the maintainer says it looks right.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 ## Iterate locally, push once
 
 1. Commit on the feature branch and run tests plus a headless start. Report and stop.
@@ -25,6 +36,7 @@ When a step fails, the problem is in that step, and the previous one is the roll
 4. Once the maintainer confirms, push and open the PR, and add "Visual check confirmed <date>" to its Notes.
 
 Silence is not approval. Do not push a visual slice until the maintainer says it looks right. Review fixes that do not change visuals push as usual.
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Checklists, never "check for regressions"
 

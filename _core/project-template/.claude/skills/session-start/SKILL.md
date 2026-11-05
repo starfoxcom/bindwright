@@ -38,7 +38,9 @@ Run these as separate calls, in parallel:
 <!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:tracker:file START -->
+<!-- TOGGLE:code_host_local:off START -->
 After the fetch, check each Now item in `ROADMAP.md` that names a branch: it is merged when `git branch --all --merged origin/{{DEV_BRANCH}}` lists the branch, and gone when `git branch --all` no longer does (the prune drops a deleted remote branch, which is how a squash or rebase merge shows). Report each such item with its fix ("R4's branch is gone: mark it done?"), so the roadmap never needs a full re-read to stay true.
+<!-- TOGGLE:code_host_local:off END -->
 <!-- TOGGLE:tracker:file END -->
 
 Then run the extra start steps, if any.
@@ -46,10 +48,17 @@ Then run the extra start steps, if any.
 ## 3. Report, in this order
 
 1. **Project status:** current focus, open work, blockers.
+<!-- TOGGLE:code_host_local START -->
+2. **Git status:** uncommitted changes, the work not yet in a save point (`git.md` § Save points).
+3. **Areas touched:** the directories the plan will change.
+4. **Plan:** the ordered steps, with dependencies. Three to seven steps; split anything larger into another session.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 2. **Git status:** current branch, uncommitted changes, how far behind `{{DEV_BRANCH}}` it is, open PRs. If `{{DEV_BRANCH}}` has moved ahead, propose merging it in before resuming (`git.md` § Keep branches current).
 3. **Branch:** if the work needs a new branch, propose its name per `git.md` and ask before creating it.
 4. **Areas touched:** the directories the plan will change. Anything outside the branch's scope becomes a prerequisite branch that lands first; name it.
 5. **Plan:** the ordered steps, with dependencies. Three to seven steps; split anything larger into another session.
+<!-- TOGGLE:code_host_local:off END -->
 
 ## 4. Stop
 
