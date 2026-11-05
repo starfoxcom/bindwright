@@ -26,7 +26,7 @@ When Git is missing, or neither Node 18 or later nor Python 3.8 or later is ther
 - **macOS:** offer to run it on a yes: `xcode-select --install`. It opens the system's own installer and brings both Git and Python, which is enough for the engine.
 - **Linux:** give the command for the user to run in their own terminal, since it asks for their password: `sudo apt install -y git python3` (`sudo dnf install -y git python3` on Fedora). The distributions' own `nodejs` package can be too old for the engine.
 
-Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app, or start `claude` again in a new terminal), and to run `/bindwright:setup` again. Stop here.
+Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app or the editor it runs in, such as VS Code or JetBrains, or start `claude` again in a new terminal window), and to run `/bindwright:setup` again. Stop here.
 
 With Git and at least one of Node 18 or later or Python 3.8 or later in place, pick the engine, the first of these that runs:
 
