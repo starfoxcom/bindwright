@@ -27,7 +27,9 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd)\s+(.+?)\s*$", re.I)
+CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
+# Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
+RETURN_TARGETS = (None, "-")
 
 
 def unquote_separators(command):
@@ -92,7 +94,10 @@ def shell_search(command, root):
         head = stages[0]
         moved = CD.match(head)
         if moved:
-            base = resolve(moved.group(2), base)
+            # The repo root is the folder such a move most likely returns to, and reading it so
+            # keeps the search counted, the side that never flatters the figure.
+            back = moved.group(1).lower() == "popd" or moved.group(2) in RETURN_TARGETS
+            base = root if back else resolve(moved.group(2), base)
             continue
         if NON_CODE.search(head):
             continue

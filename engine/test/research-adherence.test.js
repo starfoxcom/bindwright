@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -37,7 +37,8 @@ function classifyAll(root, calls) {
 test("searches count only inside the repo, wherever the path or a cd points", {
   skip: !python && "needs Python 3.8+",
 }, () => {
-  const base = mkdtempSync(join(tmpdir(), "bw-adherence-"));
+  // The real path: on macOS the temp folder is a link, and the script reads the cwd resolved.
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "bw-adherence-")));
   const root = join(base, "repo");
   const scratch = join(base, "scratch");
   mkdirSync(join(root, "src"), { recursive: true });
@@ -58,6 +59,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a cd outside, then a grep of the current folder", bash(`cd "${scratch}" && grep -rn foo .`), null],
     ["a pattern with a slash is not taken for a path", bash(`rg "a/b" "${scratch}"`), null],
     ["git grep searches the repo", bash("git grep -n foo"), "fallback"],
+    ["cd - returns to the repo", bash(`cd "${scratch}" && ls && cd - && grep -rn foo src/`), "fallback"],
+    ["popd returns to the repo", bash(`pushd "${scratch}" && ls && popd && grep -rn foo src/`), "fallback"],
     ["a marked bypass", bash("grep -rn foo src/ # TOKENSAVE_BYPASS: regex"), "bypass"],
     ["a filter on another command's output", bash("git log | grep fix"), null],
   ];
