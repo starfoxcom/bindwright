@@ -201,16 +201,47 @@ export function installedExtras(config) {
   return Object.fromEntries(EXTRAS.map((extra) => [extra, present(extra)]));
 }
 
-// A settings file's JSON, or null when it is missing.
-export function readLayerFile(path, file) {
+// A settings file's text, or null when it is missing.
+export function readLayerText(path, file) {
   const bytes = readState(path, file);
-  if (bytes === null) return null;
-  const text = decode(bytes, file);
+  return bytes === null ? null : decode(bytes, file);
+}
+
+// The JSON in a settings file's text.
+export function parseLayerText(text, file) {
   if (depthOf(text) > MAX_DEPTH) throw new Error(`${file} nests too deeply`);
   try {
     return JSON.parse(text);
   } catch {
     throw new Error(`${file} is not valid JSON`);
+  }
+}
+
+// A settings file's JSON, or null when it is missing.
+export function readLayerFile(path, file) {
+  const text = readLayerText(path, file);
+  return text === null ? null : parseLayerText(text, file);
+}
+
+// Refuses a project.json that the two engines would rewrite differently: a
+// number other than a plain whole number of up to 15 digits (JSON.stringify
+// and json.dumps spell 1.0, 1e400, -0 and long integers differently), or a key
+// that is a canonical array index, which JavaScript moves to the front of an
+// object. Scans the raw text outside strings, so a string value is never read as a number.
+const JSON_TOKEN = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?[0-9][-+.eE0-9]*)/g;
+const PLAIN_INTEGER = /^(0|-?[1-9][0-9]{0,14})$/;
+const ARRAY_INDEX = /^(0|[1-9][0-9]*)$/;
+
+const unstable = (what) =>
+  new Error(`${ANSWERS} holds ${what} that the two engines would write differently; ` +
+    "edit it by hand first");
+
+export function refuseUnstableJson(text) {
+  for (const [, quoted, colon, number] of text.matchAll(JSON_TOKEN)) {
+    if (number !== undefined && !PLAIN_INTEGER.test(number)) throw unstable(`the number ${number}`);
+    if (colon === undefined) continue;
+    const key = JSON.parse(quoted);
+    if (ARRAY_INDEX.test(key)) throw unstable(`the key "${key}"`);
   }
 }
 

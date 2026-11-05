@@ -114,13 +114,44 @@ test("null removes a choice, and an empty export removes the setup object", need
   assert.equal(personal, '{\n  "extras": {},\n  "schema": 1\n}\n');
 });
 
-test("export keeps the rest of project.json as it was, numbers included", needsPython, () => {
-  const { files } = both((run, s) => {
-    const answers = { ...ANSWERS, note: 5, ratio: 0.5 };
-    writeFileSync(join(s.repo, ".bindwright", "project.json"), `${JSON.stringify(answers, null, 2)}\n`);
+// project.json as a hand edit would leave it: ANSWERS plus the given members.
+const withMembers = (...members) => {
+  const body = JSON.stringify(ANSWERS, null, 2).replace(/\n\}$/, `,\n  ${members.join(",\n  ")}\n}`);
+  return `${body}\n`;
+};
+const refusal = (what) =>
+  `.bindwright/project.json holds ${what} that the two engines would write ` +
+  "differently; edit it by hand first";
+
+// Hand edits the two engines would write differently: each one stops the export.
+const unstable = [
+  ["1.0", "\"note\": 1.0", "the number 1.0"],
+  ["1e400", "\"note\": 1e400", "the number 1e400"],
+  ["-0", "\"note\": -0", "the number -0"],
+  ["a 16-digit integer", "\"note\": 1234567890123456", "the number 1234567890123456"],
+  ["the key \"2\"", "\"2\": 1", "the key \"2\""],
+];
+
+for (const [name, member, what] of unstable) {
+  test(`export refuses ${name} in project.json, and leaves it alone`, needsPython, () => {
+    const text = withMembers(member);
+    const { seen, files } = both((run, s) => {
+      writeFileSync(join(s.repo, ".bindwright", "project.json"), text);
+      return run(["--export", s.repo], JSON.stringify({ extras: { tasks: "recommended" } }));
+    });
+    assert.equal(seen.status, 1);
+    assert.equal(seen.error, refusal(what));
+    assert.equal(files[0], text);
+  });
+}
+
+test("export accepts a string like 1.5 and the number 42, and writes them back as they were", needsPython, () => {
+  const { seen, files } = both((run, s) => {
+    writeFileSync(join(s.repo, ".bindwright", "project.json"), withMembers("\"ratio\": \"1.5\"", "\"count\": 42"));
     return run(["--export", s.repo], JSON.stringify({ extras: { tasks: "recommended" } }));
   });
-  assert.match(files[0], /"note": 5,\n  "ratio": 0\.5,/);
+  assert.equal(seen.status, 0);
+  assert.match(files[0], /"ratio": "1\.5",\n  "count": 42,\n  "setup": \{/);
 });
 
 test("remember keeps only what the layers use, and lists what it dropped", needsPython, () => {
