@@ -218,6 +218,7 @@ export function validate(saved) {
   "shippedTextPaths must be null or a non-empty list of globs "
   + "without quotes, backslashes, line breaks or outer spaces");
   checkCodeHost(adv);
+  check(!(a.team && adv.codeHost === "local"), 'codeHost "local" is one person on one computer: team must be false');
   check(TRACKERS.includes(adv.tracker), `unknown tracker ${quoted(adv.tracker)}`);
   if (adv.tracker === "github") {
     check(adv.trackerProject === null ||

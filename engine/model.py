@@ -263,6 +263,8 @@ def validate(saved):
            "shippedTextPaths must be null or a non-empty list of globs "
            "without quotes, backslashes, line breaks or outer spaces")
     _check_code_host(adv)
+    _check(not (a["team"] and adv["codeHost"] == "local"),
+           'codeHost "local" is one person on one computer: team must be false')
     _check_tracker(get(adv, "tracker"), get(adv, "trackerProject"))
     _check_repos(get(adv, "tracker"), get(adv, "publicRoadmap"), get(adv, "trackerRepo"))
     return a
