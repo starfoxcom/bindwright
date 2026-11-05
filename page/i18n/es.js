@@ -188,9 +188,11 @@ export default {
   "evidence.legend.passed": "pasaron la primera revisión",
   "evidence.legend.fixed": "corregidos en 1 a 5 rondas",
   "evidence.legend.stalled": "tomaron 6 rondas o más",
-  "evidence.detail": "Un pull request detenido tomó {rounds} rondas de corrección en promedio. "
-    + "{deep} tocaban código riesgoso, como seguridad o datos guardados, y también recibieron una revisión "
-    + "más a fondo. Los cambios solo de documentación no pasan por revisión: {skipped} de los {merged} integrados.",
+  "evidence.detail": "De {merged} pull requests integrados, {skipped} no pasaron por revisión, "
+    + "casi todos solo de documentación, "
+    + "lo que deja los {checked} de arriba. Los {held} detenidos, en amarillo y rojo, tomaron "
+    + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
+    + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {
     one: "Bindwright pone un revisor de IA en cada pull request. "
       + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos.",

@@ -68,6 +68,8 @@ function show(total) {
   }
   note.textContent = t("evidence.note", { count: total.projects });
   detail.textContent = t("evidence.detail", {
+    checked: total.checked,
+    held: total.caught,
     rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
     deep: total.deep,
     skipped: total.merged - total.checked,
