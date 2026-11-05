@@ -315,11 +315,11 @@ test("a send whose answer was lost is not counted twice", () => inScene(async (s
   counter.reply = { status: 409, error: "this window was already counted", coveredTo: lost.getTime() };
   await sendAt(s, noon(4), gh, counter);
   assert.equal(counter.posts[1].body.from, noon(1).getTime(), "the retry resends the same start");
-  assert.deepEqual(projectOf(s), projectEntry({ since: lost.toISOString() }));
+  assert.deepEqual(projectOf(s), projectEntry({ since: new Date(lost.getTime() + SECOND).toISOString() }));
   gh.prs.push(pr([green], [], { mergedAt: new Date(2026, 10, 3, 12, 30) }));
   counter.reply = OK;
   await sendAt(s, noon(4, 13), gh, counter);
-  assert.equal(counter.posts[2].body.from, lost.getTime(), "the next send starts where the count stops");
+  assert.equal(counter.posts[2].body.from, lost.getTime() + SECOND, "the next send starts after the count stops");
 }));
 
 test("a gh that fails stops the send and changes nothing", () => inScene(async (s) => {
@@ -445,20 +445,23 @@ test("backfill on: a history past one batch goes out a batch a day, oldest first
   assert.equal(first.merged + second.merged, 650);
 }));
 
-test("backfill on: a batch whose answer was lost resumes after it, counting no PR twice", () => inScene(async (s) => {
-  seedState(s, { projects: { [s.repo]: projectEntry({ since: HISTORY_START, backfill: true }) } });
-  const gh = fakeGh(many(650));
-  const counter = fakeCounter(new Error("The operation was aborted due to timeout"));
-  await sendAt(s, noon(3), gh, counter);
-  const first = counter.posts[0].body;
-  counter.reply = { status: 409, error: "this window was already counted", coveredTo: first.to };
-  await sendAt(s, noon(4), gh, counter);
-  counter.reply = OK;
-  await sendAt(s, noon(5), gh, counter);
-  const rest = counter.posts[2].body;
-  assert.equal(rest.from, first.to + SECOND);
-  assert.equal(first.merged + rest.merged, 650);
-}));
+for (const [name, backfillOnRetry] of [["kept on", "on"], ["turned off", "off"]]) {
+  test(`a batch whose answer was lost, retried with backfill ${name}, counts no PR twice`, () => inScene(async (s) => {
+    seedState(s, { projects: { [s.repo]: projectEntry({ since: HISTORY_START, backfill: true }) } });
+    const gh = fakeGh(many(650));
+    const counter = fakeCounter(new Error("The operation was aborted due to timeout"));
+    await sendAt(s, noon(3), gh, counter);
+    const first = counter.posts[0].body;
+    setBackfill(s.stateFile, s.repo, backfillOnRetry);
+    counter.reply = { status: 409, error: "this window was already counted", coveredTo: first.to };
+    await sendAt(s, noon(4), gh, counter);
+    counter.reply = OK;
+    await sendAt(s, noon(5), gh, counter);
+    const rest = counter.posts.at(-1).body;
+    assert.equal(rest.from, first.to + SECOND);
+    assert.equal(first.merged + rest.merged, 650);
+  }));
+}
 
 test("backfill off: a history past one batch sends only the newest batch", () => inScene(async (s) => {
   seedState(s, { projects: { [s.repo]: projectEntry({ since: HISTORY_START }) } });

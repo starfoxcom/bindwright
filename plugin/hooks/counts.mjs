@@ -370,16 +370,15 @@ function isDue(entry, current) {
 
 // What the counter's answer changes in the repo's entry. A 409 means an earlier
 // send of this window was counted though its answer was lost: counting resumes
-// where the counter's count stops, or after this batch when the count stops at its end.
+// one second after the counter's count stops, since a window's end is inclusive.
 // A 429 saying the project already sent today keeps `since`, so those PRs go in the next send.
 function outcomeChange(outcome, { batch, today, failedAt }) {
   if (outcome?.status === 200) {
     return { since: batch.nextSince, lastSendDay: today, failedAt: null };
   }
   if (outcome?.status === 409 && Number.isSafeInteger(outcome.coveredTo)) {
-    const stopsAtEnd = outcome.coveredTo === batch.to;
-    const resume = stopsAtEnd ? batch.nextSince : new Date(outcome.coveredTo).toISOString();
-    return { since: resume, failedAt: null };
+    const resume = new Date(outcome.coveredTo + SECOND_IN_MILLISECONDS);
+    return { since: resume.toISOString(), failedAt: null };
   }
   if (outcome?.status === 429 && ALREADY_SENT.test(outcome.error)) return { lastSendDay: today };
   return { failedAt };
