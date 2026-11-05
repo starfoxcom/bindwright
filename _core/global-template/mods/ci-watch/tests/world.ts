@@ -47,6 +47,8 @@ export type Seen = {
   commands: { name: string; argumentHint?: string }[]
   /** Every gh call's words. */
   ghCalls: string[]
+  /** The session id: a /clear moves it on. */
+  session: string
 }
 
 export function world(on: On) {
@@ -62,11 +64,13 @@ export function world(on: On) {
     checksRead: 0,
     statusReads: 0,
     ghCalls: [],
+    session: 's1',
   }
   const clock = mock.clock(on, { now: 1_000 })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
-  on('session.id', () => ({ value: 's1' }))
+  on('session.id', () => ({ value: seen.session }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.end', ($, e) => ({ sessionId: e.sessionId }))
   on('tool.register', ($, e) => ({ value: { tool: `mcp__ci-watch__${e.name}` } }))
   on('command.register', ($, e) => {
     seen.commands.push({ name: e.name, argumentHint: e.argumentHint })
