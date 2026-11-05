@@ -79,10 +79,10 @@ test("a file from a newer Bindwright, or with a broken schema, is refused", () =
   assert.doesNotThrow(() => resolveLayers({ personal: { schema: 1 }, local: {} }));
 });
 
-test("the extras list matches the mods setup ships, plus the five file extras", () => {
+test("the extras list matches the mods setup ships, plus the six file extras", () => {
   const mods = readdirSync(join(engine, "..", "_core", "global-template", "mods"), { withFileTypes: true })
     .filter((d) => d.isDirectory()).map((d) => d.name);
-  const files = ["attribution-guard", "builder", "code-style", "global-instructions", "push-guard"];
+  const files = ["attribution-guard", "builder", "code-style", "global-instructions", "push-guard", "reply-style"];
   assert.deepEqual(EXTRAS, [...mods, ...files].sort());
 });
 

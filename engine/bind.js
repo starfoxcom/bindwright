@@ -118,9 +118,9 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
 }
 
 // The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
-// additions, the memory index, the push guard, the builder agent, the
-// attribution guard when the guards live in ~/.claude, and the research hook
-// for a tool without its own.
+// additions, the memory index, the push guard, the builder agent, the reply
+// style, the attribution guard when the guards live in ~/.claude, and the
+// research hook for a tool without its own.
 async function globalFiles(a, ctx, readFile) {
   const verbatim = async (p) => (await readFile(GLOBAL_CORE + p)).replace(/\r\n/g, "\n");
   const render = async (p) => renderTemplate(await readFile(GLOBAL_CORE + p), ctx, GLOBAL_CORE + p);
@@ -129,6 +129,7 @@ async function globalFiles(a, ctx, readFile) {
     ["memory/MEMORY.md", await render("memory-template/MEMORY.md")],
     ["hooks/push-guard.py", await verbatim("hooks/push-guard.py")],
     ["agents/builder.md", await verbatim("agents/builder.md")],
+    ["output-styles/straight-talk.md", await verbatim("output-styles/straight-talk.md")],
   ];
   if (!ctx.flags.guard_hooks_repo && ctx.flags.attribution_guard) {
     out.push(["hooks/no-ai-attribution.py", await verbatim("hooks/no-ai-attribution.py")]);

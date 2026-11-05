@@ -161,9 +161,9 @@ def plan_files(answers, core_files, precommit_profiles):
 
 def _global_files(a, ctx, read_file):
     """The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
-    additions, the memory index, the push guard, the builder agent, the
-    attribution guard when the guards live in ~/.claude, and the research hook
-    for a tool without its own."""
+    additions, the memory index, the push guard, the builder agent, the reply
+    style, the attribution guard when the guards live in ~/.claude, and the
+    research hook for a tool without its own."""
     def verbatim(p):
         return read_file(GLOBAL_CORE + p).replace("\r\n", "\n")
 
@@ -175,6 +175,7 @@ def _global_files(a, ctx, read_file):
         ["memory/MEMORY.md", render("memory-template/MEMORY.md")],
         ["hooks/push-guard.py", verbatim("hooks/push-guard.py")],
         ["agents/builder.md", verbatim("agents/builder.md")],
+        ["output-styles/straight-talk.md", verbatim("output-styles/straight-talk.md")],
     ]
     if not ctx["flags"]["guard_hooks_repo"] and ctx["flags"]["attribution_guard"]:
         out.append(["hooks/no-ai-attribution.py", verbatim("hooks/no-ai-attribution.py")])

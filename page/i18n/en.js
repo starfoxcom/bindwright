@@ -29,6 +29,7 @@ export default {
   "lands.item.memory": "Memory index",
   "lands.item.guard": "Push guard",
   "lands.item.builder": "Helper that writes code",
+  "lands.item.style": "Plain reply style",
   "lands.item.mods": "Mods you picked",
   "lands.item.brief": "Project brief",
   "lands.item.rules": "Rules",

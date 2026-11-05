@@ -51,6 +51,14 @@ export const COMPUTER = [
     keys: ["extra:code-style"],
   },
   {
+    id: "reply-style",
+    title: "Reply style",
+    text: "Short, plain replies that are easy to follow (or at least it tries ;V): the answer first, " +
+      "and a follow-up question when it needs one. /output-style default turns it off.",
+    value: "Yes",
+    keys: ["extra:reply-style"],
+  },
+  {
     id: "mods-group",
     title: "Mods",
     text: "Add-ons that show live status in Claude Code. They need CLI 2.1.287 or later and Node.",
