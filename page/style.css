@@ -205,6 +205,17 @@ h1 {
 }
 .mods-carousel { grid-area: 1 / 1; min-width: 0; padding-right: 20px; }
 .mods-carousel .mod-card { padding: 0; border-top: 0; }
+/* Out of its card, the selected mod reads as a headline: big name, larger text. */
+.mods-carousel .mod-card h3 {
+  font-size: clamp(28px, 2.8vw, 40px); font-weight: 750; font-stretch: 112%; letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.mods-carousel .mod-card h3 code {
+  font: 500 clamp(24px, 2.4vw, 34px)/1.1 "Fragment Mono", ui-monospace, monospace;
+  color: var(--accent);
+}
+.mods-carousel .mod-card p { margin-top: 14px; font-size: 19px; line-height: 1.45; color: var(--text); }
+.mods-carousel .mod-card .setting-value { margin-top: 18px; font-size: 15px; }
 .mods-viewer { display: contents; }
 #mods-prev { grid-area: 1 / 2; }
 .mods-viewer .term { grid-area: 1 / 3; margin: 0; }
