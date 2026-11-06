@@ -121,7 +121,7 @@ Take the first row that matches:
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
 <!-- TOGGLE:ci_checks END -->
 <!-- TOGGLE:ci_checks:off START -->
-| Any other branch finished | Run the tests, commit, open a PR to `{{DEV_BRANCH}}` and merge it. No CI runs here, so the tests you ran are the check. |
+| Any other branch finished | Run the tests, commit, open a PR to `{{DEV_BRANCH}}`, and merge it once it has the approvals its branch rules ask for. No CI runs here, so the tests you ran are the check. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`. Run each post-merge command as its own call.
 <!-- TOGGLE:ci_checks:off END -->
