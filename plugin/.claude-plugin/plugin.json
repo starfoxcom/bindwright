@@ -8,6 +8,10 @@
   },
   "homepage": "https://starfoxcom.github.io/bindwright/",
   "repository": "https://github.com/starfoxcom/bindwright",
+  "documentationUrl": "https://github.com/starfoxcom/bindwright#readme",
+  "supportUrl": "https://github.com/starfoxcom/bindwright/issues",
+  "privacyPolicyUrl": "https://github.com/starfoxcom/bindwright#privacy",
+  "termsOfServiceUrl": "https://github.com/starfoxcom/bindwright/blob/main/LICENSE",
   "license": "MIT",
   "keywords": ["setup", "rules", "skills", "hooks", "code-review"]
 }
