@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- The review workflows install the CLI from npm, at the exact version npm's `latest` channel (or `stable`, for the backup) names, instead of piping the install script into a shell. A `setup-node` step gives the job Node 24 first, so a self-hosted runner without Node works too. npm runs in global mode, so a `.npmrc` in a PR cannot choose the version or the registry of its own review. Any failure still falls back to the action's own CLI.
+
 ## [v2.2.1] — 2026-11-05
 
 v2.2.1 gets the plugin ready for the plugin directory's checks: it declares no hooks, and the daily notice runs from `/session-start` instead. It also fixes when the bundled usage-guard mod compacts and wraps up, and where the budgets row reads the wrap-up level.
