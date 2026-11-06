@@ -17,6 +17,7 @@ v2.3.0 sets up projects on GitHub whose organization blocks GitHub apps, Actions
 ### Fixed
 
 - The `ci-watch` mod ends a watch without waking the session when the pull request still shows no check after ten minutes and the repo has no workflows. It used to wait an hour for checks that never come and then wake the session. Checks from outside Actions, such as commit statuses from another CI, are watched as before.
+- A team project set up without the AI reviews no longer reads, in `CONTRIBUTING.md` and the collaboration rule, that an AI review verdict gates every merge.
 
 ## [v2.2.3] — 2026-11-06
 
