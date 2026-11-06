@@ -8,7 +8,7 @@
       "type": "number",
       "title": "Wrap up at (% used)",
       "description": "When any plan window (5-hour, weekly) reaches this percentage, sessions wrap up. The rest is left for the wrap-up itself and for CI jobs already running.",
-      "default": 90
+      "default": 95
     },
     "wakeDelayMinutes": {
       "type": "number",

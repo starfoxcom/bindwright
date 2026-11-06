@@ -38,7 +38,7 @@ test('crossing the line wraps up, stops background work and resumes after the re
   const seen = world(on)
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
 
   const pause = pauseOf(seen)
@@ -71,7 +71,7 @@ test('another session in the same project wraps up once and leaves the stop comm
   const other: Pause = {
     status: 'active',
     kinds: ['seven_day'],
-    percentUsed: 92,
+    percentUsed: 97,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -93,7 +93,7 @@ test("a session opened during a pause in another project stops that project's wo
   const pause: Pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 93,
+    percentUsed: 98,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -109,7 +109,7 @@ test('two projects with the same folder name each stop their own work', async ($
   const pause: Pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 93,
+    percentUsed: 98,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -130,7 +130,7 @@ test('a pause another session wrote for an earlier reset is extended; each wraps
   const other: Pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 91,
+    percentUsed: 96,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -139,8 +139,8 @@ test('a pause another session wrote for an earlier reset is extended; each wraps
     if (name.startsWith('pause-')) seen.files.set(PAUSE_FILE, JSON.stringify(other))
   }
   seen.limits = [
-    { kind: 'five_hour', percentUsed: 91, resetsAt: RESET },
-    { kind: 'seven_day', percentUsed: 92, resetsAt: WEEKLY },
+    { kind: 'five_hour', percentUsed: 96, resetsAt: RESET },
+    { kind: 'seven_day', percentUsed: 97, resetsAt: WEEKLY },
   ]
   await endTurn($)
   const joined = pauseOf(seen)
@@ -161,7 +161,7 @@ test('a pause another session wrote for a later reset is kept, and this session 
   const other: Pause = {
     status: 'active',
     kinds: ['seven_day'],
-    percentUsed: 92,
+    percentUsed: 97,
     resetsAt: WEEKLY,
     wakeAt: Date.parse(WEEKLY) + 120_000,
     triggeredBy: 'sess-b',
@@ -169,7 +169,7 @@ test('a pause another session wrote for a later reset is kept, and this session 
   seen.duringClaim = name => {
     if (name.startsWith('pause-')) seen.files.set(PAUSE_FILE, JSON.stringify(other))
   }
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   expect(pauseOf(seen)).toEqual(other)
   await seen.clock.advance(5 * 60_000)
@@ -184,7 +184,7 @@ test(
   const pause: Pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 93,
+    percentUsed: 98,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -205,7 +205,7 @@ test('a session opened after the reset is told to resume by hand', async ($, on)
   const pause: Pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 93,
+    percentUsed: 98,
     resetsAt: RESET,
     wakeAt: NOW - 1,
     triggeredBy: 'sess-b',
@@ -221,7 +221,7 @@ test('a session opened after the reset is told to resume by hand', async ($, on)
 test('cancel stops the automatic resume', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 95, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
   await endTurn($)
   const answer = await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
 
@@ -238,7 +238,7 @@ test(
   await start($)
   // Reading counts as no work.
   await $.tool.call({ tool: 'Read', file_path: 'C:/Repos/my-game/a.txt' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
 
   expect(pauseOf(seen)?.status).toBe('active')
@@ -255,7 +255,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`the pause shows a card that stays until dismissed, for every session, on ${surface}`, async ($, on) => {
     const seen = world(on)
     await start($)
-    seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+    seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
     await endTurn($)
 
     expect(cardOf(seen)?.id).toBe(`paused:${RESET}`)
@@ -278,7 +278,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 test('the card cancels the automatic resume', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   const ui = await mountCard($)
   await ui.press({ key: 'usage-cancel' })
@@ -292,7 +292,7 @@ test('the card cancels the automatic resume', LONG, async ($, on) => {
 test('the resume replaces the pause card', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   await seen.clock.advance(WAKE - NOW)
 
@@ -307,7 +307,7 @@ test('a session whose entry in the shared pause was overwritten does not wrap up
   const seen = world(on)
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   // Another session wrote the shared pause at the same moment, from an older read.
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pauseOf(seen), triggeredBy: 'sess-b', handled: ['sess-b'] }))
@@ -324,7 +324,7 @@ test('a session that loses the pause claim still stops its own project once', LO
   // The other session, in another project, won the pause claim and has not written the file yet.
   seen.claims.add(`pause-${KEY}`)
   seen.claims.add(`stop-${KEY}-c__repos_other-project`)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
 
   expect(seen.claims.has(`stop-${KEY}-c__repos_my-game`)).toBe(true)
@@ -339,14 +339,14 @@ test('a session that loses the pause claim honours a cancel written since the wi
   await doWork($)
   // The other session won the claim and wrote its pause; the person cancelled it before this check.
   seen.claims.add(`pause-${KEY}`)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   // Its pause lands, already cancelled, while this session makes its claim.
   seen.duringClaim = name => {
     if (name !== `pause-${KEY}`) return
     const cancelled = {
       status: 'cancelled',
       kinds: ['five_hour'],
-      percentUsed: 91,
+      percentUsed: 96,
       resetsAt: RESET,
       wakeAt: WAKE,
       triggeredBy: 'sess-b',
@@ -366,7 +366,7 @@ test('a cancel of an extended pause holds against a session still reading the ea
   const seen = world(on)
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   expect(seen.commands).toHaveLength(1)
   // Another session extended the pause to the weekly reset, then the person cancelled it.
@@ -389,7 +389,7 @@ test('after a hot reload during a pause, the first turn arms the wake timer agai
   const pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 93,
+    percentUsed: 98,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-a',
@@ -412,7 +412,7 @@ test('work whose claim failed before a hot reload is never called no work at the
   await doWork($)
   // The wrap-up's own work claim fails: it counts as a win in memory and leaves nothing on disk.
   seen.failClaims = new Set([`work-${KEY}-sess-a`])
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
   expect(seen.claims.has(`work-${KEY}-sess-a`)).toBe(false)
@@ -422,7 +422,7 @@ test('after a hot reload, a session with no work on record waits and says what i
   const seen = world(on)
   // The state the test above leaves, after a hot reload emptied the module's memory: the session
   // wrapped up, but its work claim never reached the disk.
-  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 93, resetsAt: RESET, wakeAt: WAKE }
+  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 98, resetsAt: RESET, wakeAt: WAKE }
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, triggeredBy: 'sess-a' }))
   seen.claims.add(`${KEY}-sess-a`)
   await $.turn.start({ turnId: 't2' } as never)
@@ -442,7 +442,7 @@ test(
   LONG,
   async ($, on) => {
   const seen = world(on)
-  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 93, resetsAt: RESET, wakeAt: WAKE }
+  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 98, resetsAt: RESET, wakeAt: WAKE }
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, triggeredBy: 'sess-a' }))
   seen.claims.add(`${KEY}-sess-a`)
   seen.failClaims = new Set([`resume-${KEY}-sess-a`])
@@ -475,7 +475,7 @@ test('a session resumes once per reset, even beside an instance left by a hot re
   const pause = {
     status: 'done',
     kinds: ['five_hour'],
-    percentUsed: 93,
+    percentUsed: 98,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-a',
@@ -506,7 +506,7 @@ test('crossing the line mid-turn waits for the turn to end before the wrap-up ru
   await start($)
   await $.turn.start({ turnId: 't1' } as never)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   // The 60-second check fires while the turn is still running.
   await seen.clock.advance(60_000)
 
@@ -529,7 +529,7 @@ test("a subagent's turn between main's turns does not hold the wrap-up", async (
   await doWork($)
   await endTurn($)
   await $.turn.start({ turnId: 's1', agentId: 'a1' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await seen.clock.advance(60_000)
 
   expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
@@ -540,7 +540,7 @@ test("a subagent's turn ending mid-turn does not start the wrap-up beside main's
   await start($)
   await $.turn.start({ turnId: 't1' } as never)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await seen.clock.advance(60_000)
   await $.turn.start({ turnId: 's1', agentId: 'a1' } as never)
   await $.turn.complete({
@@ -562,7 +562,7 @@ test('a wrap-up owed by a running turn still runs when another session extends t
   await start($)
   await $.turn.start({ turnId: 't1' } as never)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await seen.clock.advance(60_000)
   // Before the turn ends, another session crosses the weekly line and extends the pause in place.
   const WEEKLY = '2026-10-03T19:00:00.000Z'
@@ -580,7 +580,7 @@ test('a wrap-up owed by a running turn is dropped when the pause is cancelled be
   await start($)
   await $.turn.start({ turnId: 't1' } as never)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await seen.clock.advance(60_000)
   await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
   await endTurn($)
@@ -617,7 +617,7 @@ test('an arm for the reset a pause already resumes at does not resume the sessio
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   expect(pauseOf(seen)?.status).toBe('active')
 
@@ -653,7 +653,7 @@ test('an arm resumes the session once when a pause for its reset began after the
   const pause: Pause = {
     status: 'active',
     kinds: ['five_hour'],
-    percentUsed: 92,
+    percentUsed: 97,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -674,7 +674,7 @@ test('an armed wake that comes due during a pause leaves the resume to the pause
   const pause: Pause = {
     status: 'active',
     kinds: ['seven_day'],
-    percentUsed: 95,
+    percentUsed: 99,
     resetsAt: weekly,
     wakeAt: weeklyWake,
     triggeredBy: 'sess-b',
@@ -701,7 +701,7 @@ test('a cancel in this session also drops its armed wake', LONG, async ($, on) =
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
   await seen.clock.advance(WAKE - NOW)
@@ -716,7 +716,7 @@ test("another session's cancel leaves this session's own arm in place", LONG, as
   const cancelled: Pause = {
     status: 'cancelled',
     kinds: ['five_hour'],
-    percentUsed: 92,
+    percentUsed: 97,
     resetsAt: RESET,
     wakeAt: WAKE,
     triggeredBy: 'sess-b',
@@ -738,7 +738,7 @@ test(
   const pause: Pause = {
     status: 'active',
     kinds: ['seven_day'],
-    percentUsed: 95,
+    percentUsed: 99,
     resetsAt: later,
     wakeAt: laterWake,
     triggeredBy: 'sess-b',
@@ -783,7 +783,7 @@ test('after a /clear the new session id has no work: it only waits, and is not s
   await doWork($)
   // A /clear: the process goes on under a new session id, with no session.start.
   seen.sessionId = 'sess-b'
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   expect(seen.commands.filter(c => c.command === 'session-close')).toEqual([])
   await seen.clock.advance(WAKE - NOW)
