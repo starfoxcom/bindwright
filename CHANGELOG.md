@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
-- The review workflows install the CLI from npm, at the exact version npm's `latest` channel (or `stable`, for the backup) names, instead of piping the install script into a shell. A `setup-node` step gives the job Node 24 first, so a self-hosted runner without Node works too. npm runs in global mode, so a `.npmrc` in a PR cannot choose the version or the registry of its own review. Any failure still falls back to the action's own CLI.
+- The review workflows install the CLI from npm, at the exact version npm's `latest` channel (or `stable`, for the backup) names, instead of piping the install script into a shell. A self-hosted runner needs Node 22 or newer for that; without it the review runs on the action's own CLI. npm runs in global mode, so a `.npmrc` in a PR cannot choose the version or the registry of its own review. Any failure still falls back to the action's own CLI.
 
 ## [v2.2.1] — 2026-11-05
 

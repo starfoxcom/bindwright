@@ -394,15 +394,6 @@ jobs:
             fi
           fi
 
-      # The CLI installs from npm, which needs Node 22 or newer; a hosted
-      # runner has it already and a self-hosted one gets it here.
-      - name: Set up Node for the CLI install
-        continue-on-error: true
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-
       # One job-private copy of the newest CLI release, so the credits run, the
       # first attempt and the retry run the same version. The version is read
       # when the job runs, from the npm registry's release channel, and
@@ -410,8 +401,12 @@ jobs:
       # the install fails, the credits run is skipped and the action's attempts
       # fall back to the CLI it bundles. The fallback model runs on the stable
       # release (see below).
-      # npm runs in global mode, which reads no .npmrc from the PR's checkout,
-      # so a PR cannot pick the version or the registry its own review uses.
+      # The runner's own npm installs it (hosted runners have Node 22 or newer;
+      # without npm the review runs on the action's own CLI). npm runs in global
+      # mode, which reads no .npmrc from the PR's checkout, so a PR cannot pick
+      # the version or the registry its own review uses. No step here runs a
+      # tool such as setup-node in the checkout, whose config files could start
+      # the PR's own code.
       - name: Install Claude Code
         id: claude-cli
         # Each download has its own limit too, so a stalled host ends in the
