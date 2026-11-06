@@ -10,7 +10,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind } from "../bind.js";
 import { python } from "./python.js";
-import { withoutGithub } from "./code-host.js";
+import { HOST_VARIANTS, withoutActions, withoutGithub } from "./code-host.js";
 import {
   defaults, LICENSES, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES, MERGE_STYLES, HOOK_LOCATIONS, DENY_PROFILES, TRACKERS,
 } from "../model.js";
@@ -54,7 +54,7 @@ function oneAtATime() {
         }
       }
       for (const key of switches) cases.push({ ...clone(base), advanced: { ...base.advanced, [key]: !base.advanced[key] } });
-      for (const codeHost of ["local", "other"]) cases.push(withoutGithub(clone(base), codeHost));
+      for (const variant of HOST_VARIANTS) cases.push(variant(clone(base)));
       for (const license of Object.keys(LICENSES)) {
         if (license !== base.project.license) cases.push({ ...clone(base), project: { ...base.project, license } });
       }
@@ -252,11 +252,13 @@ test("the Python engine binds exactly what the JS engine binds", { skip: !python
 // Named code-host answers. Each row's answers either bind (refusal is null) or
 // are refused with exactly that message, in both engines.
 const refusedWith = (msg) => `Invalid answers: ${msg}`;
+// "blocked" is GitHub with apps, Actions and boards blocked.
 const withField = (codeHost, field, value) => {
-  const a = withoutGithub(defaults(), codeHost);
+  const a = codeHost === "blocked" ? withoutActions(defaults()) : withoutGithub(defaults(), codeHost);
   a.advanced[field] = value;
   return a;
 };
+const BLOCKED = "githubApps false blocks GitHub apps, Actions and boards";
 const CODE_HOST_ROWS = [
   ["a valid local answer is accepted", withoutGithub(defaults(), "local"), null],
   ["a valid other answer is accepted", withoutGithub(defaults(), "other"), null],
@@ -278,6 +280,15 @@ const CODE_HOST_ROWS = [
   ["local for a team is refused", { ...withoutGithub(defaults(), "local"), team: true },
     refusedWith('codeHost "local" is one person on one computer: team must be false')],
   ["other for a team is accepted", withoutGithub(defaults({ team: true }), "other"), null],
+  ["github with apps blocked is accepted", withoutActions(defaults()), null],
+  ["github with apps blocked and AI review on is refused", withField("blocked", "aiReview", true),
+    refusedWith(BLOCKED + ": aiReview must be false")],
+  ["github with apps blocked and deep escalation on is refused", withField("blocked", "deepEscalation", true),
+    refusedWith(BLOCKED + ": deepEscalation must be false")],
+  ["github with apps blocked and a board is refused", withField("blocked", "trackerProject", "owner/6"),
+    refusedWith(BLOCKED + ": trackerProject must be null")],
+  ["githubApps false off GitHub is refused", withField("local", "githubApps", false),
+    refusedWith('githubApps is only for codeHost "github": it must be true')],
   ["an unknown code host is refused", withField("github", "codeHost", "gitlab"),
     refusedWith('unknown code host "gitlab"')],
   ["a code host left out is refused", (() => { const a = defaults(); delete a.advanced.codeHost; return a; })(),

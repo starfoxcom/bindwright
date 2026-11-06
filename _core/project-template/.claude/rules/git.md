@@ -98,7 +98,9 @@ Run `git branch --show-current` before editing. Switch or branch first, then edi
 - Release PRs (`{{DEV_BRANCH}}` into `{{MAIN_BRANCH}}`) and cascade PRs (`{{MAIN_BRANCH}}` into `{{DEV_BRANCH}}`) always use `--merge`. Squashing them makes the two branches diverge and turns the next release into a conflict.
 <!-- TOGGLE:branching_model_gitflow END -->
 - After merging: `--delete-branch` removes the remote branch, but the local one only when it is checked out. Run `git branch -D <name>` if it remains, then confirm with `git branch`.
+<!-- TOGGLE:ci_checks START -->
 - Re-run a failed CI workflow as a whole (or push again). Re-running only the failed job can leave a required check stuck.
+<!-- TOGGLE:ci_checks END -->
 
 <!-- TOGGLE:branching_model_gitflow START -->
 ### Cascade after every merge into `{{MAIN_BRANCH}}`
@@ -114,6 +116,7 @@ gh pr create --base {{DEV_BRANCH}} --title "chore: cascade <name> into {{DEV_BRA
 ```
 
 The hotfix or release is done only when the cascade PR is merged and its branch deleted.
+<!-- TOGGLE:github_no_actions:off START -->
 
 ### Workflow file changes
 
@@ -124,6 +127,7 @@ Because `{{DEV_BRANCH}}` is the default branch, workflow changes are ordinary wo
 <!-- TOGGLE:default_branch_is_dev:off START -->
 Because `{{MAIN_BRANCH}}` is the default branch, a change to `.github/workflows/` lands on `{{MAIN_BRANCH}}` first as a `hotfix/<name>` PR, then cascades to `{{DEV_BRANCH}}`. A workflow change made on a feature branch fails the review check.
 <!-- TOGGLE:default_branch_is_dev:off END -->
+<!-- TOGGLE:github_no_actions:off END -->
 <!-- TOGGLE:branching_model_gitflow END -->
 
 ---
@@ -145,9 +149,9 @@ Write the body to a file and pass `--body-file <path>`. Inline bodies get trunca
 
 No empty sections and no generic testing checklist. The body carries what the diff cannot show.
 
-<!-- TOGGLE:code_host_github START -->
+<!-- TOGGLE:github_actions START -->
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.
-<!-- TOGGLE:code_host_github END -->
+<!-- TOGGLE:github_actions END -->
 
 ---
 <!-- TOGGLE:code_host_local:off END -->
@@ -163,12 +167,12 @@ Code with no remaining caller is deleted in the same PR that orphaned it. Check 
 
 ## Definition of done
 
-<!-- TOGGLE:code_host_local START -->
+<!-- TOGGLE:ci_checks:off START -->
 A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient.
-<!-- TOGGLE:code_host_local END -->
-<!-- TOGGLE:code_host_local:off START -->
+<!-- TOGGLE:ci_checks:off END -->
+<!-- TOGGLE:ci_checks START -->
 A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient.
-<!-- TOGGLE:code_host_local:off END -->
+<!-- TOGGLE:ci_checks END -->
 
 <!-- TOGGLE:precommit_hooks_scaffold START -->
 ---
