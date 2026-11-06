@@ -186,6 +186,21 @@ test('checks from outside Actions are watched in a repo with no workflows, as in
   expect(seen.prompts[0]).toContain('o/r#7: all 1 checks settled')
 })
 
+test('failed reads after the grace time never drop a watch whose checks came from outside Actions', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.workflows = 0
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  await clock.advance(POLL_MS)
+  seen.isChecksDown = true
+  for (let poll = 0; poll < 25; poll++) await clock.advance(POLL_MS)
+  seen.isChecksDown = false
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('o/r#7: all 1 checks settled')
+})
+
 test('a PR still with no check where workflows exist keeps its watch until the time limit', async ($, on) => {
   const { seen, clock } = world(on)
   seen.isCheckless = true

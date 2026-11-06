@@ -117,7 +117,9 @@ export function world(on: On) {
         value: {
           exitCode: 1,
           stdout: '',
-          stderr: 'error connecting to api.github.com',
+          stderr: seen.isChecksDown
+            ? 'error connecting to api.github.com'
+            : "no checks reported on the 'feature/x' branch",
           isStdoutTruncated: false,
           isStderrTruncated: false,
         },
