@@ -128,6 +128,18 @@ test("a damaged cache is replaced instead of breaking the notice", async () => {
   }
 });
 
+test("a cache folder the session cannot write still lets the notice out", async () => {
+  const s = scene("1.0.0");
+  try {
+    // A file where the cache folder belongs makes every write fail, as a sandboxed shell does.
+    writeFileSync(join(s.root, "config"), "");
+    const text = await s.ask("2026-10-31", latest(null));
+    assert.match(text, /from 1\.0\.0 .*\/bindwright:update/);
+  } finally {
+    rmSync(s.root, { recursive: true, force: true });
+  }
+});
+
 test("only the plain x.y.z form of a version reaches the text", async () => {
   const s = scene(`vvv0.1.0${"\n".repeat(50)}`);
   try {

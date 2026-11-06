@@ -99,7 +99,14 @@ export async function notice({ cwd, today, cacheFile, pluginVersion, fetchLatest
     cache.shown[key] = today;
     dirty = true;
   }
-  if (dirty) save(cacheFile, cache, today);
+  // A folder the session may not write (a sandboxed shell) costs the once-a-day memory, never the notice.
+  if (dirty) {
+    try {
+      save(cacheFile, cache, today);
+    } catch {
+      // The notice still goes out; the next run checks again.
+    }
+  }
   return lines.length ? lines.join("\n") : null;
 }
 
