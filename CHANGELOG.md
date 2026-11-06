@@ -6,10 +6,19 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.2.1] — 2026-11-05
+
+v2.2.1 gets the plugin ready for the plugin directory's checks: it declares no hooks, and the daily notice runs from `/session-start` instead. It also fixes when the bundled usage-guard mod compacts and wraps up, and where the budgets row reads the wrap-up level.
+
 ### Changed
 
 - The plugin declares no hooks. The daily notice that the plugin or the repo's Bindwright files are behind, and the opt-in review counts send it starts, now run when a session starts with `/session-start`, which every setup writes; a plugin installed from the plugin directory updates through Claude Code's plugin auto-update, which an install from Bindwright's own marketplace link gets once it is turned on for that marketplace in `/plugin`. A repo set up with v2.2.0 or earlier gets that step once `/bindwright:update` runs in it; until then it shows no notice and sends no counts.
 - The review counts read only the one setting that names a local counter, not the whole environment.
+
+### Fixed
+
+- usage-guard compares the context fill with "Compact before a pause above" unrounded, so a fill just under the setting no longer compacts. The setting's default is 35%, and the wrap-up default is 95%.
+- session-facts reads the wrap-up level from usage-guard's settings file first, with the same check usage-guard uses, so the plan chips turn red where usage-guard wraps up.
 
 ## [v2.2.0] — 2026-11-05
 
