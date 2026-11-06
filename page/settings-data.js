@@ -148,10 +148,11 @@ export const PROJECT = [
   {
     id: "code-host",
     title: "Where the code lives",
-    text: "GitHub, just this computer, or another site. Just this computer needs no account; "
+    text: "GitHub, GitHub with apps, Actions and boards blocked, just this computer, or another site. "
+      + "Blocked GitHub keeps pull requests and issues; just this computer needs no account; "
       + "another site gets the GitHub parts to adapt.",
     value: "GitHub",
-    keys: ["advanced.codeHost"],
+    keys: ["advanced.codeHost", "advanced.githubApps"],
   },
   {
     id: "work-state",
