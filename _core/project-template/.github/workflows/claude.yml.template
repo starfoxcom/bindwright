@@ -404,9 +404,10 @@ jobs:
       # The runner's own npm installs it; hosted runners have Node 22 or newer.
       # Without npm there is no job copy: the review runs on the action's own
       # CLI, with no credits run and no backup review. npm starts in the job's
-      # temp folder, never the PR's checkout, and runs in global mode, so no
-      # file of the PR (an .npmrc, a package.json a version manager reads) can
-      # pick the npm, the version or the registry its own review uses.
+      # temp folder, never the PR's checkout, keeps its cache there, and runs
+      # in global mode, so no file of the PR (an .npmrc, a package.json a
+      # version manager reads) can pick the npm, the version or the registry
+      # its own review uses, and the job leaves nothing in the runner's home.
       - name: Install Claude Code
         id: claude-cli
         working-directory: ${{ runner.temp }}
@@ -422,7 +423,7 @@ jobs:
           set -euo pipefail
           CLI_VERSION=""
           for attempt in 1 2 3; do
-            if CLI_VERSION=$(timeout 60 npm view --global "@anthropic-ai/claude-code@latest" version); then
+            if CLI_VERSION=$(timeout 60 npm view --global --cache "$RUNNER_TEMP/npm-cache" "@anthropic-ai/claude-code@latest" version); then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -438,7 +439,7 @@ jobs:
           fi
           echo "Newest Claude Code release: $CLI_VERSION"
           for attempt in 1 2 3; do
-            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm" --no-audit --no-fund --ignore-scripts=false --include=optional "@anthropic-ai/claude-code@$CLI_VERSION"; then
+            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm" --cache "$RUNNER_TEMP/npm-cache" --no-audit --no-fund --ignore-scripts=false --include=optional "@anthropic-ai/claude-code@$CLI_VERSION"; then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -862,7 +863,7 @@ jobs:
           }
           STABLE=""
           for attempt in 1 2 3; do
-            if STABLE=$(timeout 60 npm view --global "@anthropic-ai/claude-code@stable" version); then
+            if STABLE=$(timeout 60 npm view --global --cache "$RUNNER_TEMP/npm-cache" "@anthropic-ai/claude-code@stable" version); then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -881,7 +882,7 @@ jobs:
             exit 0
           fi
           for attempt in 1 2 3; do
-            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm-stable" --no-audit --no-fund --ignore-scripts=false --include=optional "@anthropic-ai/claude-code@$STABLE"; then
+            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm-stable" --cache "$RUNNER_TEMP/npm-cache" --no-audit --no-fund --ignore-scripts=false --include=optional "@anthropic-ai/claude-code@$STABLE"; then
               break
             fi
             if [ "$attempt" = 3 ]; then
