@@ -1,0 +1,71 @@
+# {{PROJECT_NAME}}
+
+{{ONE_LINE_DESCRIPTION}}
+
+**Stack:** {{LANGUAGE_AND_FRAMEWORK}}
+
+---
+
+## Quick start
+
+> _Replace this section with the actual setup steps. Examples below — pick what fits your stack._
+
+```bash
+<!-- TOGGLE:code_host_local:off START -->
+# Clone
+git clone https://github.com/{{REPO_URL}}.git
+cd $(basename {{REPO_URL}})
+
+<!-- TOGGLE:code_host_local:off END -->
+# Install dependencies
+# (substitute the right command for your stack)
+
+# Run locally
+# (substitute the right command for your stack)
+```
+
+## Development
+
+<!-- TOGGLE:code_host_local START -->
+The project lives on this computer, with its history kept as save points (commits) on `{{MAIN_BRANCH}}`. See `.claude/rules/git.md`.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
+- **Production branch:** `{{MAIN_BRANCH}}` (stable releases)
+<!-- TOGGLE:branching_model_gitflow START -->
+- **Development branch:** `{{DEV_BRANCH}}` (work in progress; work branches start here)
+<!-- TOGGLE:branching_model_gitflow END -->
+- **Default branch on GitHub:** `{{DEFAULT_BRANCH}}`
+- **Branching model:** {{GITFLOW_OR_TRUNK}}
+
+See `.claude/rules/git.md` for the commit and branch conventions.
+<!-- TOGGLE:code_host_local:off END -->
+
+## Testing
+
+> _Add your test commands here._
+
+## Project structure
+
+> _Sketch the directory tree once it stabilizes. Don't write it before the code is real — it'll rot._
+
+<!-- TOGGLE:code_host_local:off START -->
+## Contributing
+
+<!-- TOGGLE:contributing_md START -->
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the contributor guide.
+<!-- TOGGLE:contributing_md END -->
+
+<!-- TOGGLE:contributing_md:off START -->
+Open an issue describing the change you want to make before opening a PR.
+<!-- TOGGLE:contributing_md:off END -->
+<!-- TOGGLE:code_host_local:off END -->
+
+<!-- TOGGLE:license_file START -->
+## License
+
+See [`LICENSE`](./LICENSE).
+<!-- TOGGLE:license_file END -->
+
+---
+
+_This README was scaffolded from a Bindwright setup. Edit freely._

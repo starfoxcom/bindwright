@@ -1,0 +1,53 @@
+{
+  "_doc": "How setup installs each code-research tool. The keys match CODE_RESEARCH_TOOLS in engine/model.js and engine/model.py, which own each tool's name, homepage, bypass marker and adherence pattern; engine/test/profiles.test.js fails when the two drift. Setup shows every command to the person and runs it only with their consent: several fetch a remote script and pipe it into the shell, exactly as each tool's own README documents. Checked against each tool's README on 2026-10-21.",
+  "_schema_version": 2,
+  "_schema": {
+    "license": "string - the tool's license, shown before install.",
+    "install": "list of {os, run} - ways to get the tool's binary. os is macos, linux, windows or any; setup offers the entries that match the machine, in order, and runs each command of the one picked in order. Empty when nothing needs installing. Every run entry in every profile is a literal command, run as written.",
+    "agent": "{run} or null - commands that wire the tool into Claude Code (MCP server, permissions, instructions). null when install already did it, nothing is needed, or the step is per plugin (see plugins).",
+    "index": "{run, marker} or null - per-project commands that build the tool's index, and the path that exists once they ran. null when the tool indexes on its own.",
+    "mcp": "{name, command, args} or null - the MCP server entry, for setting it up by hand when the agent step cannot run.",
+    "hook": "{source, ...} - who redirects Grep and Glob to the tool. tool: the tool's own installer adds it. bindwright: setup renders code-research-first.py.template with filename_basename, detection_mode (walk_up or cli_available), detection_target and sequence_bullets. none: no hook. A hook value may itself hold {{TOOLS_CODE_RESEARCH_*}} placeholders (the custom profile's do); setup fills them first, with the same engine values (valuesFor in engine/model.js) it fills the template with.",
+    "notes": "string - what setup tells the person before installing."
+  },
+
+  "tokensave": {
+    "license": "MIT",
+    "install": [
+      { "os": "macos", "run": ["brew install aovestdipaperino/tap/tokensave"] },
+      { "os": "windows", "run": ["scoop bucket add tokensave https://github.com/aovestdipaperino/scoop-bucket", "scoop install tokensave"] },
+      { "os": "any", "run": ["cargo binstall tokensave"] }
+    ],
+    "agent": { "run": ["tokensave install --agent claude"] },
+    "index": { "run": ["tokensave init"], "marker": ".tokensave/" },
+    "mcp": null,
+    "hook": { "source": "tool" },
+    "notes": "The agent step registers the MCP server in the user's global config and adds tokensave's own hooks (one redirects symbol-shaped Grep, Glob and Bash searches), prompt rules and tool permissions. Add --local to register it for this project only. Run tokensave sync after large edits."
+  },
+
+  "none": {
+    "license": null,
+    "install": [],
+    "agent": null,
+    "index": null,
+    "mcp": null,
+    "hook": { "source": "none" },
+    "notes": "No tool: /find uses Grep, Glob and Read, with no call graph."
+  },
+
+  "custom": {
+    "license": null,
+    "install": [],
+    "agent": null,
+    "index": null,
+    "mcp": null,
+    "hook": {
+      "source": "bindwright",
+      "filename_basename": "{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}-first",
+      "detection_mode": "cli_available",
+      "detection_target": "{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}",
+      "sequence_bullets": "  • Refer to {{TOOLS_CODE_RESEARCH_URL}} for the lookup commands.\n  • Replace these lines in ~/.claude/hooks/{{TOOLS_CODE_RESEARCH_NAME_KEBAB}}-first.py with the tool's own commands."
+    },
+    "notes": "A tool the person names, with its homepage. Setup cannot install it; the person installs it by its own docs. The hook is a stub whose lookup lines the person fills in."
+  }
+}
