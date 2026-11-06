@@ -62,7 +62,7 @@ test("GitHub with apps, Actions and boards blocked: no workflow, gate or board, 
   const rules = [...files].filter(([path]) => path.endsWith(".md") && !path.startsWith(".bindwright/global/")
     && path !== ".claude/rules/code-host.md");
   // A line may say no CI runs here; it may not count on one.
-  const ciStep = /\bCI\b|gh pr checks|gh run\b|review-tiers\.md|review-gate/;
+  const ciStep = /\bCI\b|gh pr checks|gh run\b|review-tiers\.md|review-gate|AI review|routine review|deep review/i;
   assert.deepEqual(offending(rules, ciStep).filter((line) => !/\bno CI\b/i.test(line)), []);
   assert.match(files.get(".claude/rules/git.md"), /^## Pull requests$/m);
 });

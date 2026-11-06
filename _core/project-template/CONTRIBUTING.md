@@ -49,6 +49,7 @@ Keep PRs **scoped to one logical concern**. Cross-cutting changes (touching mult
 
 ## Review process
 
+<!-- TOGGLE:github_actions_routine_review START -->
 Every PR gets:
 
 1. **Automated routine review**: runs on every PR and posts a 🔴/🟢 verdict comment. It is a merge gate; a PR with 🔴 cannot merge.
@@ -56,6 +57,12 @@ Every PR gets:
 3. **Deep review** for diffs that touch risky areas (parsers, threading, public API, auth, migrations). Same 🔴/🟢 verdict.
 
 Reviews follow the **binary verdict rule**: 🟢 only when fully clean; 🔴 when any real finding exists. We don't ship "non-blocking minor" verdicts because they rot.
+<!-- TOGGLE:github_actions_routine_review END -->
+<!-- TOGGLE:github_actions_routine_review:off START -->
+Every PR gets a **human review** from at least one maintainer before it merges.
+
+Reviewers block on any real finding and approve only when the change is fully clean. We don't ship "non-blocking minor" findings because they rot.
+<!-- TOGGLE:github_actions_routine_review:off END -->
 
 ---
 

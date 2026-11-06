@@ -6,13 +6,18 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.3.0] — 2026-11-06
+
+v2.3.0 sets up projects on GitHub whose organization blocks GitHub apps, Actions and boards.
+
 ### Added
 
-- Setup has a fourth answer for where the code lives: GitHub, but the organization, job or client blocks GitHub apps, Actions and project boards. The project keeps branches, pull requests and issues, gets no workflow, review gate or board, and its rules run the tests and the size check on the computer before each push instead of counting on CI.
+- Setup has a fourth answer for where the code lives: GitHub, but the organization, job or client blocks GitHub apps, Actions and project boards. The project keeps branches, pull requests and issues, gets no workflow, review gate or board, and its rules run the tests and the size check on the computer before each push instead of counting on CI. When the organization blocks the GitHub CLI's sign-in too, the rules hand each pull request step to the user on GitHub's web page, with the title and body ready to paste.
 
 ### Fixed
 
 - The `ci-watch` mod ends a watch without waking the session when the pull request still shows no check after ten minutes and the repo has no workflows. It used to wait an hour for checks that never come and then wake the session. Checks from outside Actions, such as commit statuses from another CI, are watched as before.
+- A team project set up without the AI reviews no longer reads, in `CONTRIBUTING.md` and the collaboration rule, that an AI review verdict gates every merge.
 
 ## [v2.2.3] — 2026-11-06
 
