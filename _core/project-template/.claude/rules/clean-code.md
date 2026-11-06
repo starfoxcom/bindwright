@@ -15,7 +15,12 @@ Before committing, read the change as someone who knows the product but none of 
 
 - Say what the code does now and the constraint it cannot show: units, invariants, who owns a thread, a data format, why a value is this value. Never restate the line below.
 - One line by default. A block comment is for a data format, a contract between systems or an algorithm that is not obvious. A comment longer than the code it explains means the code or its name should change instead.
+<!-- TOGGLE:code_host_local START -->
+- No history: no "was", "used to", "previously", "replaces", "added for", dated measurements or the story of a bug hunt. The commit message and the docs hold that.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - No history: no "was", "used to", "previously", "replaces", "added for", dated measurements or the story of a bug hunt. The commit message, the PR and the docs hold that.
+<!-- TOGGLE:code_host_local:off END -->
 - A tuning value states the limit, not the session that found it: "past 16 rebuilds a frame the render thread stalls", not "twenty measured a 100 ms stall on Tuesday". A measurement `code-size.md` asks for is stated the same way, as the limit it shows.
 - A comment changes with its code. A comment that no longer matches the code is a bug.
 - Public surface gets a doc comment in the language's own form. Private helpers with clear names need none.

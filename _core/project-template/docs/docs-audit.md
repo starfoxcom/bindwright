@@ -13,11 +13,21 @@ List findings per area (a folder or a module) before fixing any:
 
 ## Fix in area batches
 
+<!-- TOGGLE:code_host_local START -->
+- One area per save point, each with the full test suite green.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 - One area per PR, each with the full test suite green.
+<!-- TOGGLE:code_host_local:off END -->
 - A finding whose fix spans files outside the batch goes on the tracker as its own work item (an issue, or a `ROADMAP.md` item where the project plans in one) instead of being half-fixed. Fix it in its own batch.
 - A finding that turns out to be a false positive gets its reason recorded where the next sweep will read it (an exceptions file the check reads, or a comment beside the code), so it is not raised again.
 
+<!-- TOGGLE:code_host_local START -->
+## Before saving a batch
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 ## Before pushing a batch
+<!-- TOGGLE:code_host_local:off END -->
 
 Search the living docs for every claim the diff changed: each renamed thing, moved path, changed command and changed number. A fix that leaves another doc saying the old thing is half done.
 

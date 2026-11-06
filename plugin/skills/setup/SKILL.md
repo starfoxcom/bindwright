@@ -18,12 +18,24 @@ Two kinds of choices, and the user always hears which is which:
 
 ## 0. Pick the engine and read the saved choices
 
-Pick the engine: the first of these that runs.
+Check all three tools before saying anything: `git --version`, `node --version` (18 or later counts) and `python3 --version` or `python --version` (3.8 or later counts; a `python` that only opens the Microsoft Store does not). Setup needs Git, and Node or Python to run its engine: one of the two is enough.
 
-1. `node --version` works: the engine is `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`.
-2. `python3 --version` or `python --version` reports 3.8 or later: the engine is that interpreter with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
+When Git is missing, or neither Node 18 or later nor Python 3.8 or later is there, name what is missing (Git, an engine, or both) in one plain message: Git keeps the project's history, so every change can be seen and undone, and the files setup writes work through it; Node or Python runs the setup itself. Then give the install for the user's system:
 
-With neither, tell the user setup needs Node or Python 3.8+, and stop.
+- **Windows:** offer to run it on a yes: `winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements`, and the same form with `Python.Python.3.12` when Python is not there (it runs the engine, the hooks and the computer extras) and with `OpenJS.NodeJS.LTS` when neither engine is there.
+- **macOS:** offer to run it on a yes: `xcode-select --install`. It opens the system's own installer and brings both Git and Python, which is enough for the engine.
+- **Linux:** give the command for the user to run in their own terminal, since it asks for their password: `sudo apt install -y git python3` (`sudo dnf install -y git python3` on Fedora). The distributions' own `nodejs` package can be too old for the engine.
+
+Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app or the editor it runs in, such as VS Code or JetBrains, or start `claude` again in a new terminal window), and to run `/bindwright:setup` again. Stop here.
+
+With Git and at least one of Node 18 or later or Python 3.8 or later in place, pick the engine, the first of these that runs:
+
+1. Node 18 or later: the engine is `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"`.
+2. Python 3.8 or later: the engine is that interpreter with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
+
+**Plain mode.** When `git config user.name` prints nothing or `gh auth status` fails, ask first: "Have you used Git and GitHub before?", with "Not really" first. On "Not really", word every later question and message in everyday words, with no term such as branch, pull request, CI, remote or repo left unexplained; recommend the safe answers (just me, mine, private, AI credit kept out); and offer "Just this computer" first where step 3 asks where the code lives. With both commands working, skip the question.
+
+**Git identity.** Git signs every commit with a name and an email, and refuses to commit without them. When `git config user.name` or `git config user.email` prints nothing, ask only for the one that is missing (for the email, any address the user is happy to have in the history), say it is set for every project on this computer, and on a yes set it with `git config --global user.name "<name>"` or `git config --global user.email "<email>"`. Never change one that is already set. Without them, say that the first commit will fail until they are set, and how.
 
 ## 1. Check the argument and the repo
 
@@ -65,6 +77,7 @@ Read what the repo can answer first: the project name is the repo folder's name,
 
 Ask with the question tool, in two rounds. Round one:
 
+- **Where does the code live?** GitHub, just this computer, or another site (GitLab, Bitbucket and the like). Recommend GitHub when the remote is on GitHub, and just this computer in plain mode or when there is no remote. Just this computer needs no account: the project's history stays in this folder, so say to keep a backup of it. For another site, say in one line that only GitHub is supported so far: setup writes the parts that work anywhere, plus `.claude/rules/code-host.md`, which lists the GitHub-only parts and how each session reads them on that host. Save `codeHost` as `github`, `local` or `other`. For `local` and `other`, the AI reviews and the board need GitHub: round two offers only the size check and saves `"aiReview": false` and `"deepEscalation": false`, and "Where the work state lives" is the hand-off file (`"tracker": "file"`), asked nothing. Just this computer is one person's project: skip "Who works on it?" and save `"team": false`.
 - **Who works on it?** Just me, or a team.
 - **Whose project is it?** Mine, or someone else's (a client or an employer).
 - **Private or public?** Private, or public. Recommend private for someone else's project, public otherwise.
@@ -143,6 +156,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "uiRule": true,
     "handoffFile": true,
     "codeResearch": "<the computer's code-search tool>",
+    "codeHost": "github",
     "tracker": "github",
     "trackerProject": "<owner>/<number> or null",
     "trackerRepo": "<owner>/<name> or null",
@@ -205,7 +219,7 @@ When the project has no such command (no type checker, no tests yet), remove tha
 Then fit the rules to the repo:
 
 - `.claude/rules/code-size.md`: keep only the per-language rows for languages the repo contains (count files by extension, ignoring vendored and generated folders), plus `Other` when the repo has languages the table does not list. Narrow its `paths:` globs to the same languages.
-- **Size check:** when `.github/scripts/size_check.py` was written, record the breaches the repo already has, after trimming the code-size rule above. It needs lizard, the version the workflow pins: show `python -m pip install --user lizard==1.24.3` (or a virtual environment the user prefers) and run it only on a yes. The script measures only files git tracks, and nothing setup wrote is committed yet, so first run `git add -N` on every file the repo will keep (the written and merged ones; it stages no content). Then run `python .github/scripts/size_check.py --write-baseline` and say how many breaches it recorded in `.github/size-check/baseline.txt`, which belongs in the commit. Without lizard, leave the baseline out and tell the user the check fails until they write it. Mention that the `Size check` job can be made a required check in the branch rules.
+- **Size check:** when `.github/scripts/size_check.py` was written, record the breaches the repo already has, after trimming the code-size rule above. It needs lizard, the version the workflow pins: show `python -m pip install --user lizard==1.24.3` (or a virtual environment the user prefers) and run it only on a yes. The script measures only files git tracks, and nothing setup wrote is committed yet, so first run `git add -N` on every file the repo will keep (the written and merged ones; it stages no content). Then run `python .github/scripts/size_check.py --write-baseline` and say how many breaches it recorded in `.github/size-check/baseline.txt`, which belongs in the commit. Without lizard, leave the baseline out and tell the user the check fails until they write it. For `codeHost: "github"`, mention that the `Size check` job can be made a required check in the branch rules; for `local` and `other`, say no CI runs it, so it runs by hand: `python .github/scripts/size_check.py` before each commit.
 - `.gitignore`: `.claude/settings.local.json` is personal. If `git check-ignore -q .claude/settings.local.json` fails, add that path to `.gitignore` (create the file if needed).
 - **Tracker:** when `.claude/rules/tracker.md` was written, the work state lives in GitHub issues. With a board (`advanced.trackerProject` in `.bindwright/project.json`), check `gh project view <number> --owner <owner>` reaches it; a scope error means `gh auth refresh -s project`. Without one, offer to create and pin the `Project status` issue that `tracker.md` describes. With a public roadmap (`advanced.publicRoadmap`), check `gh api "repos/<public repo>/issues?state=all&per_page=1"` reaches it and returns `[]`: the tool keeps public numbers equal to private ones, so the public repo must start with no issues, pull requests or discussions, which share the numbers; check discussions on the repo's page. Then offer to turn any `ROADMAP.md` items or hand-off file the repo already has into issues, one at a time, with the "New item" command in `tracker.md`; the old files stay until the user removes them.
 - `.claude/rules/git.md` names the branches work lands on. If it names a development branch the repo does not have (`git branch --list <name>`), offer to create it from the current branch, locally only.

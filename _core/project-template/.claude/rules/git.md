@@ -14,9 +14,22 @@ One logical change per commit. Never mix a feature with a refactor, or a fix wit
 <!-- TOGGLE:attribution_guard START -->
 - No AI-attribution lines anywhere: no co-author trailers, "generated with" footers or session links in commits, PR titles, PR bodies or comments. `.claude/settings.json` turns off the harness's own trailers, and the `no-ai-attribution` hook catches the ones written by hand.
 <!-- TOGGLE:attribution_guard END -->
+<!-- TOGGLE:code_host_local START -->
+
+## Save points
+
+A save point is a commit: a saved step you can always go back to. Make one after each piece of work that works, with one change per save point. Stage the files that belong to it with `git add <file>`, then commit with a short message that says what changed, such as `feat(login): add the sign-in form`.
+
+- See what has changed since the last save point with `git status` (which files) and `git diff` (what changed inside them).
+- Undo changes you have not saved yet, in one file, with `git restore <file>`.
+- Undo a save point you already made with `git revert <commit>`. It adds a new save point that reverses the old one, so nothing is lost.
+- Never use `git reset --hard` or a force push. They throw away saved work, and nothing brings it back.
+- This project lives only on this computer. Git keeps its history here, but nothing else keeps a copy, so back up the whole folder: copy it to another drive, or keep it in a folder that a cloud-sync service updates.
+<!-- TOGGLE:code_host_local END -->
 
 ---
 
+<!-- TOGGLE:code_host_local:off START -->
 <!-- TOGGLE:branching_model_gitflow START -->
 ## Branches (Gitflow)
 
@@ -37,7 +50,9 @@ One logical change per commit. Never mix a feature with a refactor, or a fix wit
 - The GitHub default branch is `{{MAIN_BRANCH}}`, so always pass `--base {{DEV_BRANCH}}` to `gh pr create` for work PRs.
 <!-- TOGGLE:default_branch_is_dev:off END -->
 <!-- TOGGLE:branching_model_gitflow END -->
+<!-- TOGGLE:code_host_local:off END -->
 
+<!-- TOGGLE:code_host_local:off START -->
 <!-- TOGGLE:branching_model_trunk START -->
 ## Branches (trunk-based)
 
@@ -50,7 +65,9 @@ One logical change per commit. Never mix a feature with a refactor, or a fix wit
 - Kebab-case names: `feature/user-auth-flow`.
 - Never push directly to `{{MAIN_BRANCH}}`.
 <!-- TOGGLE:branching_model_trunk END -->
+<!-- TOGGLE:code_host_local:off END -->
 
+<!-- TOGGLE:code_host_local:off START -->
 ### Keep branches current
 
 When the base branch advances, merge it into your open branches before continuing (`git fetch origin`, then `git merge origin/{{DEV_BRANCH}}` on the work branch, then push). Never rewrite a branch someone else has pulled.
@@ -128,17 +145,30 @@ Write the body to a file and pass `--body-file <path>`. Inline bodies get trunca
 
 No empty sections and no generic testing checklist. The body carries what the diff cannot show.
 
+<!-- TOGGLE:code_host_github START -->
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.
+<!-- TOGGLE:code_host_github END -->
 
 ---
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Dead code does not ship
 
+<!-- TOGGLE:code_host_local START -->
+Code with no remaining caller is deleted in the same save point that orphaned it. Check with the project's lint or dead-code tool, then judge the result: a symbol reached only through reflection, dependency injection, bindings or serialization is not dead. If a tool reports a false positive, record the exception where the tool reads it instead of silencing the tool.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 Code with no remaining caller is deleted in the same PR that orphaned it. Check with the project's lint or dead-code tool, then judge the result: a symbol reached only through reflection, dependency injection, bindings or serialization is not dead. If a tool reports a false positive, record the exception where the tool reads it instead of silencing the tool.
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Definition of done
 
+<!-- TOGGLE:code_host_local START -->
+A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient.
+<!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:precommit_hooks_scaffold START -->
 ---
