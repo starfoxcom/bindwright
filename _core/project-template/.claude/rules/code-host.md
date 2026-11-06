@@ -46,8 +46,21 @@ This project's code lives on GitHub, but its organization blocks GitHub apps, Gi
 - **The project board.** The work state lives in `ROADMAP.md` and the hand-off file, which need no host.
 <!-- TOGGLE:tracker:file END -->
 
-## When the organization blocks more
+## Without the GitHub CLI
 
-- **The GitHub CLI cannot sign in** (the organization blocks its app too): use GitHub's web page for pull requests and issues, and say which steps that leaves to the user. When the issues cannot be read either, run `/bindwright:setup` again and keep the work state in files.
-- **The organization allows apps and Actions later:** run `/bindwright:setup` again and answer plain GitHub, which adds the review workflows and the board.
+When `gh auth status` fails because the organization blocks the CLI's sign-in too, every `gh` step in the other rules and skills is the user's, on GitHub's web page. Git itself still works with the user's own GitHub sign-in. Read each step this way:
+
+| The rules say | Without the CLI |
+|---|---|
+| `git push`, `git fetch` | The same, when git can reach GitHub. When it cannot, the user pushes, and the session says which branch. |
+| `gh pr create` | Push the branch, then give the user the PR's base branch, title and body, ready to paste on GitHub's page. |
+| `gh pr merge` | The user merges the PR on GitHub's page, with the merge style `git.md` names, and says when it is done. Then fetch with `--prune`, switch back and delete the local branch. |
+| `gh pr list`, `gh pr view` | Ask the user which PRs are open or merged. Never take a branch as merged before git shows it merged. |
+<!-- TOGGLE:tracker:github START -->
+| `gh issue`, `gh project` | The user reads and updates the issues on GitHub's page. When that turns into most of each session, run `/bindwright:setup` again and keep the work state in files. |
+<!-- TOGGLE:tracker:github END -->
+
+## When the organization allows more later
+
+Run `/bindwright:setup` again and answer plain GitHub, which adds the review workflows and the board.
 <!-- TOGGLE:github_no_actions END -->
