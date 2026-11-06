@@ -6,6 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- The plugin declares no hooks. The daily notice that the plugin or the repo's Bindwright files are behind, and the opt-in review counts send it starts, now run when a session starts with `/session-start`, which every setup writes; a plugin installed from the plugin directory updates through Claude Code's plugin auto-update, which an install from Bindwright's own marketplace link gets once it is turned on for that marketplace in `/plugin`. A repo set up with v2.2.0 or earlier gets that step once `/bindwright:update` runs in it; until then it shows no notice and sends no counts.
+- The review counts read only the one setting that names a local counter, not the whole environment.
+
 ## [v2.2.0] — 2026-11-05
 
 v2.2.0 opens Bindwright to people new to programming: setup works for a project without GitHub, says in plain words which tools are missing and how to get them, and installs with one command, with no Git and from the Claude desktop app. It also gets the plugin ready for the plugin directory and makes each review tier post exactly one verdict, checked by the gate's reader before it is posted.
