@@ -161,6 +161,18 @@ test('a push starts a watch and the session is woken once when it passes', async
   expect(seen.prompts.length).toBe(1)
 })
 
+test('a push or a new PR in a repo with no workflows starts no watch and never wakes', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.workflows = 0
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'gh pr create --base develop --fill' } as never)
+  expect(seen.ghCalls.filter(call => call.includes('/actions/workflows')).length).toBe(2)
+  await clock.advance(HOUR + POLL_MS)
+  expect(seen.checksRead).toBe(0)
+  expect(seen.prompts).toEqual([])
+})
+
 test('a push that moves no commit keeps the settled watch: no second wake', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })

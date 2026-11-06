@@ -1,5 +1,4 @@
-import { atom, update } from 'claude-code'
-import type { EngineInterface, Hook, Register } from 'claude-code'
+import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from './command'
@@ -9,6 +8,7 @@ import type { PrRounds } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
+import { hasWorkflows } from './workflows'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -335,12 +335,12 @@ async function watchPushed($: EngineInterface, command: string, isPowerShell: bo
   const created = PR_URL.exec(JSON.stringify(output ?? ''))
   if (created) {
     const [, repo, number] = created
-    await startWatch($, repo!, Number(number), await headOf($, repo!, Number(number)))
+    if (await hasWorkflows($, repo!)) await startWatch($, repo!, Number(number), await headOf($, repo!, Number(number)))
     return
   }
   const folder = targetFolder(command, (await $.env.get('OS')) === 'Windows_NT', isPowerShell)
   const pr = (await prOfBranch($, folder)) ?? (await prOfBranch($))
-  if (pr) await startWatch($, pr.repo, pr.number, pr.headSha)
+  if (pr && (await hasWorkflows($, pr.repo))) await startWatch($, pr.repo, pr.number, pr.headSha)
 }
 
 // `/ci-watch rounds [<pr>]`, the PR as a number in this folder's repo or as `owner/name#N` in any.
