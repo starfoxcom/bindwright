@@ -50,7 +50,7 @@ After the fetch, check each Now item in `ROADMAP.md` that names a branch: it is 
 
 Then run the extra start steps, if any.
 
-Last, Bindwright's own check: when `plugins/installed_plugins.json` in the Claude config folder (`$CLAUDE_CONFIG_DIR`, or `~/.claude`) lists `bindwright`, run `node "<its installPath>/hooks/notice.mjs"` from the repo root. At most once a day it prints a line when the plugin or this repo's Bindwright files are behind; put any line it prints at the top of the report. It prints nothing otherwise, and a missing Node or plugin skips it.
+Last, Bindwright's own check: when `plugins/installed_plugins.json` in the Claude config folder (`$CLAUDE_CONFIG_DIR`, or `~/.claude`) lists `bindwright`, run `node "<installPath>/hooks/notice.mjs"` from the repo root, with the `installPath` of its most recently updated entry (`lastUpdated`). At most once a day it prints a line when the plugin or this repo's Bindwright files are behind; put any line it prints at the top of the report. It prints nothing otherwise. A missing or unreadable file, plugin or Node skips the step without a word.
 
 ## 3. Report, in this order
 

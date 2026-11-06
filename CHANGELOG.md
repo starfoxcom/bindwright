@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
-- The plugin declares no hooks. The daily notice that the plugin or the repo's Bindwright files are behind, and the opt-in review counts send it starts, now run when a session starts with `/session-start`, which every setup writes; the plugin itself updates through Claude Code's plugin auto-update.
+- The plugin declares no hooks. The daily notice that the plugin or the repo's Bindwright files are behind, and the opt-in review counts send it starts, now run when a session starts with `/session-start`, which every setup writes; the plugin itself updates through Claude Code's plugin auto-update. A repo set up with v2.2.0 or earlier gets that step once `/bindwright:update` runs in it; until then it shows no notice and sends no counts.
 - The review counts read only the one setting that names a local counter, not the whole environment.
 
 ## [v2.2.0] — 2026-11-05
