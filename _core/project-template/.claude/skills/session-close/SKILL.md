@@ -103,16 +103,28 @@ Take the first row that matches:
 | Only the hand-off file, `ROADMAP.md` and `CHANGELOG.md` changed | Commit and open the PR; it takes the docs-only path in `token-efficiency.md`. |
 <!-- TOGGLE:github_actions_paths_ignore_auto_merge END -->
 <!-- TOGGLE:github_actions_paths_ignore_auto_merge:off START -->
+<!-- TOGGLE:ci_checks START -->
 | Only the hand-off file, `ROADMAP.md` and `CHANGELOG.md` changed | Commit and open the PR, watch its checks per `token-efficiency.md`, and merge per `git.md` § Merging. |
+<!-- TOGGLE:ci_checks END -->
+<!-- TOGGLE:ci_checks:off START -->
+| Only the hand-off file, `ROADMAP.md` and `CHANGELOG.md` changed | Commit, open the PR and merge it per `git.md` § Merging. |
+<!-- TOGGLE:ci_checks:off END -->
 <!-- TOGGLE:github_actions_paths_ignore_auto_merge:off END -->
 <!-- TOGGLE:tracker:file END -->
 <!-- TOGGLE:branching_model_gitflow START -->
 | `hotfix/*` finished | PR to `{{MAIN_BRANCH}}`. After it merges, open the cascade PR into `{{DEV_BRANCH}}` (`git.md` § Cascade). Done only when the cascade merges. |
 | `release/*` finished | Same as a hotfix: PR to `{{MAIN_BRANCH}}`, tag the release commit, then cascade. |
 <!-- TOGGLE:branching_model_gitflow END -->
+<!-- TOGGLE:ci_checks START -->
 | Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge on 🟢. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
+<!-- TOGGLE:ci_checks END -->
+<!-- TOGGLE:ci_checks:off START -->
+| Any other branch finished | Run the tests, commit, open a PR to `{{DEV_BRANCH}}`, and merge it once it has the approvals its branch rules ask for. No CI runs here, so the tests you ran are the check. |
+
+Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`. Run each post-merge command as its own call.
+<!-- TOGGLE:ci_checks:off END -->
 <!-- TOGGLE:code_host_local:off END -->
 <!-- TOGGLE:code_host_local START -->
 ## Save point
@@ -151,6 +163,9 @@ Rewrite `.bindwright/handoff.md`. It stays in this checkout, out of git: the fir
 <!-- TOGGLE:code_host_local START -->
 > **Session closed.** Everything is in a save point. Start a fresh conversation for the next session.
 <!-- TOGGLE:code_host_local END -->
-<!-- TOGGLE:code_host_local:off START -->
+<!-- TOGGLE:ci_checks START -->
 > **Session closed.** Everything is committed; [PR #N merged and branches deleted | branch pushed, PR #N waiting on checks | work committed locally on `<branch>`]. Start a fresh conversation for the next session.
-<!-- TOGGLE:code_host_local:off END -->
+<!-- TOGGLE:ci_checks END -->
+<!-- TOGGLE:github_no_actions START -->
+> **Session closed.** Everything is committed; [PR #N merged and branches deleted | branch pushed, PR #N open | work committed locally on `<branch>`]. Start a fresh conversation for the next session.
+<!-- TOGGLE:github_no_actions END -->
