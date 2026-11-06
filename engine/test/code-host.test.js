@@ -62,9 +62,22 @@ test("GitHub with apps, Actions and boards blocked: no workflow, gate or board, 
   const rules = [...files].filter(([path]) => path.endsWith(".md") && !path.startsWith(".bindwright/global/")
     && path !== ".claude/rules/code-host.md");
   // A line may say no CI runs here; it may not count on one.
-  const ciStep = /\bCI\b|gh pr checks|gh run\b|review-tiers\.md|review-gate/;
+  const ciStep = /\bCI\b|gh pr checks|gh run\b|review-tiers\.md|review-gate|AI review|routine review|deep review/i;
   assert.deepEqual(offending(rules, ciStep).filter((line) => !/\bno CI\b/i.test(line)), []);
   assert.match(files.get(".claude/rules/git.md"), /^## Pull requests$/m);
+});
+
+test("a team project without AI review is never told an AI verdict gates its merge", async () => {
+  const github = defaults({ team: true });
+  Object.assign(github.advanced, { aiReview: false, deepEscalation: false });
+  const binds = [github, withoutGithub(defaults({ team: true }), "other"), withoutActions(defaults({ team: true }))];
+  const aiVerdict = /🔴|🟢|AI review|routine review|deep review/i;
+  for (const answers of binds) {
+    const files = await bind(answers, { readFile, coreFiles, year: 2026 });
+    const rules = [...files].filter(([path]) => /(^|\/)(CONTRIBUTING\.md|collaboration\.md)$/.test(path));
+    assert.equal(rules.length, 2, answers.advanced.codeHost);
+    assert.deepEqual(offending(rules, aiVerdict), [], answers.advanced.codeHost);
+  }
 });
 
 test("no project off GitHub points at a GitHub file the bind left out", async () => {

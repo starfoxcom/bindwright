@@ -18,11 +18,21 @@ Applies when more than one person pushes to the repo. Everything in `git.md` sti
 ## Who reviews
 
 - With a `CODEOWNERS` file, GitHub requests the owners of the touched paths. Without one, ask the owner of the touched directory, one reviewer per module for cross-cutting changes.
+<!-- TOGGLE:github_actions_routine_review START -->
 - Every PR needs an approval from someone other than its author, in addition to the AI review verdict.
+<!-- TOGGLE:github_actions_routine_review END -->
+<!-- TOGGLE:github_actions_routine_review:off START -->
+- Every PR needs an approval from someone other than its author.
+<!-- TOGGLE:github_actions_routine_review:off END -->
 
 <!-- TOGGLE:ci_checks START -->
 ## When CI is red
 
+<!-- TOGGLE:github_actions_routine_review START -->
 - A 🔴 review verdict is fixed on the same PR branch. Never merge past it.
+<!-- TOGGLE:github_actions_routine_review END -->
+<!-- TOGGLE:github_actions_routine_review:off START -->
+- A failing check or a reviewer's requested change is fixed on the same PR branch. Never merge past it.
+<!-- TOGGLE:github_actions_routine_review:off END -->
 - A red check caused by infrastructure (flaky test, runner outage) goes to whoever maintains CI. Never disable a workflow to get a merge through.
 <!-- TOGGLE:ci_checks END -->
