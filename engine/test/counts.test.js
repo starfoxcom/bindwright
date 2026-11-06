@@ -144,8 +144,8 @@ test("the plugin's stall and round limits are the counter's", () => {
 });
 
 test("the counter URL is the live Worker unless BINDWRIGHT_COUNTER_URL names another base", () => {
-  assert.equal(counterUrl({}), "https://bindwright-counter.starfoxcom.workers.dev/increment");
-  assert.equal(counterUrl({ BINDWRIGHT_COUNTER_URL: "http://127.0.0.1:8787/" }), SEND_URL);
+  assert.equal(counterUrl(undefined), "https://bindwright-counter.starfoxcom.workers.dev/increment");
+  assert.equal(counterUrl("http://127.0.0.1:8787/"), SEND_URL);
 });
 
 // A temp folder with a config folder, a repo and the state file path.
