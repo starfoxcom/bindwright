@@ -32,7 +32,7 @@ const LONG = { timeoutMs: 15_000 }
 async function crossAndWrapUp($: Engine, seen: World, resetsAt = RESET): Promise<void> {
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt }]
   await endTurn($)
   expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
 }
@@ -58,10 +58,20 @@ test('a session that resumes by itself compacts once its wrap-up turn ends, and 
   expect(seen.compactions).toHaveLength(1)
 })
 
+test('a fill just under the compaction setting is not rounded up past it', async ($, on) => {
+  const seen = world(on)
+  // 34.8% of a 500k compaction window, under the default 35%.
+  seen.context = { ...seen.context, tokens: 174_000, breakdown: { rawMaxTokens: 500_000 } as never }
+  await crossAndWrapUp($, seen)
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  expect(seen.compactions).toEqual([])
+})
+
 test('after a reload in a pause, a wrap-up begun at a turn end compacts after its own turn', async ($, on) => {
   const seen = world(on)
   seen.context = { ...seen.context, tokens: 400_000 }
-  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 92, resetsAt: RESET, wakeAt: WAKE }
+  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 97, resetsAt: RESET, wakeAt: WAKE }
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, triggeredBy: 'sess-b' }))
   // No session.start: the module reloaded mid-turn, and the turn changed something after it.
   await doWork($)
@@ -95,7 +105,7 @@ test('a session with nothing saved compacts nothing at the pause', async ($, on)
   const seen = world(on)
   seen.context = { ...seen.context, tokens: 400_000 }
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   await endTurn($)
   await seen.clock.advance(1_000)
@@ -311,7 +321,7 @@ test('an arm a longer pause moves keeps the session it was set in, and still res
   // Another session paused for the weekly reset, past this arm's wake.
   const resetsAt = new Date(Date.parse(RESET) + 3 * 3_600_000).toISOString()
   const wakeAt = Date.parse(resetsAt) + 2 * 60_000
-  const pause = { status: 'active', kinds: ['seven_day'], percentUsed: 92, resetsAt, wakeAt, triggeredBy: 'sess-c' }
+  const pause = { status: 'active', kinds: ['seven_day'], percentUsed: 97, resetsAt, wakeAt, triggeredBy: 'sess-c' }
   seen.files.set(PAUSE_FILE, JSON.stringify(pause))
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
@@ -331,7 +341,7 @@ test(
   await arm5h($)
   seen.sessionId = 'sess-b'
   await $.turn.start({ turnId: 't2', prompt: 'next' } as never)
-  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 92, resetsAt: RESET, wakeAt: WAKE }
+  const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 97, resetsAt: RESET, wakeAt: WAKE }
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, triggeredBy: 'sess-c' }))
   await seen.clock.advance(60_000)
   // The arm's own timer clears the arm while the pause's resume waits on its claim helper.
@@ -351,7 +361,7 @@ test(
   tasksFile(seen, [])
   await start($)
   await arm5h($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
@@ -560,7 +570,7 @@ test('/usage-guard phone gives the status as text, in green with no pause', asyn
   world(on)
   await start($)
   expect(await phone($)).toEqual([
-    '🟩 No usage pause. Sessions wrap up at 90% of any plan window.',
+    '🟩 No usage pause. Sessions wrap up at 95% of any plan window.',
     '/usage-guard help for more',
   ])
 })
@@ -568,10 +578,10 @@ test('/usage-guard phone gives the status as text, in green with no pause', asyn
 test('/usage-guard phone shows the pause and the card the PC draws above the prompt', async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 92, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
   const lines = await phone($)
-  expect(lines[0]).toMatch(/^🟨 Paused: 5-hour at 92%\. Resumes at Fri 2026-10-02 12:02/)
+  expect(lines[0]).toMatch(/^🟨 Paused: 5-hour at 97%\. Resumes at Fri 2026-10-02 12:02/)
   expect(lines[1]).toBe(`🟨 ${cardOf(seen)?.text}`)
   expect(lines.at(-1)).toBe('/usage-guard help for more')
 })
@@ -650,7 +660,7 @@ test('a bare /usage-guard typed over Remote Control answers with the phone text'
   const bridge = { command: 'usage-guard', args: '', origin: { kind: 'bridge' } }
   const answer = (await $.command.run(bridge as never)) as { text: string }
   expect(answer.text.split('\n')).toEqual([
-    '🟩 No usage pause. Sessions wrap up at 90% of any plan window.',
+    '🟩 No usage pause. Sessions wrap up at 95% of any plan window.',
     '/usage-guard help for more',
   ])
 })

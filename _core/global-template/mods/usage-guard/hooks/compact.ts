@@ -10,7 +10,7 @@ export const PAUSE_INSTRUCTIONS =
   'The session pauses for a plan limit and resumes its saved work on its own after the reset. Keep what ' +
   'that resume needs: the task in progress, its next step, and what waits on the person.'
 
-/** The context's fill: tokens, and their share of the compaction window as the context meter shows it. */
+/** The context's fill: tokens, and their unrounded share of the compaction window the meter measures against. */
 export type Fill = { tokens: number; percent: number }
 
 /**

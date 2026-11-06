@@ -172,7 +172,7 @@ test('pauseChip: only while the pause is still ahead', () => {
 
 const PROPS = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100 } as never
 
-function world(on: On, pause?: object) {
+function world(on: On, pause?: object, guardSettings?: object, loadedWrapUpAt = 80) {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   on('process.run', () => ({
@@ -194,9 +194,12 @@ function world(on: On, pause?: object) {
       ],
     },
   }))
-  on('settings.read', () => ({ value: { pluginConfigs: { 'usage-guard': { options: { wrapUpAt: 80 } } } } }) as never)
+  const options = { wrapUpAt: loadedWrapUpAt }
+  on('settings.read', () => ({ value: { pluginConfigs: { 'usage-guard': { options } } } }) as never)
   on('fs.read', ($, e) => {
-    if (!pause || !e.path.replaceAll('\\', '/').endsWith('usage-guard/pause.json')) throw new Error('ENOENT')
+    const path = e.path.replaceAll('\\', '/')
+    if (guardSettings && path.endsWith('usage-guard/settings.json')) return { value: JSON.stringify(guardSettings) }
+    if (!pause || !path.endsWith('usage-guard/pause.json')) throw new Error('ENOENT')
     return { value: JSON.stringify(pause) }
   })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -215,18 +218,38 @@ async function start($: Engine, surface: 'terminal' | 'desktop'): Promise<void> 
   await $.session.attach({ surface: 'desktop', clientId: 'app' } as never)
 }
 
+// The colour a Text is drawn in: `find` matches on type and text alone.
+async function colorOf(ui: { find: (query: never) => Promise<unknown> }, text: string | RegExp) {
+  const found = (await ui.find({ type: 'Text', text } as never)) as { props: { color?: string } } | undefined
+  return found?.props.color
+}
+
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: the row shows context and both plan windows, red at usage-guard's level`, async ($, on) => {
     world(on)
     await start($, surface)
     const ui = await $.ui.mount({ plugin: 'session-facts', surface, component: 'AbovePrompt', props: PROPS })
     // No compaction point here, so the bar fills against the window: 5 of 10 cells, green.
-    expect(await ui.find({ type: 'Text', text: '▰▰▰▰▰', color: 'green' } as never)).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '▱▱▱▱▱', color: 'gray' } as never)).toBeDefined()
+    expect(await colorOf(ui, '▰▰▰▰▰')).toBe('green')
+    expect(await colorOf(ui, '▱▱▱▱▱')).toBe('gray')
     expect(await ui.find({ type: 'Text', text: / 50%$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /5h 80% → resets Fri 14:00/, color: 'red' } as never)).toBeDefined()
+    expect(await colorOf(ui, /5h 80% → resets Fri 14:00/)).toBe('red')
     expect(await ui.find({ type: 'Text', text: /week 20%/ })).toBeDefined()
   })
+
+  // usage-guard takes a saved level only when it is a finite number; the loaded options stand otherwise.
+  const levels = [
+    { name: 'a saved 85 holds the 80% chip yellow', saved: 85, loaded: 80, color: 'yellow' },
+    { name: 'a saved 0 turns it red over a loaded 90', saved: 0, loaded: 90, color: 'red' },
+    { name: 'a saved "85" text falls back to the loaded 80', saved: '85', loaded: 80, color: 'red' },
+  ]
+  for (const level of levels)
+    test(`${surface}: usage-guard's settings file: ${level.name}`, async ($, on) => {
+      world(on, undefined, { wrapUpAt: level.saved }, level.loaded)
+      await start($, surface)
+      const ui = await $.ui.mount({ plugin: 'session-facts', surface, component: 'AbovePrompt', props: PROPS })
+      expect(await colorOf(ui, /5h 80% → resets Fri 14:00/)).toBe(level.color)
+    })
 
   test(`${surface}: in a narrow band each chip wraps whole, and only one wider than the band is cut`, async ($, on) => {
     world(on)

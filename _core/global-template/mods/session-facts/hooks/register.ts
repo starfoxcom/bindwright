@@ -142,7 +142,7 @@ async function saveSharedPlan($: EngineInterface): Promise<void> {
 const BUDGETS_EVERY_MS = 5_000
 // How old the newest facts line gets in a long turn before a tool result carries a newer one.
 const REFRESH_LINE_AFTER_MS = 10 * 60_000
-const DEFAULT_WRAP_UP_AT = 90
+const DEFAULT_WRAP_UP_AT = 95
 
 // The budgets row (budgets.tsx) reads this; each file names the state with its own literal reference.
 const budgets = atom({ plugin: 'session-facts', key: 'budgets' } as const, null)
@@ -194,8 +194,17 @@ const live: {
   isWindowFresh: false,
 }
 
-// usage-guard's own threshold, so the row turns red where the guard steps in.
+// usage-guard's own threshold, so the row turns red where the guard steps in: its settings file first, as
+// usage-guard runs from that file over the options it loaded with.
 async function readWrapUpAt($: EngineInterface): Promise<number> {
+  try {
+    const text = String(await $.fs.read(await usageGuardFile($, 'settings.json')))
+    const saved = JSON.parse(text) as { wrapUpAt?: unknown }
+    // The same test usage-guard puts a saved number through, so both read one level.
+    if (typeof saved.wrapUpAt === 'number' && Number.isFinite(saved.wrapUpAt)) return saved.wrapUpAt
+  } catch {
+    // No settings file, or one that does not parse: the loaded options stand.
+  }
   try {
     const configs = (await $.settings.read()).pluginConfigs as Record<string, { options?: { wrapUpAt?: unknown } }>
     return Number(configs?.['usage-guard']?.options?.wrapUpAt) || DEFAULT_WRAP_UP_AT

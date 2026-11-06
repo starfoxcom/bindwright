@@ -130,7 +130,7 @@ test('the arm tool compacts in a wrap-up turn the pause alone would not', async 
   const seen = world(on)
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   // The context is below the pause's setting: only the tool's ask makes the wrap-up turn compact.
   await $.tool.call({ tool: 'mcp__usage-guard__arm', at: '10:30', compact: true } as never)
@@ -144,7 +144,7 @@ test('a session that only set an arm with the tool has no work to wrap up at a p
   const seen = world(on)
   await start($)
   await $.tool.call({ tool: 'mcp__usage-guard__arm', at: '11:00' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   expect(seen.commands).toEqual([])
 })
