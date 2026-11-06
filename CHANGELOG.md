@@ -12,7 +12,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- The `ci-watch` mod starts no watch for a pull request in a repo without workflows, where it used to wait an hour for checks that never come and then wake the session.
+- The `ci-watch` mod ends a watch without waking the session when the pull request still shows no check after ten minutes and the repo has no workflows. It used to wait an hour for checks that never come and then wake the session. Checks from outside Actions, such as commit statuses from another CI, are watched as before.
 
 ## [v2.2.3] — 2026-11-06
 
