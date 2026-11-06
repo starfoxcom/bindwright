@@ -50,6 +50,8 @@ After the fetch, check each Now item in `ROADMAP.md` that names a branch: it is 
 
 Then run the extra start steps, if any.
 
+Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude config folder (`$CLAUDE_CONFIG_DIR`, or `~/.claude`), take the `bindwright` install that applies here: the one whose `projectPath` is this repo root, otherwise the one with `scope` `managed` or `user`; never one whose `projectPath` names another folder. Skip the step when the most specific settings file that sets that plugin's `enabledPlugins` entry (the managed settings an administrator installs, then `.claude/settings.local.json`, then `.claude/settings.json`, then `settings.json` in the config folder) sets it to `false`: a plugin turned off in `/plugin` stays installed. Otherwise run `node "<installPath>/hooks/notice.mjs"` from the repo root. At most once a day it prints a line when the plugin or this repo's Bindwright files are behind; put any line it prints at the top of the report. It prints nothing otherwise. Run it outside the Bash sandbox when one is on: inside it the opt-in counts send cannot reach the network. A missing or unreadable file, plugin or Node skips the step without a word.
+
 ## 3. Report, in this order
 
 1. **Project status:** current focus, open work, blockers.

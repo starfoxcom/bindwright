@@ -26,7 +26,7 @@ const RESUME_CLAIM = `resume-${KEY}-sess-old`
 const DONE: Pause = {
   status: 'done',
   kinds: ['five_hour'],
-  percentUsed: 92,
+  percentUsed: 97,
   resetsAt: RESET,
   wakeAt: SAVED.wakeAt,
   triggeredBy: 'x',
@@ -95,7 +95,7 @@ test('the wrap-up files the saved work in its claim, naming the project', async 
   const seen = world(on)
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   const record = parseSaved(seen.files.get(`${CLAIMS_DIR}/work-${KEY}-sess-a/saved.json`) ?? '')
   const expected = { session: 'sess-a', root: ROOT, key: KEY, resetsAt: RESET, wakeAt: WAKE, kinds: ['five_hour'] }
@@ -105,7 +105,7 @@ test('the wrap-up files the saved work in its claim, naming the project', async 
 test('a session that changed nothing files no saved work', async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 91, resetsAt: RESET }]
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
   expect([...seen.files.keys()].filter(path => path.startsWith(CLAIMS_DIR))).toEqual([])
 })

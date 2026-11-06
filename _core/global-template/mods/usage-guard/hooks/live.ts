@@ -39,9 +39,9 @@ export type Live = {
 
 /** Runs the mod with its settings: the file's values over the options it loaded with. */
 export function applyValues(live: Live, values: Record<string, unknown>): void {
-  live.wrapUpAt = Number(values.wrapUpAt ?? 90)
+  live.wrapUpAt = Number(values.wrapUpAt ?? 95)
   live.delayMinutes = Number(values.wakeDelayMinutes ?? 2)
-  live.compactAbovePercent = Number(values.compactAbovePercent ?? 25)
+  live.compactAbovePercent = Number(values.compactAbovePercent ?? 35)
   live.catchUpMinutes = Number(values.catchUpMinutes ?? 30)
 }
 
@@ -52,9 +52,9 @@ export function newLive(): Live {
     isTurnRunning: false,
     isStatusShown: false,
     handled: new Set(),
-    wrapUpAt: 90,
+    wrapUpAt: 95,
     delayMinutes: 2,
-    compactAbovePercent: 25,
+    compactAbovePercent: 35,
     catchUpMinutes: 30,
     isArmsDirMade: false,
   }

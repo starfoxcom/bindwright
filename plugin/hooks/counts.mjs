@@ -85,9 +85,9 @@ export function localDay(date) {
   return date.toLocaleDateString("en-CA");
 }
 
-/** The send URL: BINDWRIGHT_COUNTER_URL names another base, for local runs. */
-export function counterUrl(env) {
-  const base = (env.BINDWRIGHT_COUNTER_URL || DEFAULT_COUNTER_URL).replace(/\/+$/, "");
+/** The send URL; `override` (BINDWRIGHT_COUNTER_URL) names another base, for local runs. */
+export function counterUrl(override) {
+  const base = (override || DEFAULT_COUNTER_URL).replace(/\/+$/, "");
   return `${base}/increment`;
 }
 
@@ -470,7 +470,7 @@ async function main(argv) {
   const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   const stateFile = stateFileIn(configDir);
   if (argv[0] === "send") {
-    await send({ root: argv[1], stateFile, url: counterUrl(process.env) }).catch(() => {});
+    await send({ root: argv[1], stateFile, url: counterUrl(process.env.BINDWRIGHT_COUNTER_URL) }).catch(() => {});
     return;
   }
   const result = await command(argv, stateFile);
@@ -478,7 +478,7 @@ async function main(argv) {
   process.exitCode = "error" in result ? 1 : 0;
 }
 
-// Run as the hook or the CLI, not when a test imports it. The path is compared
+// Run as a script (the notice starts it) or the CLI, not when a test imports it. The path is compared
 // after following links, as notice.mjs does.
 function isEntry() {
   try {

@@ -215,13 +215,14 @@ async function startWrapUp($: EngineInterface, pause: Pause): Promise<void> {
 }
 
 // Measured against the compaction window, as the context meter is; the model's whole window stands in
-// when the engine reports none. The plain summary is estimated locally and costs nothing.
+// when the engine reports none. The plain summary is estimated locally and costs nothing. The percent stays
+// unrounded, so a fill just under the compaction setting never rounds up past it.
 async function readFill($: EngineInterface): Promise<Fill | undefined> {
   try {
     const { context } = await $.session.usage({ breakdown: 'summary' })
     const size = context.breakdown?.rawMaxTokens ?? context.window
     if (context.tokens === undefined || !size) return undefined
-    return { tokens: context.tokens, percent: Math.round((context.tokens / size) * 100) }
+    return { tokens: context.tokens, percent: (context.tokens / size) * 100 }
   } catch {
     return undefined
   }
