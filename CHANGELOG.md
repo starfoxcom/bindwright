@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- A team project without the AI reviews, on another site or on GitHub with them off, no longer reads in the collaboration rule that a 🔴 review verdict blocks its merge: a failing check or a reviewer's requested change does.
+
 ## [v2.3.0] — 2026-11-06
 
 v2.3.0 sets up projects on GitHub whose organization blocks GitHub apps, Actions and boards.
