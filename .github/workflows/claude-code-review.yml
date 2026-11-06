@@ -1023,15 +1023,22 @@ jobs:
           echo "--- review_context.md ---"
           cat "$RUNNER_TEMP/review_context.md"
 
+      # The CLI installs from npm, which needs Node 22 or newer; a hosted
+      # runner has it already and a self-hosted one gets it here.
+      - name: Set up Node for the CLI install
+        continue-on-error: true
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
       # One job-private copy of the newest CLI release, so the credits run and
       # the action's review run the same version. The version is read when the
-      # job runs, from the channel the official installer reads, and then
+      # job runs, from the npm registry's release channel, and then
       # installed exactly, so those steps and the log name one version. When
       # the lookup or the install fails, the credits run is skipped and the
       # action's review falls back to the CLI it bundles. The backup runs on
-      # the stable release (see below). The installer runs with a home folder
-      # of the job's own, so two runners under one account never share its
-      # ~/.local/bin/claude link mid-install.
+      # the stable release (see below). npm installs it into a folder of the
+      # job's own, so two runners under one account never share it mid-install.
       - name: Install Claude Code
         id: claude-cli
         # Each download has its own limit too, so a stalled host ends in the
@@ -1045,7 +1052,7 @@ jobs:
           set -euo pipefail
           CLI_VERSION=""
           for attempt in 1 2 3; do
-            if CLI_VERSION=$(curl -fsSL --connect-timeout 20 --max-time 60 https://downloads.claude.ai/claude-code-releases/latest); then
+            if CLI_VERSION=$(timeout 60 npm view "@anthropic-ai/claude-code@latest" version); then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -1060,22 +1067,18 @@ jobs:
             exit 1
           fi
           echo "Newest Claude Code release: $CLI_VERSION"
-          mkdir -p "$RUNNER_TEMP/claude-home"
           for attempt in 1 2 3; do
-            if curl -fsSL --connect-timeout 20 --max-time 60 https://claude.ai/install.sh | HOME="$RUNNER_TEMP/claude-home" timeout 300 bash -s -- "$CLI_VERSION"; then
+            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm" --no-audit --no-fund "@anthropic-ai/claude-code@$CLI_VERSION"; then
               break
             fi
             if [ "$attempt" = 3 ]; then
               echo "::warning::Claude Code $CLI_VERSION install failed three times: the review runs on the action's own CLI; the backup tries the stable release"
               exit 1
             fi
-            # The install host answers bursts with HTTP 429: back off longer.
+            # The registry answers bursts with HTTP 429: back off longer.
             sleep $((attempt * 20))
           done
-          src="$RUNNER_TEMP/claude-home/.local/share/claude/versions/$CLI_VERSION"
-          if [ ! -x "$src" ]; then
-            src="$(readlink -f "$RUNNER_TEMP/claude-home/.local/bin/claude" || true)"
-          fi
+          src="$(readlink -f "$RUNNER_TEMP/claude-npm/bin/claude" || true)"
           dest="$RUNNER_TEMP/claude-cli/claude"
           mkdir -p "$(dirname "$dest")"
           if ! cp "$src" "$dest"; then
@@ -1457,7 +1460,7 @@ jobs:
           }
           STABLE=""
           for attempt in 1 2 3; do
-            if STABLE=$(curl -fsSL --connect-timeout 20 --max-time 60 https://downloads.claude.ai/claude-code-releases/stable); then
+            if STABLE=$(timeout 60 npm view "@anthropic-ai/claude-code@stable" version); then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -1475,9 +1478,8 @@ jobs:
             echo "version=$STABLE" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          mkdir -p "$RUNNER_TEMP/claude-home-stable"
           for attempt in 1 2 3; do
-            if curl -fsSL --connect-timeout 20 --max-time 60 https://claude.ai/install.sh | HOME="$RUNNER_TEMP/claude-home-stable" timeout 300 bash -s -- "$STABLE"; then
+            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm-stable" --no-audit --no-fund "@anthropic-ai/claude-code@$STABLE"; then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -1485,10 +1487,7 @@ jobs:
             fi
             sleep $((attempt * 20))
           done
-          src="$RUNNER_TEMP/claude-home-stable/.local/share/claude/versions/$STABLE"
-          if [ ! -x "$src" ]; then
-            src="$(readlink -f "$RUNNER_TEMP/claude-home-stable/.local/bin/claude" || true)"
-          fi
+          src="$(readlink -f "$RUNNER_TEMP/claude-npm-stable/bin/claude" || true)"
           dest="$RUNNER_TEMP/claude-cli-stable/claude"
           mkdir -p "$(dirname "$dest")"
           cp "$src" "$dest" || no_stable "Claude Code $STABLE left no binary to copy"
