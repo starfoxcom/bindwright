@@ -1,7 +1,7 @@
-// The plugin's SessionStart notice (plugin/hooks/notice.mjs): what it says,
+// The plugin's session-start notice (plugin/hooks/notice.mjs): what it says,
 // that it says it at most once a day per repo, asks the network at most once
-// a day, and stays quiet offline. The last case runs the hook's own command
-// from a fresh pack.
+// a day, and stays quiet offline. The last case runs the script from a fresh
+// pack, as /session-start does, and checks the pack declares no hooks.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

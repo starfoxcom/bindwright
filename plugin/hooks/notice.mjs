@@ -111,7 +111,7 @@ export async function fetchVersion(url) {
   return parse(text) ? text.replace(/^v+/, "") : null;
 }
 
-// The engine ships beside this hook in the packed plugin.
+// The engine ships beside this script in the packed plugin.
 async function driftOf(root, repo, config) {
   const { runSettings } = await import(pathToFileURL(join(root, "engine", "layers.js")).href);
   return runSettings(repo, config).drift;

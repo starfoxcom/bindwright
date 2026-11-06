@@ -478,7 +478,7 @@ async function main(argv) {
   process.exitCode = "error" in result ? 1 : 0;
 }
 
-// Run as the hook or the CLI, not when a test imports it. The path is compared
+// Run as a script (the notice starts it) or the CLI, not when a test imports it. The path is compared
 // after following links, as notice.mjs does.
 function isEntry() {
   try {
