@@ -16,7 +16,7 @@ v2.2.0 opens Bindwright to people new to programming: setup works for a project 
 
 - **Plain words for first-time users** (#633). With no Git name or GitHub sign-in, setup asks "Have you used Git and GitHub before?"; "Not really" words the rest plainly and recommends the safe answers, and setup sets the Git name and email on a yes when they are missing.
 
-- **Setup says what is missing and how to get it** (#627, #630). Setup checks for Git before it looks for the repo and stops with a plain explanation when Git, Node or Python is missing, with the install route for the user's system (winget on Windows, `xcode-select` or Homebrew on macOS, the package manager on Linux), which it offers to run.
+- **Setup says what is missing and how to get it** (#627, #630). Setup checks for Git before it looks for the repo and stops with a plain explanation when Git is missing or neither Node 18 nor Python 3.8 is there, with the install route for the user's system: winget on Windows and `xcode-select` on macOS, both offered to run on a yes, and on Linux the package-manager command to run yourself.
 
 - **The packed plugin on its own branch** (#421). Each published release also writes the packed plugin to a `plugin` branch, the layout the plugin directory installs from, and the plugin gains an icon and an install line for its listing.
 
