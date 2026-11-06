@@ -1031,14 +1031,15 @@ jobs:
       # action's review falls back to the CLI it bundles. The backup runs on
       # the stable release (see below). npm installs it into a folder of the
       # job's own, so two runners under one account never share it mid-install.
-      # The runner's own npm installs it (hosted runners have Node 22 or newer;
-      # without npm the review runs on the action's own CLI). npm runs in global
-      # mode, which reads no .npmrc from the PR's checkout, so a PR cannot pick
-      # the version or the registry its own review uses. No step here runs a
-      # tool such as setup-node in the checkout, whose config files could start
-      # the PR's own code.
+      # The runner's own npm installs it; hosted runners have Node 22 or newer.
+      # Without npm there is no job copy: the review runs on the action's own
+      # CLI, with no credits run and no backup review. npm starts in the job's
+      # temp folder, never the PR's checkout, and runs in global mode, so no
+      # file of the PR (an .npmrc, a package.json a version manager reads) can
+      # pick the npm, the version or the registry its own review uses.
       - name: Install Claude Code
         id: claude-cli
+        working-directory: ${{ runner.temp }}
         # Each download has its own limit too, so a stalled host ends in the
         # warnings below rather than at the step's limit.
         timeout-minutes: 30
@@ -1434,6 +1435,7 @@ jobs:
       # lookup or install fails, so this step never costs the backup its run.
       - name: Install the stable Claude Code for the backup
         id: claude-cli-stable
+        working-directory: ${{ runner.temp }}
         timeout-minutes: 30
         if: steps.claude-review.outcome != 'skipped' && steps.main-answer.outputs.ok != 'yes'
         continue-on-error: true
