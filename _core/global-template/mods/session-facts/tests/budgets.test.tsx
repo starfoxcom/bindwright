@@ -236,12 +236,19 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ type: 'Text', text: /week 20%/ })).toBeDefined()
   })
 
-  test(`${surface}: usage-guard's settings file sets the red level over its loaded options`, async ($, on) => {
-    world(on, undefined, { wrapUpAt: 85 })
-    await start($, surface)
-    const ui = await $.ui.mount({ plugin: 'session-facts', surface, component: 'AbovePrompt', props: PROPS })
-    expect(await colorOf(ui, /5h 80% → resets Fri 14:00/)).toBe('yellow')
-  })
+  // usage-guard takes a saved level only when it is a finite number; the loaded options (80 here) stand otherwise.
+  const levels = [
+    { name: 'a saved 85 holds the 80% chip yellow', saved: 85, color: 'yellow' },
+    { name: 'a saved 0 turns it red', saved: 0, color: 'red' },
+    { name: 'a saved "85" text falls back to the loaded 80', saved: '85', color: 'red' },
+  ]
+  for (const level of levels)
+    test(`${surface}: usage-guard's settings file: ${level.name}`, async ($, on) => {
+      world(on, undefined, { wrapUpAt: level.saved })
+      await start($, surface)
+      const ui = await $.ui.mount({ plugin: 'session-facts', surface, component: 'AbovePrompt', props: PROPS })
+      expect(await colorOf(ui, /5h 80% → resets Fri 14:00/)).toBe(level.color)
+    })
 
   test(`${surface}: in a narrow band each chip wraps whole, and only one wider than the band is cut`, async ($, on) => {
     world(on)

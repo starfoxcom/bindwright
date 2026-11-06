@@ -200,7 +200,8 @@ async function readWrapUpAt($: EngineInterface): Promise<number> {
   try {
     const text = String(await $.fs.read(await usageGuardFile($, 'settings.json')))
     const saved = JSON.parse(text) as { wrapUpAt?: unknown }
-    if (Number(saved.wrapUpAt) > 0) return Number(saved.wrapUpAt)
+    // The same test usage-guard puts a saved number through, so both read one level.
+    if (typeof saved.wrapUpAt === 'number' && Number.isFinite(saved.wrapUpAt)) return saved.wrapUpAt
   } catch {
     // No settings file, or one that does not parse: the loaded options stand.
   }
