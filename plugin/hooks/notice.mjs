@@ -1,8 +1,9 @@
-// Bindwright's SessionStart notice. At most once a day per repo it says when
-// the repo's Bindwright files are older than the plugin (/bindwright:update
-// brings them up) or a newer plugin is out. It asks the network at most once
-// a day, with a short timeout, and says nothing when offline, when nothing is
-// behind, or on any error. Node 18+; the hook skips it where Node is missing.
+// Bindwright's session-start notice, run by the repo's /session-start skill
+// from the repo root. At most once a day per repo it says when the repo's
+// Bindwright files are older than the plugin (/bindwright:update brings them
+// up) or a newer plugin is out. It asks the network at most once a day, with
+// a short timeout, and prints nothing when offline, when nothing is behind, or
+// on any error. Node 18+.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
@@ -129,11 +130,10 @@ function startCountsSend(repo, config) {
 }
 
 async function main() {
-  const input = readJson(0) ?? {};
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   try {
-    startCountsSend(findRepo(input.cwd || process.cwd()), config);
+    startCountsSend(findRepo(process.cwd()), config);
   } catch {
     // The counts never stand in the way of the notice.
   }
@@ -141,19 +141,17 @@ async function main() {
   if (!parse(pluginVersion)) return;
   const url = process.env.BINDWRIGHT_LATEST_URL || LATEST_URL;
   const text = await notice({
-    cwd: input.cwd || process.cwd(),
+    cwd: process.cwd(),
     today: new Date().toLocaleDateString("en-CA"),
     cacheFile: join(config, "bindwright", "notice.json"),
     pluginVersion: pluginVersion.replace(/^v+/, ""),
     fetchLatest: () => fetchVersion(url),
     driftFor: (repo) => driftOf(root, repo, config),
   });
-  if (!text) return;
-  const hookSpecificOutput = { hookEventName: "SessionStart", additionalContext: text };
-  process.stdout.write(JSON.stringify({ systemMessage: text, hookSpecificOutput }));
+  if (text) process.stdout.write(`${text}\n`);
 }
 
-// Run as the hook, not when a test imports it. The loader names this module
+// Run as a script, not when a test imports it. The loader names this module
 // by its real path, so the command's path is compared after following links.
 function isEntry() {
   try {

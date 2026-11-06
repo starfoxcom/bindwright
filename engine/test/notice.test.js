@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -174,40 +174,33 @@ test("drift names the extras the repo's setup expects, and nothing else", async 
   }
 });
 
-const bash = spawnSync("bash", ["-c", "true"]).status === 0;
+const needs = { skip: !python && "needs Python 3.8+" };
 
-const needs = { skip: !(python && bash) && "needs Python 3.8+ and bash" };
-
-test("the hook's own command, run from a pack, tells the user and then stays quiet", needs, () => {
+test("the notice, run from a pack as /session-start runs it, tells the user and then stays quiet", needs, () => {
   const s = scene("0.1.0");
   try {
     const plugin = join(s.root, "bindwright");
     const pack = [join(repoRoot, "tools", "pack_plugin.py"), "--out", plugin];
     const packed = spawnSync(python, pack, { encoding: "utf8" });
     assert.equal(packed.status, 0, packed.stderr);
-    const hooks = JSON.parse(readFileSync(join(plugin, "hooks", "hooks.json"), "utf8")).hooks;
-    const { command } = hooks.SessionStart[0].hooks[0];
+    assert.equal(existsSync(join(plugin, "hooks", "hooks.json")), false, "the plugin declares no hooks");
     // The plugin folder reached through a link too, as a linked ~/.claude does.
     const linked = join(s.root, "linked");
     symlinkSync(plugin, linked, "junction");
     for (const root of [plugin, linked]) {
       const env = {
-        ...process.env, CLAUDE_PLUGIN_ROOT: root, CLAUDE_CONFIG_DIR: join(s.root, `config-${root === plugin}`),
+        ...process.env, CLAUDE_CONFIG_DIR: join(s.root, `config-${root === plugin}`),
         BINDWRIGHT_LATEST_URL: "http://127.0.0.1:9/VERSION", // nothing listens there: offline
       };
       const setup = { schema: 1, extras: { tasks: "recommended" } };
-    const project = { team: true, client: false, project: {}, advanced: { tracker: "github" }, setup };
-    writeFileSync(join(s.repo, ".bindwright", "project.json"), JSON.stringify(project));
-    const input = JSON.stringify({ cwd: s.repo });
-      const run = () => spawnSync("bash", ["-c", command], { env, input, encoding: "utf8" });
+      const project = { team: true, client: false, project: {}, advanced: { tracker: "github" }, setup };
+      writeFileSync(join(s.repo, ".bindwright", "project.json"), JSON.stringify(project));
+      const script = join(root, "hooks", "notice.mjs");
+      const run = () => spawnSync(process.execPath, [script], { cwd: s.repo, env, encoding: "utf8" });
       const first = run();
       assert.equal(first.status, 0, first.stderr);
-      assert.notEqual(first.stdout, "", root);
-      const out = JSON.parse(first.stdout);
-      assert.match(out.systemMessage, /from 0\.1\.0 .*\/bindwright:update/);
-      assert.match(out.systemMessage, /expects extras this machine lacks \(tasks\)/);
-      assert.equal(out.hookSpecificOutput.hookEventName, "SessionStart");
-      assert.equal(out.hookSpecificOutput.additionalContext, out.systemMessage);
+      assert.match(first.stdout, /from 0\.1\.0 .*\/bindwright:update/, root);
+      assert.match(first.stdout, /expects extras this machine lacks \(tasks\)/);
       const second = run();
       assert.equal(second.status, 0, second.stderr);
       assert.equal(second.stdout, "");
