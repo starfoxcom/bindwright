@@ -6,6 +6,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.2.3] — 2026-11-06
+
+v2.2.3 completes the plugin's directory listing.
+
+### Changed
+
+- The plugin names its documentation, support page, privacy policy and terms of service, which the plugin directory shows on its listing.
+
 ## [v2.2.2] — 2026-11-05
 
 v2.2.2 takes the last download-and-run command out of the shipped review workflows, for the plugin directory's checks.
