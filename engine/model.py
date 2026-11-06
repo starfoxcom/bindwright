@@ -164,6 +164,9 @@ def defaults(team=False, client=False, private=None):
             # "github" keeps the GitHub parts; "local" and "other" have no GitHub, so no
             # Actions, no board and no GitHub-hosted tracker (_check_code_host).
             "codeHost": "github",
+            # False: the code is on GitHub, but its organization blocks GitHub apps, Actions
+            # and project boards, so no AI review, no workflow and no board (_check_code_host).
+            "githubApps": True,
             "tracker": "github",
             # "<owner>/<number>" when tracker is "github" and the project has a
             # board; None keeps project status in a pinned issue instead.
@@ -229,7 +232,7 @@ def validate(saved):
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
     _check(_is_bool(get(a, "private")), "private must be true or false")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-                "plainWriting", "codeSizeCheck", "handoffFile"]
+                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
     name = get(project, "name")
@@ -304,7 +307,14 @@ def _check_code_host(adv):
     host = adv.get("codeHost", UNDEFINED)
     _check(isinstance(host, str) and host in CODE_HOSTS, 'unknown code host %s' % quoted(host))
     if host == "github":
+        if adv["githubApps"]:
+            return
+        blocked = "githubApps false blocks GitHub apps, Actions and boards"
+        _check(adv["aiReview"] is False, blocked + ": aiReview must be false")
+        _check(adv["deepEscalation"] is False, blocked + ": deepEscalation must be false")
+        _check(_unset(adv.get("trackerProject", UNDEFINED)), blocked + ": trackerProject must be null")
         return
+    _check(adv["githubApps"] is True, 'githubApps is only for codeHost "github": it must be true')
     label = 'codeHost "%s"' % host
     _check(adv["aiReview"] is False, label + " has no GitHub Actions: aiReview must be false")
     _check(adv["deepEscalation"] is False, label + " has no GitHub Actions: deepEscalation must be false")
@@ -374,6 +384,10 @@ def flags_for(a):
         "code_host_github": adv["codeHost"] == "github",
         "code_host_local": adv["codeHost"] == "local",
         "code_host_other": adv["codeHost"] == "other",
+        "github_actions": adv["codeHost"] == "github" and adv["githubApps"],
+        "github_no_actions": adv["codeHost"] == "github" and not adv["githubApps"],
+        # A host that runs checks on each PR: GitHub Actions, or another site's pipeline.
+        "ci_checks": adv["codeHost"] == "other" or (adv["codeHost"] == "github" and adv["githubApps"]),
         "guard_hooks_repo": adv["hookLocation"] == "repo",
         "attribution_guard": adv["attributionGuard"],
         "deny_list_strict": adv["denyProfile"] == "strict",

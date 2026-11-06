@@ -25,6 +25,8 @@ export type Watch = {
    * every path that keeps or drops a wake relies on that. Dropped once the watch settles or its head moves.
    */
   incidentPending?: boolean
+  /** Whether GitHub lists any workflow for the repo, asked once the PR has gone a while with no check. */
+  hasWorkflows?: boolean
 }
 
 /** The settings pane's own state: the last refusal per field. */

@@ -49,6 +49,10 @@ export type Seen = {
   ghCalls: string[]
   /** The session id: a /clear moves it on. */
   session: string
+  /** How many workflows GitHub lists for the repo (default 1). */
+  workflows?: number
+  /** The PR has no check at all: `gh pr checks` says so on stderr and exits non-zero. */
+  isCheckless?: boolean
 }
 
 export function world(on: On) {
@@ -108,12 +112,14 @@ export function world(on: On) {
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)
     if (args.includes('pr checks')) seen.checksRead++
     if (args.includes('pr checks')) await seen.duringChecks?.()
-    if (args.includes('pr checks') && seen.isChecksDown) {
+    if (args.includes('pr checks') && (seen.isChecksDown || seen.isCheckless)) {
       return {
         value: {
           exitCode: 1,
           stdout: '',
-          stderr: 'error connecting to api.github.com',
+          stderr: seen.isChecksDown
+            ? 'error connecting to api.github.com'
+            : "no checks reported on the 'feature/x' branch",
           isStdoutTruncated: false,
           isStderrTruncated: false,
         },
@@ -123,7 +129,9 @@ export function world(on: On) {
     const repo = named ?? 'o/r'
     const stdout = args.includes('pr checks')
       ? JSON.stringify([{ name: 'build', bucket: seen.bucket }, ...seen.rows])
-      : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))
+      : args.includes('/actions/workflows')
+        ? String(seen.workflows ?? 1)
+        : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('prompt.submit', ($, e) => {
@@ -134,7 +142,11 @@ export function world(on: On) {
     seen.prompts.push(e.text)
     return { text: e.text }
   })
-  const answer = () => ({ result: { stdout: '', stderr: '', interrupted: false } as never })
+  // `gh pr create` prints the new PR's URL.
+  const answer = (_: unknown, e: { command?: string }) => {
+    const stdout = e.command?.includes('pr create') ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
+    return { result: { stdout, stderr: '', interrupted: false } as never }
+  }
   on('tool.call', { tool: ['Bash', 'PowerShell'] }, answer)
   // The engine's own band beneath the plugins: empty.
   on('ui.render', () => ({ type: 'Box', children: [] }) as never)

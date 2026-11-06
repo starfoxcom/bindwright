@@ -9,3 +9,20 @@ export function withoutGithub(answers, codeHost) {
   if (codeHost === "local") answers.team = false;
   return answers;
 }
+
+// The answers of a project on GitHub whose organization blocks apps, Actions and
+// boards: no AI review and no board, while the issues may stay on GitHub.
+export function withoutActions(answers, tracker = answers.advanced.tracker) {
+  Object.assign(answers.advanced, {
+    githubApps: false, aiReview: false, deepEscalation: false, trackerProject: null, tracker,
+  });
+  return answers;
+}
+
+// Each code host a test binds besides plain GitHub, applied to a fresh copy of the answers.
+export const HOST_VARIANTS = [
+  (a) => withoutGithub(a, "local"),
+  (a) => withoutGithub(a, "other"),
+  (a) => withoutActions(a),
+  (a) => withoutActions(a, "file"),
+];

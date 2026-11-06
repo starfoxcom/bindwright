@@ -1,5 +1,4 @@
-import { atom, update } from 'claude-code'
-import type { EngineInterface, Hook, Register } from 'claude-code'
+import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from './command'
@@ -9,6 +8,7 @@ import type { PrRounds } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
+import { isNothingToWatch, readChecks, withWorkflows } from './checks'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -489,24 +489,18 @@ async function poll($: EngineInterface): Promise<void> {
             isSilent: isForeign(current, now) || undefined,
           }
         : current
-    let checks: Record<string, string> | undefined
-    try {
-      const rows = JSON.parse(
-        await gh($, ['pr', 'checks', String(base.number), '--repo', base.repo, '--json', 'name,bucket']),
-      ) as {
-        name: string
-        bucket: string
-      }[]
-      checks = Object.fromEntries(rows.map(row => [row.name, row.bucket]))
-    } catch {
-      // A failed read (network, auth, no checks yet) is not a quiet poll: the count stands and the
-      // next poll tries again. Only the time limit can settle the watch meanwhile.
+    // A failed read leaves only the time limit to settle the watch meanwhile.
+    const checks = await readChecks($, base)
+    const asked = await withWorkflows($, base, checks, now)
+    if (isNothingToWatch(asked, checks, now)) {
+      changed = true
+      continue
     }
     const polled = checks
-      ? settle(base, checks, now, live.timeoutMs, live.pollMs)
-      : now - base.startedAt > live.timeoutMs
-        ? { ...base, outcome: 'timeout' as const, settledAt: now }
-        : base
+      ? settle(asked, checks, now, live.timeoutMs, live.pollMs)
+      : now - asked.startedAt > live.timeoutMs
+        ? { ...asked, outcome: 'timeout' as const, settledAt: now }
+        : asked
     // Settled: its own wake says it all, so an incident note not sent yet is dropped.
     const next = polled.outcome && polled.incidentPending ? { ...polled, incidentPending: undefined } : polled
     kept.push(next)
