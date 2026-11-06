@@ -6,6 +6,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- Setup has a fourth answer for where the code lives: GitHub, but the organization, job or client blocks GitHub apps, Actions and project boards. The project keeps branches, pull requests and issues, gets no workflow, review gate or board, and its rules run the tests and the size check on the computer before each push instead of counting on CI.
+
+### Fixed
+
+- The `ci-watch` mod starts no watch for a pull request in a repo without workflows, where it used to wait an hour for checks that never come and then wake the session.
+
 ## [v2.2.3] — 2026-11-06
 
 v2.2.3 completes the plugin's directory listing.
