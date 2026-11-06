@@ -6,7 +6,19 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.2.0] — 2026-11-05
+
+v2.2.0 opens Bindwright to people new to programming: setup works for a project without GitHub, says in plain words which tools are missing and how to get them, and installs with one command, with no Git and from the Claude desktop app. It also gets the plugin ready for the plugin directory and makes each review tier post exactly one verdict, checked by the gate's reader before it is posted.
+
 ### Added
+
+- **Setup for a project without GitHub** (#631, #633). Setup first asks where the code lives: GitHub, just this computer, or another site (GitLab, Bitbucket and the like), saved as `advanced.codeHost` (`github`, the default, `local` or `other`). For `local` and `other` the AI reviews are off and the work state lives in the hand-off file; no board, private tracker repo, public roadmap, `.github/` workflows, issue and PR templates or review settings are written, and both engines refuse answers that need GitHub. A just-this-computer project is one person's: `git.md` gets a "Save points" section in plain words instead of branches and pull requests, and the other shipped files drop their branch, CI, push and pull-request steps. Another site gets `.claude/rules/code-host.md`, which says how to read each GitHub step there and lists the GitHub-only parts left out. Answers saved before this release read as `github`.
+
+- **Plain words for first-time users** (#633). With no Git name or GitHub sign-in, setup asks "Have you used Git and GitHub before?"; "Not really" words the rest plainly and recommends the safe answers, and setup sets the Git name and email on a yes when they are missing.
+
+- **Setup says what is missing and how to get it** (#627, #630). Setup checks for Git before it looks for the repo and stops with a plain explanation when Git is missing or neither Node 18 nor Python 3.8 is there, with the install route for the user's system: winget on Windows and `xcode-select` on macOS, both offered to run on a yes, and on Linux the package-manager command to run yourself.
+
+- **The packed plugin on its own branch** (#421). Each published release also writes the packed plugin to a `plugin` branch, the layout the plugin directory installs from, and the plugin gains an icon and an install line for its listing.
 
 - **Where session scratch goes** (#531). `token-efficiency.md` asks every session to keep scratch files, test copies and captures in its scratchpad or the project's git-ignored build folder, never a fixed folder such as `C:/tmp`, since the CLI deletes a session's scratchpad with its transcript after `cleanupPeriodDays`.
 
@@ -18,7 +30,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **The routine review posts from a job apart from its reviewers** (#456, #460). The review attempts run with a read-only job token, and a second job checks the review again with the gate's reader and posts it, so no reviewer process shares a job whose token can write checks. A run whose PR has a newer head posts nothing, a deep-review request with automatic escalation off is posted only when one is owed, every GitHub call in the repair step has a time limit, and the CLI installs into a home folder of the job's own.
 
-- **The deep review posts once, after every attempt** (#458). The deep attempts post nothing: each returns its review as structured output, the workflow checks it with the gate's reader, and one step posts the first readable review as the review app. A crashed, hung or late attempt can no longer leave a second verdict that buries the first, and a run whose PR has a newer head posts nothing.
+- **The deep review posts once, after every attempt** (#458, #628). The deep attempts post nothing: each returns its review as structured output, the workflow checks it with the gate's reader, and one step posts the first readable review as the review app. A crashed, hung or late attempt can no longer leave a second verdict that buries the first, and a run whose PR has a newer head posts nothing.
 
 ## [v2.1.0] — 2026-11-05
 
