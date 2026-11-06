@@ -21,7 +21,7 @@ In the Claude desktop app, where `/plugin` does not run, the page's Install sect
 - `/bindwright:export` records which extras the team expects; `/bindwright:join` brings a teammate's machine in line after cloning.
 - `/bindwright:runners` checks your computer and the repo's CI, recommends how many local CI runners to set up (or none), and installs the ones you pick.
 
-A notice at session start, at most once a day, says when the repo or the plugin is behind.
+When a session starts with `/session-start`, a notice says at most once a day when the repo or the plugin is behind.
 
 ## Privacy
 
