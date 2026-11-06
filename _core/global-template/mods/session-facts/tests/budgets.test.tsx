@@ -172,7 +172,7 @@ test('pauseChip: only while the pause is still ahead', () => {
 
 const PROPS = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100 } as never
 
-function world(on: On, pause?: object, guardSettings?: object) {
+function world(on: On, pause?: object, guardSettings?: object, loadedWrapUpAt = 80) {
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   on('process.run', () => ({
@@ -194,7 +194,8 @@ function world(on: On, pause?: object, guardSettings?: object) {
       ],
     },
   }))
-  on('settings.read', () => ({ value: { pluginConfigs: { 'usage-guard': { options: { wrapUpAt: 80 } } } } }) as never)
+  const options = { wrapUpAt: loadedWrapUpAt }
+  on('settings.read', () => ({ value: { pluginConfigs: { 'usage-guard': { options } } } }) as never)
   on('fs.read', ($, e) => {
     const path = e.path.replaceAll('\\', '/')
     if (guardSettings && path.endsWith('usage-guard/settings.json')) return { value: JSON.stringify(guardSettings) }
@@ -236,15 +237,15 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ type: 'Text', text: /week 20%/ })).toBeDefined()
   })
 
-  // usage-guard takes a saved level only when it is a finite number; the loaded options (80 here) stand otherwise.
+  // usage-guard takes a saved level only when it is a finite number; the loaded options stand otherwise.
   const levels = [
-    { name: 'a saved 85 holds the 80% chip yellow', saved: 85, color: 'yellow' },
-    { name: 'a saved 0 turns it red', saved: 0, color: 'red' },
-    { name: 'a saved "85" text falls back to the loaded 80', saved: '85', color: 'red' },
+    { name: 'a saved 85 holds the 80% chip yellow', saved: 85, loaded: 80, color: 'yellow' },
+    { name: 'a saved 0 turns it red over a loaded 90', saved: 0, loaded: 90, color: 'red' },
+    { name: 'a saved "85" text falls back to the loaded 80', saved: '85', loaded: 80, color: 'red' },
   ]
   for (const level of levels)
     test(`${surface}: usage-guard's settings file: ${level.name}`, async ($, on) => {
-      world(on, undefined, { wrapUpAt: level.saved })
+      world(on, undefined, { wrapUpAt: level.saved }, level.loaded)
       await start($, surface)
       const ui = await $.ui.mount({ plugin: 'session-facts', surface, component: 'AbovePrompt', props: PROPS })
       expect(await colorOf(ui, /5h 80% → resets Fri 14:00/)).toBe(level.color)
