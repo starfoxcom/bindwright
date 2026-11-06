@@ -2,18 +2,34 @@ name: Release plugin
 
 # Attaches the Bindwright plugin zip to a published release, for the
 # marketplace's archive source. The zip is rebuilt from the release tag by
-# tools/pack_plugin.py, which reads the files git stores, so it has the bytes
-# the release PR computed; the job refuses to upload a zip whose SHA-256
-# differs from the one .claude-plugin/marketplace.json pins at that tag,
-# because the marketplace would refuse it on every machine anyway. The same
-# files then go to the `plugin` branch, which the plugin directory follows.
+# tools/pack_plugin.py, which reads the files git stores. The job refuses to
+# upload a zip whose SHA-256 differs from the one the default branch's
+# .claude-plugin/marketplace.json pins, since that copy is the one every
+# machine reads, and the marketplace would refuse the zip anyway. The pin may
+# land in the release PR or in a hotfix after it: either way the tag can sit
+# on the release merge. The same files then go to the `plugin` branch, which
+# the plugin directory follows.
+#
+# When a run refuses, fix the pin on the default branch and run this again
+# for the same release, never moving its tag:
+#   gh workflow run release-plugin.yml -f tag=vX.Y.Z
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "A published release, such as v2.2.1"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-plugin
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -22,12 +38,33 @@ defaults:
 jobs:
   zip:
     name: Plugin zip
+    # By hand, only the default branch's copy of this workflow runs.
+    if: github.event_name == 'release' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
+      - name: Check the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$TAG' is not a release tag such as v2.2.1"
+            exit 1
+          fi
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft) || {
+            echo "::error::there is no release $TAG"
+            exit 1
+          }
+          if [ "$draft" != false ]; then
+            echo "::error::release $TAG is a draft: publish it first"
+            exit 1
+          fi
+
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
 
       # Releases before the plugin have no marketplace file: nothing to attach.
@@ -45,27 +82,34 @@ jobs:
         if: steps.market.outputs.present == 'true'
         id: build
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           version="${TAG#v}"
           zip="bindwright-$version.zip"
+          market="$RUNNER_TEMP/marketplace.json"
+          path="repos/$GITHUB_REPOSITORY/contents/.claude-plugin/marketplace.json?ref=$DEFAULT_BRANCH"
+          gh api -H "Accept: application/vnd.github.raw+json" "$path" > "$market"
           python3 tools/pack_plugin.py --zip "$zip" --ref HEAD
-          python3 - "$zip" "$version" <<'EOF'
+          python3 - "$zip" "$version" "$market" "$DEFAULT_BRANCH" <<'EOF'
           import hashlib, json, sys
-          zip_path, version = sys.argv[1], sys.argv[2]
-          with open(".claude-plugin/marketplace.json", encoding="utf-8") as fh:
+          zip_path, version, market, branch = sys.argv[1:5]
+          with open(market, encoding="utf-8") as fh:
               entry = next(p for p in json.load(fh)["plugins"] if p["name"] == "bindwright")
           with open(zip_path, "rb") as fh:
               built = hashlib.sha256(fh.read()).hexdigest()
           problems = []
           if entry.get("version") != version:
-              problems.append("the marketplace lists version %s, the tag is %s" % (entry.get("version"), version))
+              problems.append("%s's marketplace lists version %s, the tag is %s" % (branch, entry.get("version"), version))
           if entry["source"].get("sha256", "").lower() != built:
-              problems.append("the marketplace pins %s, the rebuilt zip is %s" % (entry["source"].get("sha256"), built))
+              problems.append("%s's marketplace pins %s, the rebuilt zip is %s" % (branch, entry["source"].get("sha256"), built))
           if not entry["source"].get("url", "").endswith("/v%s/bindwright-%s.zip" % (version, version)):
-              problems.append("the marketplace url does not name this release's zip")
+              problems.append("%s's marketplace url does not name this release's zip" % branch)
           for p in problems:
               print("::error::" + p)
+          if problems:
+              print("::error::pin the zip on %s (python tools/pack_plugin.py --marketplace), then run: "
+                    "gh workflow run release-plugin.yml -f tag=v%s" % (branch, version))
           sys.exit(1 if problems else 0)
           EOF
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
@@ -74,7 +118,6 @@ jobs:
         if: steps.market.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
           ZIP: ${{ steps.build.outputs.zip }}
         run: gh release upload "$TAG" "$ZIP" --clobber --repo "$GITHUB_REPOSITORY"
 
@@ -85,7 +128,6 @@ jobs:
         if: steps.market.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
           ZIP: ${{ steps.build.outputs.zip }}
         run: |
           set -euo pipefail
