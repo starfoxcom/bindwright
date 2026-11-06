@@ -6,9 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.3.0] — 2026-11-06
+
+v2.3.0 sets up projects on GitHub whose organization blocks GitHub apps, Actions and boards.
+
 ### Added
 
-- Setup has a fourth answer for where the code lives: GitHub, but the organization, job or client blocks GitHub apps, Actions and project boards. The project keeps branches, pull requests and issues, gets no workflow, review gate or board, and its rules run the tests and the size check on the computer before each push instead of counting on CI.
+- Setup has a fourth answer for where the code lives: GitHub, but the organization, job or client blocks GitHub apps, Actions and project boards. The project keeps branches, pull requests and issues, gets no workflow, review gate or board, and its rules run the tests and the size check on the computer before each push instead of counting on CI. When the organization blocks the GitHub CLI's sign-in too, the rules hand each pull request step to the user on GitHub's web page, with the title and body ready to paste.
 
 ### Fixed
 
