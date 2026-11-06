@@ -9,7 +9,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind } from "../bind.js";
 import { defaults } from "../model.js";
-import { withoutGithub } from "./code-host.js";
+import { withoutActions, withoutGithub } from "./code-host.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const readFile = async (p) => readFileSync(join(repo, p), "utf8");
@@ -49,6 +49,22 @@ function offending(files, pattern) {
 
 test("a local project's files name no pull request, CI or remote step", async () => {
   assert.deepEqual(offending(await render("local"), HOST_STEP), []);
+});
+
+test("GitHub with apps, Actions and boards blocked: no workflow, gate or board, and PRs stay", async () => {
+  const a = withoutActions(defaults({ team: true, client: true, isPrivate: true }));
+  Object.assign(a.advanced, { uiRule: true, confidentiality: true, cleanRoom: true, plainWriting: true });
+  const files = await bind(a, { readFile, coreFiles, year: 2026 });
+  const paths = [...files.keys()];
+  const actionsFiles = /^\.github\/(workflows\/|review-|scripts\/(review_gate|setup-review-gate|pin_check))/;
+  assert.deepEqual(paths.filter((path) => actionsFiles.test(path)), []);
+  assert.ok(paths.includes(".claude/rules/code-host.md") && paths.includes(".github/scripts/size_check.py"));
+  const rules = [...files].filter(([path]) => path.endsWith(".md") && !path.startsWith(".bindwright/global/")
+    && path !== ".claude/rules/code-host.md");
+  // A line may say no CI runs here; it may not count on one.
+  const ciStep = /\bCI\b|gh pr checks|gh run\b|review-tiers\.md|review-gate/;
+  assert.deepEqual(offending(rules, ciStep).filter((line) => !/\bno CI\b/i.test(line)), []);
+  assert.match(files.get(".claude/rules/git.md"), /^## Pull requests$/m);
 });
 
 test("no project off GitHub points at a GitHub file the bind left out", async () => {

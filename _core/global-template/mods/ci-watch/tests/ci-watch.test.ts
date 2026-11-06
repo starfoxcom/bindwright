@@ -161,6 +161,56 @@ test('a push starts a watch and the session is woken once when it passes', async
   expect(seen.prompts.length).toBe(1)
 })
 
+test('a PR with no check in a repo with no workflows is dropped after the grace time, unwoken', async ($, on) => {
+  const { seen, clock } = world(on)
+  Object.assign(seen, { workflows: 0, isCheckless: true, isReadable: true })
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let poll = 0; poll < 25; poll++) await clock.advance(POLL_MS)
+  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s1.json') ?? '{}')
+  expect(saved.watches).toEqual([])
+  expect(seen.ghCalls.filter(call => call.includes('/actions/workflows')).length).toBe(1)
+  await clock.advance(HOUR)
+  expect(seen.prompts).toEqual([])
+})
+
+test('checks from outside Actions are watched in a repo with no workflows, as in any other', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.workflows = 0
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let poll = 0; poll < 25; poll++) await clock.advance(POLL_MS)
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('o/r#7: all 1 checks settled')
+})
+
+test('failed reads after the grace time never drop a watch whose checks came from outside Actions', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.workflows = 0
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  await clock.advance(POLL_MS)
+  seen.isChecksDown = true
+  for (let poll = 0; poll < 25; poll++) await clock.advance(POLL_MS)
+  seen.isChecksDown = false
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('o/r#7: all 1 checks settled')
+})
+
+test('a PR still with no check where workflows exist keeps its watch until the time limit', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isCheckless = true
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  await clock.advance(HOUR + 2 * POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('still pending after the time limit')
+})
+
 test('a push that moves no commit keeps the settled watch: no second wake', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })

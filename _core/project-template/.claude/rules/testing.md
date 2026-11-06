@@ -48,7 +48,12 @@ A test calls the production function. It never re-implements the logic in the te
 <!-- TOGGLE:code_host_local END -->
 <!-- TOGGLE:code_host_local:off START -->
 - **Every PR:** fast tests only, a few minutes at most.
+<!-- TOGGLE:ci_checks START -->
 - **Nightly or weekly:** slow suites (long sweeps, integration, performance). A red scheduled run must open or update an issue, because nothing else will surface it.
+<!-- TOGGLE:ci_checks END -->
+<!-- TOGGLE:github_no_actions START -->
+- **Before a bigger piece of work is called done:** slow suites (long sweeps, integration, performance), run by hand, since no CI runs them on a schedule.
+<!-- TOGGLE:github_no_actions END -->
 <!-- TOGGLE:code_host_local:off END -->
 
 ## Coverage

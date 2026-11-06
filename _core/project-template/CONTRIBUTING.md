@@ -61,7 +61,12 @@ Reviews follow the **binary verdict rule**: 🟢 only when fully clean; 🔴 whe
 
 ## Definition of done
 
+<!-- TOGGLE:ci_checks START -->
 A change is done when it can be **exercised end-to-end** in a running build — not when the code compiles. CI green is necessary but not sufficient.
+<!-- TOGGLE:ci_checks END -->
+<!-- TOGGLE:ci_checks:off START -->
+A change is done when it can be **exercised end-to-end** in a running build — not when the code compiles. Passing tests are necessary but not sufficient.
+<!-- TOGGLE:ci_checks:off END -->
 
 For features with a visible surface (UI, API, CLI):
 - Include a manual smoke-test checklist in the PR description.

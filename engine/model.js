@@ -108,6 +108,9 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       // "github" keeps the GitHub parts; "local" and "other" have no GitHub, so no
       // Actions, no board and no GitHub-hosted tracker (checkCodeHost).
       codeHost: "github",
+      // false: the code is on GitHub, but its organization blocks GitHub apps, Actions
+      // and project boards, so no AI review, no workflow and no board (checkCodeHost).
+      githubApps: true,
       tracker: "github",
       // "<owner>/<number>" when tracker is "github" and the project has a
       // board; null keeps project status in a pinned issue instead.
@@ -134,7 +137,15 @@ const unset = (value) => value === null || value === undefined;
 // A code host without GitHub: the answers that need GitHub must be off.
 function checkCodeHost(adv) {
   check(CODE_HOSTS.includes(adv.codeHost), `unknown code host ${quoted(adv.codeHost)}`);
-  if (adv.codeHost === "github") return;
+  if (adv.codeHost === "github") {
+    if (adv.githubApps) return;
+    const blocked = "githubApps false blocks GitHub apps, Actions and boards";
+    check(adv.aiReview === false, `${blocked}: aiReview must be false`);
+    check(adv.deepEscalation === false, `${blocked}: deepEscalation must be false`);
+    check(unset(adv.trackerProject), `${blocked}: trackerProject must be null`);
+    return;
+  }
+  check(adv.githubApps === true, 'githubApps is only for codeHost "github": it must be true');
   const host = `codeHost "${adv.codeHost}"`;
   check(adv.aiReview === false, `${host} has no GitHub Actions: aiReview must be false`);
   check(adv.deepEscalation === false, `${host} has no GitHub Actions: deepEscalation must be false`);
@@ -178,7 +189,7 @@ export function validate(saved) {
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
   check(typeof a.private === "boolean", "private must be true or false");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-    "plainWriting", "codeSizeCheck", "handoffFile"];
+    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
   }
@@ -286,6 +297,10 @@ export function flagsFor(a) {
     code_host_github: adv.codeHost === "github",
     code_host_local: adv.codeHost === "local",
     code_host_other: adv.codeHost === "other",
+    github_actions: adv.codeHost === "github" && adv.githubApps,
+    github_no_actions: adv.codeHost === "github" && !adv.githubApps,
+    // A host that runs checks on each PR: GitHub Actions, or another site's pipeline.
+    ci_checks: adv.codeHost === "other" || (adv.codeHost === "github" && adv.githubApps),
     guard_hooks_repo: adv.hookLocation === "repo",
     attribution_guard: adv.attributionGuard,
     deny_list_strict: adv.denyProfile === "strict",

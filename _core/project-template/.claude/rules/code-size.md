@@ -48,9 +48,12 @@ New code meets the table from its first commit. A new file or function that woul
 
 ## The check
 
-<!-- TOGGLE:code_host_local:off START -->
+<!-- TOGGLE:github_no_actions START -->
+`.github/scripts/size_check.py` measures the mechanical rows of these tables; no CI runs it here, so run `python .github/scripts/size_check.py` before each push: file and line length, and each function's length, complexity and parameters. Breaches the project had when the check was set up are recorded in `.github/size-check/baseline.txt` and may only shrink; any new hard breach fails the check, so fix it before you push. Delete a baseline line once its code complies; the check fails until you do, so a leftover line cannot excuse the next breach. A breach under one of the exceptions above goes in `.github/size-check/exceptions.txt` with its reason. `--report` lists every finding, soft ones included. Edit the tables here, not in the script: it reads them from this file.
+<!-- TOGGLE:github_no_actions END -->
+<!-- TOGGLE:ci_checks START -->
 `.github/scripts/size_check.py` measures the mechanical rows of these tables on every PR (`.github/workflows/size-check.yml`): file and line length, and each function's length, complexity and parameters. Breaches the project had when the check was set up are recorded in `.github/size-check/baseline.txt` and may only shrink; any new hard breach fails the PR. Delete a baseline line once its code complies; the check fails until you do, so a leftover line cannot excuse the next breach. A breach under one of the exceptions above goes in `.github/size-check/exceptions.txt` with its reason. `--report` lists every finding, soft ones included. Edit the tables here, not in the script: it reads them from this file.
-<!-- TOGGLE:code_host_local:off END -->
+<!-- TOGGLE:ci_checks END -->
 <!-- TOGGLE:code_host_local START -->
 `.github/scripts/size_check.py` measures the mechanical rows of these tables; run `python .github/scripts/size_check.py` before each save point: file and line length, and each function's length, complexity and parameters. Breaches the project had when the check was set up are recorded in `.github/size-check/baseline.txt` and may only shrink; any new hard breach fails the check, so fix it before you make the save point. Delete a baseline line once its code complies; the check fails until you do, so a leftover line cannot excuse the next breach. A breach under one of the exceptions above goes in `.github/size-check/exceptions.txt` with its reason. `--report` lists every finding, soft ones included. Edit the tables here, not in the script: it reads them from this file.
 <!-- TOGGLE:code_host_local END -->
