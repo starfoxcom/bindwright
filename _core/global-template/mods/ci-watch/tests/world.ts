@@ -51,6 +51,8 @@ export type Seen = {
   session: string
   /** How many workflows GitHub lists for the repo (default 1). */
   workflows?: number
+  /** The PR has no check at all: `gh pr checks` says so on stderr and exits non-zero. */
+  isCheckless?: boolean
 }
 
 export function world(on: On) {
@@ -110,7 +112,7 @@ export function world(on: On) {
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)
     if (args.includes('pr checks')) seen.checksRead++
     if (args.includes('pr checks')) await seen.duringChecks?.()
-    if (args.includes('pr checks') && seen.isChecksDown) {
+    if (args.includes('pr checks') && (seen.isChecksDown || seen.isCheckless)) {
       return {
         value: {
           exitCode: 1,
