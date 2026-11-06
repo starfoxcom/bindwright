@@ -60,8 +60,8 @@ test('a session that resumes by itself compacts once its wrap-up turn ends, and 
 
 test('a fill just under the compaction setting is not rounded up past it', async ($, on) => {
   const seen = world(on)
-  // 24.6% of a 500k compaction window, under the default 25%.
-  seen.context = { ...seen.context, tokens: 123_000, breakdown: { rawMaxTokens: 500_000 } as never }
+  // 34.8% of a 500k compaction window, under the default 35%.
+  seen.context = { ...seen.context, tokens: 174_000, breakdown: { rawMaxTokens: 500_000 } as never }
   await crossAndWrapUp($, seen)
   await endTurn($)
   await seen.clock.advance(1_000)

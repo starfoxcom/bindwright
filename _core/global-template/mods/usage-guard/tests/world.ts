@@ -67,7 +67,7 @@ export function world(on: On, root = 'C:/Repos/my-game'): World {
     limits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: RESET }],
     claims: new Set(),
     sessionId: 'sess-a',
-    // 10% of a 1M compaction window: below the default 25%.
+    // 10% of a 1M compaction window: below the default 35%.
     context: { window: 1_000_000, tokens: 100_000, breakdown: { rawMaxTokens: 1_000_000 } as never },
     compactions: [],
     compactResult: { messages: SUMMARY, tokensBefore: 400_000, tokensAfter: 30_000 },

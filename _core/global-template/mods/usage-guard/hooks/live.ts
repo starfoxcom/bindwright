@@ -41,7 +41,7 @@ export type Live = {
 export function applyValues(live: Live, values: Record<string, unknown>): void {
   live.wrapUpAt = Number(values.wrapUpAt ?? 90)
   live.delayMinutes = Number(values.wakeDelayMinutes ?? 2)
-  live.compactAbovePercent = Number(values.compactAbovePercent ?? 25)
+  live.compactAbovePercent = Number(values.compactAbovePercent ?? 35)
   live.catchUpMinutes = Number(values.catchUpMinutes ?? 30)
 }
 
@@ -54,7 +54,7 @@ export function newLive(): Live {
     handled: new Set(),
     wrapUpAt: 90,
     delayMinutes: 2,
-    compactAbovePercent: 25,
+    compactAbovePercent: 35,
     catchUpMinutes: 30,
     isArmsDirMade: false,
   }

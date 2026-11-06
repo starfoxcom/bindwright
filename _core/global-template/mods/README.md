@@ -38,7 +38,7 @@ Options are `userConfig` fields in each mod's `.claude-plugin/plugin.json`: thos
 | `tasks` | `keepGoing` | `true` | When a turn ends with an open task that is not on hold (nor waiting on another open task), and no CI watch or plan-limit pause will wake the session (nor was such a pause's automatic resume cancelled before its reset), the model is prompted a few seconds later to carry on. Never after an interrupted turn; stops after two prompts in a row that change nothing on the list, until the next prompt of your own. |
 | `usage-guard` | `wrapUpAt` | `90` | Percentage of any plan window (5-hour, weekly) at which sessions wrap up. |
 | `usage-guard` | `wakeDelayMinutes` | `2` | How long after the reset sessions resume. |
-| `usage-guard` | `compactAbovePercent` | `25` | A session that will resume on its own compacts after its wrap-up when its context is above this share and the reset is more than an hour away. `0` turns it off. |
+| `usage-guard` | `compactAbovePercent` | `35` | A session that will resume on its own compacts after its wrap-up when its context is above this share and the reset is more than an hour away. `0` turns it off. |
 | `usage-guard` | `catchUpMinutes` | `30` | A session armed to resume that was closed at its wake resumes when it starts again within this many minutes of the wake; later, it only says what it missed. `0` never catches up. |
 | `session-facts` | `planWarnAt` | `75` | Plan usage (%) at which a window turns yellow and shows when it resets; it turns red at `usage-guard`'s `wrapUpAt`. |
 | `session-facts` | `cacheWarnMinutes` | `10` | The prompt-cache countdown shows once this few minutes are left. |
