@@ -75,7 +75,7 @@ function show(total) {
     rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
     deep: total.deep,
   });
-  const largest = Math.max(...total.rows.map((row) => row.checked));
+  const largest = Math.max(...total.rows.map((row) => row.merged));
   chart.replaceChildren(...total.rows.map((row, index) => projectRow(row, index, largest)));
   legend.replaceChildren(...PARTS.map(legendItem));
   counts.hidden = false;

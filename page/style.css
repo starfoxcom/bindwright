@@ -161,6 +161,7 @@ h1 {
 }
 .projects.counted .project-bar { transform: scaleX(1); }
 .project-bar i { flex: none; height: 100%; }
+.seg-skipped { background: var(--info); }
 .seg-ok { background: var(--accent); }
 .seg-fixed { background: var(--warn); }
 .seg-stalled { background: var(--del); }

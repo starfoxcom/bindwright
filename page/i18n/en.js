@@ -66,8 +66,9 @@ export default {
   "mods.scene.usage-guard.save": "Saved your work in progress and paused until the reset.",
   "mods.scene.usage-guard.resume": "Limit reset. Resuming where it stopped.",
 
-  "evidence.checked": { one: "{count} checked", other: "{count} checked" },
+  "evidence.mergedCount": { one: "{count} merged", other: "{count} merged" },
   "evidence.firstTry": "{percent}% first try",
+  "evidence.legend.skipped": "skipped the review",
   "evidence.legend.passed": "passed the first review",
   "evidence.legend.fixed": "fixed in 1 to 5 rounds",
   "evidence.legend.stalled": "took 6 rounds or more",
