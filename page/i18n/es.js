@@ -180,7 +180,8 @@ export default {
   "mods.scene.usage-guard.save": "Guardé tu trabajo en curso y hice pausa hasta el reinicio.",
   "mods.scene.usage-guard.resume": "Se reinició el límite. Retomo donde me quedé.",
   "evidence.title": "Lo que ha detectado en proyectos reales hasta ahora",
-  "evidence.checked.label": "pull requests que la IA revisó antes de integrarse",
+  "evidence.merged.label": "pull requests integrados, todos pasaron por el filtro de revisión de la IA",
+  "evidence.skipped.label": "no necesitaron revisión, casi todos solo de documentación, sin código que revisar",
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
   "evidence.fixed.label": "se detuvieron de 1 a 5 rondas hasta corregir el problema",
   "evidence.stalled.label": "tomaron 6 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
@@ -193,9 +194,7 @@ export default {
   "evidence.legend.passed": "pasaron la primera revisión",
   "evidence.legend.fixed": "corregidos en 1 a 5 rondas",
   "evidence.legend.stalled": "tomaron 6 rondas o más",
-  "evidence.detail": "De {merged} pull requests integrados, {skipped} no pasaron por revisión, "
-    + "casi todos solo de documentación, "
-    + "lo que deja los {checked} de arriba. Los {held} detenidos, en amarillo y rojo, tomaron "
+  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y rojo, tomaron "
     + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {

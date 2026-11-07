@@ -50,10 +50,12 @@ export function onEnter(node, start) {
   observer.observe(node);
 }
 
-// The four big numbers: checked, then passed first try, fixed in a few rounds and stalled.
+// The five big numbers: merged, then the parts that add up to it: skipped the review,
+// passed first try, fixed in a few rounds and stalled.
 function totalsOf(total) {
   return {
-    checked: total.checked,
+    merged: total.merged,
+    skipped: total.merged - total.checked,
     firstTry: total.checked - total.caught,
     fixed: total.caught - total.stalled,
     stalled: total.stalled,
@@ -72,8 +74,6 @@ function show(total) {
     held: total.caught,
     rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
     deep: total.deep,
-    skipped: total.merged - total.checked,
-    merged: total.merged,
   });
   const largest = Math.max(...total.rows.map((row) => row.checked));
   chart.replaceChildren(...total.rows.map((row, index) => projectRow(row, index, largest)));
