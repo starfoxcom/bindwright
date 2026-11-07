@@ -66,15 +66,19 @@ export default {
   "mods.scene.usage-guard.save": "Saved your work in progress and paused until the reset.",
   "mods.scene.usage-guard.resume": "Limit reset. Resuming where it stopped.",
 
-  "evidence.checked": { one: "{count} checked", other: "{count} checked" },
+  "evidence.mergedCount": { one: "{count} merged", other: "{count} merged" },
   "evidence.firstTry": "{percent}% first try",
+  "evidence.part.skipped": "skipped",
+  "evidence.part.passed": "first try",
+  "evidence.part.fixed": "fixed in 1 to 5 rounds",
+  "evidence.part.stalled": "fixed after deeper research",
+  "evidence.legend.skipped": "skipped the review",
   "evidence.legend.passed": "passed the first review",
   "evidence.legend.fixed": "fixed in 1 to 5 rounds",
   "evidence.legend.stalled": "took 6 rounds or more",
-  "evidence.detail": "Of {merged} merged pull requests, {skipped} skipped the review, mostly docs-only changes, "
-    + "which leaves the {checked} above. The {held} held back, yellow and red, took {rounds} fix rounds "
-    + "on average. {deep} of the {checked} touched risky code, like security or saved data, and also got "
-    + "a deeper review.",
+  "evidence.detail": "The AI reviewed {checked} of them. The {held} held back, yellow and red, took "
+    + "{rounds} fix rounds on average. {deep} of the {checked} touched risky code, like security or "
+    + "saved data, and also got a deeper review.",
   "evidence.note": {
     one: "Bindwright puts an AI reviewer on every pull request. "
       + "These are its results so far in {count} project whose owner chose to share anonymous counts.",

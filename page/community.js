@@ -24,7 +24,8 @@ function validated(total) {
   const fields = ["projects", "checked", "caught", "deep", "merged", "stalled", "rounds"];
   if (!total || !fields.every((field) => isCount(total[field])) || !Array.isArray(total.top)) return null;
   const top = total.top.filter((p) => KINDS.includes(p?.kind) && isCount(p.checked) && p.checked > 0
-    && isCount(p.caught) && p.caught <= p.checked && isCount(p.stalled) && p.stalled <= p.caught);
+    && isCount(p.merged) && p.merged >= p.checked && isCount(p.caught) && p.caught <= p.checked
+    && isCount(p.stalled) && p.stalled <= p.caught);
   return { ...total, top };
 }
 
@@ -37,7 +38,8 @@ function labelled(top) {
     seen[project.kind] = (seen[project.kind] ?? 0) + 1;
     const name = t(`evidence.kind.${project.kind}`);
     const label = totals[project.kind] > 1 ? `${name} ${seen[project.kind]}` : name;
-    return { label, checked: project.checked, caught: project.caught, stalled: project.stalled };
+    const { merged, checked, caught, stalled } = project;
+    return { label, merged, checked, caught, stalled };
   });
 }
 
@@ -52,6 +54,6 @@ async function load() {
 
 /**
  * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled,
- * rounds, rows }`, or null. Each row is `{ label, checked, caught, stalled }`, for bars.js.
+ * rounds, rows }`, or null. Each row is `{ label, merged, checked, caught, stalled }`, for bars.js.
  */
 export const shared = load().catch(() => null);
