@@ -68,6 +68,10 @@ export default {
 
   "evidence.mergedCount": { one: "{count} merged", other: "{count} merged" },
   "evidence.firstTry": "{percent}% first try",
+  "evidence.part.skipped": "skipped",
+  "evidence.part.passed": "first try",
+  "evidence.part.fixed": "fixed in 1 to 5 rounds",
+  "evidence.part.stalled": "fixed after deeper research",
   "evidence.legend.skipped": "skipped the review",
   "evidence.legend.passed": "passed the first review",
   "evidence.legend.fixed": "fixed in 1 to 5 rounds",
