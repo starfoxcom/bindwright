@@ -77,8 +77,8 @@ export default {
   "evidence.legend.fixed": "fixed in 1 to 5 rounds",
   "evidence.legend.stalled": "took 6 rounds or more",
   "evidence.detail": "The AI reviewed {checked} of them. The {held} held back, yellow and red, took "
-    + "{rounds} fix rounds on average. {deep} of the {checked} touched risky code, like security or saved data, and also got "
-    + "a deeper review.",
+    + "{rounds} fix rounds on average. {deep} of the {checked} touched risky code, like security or "
+    + "saved data, and also got a deeper review.",
   "evidence.note": {
     one: "Bindwright puts an AI reviewer on every pull request. "
       + "These are its results so far in {count} project whose owner chose to share anonymous counts.",

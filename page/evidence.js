@@ -1,6 +1,7 @@
 // The evidence section's counts, all from the projects whose owners chose to share them:
-// the four totals count up once and a bar per project grows with its checked pull
-// requests, split by how many review rounds they took. The counts stay
+// the five totals count up once and a bar per project grows with its merged pull
+// requests, split into the ones that skipped the review and how many review rounds the
+// rest took. The counts stay
 // hidden until the counter answers with at least one project. Each animation starts as
 // its block enters the view, while it fades in; reduced motion shows the final state.
 import { t } from "./i18n/index.js";

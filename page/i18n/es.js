@@ -185,7 +185,8 @@ export default {
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
   "evidence.fixed.label": "se detuvieron de 1 a 5 rondas hasta corregir el problema",
   "evidence.stalled.label": "tomaron 6 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
-  "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión y cuántas rondas tomó cada uno en pasar",
+  "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión "
+    + "y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",
   "evidence.wrong": "Qué salió mal",
   "evidence.now": "Qué hace Bindwright ahora",

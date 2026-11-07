@@ -420,7 +420,7 @@ footer {
   footer { padding: 20px 16px 32px; }
 }
 
-/* Narrow screens: the four totals stack, each number on its own line above its label, so a
+/* Narrow screens: the five totals stack, each number on its own line above its label, so a
    growing number has the whole width and never pushes its label. */
 @media (max-width: 720px) {
   .stats { grid-template-columns: minmax(0, 1fr); gap: 24px; margin-top: 28px; }

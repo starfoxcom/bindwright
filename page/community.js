@@ -24,7 +24,8 @@ function validated(total) {
   const fields = ["projects", "checked", "caught", "deep", "merged", "stalled", "rounds"];
   if (!total || !fields.every((field) => isCount(total[field])) || !Array.isArray(total.top)) return null;
   const top = total.top.filter((p) => KINDS.includes(p?.kind) && isCount(p.checked) && p.checked > 0
-    && isCount(p.merged) && p.merged >= p.checked && isCount(p.caught) && p.caught <= p.checked && isCount(p.stalled) && p.stalled <= p.caught);
+    && isCount(p.merged) && p.merged >= p.checked && isCount(p.caught) && p.caught <= p.checked
+    && isCount(p.stalled) && p.stalled <= p.caught);
   return { ...total, top };
 }
 
