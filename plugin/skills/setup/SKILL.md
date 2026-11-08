@@ -83,6 +83,7 @@ Ask with the question tool, in two rounds. Round one:
 
 - **Where does the code live?** GitHub; GitHub, but the organization, job or client blocks apps, Actions and boards; just this computer; or another site (GitLab, Bitbucket and the like). Recommend GitHub when the remote is on GitHub, and just this computer in plain mode or when there is no remote. When the remote is on GitHub but `gh auth status` fails for someone who knows Git, ask in one line whether their organization blocks the GitHub CLI and apps; on a yes, recommend the blocked answer below. GitHub with apps, Actions and boards blocked saves `"codeHost": "github"` and `"githubApps": false`: setup keeps branches, pull requests and issues and writes no workflow, review gate or board, plus `.claude/rules/code-host.md`, which says what was left out and that the checks run on this computer before each push. Round two offers only the size check (which then runs by hand) and saves `"aiReview": false` and `"deepEscalation": false`, and "Where the work state lives" offers only GitHub issues without a board and the hand-off file. Just this computer needs no account: the project's history stays in this folder, so say to keep a backup of it. For another site, say in one line that only GitHub is supported so far: setup writes the parts that work anywhere, plus `.claude/rules/code-host.md`, which lists the GitHub-only parts and how each session reads them on that host. Save `codeHost` as `github`, `local` or `other`. For `local` and `other`, the AI reviews and the board need GitHub: round two offers only the size check and saves `"aiReview": false` and `"deepEscalation": false`, and "Where the work state lives" is the hand-off file (`"tracker": "file"`), asked nothing. Just this computer is one person's project: skip "Who works on it?" and save `"team": false`.
 - **Who works on it?** Just me, or a team.
+- **Do pull requests need named reviewers?** Asked only for a team project on GitHub, after round one. No (recommended when nothing on GitHub asks for one), or yes: ask for each reviewer's GitHub name, or `<org>/<team>` for a team, up to 10, and save them as `"prReviewers": ["<name>", ...]`. Setup then has each PR request those reviewers and merge only once GitHub reports it approved. No saves `"prReviewers": null`.
 - **Whose project is it?** Mine, or someone else's (a client or an employer).
 - **Private or public?** Private, or public. Recommend private for someone else's project, public otherwise.
 - **AI credit in commits?** Keep it out (recommended): commits, PRs and comments carry no "generated with" lines or AI co-author credit. Or allow it.
@@ -162,6 +163,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "codeResearch": "<the computer's code-search tool>",
     "codeHost": "github",
     "githubApps": true,
+    "prReviewers": null,
     "tracker": "github",
     "trackerProject": "<owner>/<number> or null",
     "trackerRepo": "<owner>/<name> or null",
