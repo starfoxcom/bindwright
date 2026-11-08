@@ -8,6 +8,29 @@
 <!-- TOGGLE:attribution_guard END -->
 <!-- TOGGLE:guard_hooks_repo START -->
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'test -f \"$0\" && exec sh \"$0\" session-title' \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'test -f \"$0\" && exec sh \"$0\" session-title' \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell",

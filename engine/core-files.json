@@ -3,6 +3,7 @@
   ".claude/hooks/no-ai-attribution.py",
   ".claude/hooks/push-guard.py",
   ".claude/hooks/run-hook.sh",
+  ".claude/hooks/session-title.py",
   ".claude/rules/architecture/README.md",
   ".claude/rules/architecture/clean.md",
   ".claude/rules/architecture/ddd.md",
