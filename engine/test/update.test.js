@@ -16,44 +16,18 @@ import { bind } from "../bind.js";
 import { defaults } from "../model.js";
 import { applyFiles } from "../apply.js";
 import { planUpdate, MERGE_LABELS } from "../update.js";
+import { PRISTINE, STAGING, makeRepo } from "./bound-repo.js";
 import { python } from "./python.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const coreFiles = JSON.parse(readFileSync(join(engine, "core-files.json"), "utf8"));
 const readFile = async (p) => readFileSync(join(engine, "..", p), "utf8");
-const PRISTINE = ".bindwright/pristine.json";
-const STAGING = ".bindwright/incoming/";
 const RULE = ".claude/rules/task-tracking.md";
 const OTHER = ".claude/rules/testing.md";
 const THIRD = ".claude/rules/git.md";
 
 const needsPython = { skip: !python && "needs Python 3.8+" };
 const engines = [[process.execPath, [join(engine, "cli.js")]], [python, [join(engine, "bind.py")]]];
-
-// A bound repo; `change(repo)` edits its files and its saved render.
-async function makeRepo(change) {
-  const root = mkdtempSync(join(tmpdir(), "update-"));
-  const files = await bind(defaults(), { readFile, coreFiles, year: 2026, version: "0.0.1" });
-  applyFiles([...files.entries()], root);
-  spawnSync("git", ["init", "-q"], { cwd: root });
-  const at = (p) => join(root, ...p.split("/"));
-  // Setup's merge step, for a repo that had none of the staged files.
-  for (const [dest, text] of files) {
-    if (dest.startsWith(STAGING)) writeFileSync(at(dest.slice(STAGING.length)), text);
-  }
-  rmSync(at(STAGING), { recursive: true, force: true });
-  const pristine = JSON.parse(readFileSync(at(PRISTINE), "utf8"));
-  const read = (p) => readFileSync(at(p), "utf8");
-  const write = (p, t) => {
-    mkdirSync(dirname(at(p)), { recursive: true });
-    writeFileSync(at(p), t);
-  };
-  const peek = (p) => (existsSync(at(p)) ? read(p) : null);
-  const repo = { pristine, read, write, peek, at };
-  change(repo);
-  writeFileSync(at(PRISTINE), `${JSON.stringify(pristine, null, 2)}\n`);
-  return repo;
-}
 
 // Both engines on identical copies; returns the JS repo and its report.
 async function update(change) {
