@@ -4,11 +4,13 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { browserProcesses, usesProfile } from "../../plugin/hooks/browser-cleanup.mjs";
 import { findBrowser } from "../../plugin/hooks/layout-check.mjs";
 
 const CLI = fileURLToPath(new URL("../../plugin/hooks/layout-check.mjs", import.meta.url));
@@ -152,4 +154,48 @@ test("a rotated chevron poking past its button is not overflowing text", { skip:
 test("a fixed header over content passes", { skip: SKIP }, () => {
   const run = runCheck(FIXED_HEADER_OVER_CONTENT);
   assert.equal(run.status, 0, run.stdout + run.stderr);
+});
+
+const SIGNAL_SKIP = SKIP || (process.platform === "win32" && "Windows sends no stop signal a run can catch");
+
+async function waitFor(find, ms) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const found = find();
+    if (found) return found;
+    if (Date.now() > deadline) throw new Error("timed out waiting");
+    await new Promise((done) => setTimeout(done, 200));
+  }
+}
+
+// The newest layout-check profile started at or after `startMs` whose browser is listening.
+function profileSince(startMs) {
+  const names = readdirSync(tmpdir()).filter((name) => {
+    const match = /^layout-check-(\d+)-[A-Za-z0-9]{6}$/.exec(name);
+    return match && Number(match[1]) >= startMs;
+  });
+  const listening = names.map((name) => join(tmpdir(), name))
+    .filter((folder) => existsSync(join(folder, "DevToolsActivePort")));
+  return listening[0];
+}
+
+test("a run stopped by a signal stops its browser and removes its profile", { skip: SIGNAL_SKIP }, async () => {
+  // A server that never answers keeps the run waiting for the page to load.
+  const server = createServer(() => {});
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const started = Date.now();
+  const run = spawn(process.execPath, [CLI, `http://127.0.0.1:${server.address().port}/`], { stdio: "ignore" });
+  const exited = new Promise((done) => run.once("exit", (code) => done(code)));
+  try {
+    const profile = await waitFor(() => profileSince(started), 30000);
+    await new Promise((done) => setTimeout(done, 1000));
+    run.kill("SIGTERM");
+    assert.equal(await exited, 143);
+    const left = browserProcesses().filter((p) => usesProfile(p.commandLine, profile));
+    assert.deepEqual(left, []);
+    assert.equal(existsSync(profile), false);
+  } finally {
+    run.kill("SIGKILL");
+    server.close();
+  }
 });

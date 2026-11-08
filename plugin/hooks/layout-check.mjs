@@ -10,10 +10,13 @@
 // layout-page.mjs.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  isRunning, killTree, profilePrefix, removeProfile, stopProfile, sweepStaleProfiles,
+} from "./browser-cleanup.mjs";
 import { pageCheckScript } from "./layout-page.mjs";
 
 const DEFAULT_WIDTHS = [390, 1280];
@@ -26,6 +29,8 @@ const PORT_TIMEOUT_MS = 30000;
 const CALL_TIMEOUT_MS = 30000;
 // How long the browser gets to close itself before it is killed.
 const CLOSE_GRACE_MS = 2000;
+// A run stopped by one of these still stops its browser; the exit code is 128 + the signal.
+const STOP_SIGNALS = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
 const USAGE = "usage: layout-check.mjs <url> [--widths 390,1280] [--height 900]";
 const LINUX_BROWSER_NAMES = [
   "google-chrome",
@@ -221,25 +226,65 @@ function waitForExit(child, ms) {
   });
 }
 
-async function stopBrowser(child) {
-  // A child whose spawn failed has no pid and nothing to stop.
-  if (child.pid === undefined) return;
-  await waitForExit(child, CLOSE_GRACE_MS);
-  if (child.exitCode === null && child.signalCode === null) child.kill();
+async function waitWhileRunning(pid, ms) {
+  const deadline = Date.now() + ms;
+  while (isRunning(pid) && Date.now() < deadline) await sleep(100);
 }
 
-function removeFolder(folder) {
+// The browser's own process id. On Windows the spawned msedge.exe only launches the browser
+// and exits, so the child's pid cannot stop it. Null when the browser does not say.
+async function browserPid(client) {
   try {
-    rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    const { processInfo } = await client.call("SystemInfo.getProcessInfo");
+    return processInfo.find((info) => info.type === "browser")?.id ?? null;
   } catch {
-    // A folder the browser still holds open is left to the OS temp cleaner.
+    return null;
   }
 }
 
-// Starts the browser, hands its client to `use`, and always closes the browser and its folder.
+// Kills whatever is left of the browser at once, for a run stopped by a signal.
+function stopNow(browser, userDataDir) {
+  if (browser.child?.pid !== undefined && browser.child.exitCode === null) browser.child.kill();
+  if (browser.pid === null) stopProfile(userDataDir);
+  else killTree(browser.pid);
+  removeProfile(userDataDir);
+}
+
+// Stops the browser when the run gets a stop signal; returns the call that removes the handlers.
+function stopOnSignals(stop) {
+  const handlers = Object.entries(STOP_SIGNALS).map(([signal, code]) => {
+    const handler = () => {
+      stop();
+      process.exit(code);
+    };
+    process.once(signal, handler);
+    return [signal, handler];
+  });
+  return () => {
+    for (const [signal, handler] of handlers) process.off(signal, handler);
+  };
+}
+
+async function stopBrowser(browser, userDataDir) {
+  const { child, pid } = browser;
+  // A child whose spawn failed has no pid, and no browser started.
+  if (child?.pid === undefined) return removeProfile(userDataDir);
+  await waitForExit(child, CLOSE_GRACE_MS);
+  if (child.exitCode === null && child.signalCode === null) child.kill();
+  if (pid === null) return stopProfile(userDataDir);
+  await waitWhileRunning(pid, CLOSE_GRACE_MS);
+  if (isRunning(pid)) killTree(pid);
+  removeProfile(userDataDir);
+}
+
+// Starts the browser, hands its client to `use`, and always stops the browser and removes its
+// profile, whether the check passes, fails, throws or gets a stop signal. A run killed outright
+// cannot clean up, so each run first stops the browsers such runs left.
 async function withBrowser(browserPath, use) {
-  const userDataDir = mkdtempSync(join(tmpdir(), "layout-check-"));
-  const browser = { child: null, spawnError: null };
+  sweepStaleProfiles(tmpdir());
+  const userDataDir = mkdtempSync(join(tmpdir(), profilePrefix(Date.now())));
+  const browser = { child: null, spawnError: null, pid: null };
+  const removeHandlers = stopOnSignals(() => stopNow(browser, userDataDir));
   try {
     browser.child = spawn(browserPath, launchArgs(userDataDir), { stdio: "ignore" });
     browser.child.on("error", (error) => {
@@ -249,14 +294,15 @@ async function withBrowser(browserPath, use) {
     const socket = await openSocket(`ws://127.0.0.1:${port}${path}`);
     const client = createClient(socket);
     try {
+      browser.pid = await browserPid(client);
       return await use(client);
     } finally {
       await client.call("Browser.close", {}, undefined, CLOSE_GRACE_MS).catch(() => {});
       socket.close();
     }
   } finally {
-    await stopBrowser(browser.child);
-    removeFolder(userDataDir);
+    removeHandlers();
+    await stopBrowser(browser, userDataDir);
   }
 }
 
