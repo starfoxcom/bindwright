@@ -94,6 +94,8 @@ Round two, each with "All of them (recommended)" first and "Let me pick" second:
 
 For a "Let me pick", ask one multiple-choice question with that group's items; what is not picked is off. A deeper review needs the AI review: if only the deeper review is picked, say it needs the AI review and turn both on.
 
+With `"githubApps": false` or another site, no CI can run the AI reviews, so the checks question offers **a local review before each merge** in their place, off unless picked: two fresh reviewers check each change on this computer before it merges, with the verdict rule the CI reviews use, and nothing about them reaches GitHub or the other site. Say in one line that each review round uses the plan's model time. Picked, it saves `"localReview": true` and writes `.claude/rules/local-review.md`.
+
 ### Where the work state lives
 
 GitHub works here when the repo's remote is on GitHub and `gh auth status` works. When it does not, say why in one line and use the detailed hand-off file (`"tracker": "file"`). Otherwise ask the question below; with `"githubApps": false`, offer only its "GitHub issues only" and hand-off file choices, and skip the board:
@@ -162,6 +164,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "codeResearch": "<the computer's code-search tool>",
     "codeHost": "github",
     "githubApps": true,
+    "localReview": false,
     "tracker": "github",
     "trackerProject": "<owner>/<number> or null",
     "trackerRepo": "<owner>/<name> or null",
