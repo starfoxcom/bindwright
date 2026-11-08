@@ -36,11 +36,15 @@ Also offer to take out what setup changed outside those files: the `.claude/sett
 
 ## 3. Remove the files
 
+First read `advanced.localOnly` in `.bindwright/project.json`, since `state` removes that file.
+
 Run the engine with `--remove-files <repo root>`, passing on standard input `{"paths": [<every file the user agreed to remove>], "state": true}`. `state` removes `.bindwright/` last, with the saved answers, so a later `/bindwright:setup` starts fresh. It refuses a path setup did not write, one reached through a link, and one that is not a plain file, before removing anything; on `{"error": ...}`, show the message and stop. Otherwise it prints `{"removed": [...], "folders": [...], "state": true}`: the files removed and the folders that were left empty and removed with them.
+
+When `localOnly` was true, run the engine with `--local-exclude <repo root> --undo`. It takes setup's block out of the clone's `.git/info/exclude` and keeps the user's own lines; it prints `{"exclude": "<file>", "removed": true}`, or `false` when the block was already gone.
 
 When anonymous review counts are on (`node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" status`), leave this repo out of them with `counts.mjs project <repo root> none`.
 
-Nothing is committed. Say that `git status` shows the removal, and offer to commit it as one commit (`chore: remove Bindwright`), which the user can revert to get the setup back.
+Nothing is committed. Say that `git status` shows the removal, and offer to commit it as one commit (`chore: remove Bindwright`), which the user can revert to get the setup back. With `localOnly`, the assistant's files were never in git, so there is nothing of theirs to commit: say so, and offer the commit only for a shared file the user kept and committed earlier.
 
 ## 4. This computer
 
