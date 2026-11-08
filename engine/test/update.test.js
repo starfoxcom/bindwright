@@ -12,16 +12,11 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bind } from "../bind.js";
-import { defaults } from "../model.js";
-import { applyFiles } from "../apply.js";
 import { planUpdate, MERGE_LABELS } from "../update.js";
 import { PRISTINE, STAGING, makeRepo } from "./bound-repo.js";
 import { python } from "./python.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
-const coreFiles = JSON.parse(readFileSync(join(engine, "core-files.json"), "utf8"));
-const readFile = async (p) => readFileSync(join(engine, "..", p), "utf8");
 const RULE = ".claude/rules/task-tracking.md";
 const OTHER = ".claude/rules/testing.md";
 const THIRD = ".claude/rules/git.md";
