@@ -3,7 +3,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join, dirname } from "node:path";
@@ -392,6 +394,23 @@ test("a removed mod leaves the folder list, keeps the user's other entries, and 
     assert.ok(!existsSync(target));
     assert.deepEqual(home(dir, "remove-mod", "session-facts").out,
       { removed: target, unlisted: false, deleted_folder: false });
+  });
+});
+
+test("a linked mod folder is refused before its entry leaves the folder list", { skip }, () => {
+  withHome((dir) => {
+    const real = join(dir, "pack", "tasks");
+    const target = join(dir, ".claude", "mods", "tasks");
+    mkdirSync(real, { recursive: true });
+    mkdirSync(dirname(target), { recursive: true });
+    // A junction on Windows, which os.path.islink does not report.
+    symlinkSync(real, target, process.platform === "win32" ? "junction" : "dir");
+    writeSettings(dir, { env: { CLAUDE_CODE_PLUGIN_DIRS: target } });
+    const removed = home(dir, "remove-mod", "tasks");
+    assert.equal(removed.status, 1, removed.stderr);
+    assert.match(removed.out.error, /The mod folder is a link/);
+    assert.deepEqual(settings(dir).env, { CLAUDE_CODE_PLUGIN_DIRS: target });
+    assert.ok(existsSync(real));
   });
 });
 

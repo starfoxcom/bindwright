@@ -28,6 +28,8 @@ import shutil
 import subprocess
 import sys
 
+from apply import _is_link
+
 # Runs the hook file by path. A missing file then fails with exit 1, which the
 # CLI reports and moves past; a plain `python FILE` exits 2, which blocks
 # every command. -I keeps the project folder off the import path.
@@ -337,7 +339,11 @@ def _plain_name(name, kind):
 def remove_mod(home, name):
     """Takes a mod out of CLAUDE_CODE_PLUGIN_DIRS and deletes its folder under mods/."""
     target = os.path.normpath(os.path.join(_claude(home), "mods", _plain_name(name, "a mod")))
-    if os.path.islink(target):
+    try:
+        is_link = _is_link(os.lstat(target))
+    except FileNotFoundError:
+        is_link = False
+    if is_link:
         raise HomeError("The mod folder is a link; remove it by hand: " + target)
     path, data = _load(home)
     env = _section(data, "env", dict, path)
