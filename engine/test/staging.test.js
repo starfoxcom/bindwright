@@ -82,7 +82,22 @@ for (const [name, clean] of ENGINES) {
     try {
       assert.deepEqual(run(clean, repo), { status: 0, result: { removed: [] } });
       mkdirSync(join(repo, ".bindwright", "global"), { recursive: true });
+      writeFileSync(join(repo, ".bindwright", "project.json"), "{}");
       assert.deepEqual(run(clean, repo), { status: 0, result: { removed: [".bindwright/global"] } });
+      assert.equal(existsSync(join(repo, ".bindwright", "project.json")), true);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test(`${name}: a .bindwright left empty goes too, as outside a repo`, { skip }, () => {
+    const repo = mkdtempSync(join(tmpdir(), "staging-"));
+    try {
+      mkdirSync(join(repo, ".bindwright", "global", "hooks"), { recursive: true });
+      assert.deepEqual(run(clean, repo), {
+        status: 0, result: { removed: [".bindwright/global", ".bindwright"] },
+      });
+      assert.equal(existsSync(join(repo, ".bindwright")), false);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

@@ -2,7 +2,7 @@
 // .bindwright/incoming/ (files to merge by hand) and .bindwright/global/ (files for ~/.claude).
 // The Python twin is staging.py.
 
-import { lstatSync, rmSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, rmdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** The staging folders, relative to the repo root, in the order they are removed. */
@@ -31,16 +31,20 @@ function checkFolder(path, relative) {
 /**
  * Removes the staging folders of the repo at `folder` and returns { removed: [...] }, the
  * relative paths it removed. A folder that is missing is skipped. A link or a file where a
- * folder should be stops the run before anything is removed.
+ * folder should be stops the run before anything is removed. A .bindwright folder left empty,
+ * as setup's global path leaves one outside a repo, goes too.
  */
 export function cleanStaging(folder) {
   // The repo root itself may be a link to the real folder; only the entries inside are guarded.
   const repo = statSync(folder, { throwIfNoEntry: false });
   if (repo === undefined || !repo.isDirectory()) throw new Error(`${folder} is not a folder`);
-  if (!checkFolder(join(folder, ".bindwright"), ".bindwright")) return { removed: [] };
+  const own = join(folder, ".bindwright");
+  if (!checkFolder(own, ".bindwright")) return { removed: [] };
   const present = STAGING_FOLDERS.filter((relative) => checkFolder(join(folder, relative), relative));
   for (const relative of present) {
     rmSync(join(folder, relative), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
-  return { removed: present };
+  if (readdirSync(own).length > 0) return { removed: present };
+  rmdirSync(own);
+  return { removed: [...present, ".bindwright"] };
 }

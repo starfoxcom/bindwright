@@ -49,14 +49,19 @@ def clean_staging(folder):
     """Removes the staging folders of the repo at `folder`; returns {"removed": [...]}.
 
     A folder that is missing is skipped. A link or a file where a folder should be
-    stops the run before anything is removed.
+    stops the run before anything is removed. A .bindwright folder left empty, as
+    setup's global path leaves one outside a repo, goes too.
     """
     # The repo root itself may be a link to the real folder; only the entries inside are guarded.
     if not os.path.isdir(folder):
         raise ValueError(f"{folder} is not a folder")
-    if not _check_folder(os.path.join(folder, ".bindwright"), ".bindwright"):
+    own = os.path.join(folder, ".bindwright")
+    if not _check_folder(own, ".bindwright"):
         return {"removed": []}
     present = [r for r in STAGING_FOLDERS if _check_folder(os.path.join(folder, r), r)]
     for relative in present:
         shutil.rmtree(os.path.join(folder, relative))
-    return {"removed": present}
+    if os.listdir(own):
+        return {"removed": present}
+    os.rmdir(own)
+    return {"removed": present + [".bindwright"]}

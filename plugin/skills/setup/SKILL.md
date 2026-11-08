@@ -250,7 +250,7 @@ The hooks need a system Python: run `home.py find-python` once. On an error, ski
 
 After a hook install, check it works: pipe `{"tool_name": "Bash", "tool_input": {"command": "git push -qf origin main"}}` into the registered command and arguments on standard input, writing no file (`home.py` printed the settings path; the entry is the last one under `hooks.PreToolUse`). The push guard must exit 2.
 
-Then remove the staging folders: run the engine with `--clean-staging <repo root>` (never `rm -rf`, which the project's settings deny). It removes `.bindwright/incoming/` and `.bindwright/global/`, prints `{"removed": [...]}`, and refuses a folder that is a link; on `{"error": ...}`, show the message and say which folder to remove by hand. When the user left a staged file for later, skip this and name the files still waiting in `.bindwright/incoming/`.
+Then remove the staging folders: run the engine with `--clean-staging <repo root>` (never `rm -rf`, which the project's settings deny). It removes `.bindwright/incoming/` and `.bindwright/global/`, prints `{"removed": [...]}`, and refuses a folder that is a link; on `{"error": ...}`, show the message and say which folder to remove by hand. A `.bindwright/` it leaves empty goes too, as outside a repo. When `.bindwright/incoming/` still holds files, skip this and name them instead, since the command would remove them unsettled: files the user left for later, or files from an earlier setup that stopped, which the `global` path and `/bindwright:join` never settle.
 
 ## 8. Finish
 
