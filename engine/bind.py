@@ -15,7 +15,7 @@
 #   python engine/bind.py --export DIR < choices.json    -> the project's setup object written (share.py)
 #   python engine/bind.py --remember DIR --layer L < choices.json -> one person's choices written to layer L
 #   python engine/bind.py --doctor DIR                   -> a health check of that repo and this machine (doctor.py)
-#   python engine/bind.py --clean-staging DIR            -> {"removed": [...]}, setup's staging folders (staging.py)
+#   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
 # A failed bind gives {"error": message} and, alone, exit status 1.
 
 import json
@@ -381,7 +381,7 @@ def _report(argv, read_file):
 def _clean_staging(argv):
     """--clean-staging DIR: removes setup's staging folders from that repo."""
     try:
-        return clean_staging(_option(argv, "--clean-staging"))
+        return clean_staging(_option(argv, "--clean-staging"), "--discard-incoming" in argv)
     except Exception as e:  # every failure is reported, as the JS engine throws it
         return {"error": str(e)}
 

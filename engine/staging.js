@@ -28,23 +28,39 @@ function checkFolder(path, relative) {
   return true;
 }
 
+// The files under `path`, relative to it with "/" between parts, sorted. Links inside are
+// listed as files, never followed.
+function filesUnder(path, prefix = "") {
+  return readdirSync(path, { withFileTypes: true })
+    .flatMap((entry) => (entry.isDirectory()
+      ? filesUnder(join(path, entry.name), `${prefix}${entry.name}/`)
+      : [`${prefix}${entry.name}`]))
+    .sort();
+}
+
 /**
- * Removes the staging folders of the repo at `folder` and returns { removed: [...] }, the
- * relative paths it removed. A folder that is missing is skipped. A link or a file where a
- * folder should be stops the run before anything is removed. A .bindwright folder left empty,
- * as setup's global path leaves one outside a repo, goes too.
+ * Removes the staging folders of the repo at `folder`. .bindwright/global/ always goes;
+ * .bindwright/incoming/ goes only when no file waits in it, or with `discardIncoming`, so a
+ * merge the user has not settled is never lost. Returns { removed, unsettled }: the relative
+ * paths removed, and the files kept waiting in .bindwright/incoming/. A missing folder is
+ * skipped; a link or a file where a folder should be stops the run before anything is
+ * removed. A .bindwright folder left empty, as setup's global path leaves one outside a repo,
+ * goes too.
  */
-export function cleanStaging(folder) {
+export function cleanStaging(folder, { discardIncoming = false } = {}) {
   // The repo root itself may be a link to the real folder; only the entries inside are guarded.
   const repo = statSync(folder, { throwIfNoEntry: false });
   if (repo === undefined || !repo.isDirectory()) throw new Error(`${folder} is not a folder`);
   const own = join(folder, ".bindwright");
-  if (!checkFolder(own, ".bindwright")) return { removed: [] };
+  if (!checkFolder(own, ".bindwright")) return { removed: [], unsettled: [] };
   const present = STAGING_FOLDERS.filter((relative) => checkFolder(join(folder, relative), relative));
-  for (const relative of present) {
+  const incoming = join(folder, STAGING_FOLDERS[0]);
+  const unsettled = present.includes(STAGING_FOLDERS[0]) && !discardIncoming ? filesUnder(incoming) : [];
+  const removed = present.filter((relative) => relative !== STAGING_FOLDERS[0] || unsettled.length === 0);
+  for (const relative of removed) {
     rmSync(join(folder, relative), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
-  if (readdirSync(own).length > 0) return { removed: present };
+  if (readdirSync(own).length > 0) return { removed, unsettled };
   rmdirSync(own);
-  return { removed: [...present, ".bindwright"] };
+  return { removed: [...removed, ".bindwright"], unsettled };
 }

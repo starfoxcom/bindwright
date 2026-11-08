@@ -11,7 +11,7 @@
 //   node engine/cli.js --export DIR < choices.json   -> the project's setup object written (share.js)
 //   node engine/cli.js --remember DIR --layer L < choices.json -> one person's choices written to layer L
 //   node engine/cli.js --doctor DIR                  -> a health check of that repo and this machine (doctor.js)
-//   node engine/cli.js --clean-staging DIR           -> {"removed": [...]}, setup's staging folders (staging.js)
+//   node engine/cli.js --clean-staging DIR [--discard-incoming] -> setup's staging folders removed (staging.js)
 // A failure gives {"error": message} and exit status 1.
 
 import { readFileSync } from "node:fs";
@@ -49,7 +49,8 @@ async function run(argv) {
     flags.map((n) => option(argv, n));
   const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   const staging = option(argv, "--clean-staging");
-  if (staging !== undefined) return cleanStaging(staging);
+  const discardIncoming = argv.includes("--discard-incoming");
+  if (staging !== undefined) return cleanStaging(staging, { discardIncoming });
   if (report !== undefined) return reportRepo(report, config);
   if (doctor !== undefined) return doctorRepo(doctor, config);
   if (update !== undefined) return updateRepo(update);
