@@ -70,7 +70,9 @@ function pruneAbove(root, path, pruned) {
  * write, one reached through a link, or one that is not a plain file stops the run. Returns
  * { removed, folders, state }.
  */
-export function removeFiles(root, { paths, state }) {
+export function removeFiles(root, { paths: requested, state }) {
+  // A path named twice is removed once, so the second unlink cannot fail after the first.
+  const paths = [...new Set(requested)];
   const files = pristineFiles(reader(root));
   const unknown = paths.filter((path) => !Object.hasOwn(files, path));
   if (unknown.length) throw new Error(`Not a file setup wrote: ${unknown.join(", ")}`);

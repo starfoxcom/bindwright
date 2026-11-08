@@ -106,6 +106,8 @@ def remove_files(root, paths, state):
     .bindwright folder. Every path is checked before the first removal: a path setup did not
     write, one reached through a link, or one that is not a plain file stops the run. A path
     already gone is skipped. Returns { removed, folders, state }."""
+    # A path named twice is removed once, so the second unlink cannot fail after the first.
+    paths = list(dict.fromkeys(paths))
     files = _pristine_files(_reader(root))
     unknown = [path for path in paths if path not in files]
     if unknown:

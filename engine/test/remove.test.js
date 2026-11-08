@@ -128,6 +128,15 @@ for (const [name, cli] of ENGINES) {
     }
   });
 
+  test(`${name}: a path named twice is removed once`, { skip }, async () => {
+    await withRepo(() => {}, (repo) => {
+      const { status, result } = remove(cli, repo, [RULE, RULE], true);
+      assert.equal(status, 0, JSON.stringify(result));
+      assert.deepEqual(result.removed, [RULE]);
+      assert.equal(existsSync(repo.at(".bindwright")), false);
+    });
+  });
+
   test(`${name}: a repo that was never set up is refused`, { skip }, () => {
     const bare = mkdtempSync(join(tmpdir(), "remove-bare-"));
     try {
