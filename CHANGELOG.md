@@ -13,6 +13,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - Setup installs lizard, which the size check needs, on a Python that refuses `pip install --user` because the system or Homebrew manages it (macOS with Homebrew, Debian, Ubuntu): it installs it into its own environment at `~/.bindwright/size-check-venv`, and the size check looks there too.
+- The layout check no longer stops at random on Windows with `EBUSY` while the browser starts: it waits while the browser still holds its DevTools port file locked.
 
 ## [v2.4.0] — 2026-11-08
 
