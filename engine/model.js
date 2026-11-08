@@ -124,6 +124,9 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       // With the github tracker: a short, git-ignored hand-off file that
       // points at the issues the last session worked on.
       handoffFile: true,
+      // true runs two local reviewer subagents before each merge, for a project
+      // with no AI review in CI, and posts nothing to the host.
+      localReview: false,
     },
   };
 }
@@ -153,6 +156,14 @@ function checkCodeHost(adv) {
   check(unset(adv.trackerProject), `${host} has no GitHub Projects board: trackerProject must be null`);
   check(unset(adv.trackerRepo), `${host} has no GitHub issues repo: trackerRepo must be null`);
   check(unset(adv.publicRoadmap), `${host} has no GitHub public roadmap: publicRoadmap must be null`);
+}
+
+// The local review stands in for the CI reviews, so it needs a host where none run.
+function checkLocalReview(adv) {
+  if (!adv.localReview) return;
+  check(adv.aiReview === false, "localReview is for projects without CI reviews: aiReview must be false");
+  const hostWithoutActions = adv.codeHost === "other" || (adv.codeHost === "github" && adv.githubApps === false);
+  check(hostWithoutActions, 'localReview needs codeHost "other", or "github" with githubApps false');
 }
 
 const QUOTE_MAX = 40;
@@ -189,7 +200,7 @@ export function validate(saved) {
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
   check(typeof a.private === "boolean", "private must be true or false");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps"];
+    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localReview"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
   }
@@ -229,6 +240,7 @@ export function validate(saved) {
   "shippedTextPaths must be null or a non-empty list of globs "
   + "without quotes, backslashes, line breaks or outer spaces");
   checkCodeHost(adv);
+  checkLocalReview(adv);
   check(!(a.team && adv.codeHost === "local"), 'codeHost "local" is one person on one computer: team must be false');
   check(TRACKERS.includes(adv.tracker), `unknown tracker ${quoted(adv.tracker)}`);
   if (adv.tracker === "github") {
@@ -307,6 +319,7 @@ export function flagsFor(a) {
     code_size_check: adv.codeSizeCheck,
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
+    local_review: adv.localReview,
     contributing_md: a.team,
     license_file: !a.client,
     audit_trail_commits: a.client && a.private,

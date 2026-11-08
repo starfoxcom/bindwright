@@ -155,6 +155,15 @@ export const PROJECT = [
     keys: ["advanced.codeHost", "advanced.githubApps"],
   },
   {
+    id: "local-review",
+    title: "Local review before each merge",
+    text: "Offered when no CI can run the AI reviews. Two fresh reviewers check each change "
+      + "before it merges, and nothing about them reaches GitHub.",
+    value: "No",
+    keys: ["advanced.localReview"],
+    engine: [{ flags: {}, key: "advanced.localReview", value: false }],
+  },
+  {
     id: "work-state",
     title: "Where work is tracked",
     text: "A GitHub board, issues only, or a hand-off file in the repo.",
