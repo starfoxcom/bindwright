@@ -13,6 +13,7 @@ A Python twin (`model.py`, `render.py`, `bind.py`, standard library only, Python
 - `--audit DIR` counts, from the repo's recent Claude Code session logs, how often each of its rules applied and was broken (`audit.js`). `/bindwright:audit` reads it.
 - `--doctor DIR` checks the repo at `DIR` and this machine (`doctor.js`) and prints each check with a plain fix. `/bindwright:doctor` runs it.
 - `--clean-staging DIR` removes setup's staging folders (`staging.js`) and prints `{"removed", "unsettled"}`: `.bindwright/global/` always, `.bindwright/incoming/` only when no staged copy waits in it (the ones that do are listed in `unsettled`), and a `.bindwright/` it leaves empty. `--discard-incoming` removes `.bindwright/incoming/` even with copies waiting. A link or a file where one of those folders should be stops it before anything is removed. Setup, update and join run it, since the project's settings deny `rm -rf`.
+- `--local-exclude DIR < answers.json` lists the files the bind would write in the clone's `.git/info/exclude`, never `.gitignore` (`exclude.js`), and prints `{"exclude", "lines", "shared", "tracked"}`: `shared` are the team-facing files no line covers, `tracked` the covered files git already tracks. `--undo` removes that block and prints `{"exclude", "removed"}`.
 - `--year N` sets the copyright year. `bind.py --batch` (Python only) binds a list of `{"answers", "year", "version"}` jobs for the golden test.
 
 | File | Job |
