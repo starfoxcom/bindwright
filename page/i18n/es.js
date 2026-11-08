@@ -311,6 +311,11 @@ export default {
     + "u otro sitio. GitHub bloqueado conserva los pull requests y los issues; solo esta computadora no necesita "
     + "cuenta; otro sitio recibe las partes de GitHub para adaptarlas.",
   "settings.code-host.value": "GitHub",
+  "settings.local-only.title": "Archivos del asistente solo en esta computadora",
+  "settings.local-only.text": "Se pregunta para el proyecto de un cliente o de un empleador. CLAUDE.md, .claude/ "
+    + "y los archivos propios de la configuración quedan fuera de todo commit, en la lista de ignorados propia "
+    + "del clon.",
+  "settings.local-only.value": "No",
   "settings.work-state.title": "Dónde se sigue el trabajo",
   "settings.work-state.text": "Un tablero de GitHub, solo issues, o un archivo de traspaso en el repo.",
   "settings.work-state.value": "Tablero de GitHub",
