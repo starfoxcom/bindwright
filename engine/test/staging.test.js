@@ -60,6 +60,23 @@ for (const [name, clean] of ENGINES) {
     }
   });
 
+  test(`${name}: a repo root that is a link is followed to the real folder`, { skip }, () => {
+    const repo = stagedRepo();
+    const parent = mkdtempSync(join(tmpdir(), "staging-link-"));
+    const linked = join(parent, "project");
+    try {
+      linkFolder(repo, linked);
+      assert.deepEqual(run(clean, linked), {
+        status: 0, result: { removed: [".bindwright/incoming", ".bindwright/global"] },
+      });
+      assert.equal(existsSync(join(repo, ".bindwright", "global")), false);
+      assert.equal(existsSync(join(repo, ".bindwright", "pristine.json")), true);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   test(`${name}: missing folders are skipped`, { skip }, () => {
     const repo = mkdtempSync(join(tmpdir(), "staging-"));
     try {

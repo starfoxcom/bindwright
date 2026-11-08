@@ -17,10 +17,17 @@ def _entry_at(path):
         return None
 
 
+# The Windows reparse tags of a symlink and a junction. Other reparse points, such as OneDrive
+# placeholders, are ordinary folders, as Node's lstat reads them too.
+_LINK_TAGS = (
+    getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0xA000000C),
+    getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003),
+)
+
+
 def _is_link(entry):
-    # A junction on Windows is a reparse point that os.path.islink misses before Python 3.12.
-    reparse = getattr(entry, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
-    return stat.S_ISLNK(entry.st_mode) or bool(reparse)
+    # os.path.islink misses a junction, which is how os.path.isjunction tells them apart.
+    return stat.S_ISLNK(entry.st_mode) or getattr(entry, "st_reparse_tag", 0) in _LINK_TAGS
 
 
 def _check_folder(path, relative):
@@ -44,8 +51,8 @@ def clean_staging(folder):
     A folder that is missing is skipped. A link or a file where a folder should be
     stops the run before anything is removed.
     """
-    repo = _entry_at(folder)
-    if repo is None or not stat.S_ISDIR(repo.st_mode):
+    # The repo root itself may be a link to the real folder; only the entries inside are guarded.
+    if not os.path.isdir(folder):
         raise ValueError(f"{folder} is not a folder")
     if not _check_folder(os.path.join(folder, ".bindwright"), ".bindwright"):
         return {"removed": []}

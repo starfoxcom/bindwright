@@ -2,7 +2,7 @@
 // .bindwright/incoming/ (files to merge by hand) and .bindwright/global/ (files for ~/.claude).
 // The Python twin is staging.py.
 
-import { lstatSync, rmSync } from "node:fs";
+import { lstatSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /** The staging folders, relative to the repo root, in the order they are removed. */
@@ -34,8 +34,9 @@ function checkFolder(path, relative) {
  * folder should be stops the run before anything is removed.
  */
 export function cleanStaging(folder) {
-  const repo = entryAt(folder);
-  if (repo === null || !repo.isDirectory()) throw new Error(`${folder} is not a folder`);
+  // The repo root itself may be a link to the real folder; only the entries inside are guarded.
+  const repo = statSync(folder, { throwIfNoEntry: false });
+  if (repo === undefined || !repo.isDirectory()) throw new Error(`${folder} is not a folder`);
   if (!checkFolder(join(folder, ".bindwright"), ".bindwright")) return { removed: [] };
   const present = STAGING_FOLDERS.filter((relative) => checkFolder(join(folder, relative), relative));
   for (const relative of present) {
