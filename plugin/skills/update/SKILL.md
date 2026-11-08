@@ -19,6 +19,8 @@ This skill rebuilds the repo's Bindwright files from the answers saved at setup,
 
 Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, tell the user the update needs Node 18 or later, or Python 3.8 or later, and stop.
 
+When `advanced.localOnly` is true in `.bindwright/project.json`, first refresh the exclude list: run the engine with `--local-exclude <repo root>`, passing that file on standard input, so a file the new version adds for the assistant stays out of commits from its first write. Name any `tracked` path it prints, as setup does.
+
 Run it with `--update <repo root>`. It prints one line of JSON:
 
 - `{"error": "..."}`: show the message and stop; nothing was written. Unless it is the symbolic-link message below, offer `/bindwright:report`. A message starting `Refusing to write through a symbolic link` names repo files that are links: the update never writes through one. Offer to list each in `.bindwright/owned`, so later updates leave it alone, or to replace the link with a plain file, then run the update again.

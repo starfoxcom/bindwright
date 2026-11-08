@@ -94,6 +94,10 @@ Round two, each with "All of them (recommended)" first and "Let me pick" second:
 
 For a "Let me pick", ask one multiple-choice question with that group's items; what is not picked is off. A deeper review needs the AI review: if only the deeper review is picked, say it needs the AI review and turn both on.
 
+For someone else's project (a client or an employer), ask one more:
+
+- **Keep the assistant's files on this computer only?** No, they go in the repo like any other file (recommended); or yes, for a team or organization whose repo must not carry them. Yes saves `"localOnly": true`: setup lists `CLAUDE.md`, `.claude/`, `.bindwright/` and its other files for the assistant in this clone's `.git/info/exclude`, an ignore list git keeps out of every commit, and step 8 offers each file meant for the whole team (README and CHANGELOG sections, issue and PR templates, `.gitattributes`) to keep or drop. Say that a new clone needs setup again, since the files and the list stay in this one.
+
 ### Where the work state lives
 
 GitHub works here when the repo's remote is on GitHub and `gh auth status` works. When it does not, say why in one line and use the detailed hand-off file (`"tracker": "file"`). Otherwise ask the question below; with `"githubApps": false`, offer only its "GitHub issues only" and hand-off file choices, and skip the board:
@@ -162,6 +166,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "codeResearch": "<the computer's code-search tool>",
     "codeHost": "github",
     "githubApps": true,
+    "localOnly": false,
     "tracker": "github",
     "trackerProject": "<owner>/<number> or null",
     "trackerRepo": "<owner>/<name> or null",
@@ -169,6 +174,8 @@ Build the answers. Only what differs from the defaults is needed; every other ch
   }
 }
 ```
+
+With `"localOnly": true`, first run the engine with `--local-exclude <repo root>`, passing the same answers on standard input, so the exclude list is in place before any file is written. It prints `{"exclude": "<file>", "lines": [...], "shared": [...], "tracked": [...]}`. Keep `shared` for step 8. `tracked` names files git already tracks, which an exclude line cannot hide: name each one and say that the repo already carries it, so a change setup makes to it shows in the next commit; step 5 lets the user leave it as it is.
 
 Run the engine with `--write <repo root>`, passing the answers on standard input (or `--code <the code>` for a `bw1-` code), and add `--adopt` in adopt mode: it then stages every file, new ones included, instead of writing them in place. It prints one line of JSON:
 
@@ -225,7 +232,7 @@ Then fit the rules to the repo:
 
 - `.claude/rules/code-size.md`: keep only the per-language rows for languages the repo contains (count files by extension, ignoring vendored and generated folders), plus `Other` when the repo has languages the table does not list. Narrow its `paths:` globs to the same languages.
 - **Size check:** when `.github/scripts/size_check.py` was written, record the breaches the repo already has, after trimming the code-size rule above. It needs lizard: on a yes in step 0, install it now with `<python> -m pip install --user lizard==1.24.3`, the version the size-check workflow pins. When the install fails, show why and go on without the baseline. The script measures only files git tracks, and nothing setup wrote is committed yet, so first run `git add -N` on every file the repo will keep (the written and merged ones; it stages no content). Then run `python .github/scripts/size_check.py --write-baseline` and say how many breaches it recorded in `.github/size-check/baseline.txt`, which belongs in the commit. Without lizard (a no in step 0, a failed install, or no Python), leave the baseline out and tell the user the check fails until they install lizard and write it. For `codeHost: "github"` with GitHub apps allowed, mention that the `Size check` job can be made a required check in the branch rules; for `local`, `other` and `"githubApps": false`, say no CI runs it, so it runs by hand: `python .github/scripts/size_check.py` before each commit.
-- `.gitignore`: `.claude/settings.local.json` is personal. If `git check-ignore -q .claude/settings.local.json` fails, add that path to `.gitignore` (create the file if needed).
+- `.gitignore`: `.claude/settings.local.json` is personal. If `git check-ignore -q .claude/settings.local.json` fails, add that path to `.gitignore` (create the file if needed). With `"localOnly": true`, skip this: the exclude list already covers `.claude/`, and `.gitignore` is shared with the team.
 - **Tracker:** when `.claude/rules/tracker.md` was written, the work state lives in GitHub issues. With a board (`advanced.trackerProject` in `.bindwright/project.json`), check `gh project view <number> --owner <owner>` reaches it; a scope error means `gh auth refresh -s project`. Without one, offer to create and pin the `Project status` issue that `tracker.md` describes. With a public roadmap (`advanced.publicRoadmap`), check `gh api "repos/<public repo>/issues?state=all&per_page=1"` reaches it and returns `[]`: the tool keeps public numbers equal to private ones, so the public repo must start with no issues, pull requests or discussions, which share the numbers; check discussions on the repo's page. Then offer to turn any `ROADMAP.md` items or hand-off file the repo already has into issues, one at a time, with the "New item" command in `tracker.md`; the old files stay until the user removes them.
 - `.claude/rules/git.md` names the branches work lands on. If it names a development branch the repo does not have (`git branch --list <name>`), offer to create it from the current branch, locally only.
 - Check that every command and path the new files name exists in the repo. Fix what you can; list the rest for the user.
@@ -261,7 +268,8 @@ Tell the user, in plain words, in two parts.
 - What was written, merged and left out, grouped by kind (rules, skills, hooks, workflows, docs), not file by file.
 - Where the work state lives: the board's link and whether it is private, the clean public copy's repo when there is one, or the hand-off file.
 - What still needs them: for a repo with AI review workflows, the repository secret and branch rules those workflows describe.
-- That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive.
+- That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive. With `"localOnly": true` they stay on this computer with the other assistant files, out of every commit.
+- With `"localOnly": true`, each `shared` file from step 4, one at a time: drop it (recommended: delete a new file, `git restore` a changed one) or keep it, for the user to commit when the team wants it.
 - That nothing is committed yet: they can read the changes with `git diff` and `git status`, and commit when happy.
 
 **This computer:**
