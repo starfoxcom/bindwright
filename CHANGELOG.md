@@ -14,6 +14,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - Setup no longer stops at its last step, removing its staging folders, which the project's own settings refuse as `rm -rf`. A new engine command, `--clean-staging`, removes only `.bindwright/incoming/` and `.bindwright/global/` and refuses a folder that is a link; `/bindwright:update` uses it too.
 - Setup asks about installing lizard, which the size check needs, at the start with the other requirements instead of partway through, and on Windows checks that Git is Git for Windows, whose shell runs the guard hooks.
+- The layout check no longer leaves headless browsers running. On Windows, Edge's launcher exits at once and hands off to the real browser, which only a clean finish used to close: the check now stops the browser itself, on a stop signal too, and each run first stops browsers that runs killed outright left behind.
 - A team project without the AI reviews, on another site or on GitHub with them off, no longer reads in the collaboration rule that a 🔴 review verdict blocks its merge: a failing check or a reviewer's requested change does.
 
 ## [v2.3.0] — 2026-11-06
