@@ -152,7 +152,7 @@ export function readState(path, file) {
 }
 
 // The repo's text at a path with \r\n turned into \n, or null when it has none.
-function reader(root) {
+export function reader(root) {
   return (path) => {
     const bytes = readState(join(root, ...path.split("/")), path);
     return bytes === null ? null : decode(bytes, path).replace(/\r\n/g, "\n");

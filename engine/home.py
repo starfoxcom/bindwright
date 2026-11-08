@@ -12,6 +12,7 @@ Standard library, Python 3.8+.
     python engine/home.py add-mod DIR
     python engine/home.py add-agent FILE
     python engine/home.py add-style FILE      (copies the output style, turns it on)
+    python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
@@ -26,6 +27,8 @@ import os
 import shutil
 import subprocess
 import sys
+
+from apply import _is_link
 
 # Runs the hook file by path. A missing file then fails with exit 1, which the
 # CLI reports and moves past; a plain `python FILE` exits 2, which blocks
@@ -326,6 +329,67 @@ def add_style(home, file):
     return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
 
 
+def _plain_name(name, kind):
+    """`name` when it is one file or folder name, never a path; refused otherwise."""
+    if not name or name in (".", "..") or "/" in name or "\\" in name or ":" in name:
+        raise HomeError(f"Not {kind} name: {name}")
+    return name
+
+
+def remove_mod(home, name):
+    """Takes a mod out of CLAUDE_CODE_PLUGIN_DIRS and deletes its folder under mods/."""
+    target = os.path.normpath(os.path.join(_claude(home), "mods", _plain_name(name, "a mod")))
+    try:
+        is_link = _is_link(os.lstat(target))
+    except FileNotFoundError:
+        is_link = False
+    if is_link:
+        raise HomeError("The mod folder is a link; remove it by hand: " + target)
+    path, data = _load(home)
+    env = _section(data, "env", dict, path)
+    listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+    same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
+    kept = [d for d in listed if not same(d)]
+    unlisted = len(kept) != len(listed)
+    if unlisted:
+        if kept:
+            env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(kept)
+        else:
+            del env["CLAUDE_CODE_PLUGIN_DIRS"]
+        _save(path, data)
+    deleted = os.path.isdir(target)
+    if deleted:
+        shutil.rmtree(target)
+    return {"removed": target, "unlisted": unlisted, "deleted_folder": deleted}
+
+
+def remove_agent(home, name):
+    """Deletes an agent file under agents/, such as builder.md."""
+    target = os.path.normpath(os.path.join(_claude(home), "agents", _plain_name(name, "an agent file")))
+    deleted = os.path.isfile(target) and not os.path.islink(target)
+    if deleted:
+        os.remove(target)
+    return {"removed": target, "deleted_file": deleted}
+
+
+def remove_style(home, name):
+    """Deletes an output style file and turns it off when outputStyle names it."""
+    target = os.path.normpath(os.path.join(_claude(home), "output-styles", _plain_name(name, "a style file")))
+    style = os.path.splitext(name)[0]
+    deleted = os.path.isfile(target) and not os.path.islink(target)
+    if deleted:
+        with open(target, encoding="utf-8-sig") as fh:
+            style = _style_name(fh.read()) or style
+    path, data = _load(home)
+    turned_off = data.get("outputStyle") == style
+    if turned_off:
+        del data["outputStyle"]
+        _save(path, data)
+    if deleted:
+        os.remove(target)
+    return {"removed": target, "deleted_file": deleted, "turned_off": turned_off, "outputStyle": style}
+
+
 def _work_language_rule(home):
     return os.path.abspath(os.path.join(_claude(home), "rules", "work-language.md"))
 
@@ -370,6 +434,9 @@ NAMED_COMMANDS = {
     "add-mod": add_mod,
     "add-agent": add_agent,
     "add-style": add_style,
+    "remove-mod": remove_mod,
+    "remove-agent": remove_agent,
+    "remove-style": remove_style,
     "set-language": set_language,
 }
 

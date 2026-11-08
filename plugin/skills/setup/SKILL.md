@@ -263,6 +263,7 @@ Tell the user, in plain words, in two parts.
 - What still needs them: for a repo with AI review workflows, the repository secret and branch rules those workflows describe.
 - That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive.
 - That nothing is committed yet: they can read the changes with `git diff` and `git status`, and commit when happy.
+- That `/bindwright:remove` takes the setup back out at any time, keeping every file they changed.
 
 **This computer:**
 

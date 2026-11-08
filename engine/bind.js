@@ -18,7 +18,7 @@ const ACTIONS_ONLY = [
 
 // Files a repo often already has. They land in STAGING and the tailoring
 // step merges them instead of the zip overwriting the user's copy.
-const MERGE_TARGETS = new Set([
+export const MERGE_TARGETS = new Set([
   "CLAUDE.md", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", ".gitattributes", ".claude/settings.json",
 ]);
 export const STAGING = ".bindwright/incoming/";

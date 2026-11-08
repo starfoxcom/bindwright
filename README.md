@@ -39,6 +39,10 @@ Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or lat
 
 The page's Install section says what each command changes on your computer and in the project; [plugin/README.md](plugin/README.md) lists the plugin's other commands.
 
+## Remove
+
+In each set-up project, run `/bindwright:remove`. It takes out the files setup wrote there and the extras it added to your config folder, keeps every file you changed unless you say otherwise, and ends with how to uninstall the plugin. `/bindwright:remove computer` does only the config folder part. Nothing is committed until you say so.
+
 ## Repo layout
 
 ```
