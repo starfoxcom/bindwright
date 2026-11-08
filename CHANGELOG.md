@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
+- A local review gate for projects where no CI can run the AI reviews (GitHub with apps and Actions blocked, or another site): setup offers it, off unless picked (`"localReview": true`), and `.claude/rules/local-review.md` has the session run two fresh reviewers on each change before it merges, with the CI reviews' bar and verdict rule. Nothing about the review is posted to the host.
 - `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
 
 ### Fixed
