@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  isRunning, killTree, profilePrefix, removeProfile, stopOnSignals, stopProfile, sweepStaleProfiles,
+  profilePrefix, removeProfile, stopBrowserProcesses, stopOnSignals, stopProfile, sweepStaleProfiles,
   waitWhileRunning,
 } from "./browser-cleanup.mjs";
 import { pageCheckScript } from "./layout-page.mjs";
@@ -240,8 +240,7 @@ async function browserPid(client) {
 function stopNow(browser, userDataDir) {
   if (browser.child?.pid !== undefined && browser.child.exitCode === null) browser.child.kill();
   if (browser.pid === null) stopProfile(userDataDir);
-  else killTree(browser.pid);
-  removeProfile(userDataDir);
+  else stopBrowserProcesses(browser.pid, userDataDir);
 }
 
 async function stopBrowser(browser, userDataDir) {
@@ -252,8 +251,7 @@ async function stopBrowser(browser, userDataDir) {
   if (child.exitCode === null && child.signalCode === null) child.kill();
   if (pid === null) return stopProfile(userDataDir);
   await waitWhileRunning(pid, CLOSE_GRACE_MS);
-  if (isRunning(pid)) killTree(pid);
-  removeProfile(userDataDir);
+  stopBrowserProcesses(pid, userDataDir);
 }
 
 // Starts the browser, hands its client to `use`, and always stops the browser and removes its

@@ -57,8 +57,11 @@ function parseProcessLines(text, pattern) {
 /** The running processes whose command line names a layout-check profile; [] when unreadable. */
 export function browserProcesses(platform = process.platform) {
   const run = platform === "win32"
+    // Windows PowerShell writes the console's code page unless told otherwise, which would
+    // garble a profile path under a user name with accents.
     ? ["powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-      "Get-CimInstance Win32_Process -Filter \"CommandLine LIKE '%layout-check-%'\" | "
+      "[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
+        + "Get-CimInstance Win32_Process -Filter \"CommandLine LIKE '%layout-check-%'\" | "
         + "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"]]
     : ["ps", ["-axo", "pid=,args="]];
   const listed = spawnSync(run[0], run[1], { encoding: "utf8", timeout: LIST_TIMEOUT_MS });
@@ -129,6 +132,17 @@ export function stopProfile(folder, processes = browserProcesses()) {
     if (usesProfile(commandLine, folder)) killTree(pid);
   }
   removeProfile(folder);
+}
+
+/**
+ * Stops a browser whose own process id is `pid` and removes its profile. On Windows its
+ * process tree goes with it; on Linux and macOS Chromium's helper processes outlive a killed
+ * browser, so every process that uses the profile is stopped too.
+ */
+export function stopBrowserProcesses(pid, folder, platform = process.platform) {
+  if (isRunning(pid)) killTree(pid, platform);
+  if (platform === "win32") removeProfile(folder);
+  else stopProfile(folder);
 }
 
 /**
