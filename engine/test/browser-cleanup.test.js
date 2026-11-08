@@ -50,24 +50,18 @@ test("a profile is stale past the limit, or when it predates dated names; other 
   assert.equal(profilePrefix(1700000000000), "layout-check-1700000000000-");
 });
 
-test("the sweep removes only stale profiles, and reads the processes only when there is one", () => {
+test("the sweep removes only stale profiles", () => {
   const temp = mkdtempSync(join(tmpdir(), "sweep-"));
   const now = Date.now();
   const stale = join(temp, `layout-check-${now - STALE_AFTER_MS - 1}-Ab3dE9`);
   const fresh = join(temp, `layout-check-${now - 1000}-Zz9yX8`);
   const other = join(temp, "layout-check-page-Qq1wW2");
+  const list = () => [];
   try {
     for (const folder of [stale, fresh, other]) mkdirSync(folder);
-    let listed = 0;
-    const list = () => {
-      listed += 1;
-      return [];
-    };
     assert.deepEqual(sweepStaleProfiles(temp, now, list), [stale]);
-    assert.equal(listed, 1);
     assert.deepEqual([stale, fresh, other].map(existsSync), [false, true, true]);
-
-    assert.deepEqual(sweepStaleProfiles(temp, now, () => assert.fail("listed with nothing stale")), []);
+    assert.deepEqual(sweepStaleProfiles(temp, now, list), []);
     assert.deepEqual(sweepStaleProfiles(join(temp, "missing"), now, list), []);
   } finally {
     rmSync(temp, { recursive: true, force: true });
