@@ -98,6 +98,7 @@ Run `git branch --show-current` before editing. Switch or branch first, then edi
 - Release PRs (`{{DEV_BRANCH}}` into `{{MAIN_BRANCH}}`) and cascade PRs (`{{MAIN_BRANCH}}` into `{{DEV_BRANCH}}`) always use `--merge`. Squashing them makes the two branches diverge and turns the next release into a conflict.
 <!-- TOGGLE:branching_model_gitflow END -->
 - After merging: `--delete-branch` removes the remote branch, but the local one only when it is checked out. Run `git branch -D <name>` if it remains, then confirm with `git branch`.
+- Then, when the Bindwright plugin is installed (`bindwright` in `~/.claude/plugins/installed_plugins.json`, whose `installPath` is the plugin folder), run `node "<plugin folder>/hooks/counts.mjs" send <repo root>` in the background. It sends nothing unless this computer turned on the anonymous review counts, and at most once in 24 hours, so a merge never waits on it.
 <!-- TOGGLE:ci_checks START -->
 - Re-run a failed CI workflow as a whole (or push again). Re-running only the failed job can leave a required check stuck.
 <!-- TOGGLE:ci_checks END -->
