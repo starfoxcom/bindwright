@@ -14,6 +14,7 @@
 //   node engine/cli.js --remove-plan DIR             -> what setup wrote there, sorted for removal (remove.js)
 //   node engine/cli.js --remove-files DIR < {"paths": [...], "state": true} -> those files removed
 //   node engine/cli.js --clean-staging DIR [--discard-incoming] -> setup's staging folders removed (staging.js)
+//   node engine/cli.js --releases-since DIR -> the plugin's releases since DIR's bound version (releases.js)
 // A failure gives {"error": message} and exit status 1.
 
 import { readFileSync } from "node:fs";
@@ -32,6 +33,7 @@ import { cliVersionFrom, runDoctor } from "./doctor.js";
 import { draftReport } from "./report.js";
 import { planRemoval, removeFiles } from "./remove.js";
 import { cleanStaging } from "./staging.js";
+import { releasesForRepo } from "./releases.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,6 +71,8 @@ async function run(argv) {
   const staging = option(argv, "--clean-staging");
   const discardIncoming = argv.includes("--discard-incoming");
   if (staging !== undefined) return cleanStaging(staging, { discardIncoming });
+  const releases = option(argv, "--releases-since");
+  if (releases !== undefined) return releasesForRepo(releases, root);
   if (report !== undefined) return reportRepo(report, config);
   if (doctor !== undefined) return doctorRepo(doctor, config);
   if (update !== undefined) return updateRepo(update);

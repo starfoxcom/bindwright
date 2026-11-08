@@ -19,6 +19,8 @@ This skill rebuilds the repo's Bindwright files from the answers saved at setup,
 
 Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, tell the user the update needs Node 18 or later, or Python 3.8 or later, and stop.
 
+First say what the releases changed: run the engine with `--releases-since <repo root>`. It reads only the plugin's own changelog, never the repo's `CHANGELOG.md`, and prints `{"from": "<bound version>", "to": "<plugin version>", "releases": [{"version", "date", "text"}, ...]}`, newest first. When `releases` holds any, open with a plain summary of each release in the range, newest first and a few short lines each: what is new, what changed and what was fixed, then anything the user may want to act on, such as a new setup answer to consider or a behaviour that now works differently. When it holds an `unavailable` reason, say in one line that the summary is not available and why, and go on.
+
 Run it with `--update <repo root>`. It prints one line of JSON:
 
 - `{"error": "..."}`: show the message and stop; nothing was written. Unless it is the symbolic-link message below, offer `/bindwright:report`. A message starting `Refusing to write through a symbolic link` names repo files that are links: the update never writes through one. Offer to list each in `.bindwright/owned`, so later updates leave it alone, or to replace the link with a plain file, then run the update again.

@@ -31,9 +31,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENGINE_FILES = [
     "package.json", "core-files.json", "cli.js",
     "bind.js", "model.js", "render.js", "setupcode.js", "apply.js", "keep.js", "update.js",
-    "layers.js", "share.js", "doctor.js", "report.js", "audit.js", "remove.js", "staging.js",
+    "layers.js", "share.js", "doctor.js", "report.js", "audit.js", "remove.js", "staging.js", "releases.js",
     "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py",
-    "layers.py", "share.py", "doctor.py", "report.py", "audit.py", "remove.py", "staging.py",
+    "layers.py", "share.py", "doctor.py", "report.py", "audit.py", "remove.py", "staging.py", "releases.py",
     "home.py", "authored.py",
 ]
 # The ~/.claude templates bind.js and bind.py read (globalFiles).
@@ -126,8 +126,8 @@ def contents(source):
     global_files = ["_core/global-template/" + p for p in GLOBAL_FILES]
     # Mods are copied whole into ~/.claude/mods/, so the pack carries them as they ship.
     global_files += list(source.files_under("_core/global-template/mods"))
-    # VERSION too: the engine records it in the pristine render it writes.
-    for rel in core + licenses + global_files + ["VERSION"]:
+    # VERSION records the version in the pristine render; CHANGELOG.md lists the releases since it.
+    for rel in core + licenses + global_files + ["VERSION", "CHANGELOG.md"]:
         out[rel] = source.read(rel)
     manifest = json.loads(out[".claude-plugin/plugin.json"])
     manifest["version"] = version_of(source)

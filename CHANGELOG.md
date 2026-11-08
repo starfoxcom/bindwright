@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - Sessions in a set-up repo are titled after the project, then `<Project> - <purpose>` once `/session-start`'s plan is approved, instead of the CLI's title from the first message, so several sessions and their peer lists tell projects and tasks apart. A new project hook, `session-title.py`, sets each title once, so one picked with `/rename` stays until the purpose changes.
+- `/bindwright:update` opens with a plain summary of every release since the version the repo was set up with, newest first: what is new, changed and fixed, and what the user may want to act on. A new engine command, `--releases-since`, reads the plugin's own changelog, which now ships in the bundle.
 - `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
 
 ### Changed
