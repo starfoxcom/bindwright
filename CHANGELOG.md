@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- For someone else's project, setup asks whether to keep the assistant's files on this computer only. On a yes (`"localOnly": true`), `CLAUDE.md`, `.claude/`, `.bindwright/` and its other files for the assistant go into the clone's `.git/info/exclude`, never `.gitignore`, before any file is written, and the files meant for the whole team are offered one by one to keep or drop. A new engine command, `--local-exclude`, writes that list, and `/bindwright:update` refreshes it.
+
 ### Fixed
 
 - Setup installs lizard, which the size check needs, on a Python that refuses `pip install --user` because the system or Homebrew manages it (macOS with Homebrew, Debian, Ubuntu): it installs it into its own environment at `~/.bindwright/size-check-venv`, and the size check looks there too.
