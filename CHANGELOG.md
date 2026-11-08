@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
+- `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
 - For someone else's project, setup asks whether to keep the assistant's files on this computer only. On a yes (`"localOnly": true`), `CLAUDE.md`, `.claude/`, `.bindwright/` and its other files for the assistant go into the clone's `.git/info/exclude`, never `.gitignore`, before any file is written, and the files meant for the whole team are offered one by one to keep or drop. A new engine command, `--local-exclude`, writes that list, and `/bindwright:update` refreshes it.
 
 ### Fixed

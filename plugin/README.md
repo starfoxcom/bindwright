@@ -18,6 +18,7 @@ In the Claude desktop app, where `/plugin` does not run, the page's Install sect
 - `/bindwright:setup global` asks the computer questions again.
 - `/bindwright:code-style` reads code you wrote by hand, in your local repos and your GitHub account, with your permission, and saves a short profile of how you write code, with the weak spots brought up to current practice, which every session then follows.
 - `/bindwright:update` brings a set-up repo up to the plugin's current templates and keeps your edits.
+- `/bindwright:remove` takes the setup back out of a repo and the extras out of your config folder, keeping every file you changed, and ends with how to uninstall the plugin; `/bindwright:remove computer` does only the config folder.
 - `/bindwright:export` records which extras the team expects; `/bindwright:join` brings a teammate's machine in line after cloning.
 - `/bindwright:runners` checks your computer and the repo's CI, recommends how many local CI runners to set up (or none), and installs the ones you pick.
 

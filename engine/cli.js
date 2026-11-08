@@ -11,6 +11,8 @@
 //   node engine/cli.js --export DIR < choices.json   -> the project's setup object written (share.js)
 //   node engine/cli.js --remember DIR --layer L < choices.json -> one person's choices written to layer L
 //   node engine/cli.js --doctor DIR                  -> a health check of that repo and this machine (doctor.js)
+//   node engine/cli.js --remove-plan DIR             -> what setup wrote there, sorted for removal (remove.js)
+//   node engine/cli.js --remove-files DIR < {"paths": [...], "state": true} -> those files removed
 //   node engine/cli.js --clean-staging DIR [--discard-incoming] -> setup's staging folders removed (staging.js)
 //   node engine/cli.js --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.js)
 // A failure gives {"error": message} and exit status 1.
@@ -29,6 +31,7 @@ import { runAudit } from "./audit.js";
 import { exportSetup, rememberChoices } from "./share.js";
 import { cliVersionFrom, runDoctor } from "./doctor.js";
 import { draftReport } from "./report.js";
+import { planRemoval, removeFiles } from "./remove.js";
 import { cleanStaging } from "./staging.js";
 import { localExclude, undoLocalExclude } from "./exclude.js";
 
@@ -42,7 +45,22 @@ function option(argv, name) {
   return argv[i + 1];
 }
 
+// --remove-plan DIR sorts what setup wrote; --remove-files DIR takes {"paths", "state"} on stdin.
+function removal(argv) {
+  const plan = option(argv, "--remove-plan");
+  if (plan !== undefined) return planRemoval(plan);
+  const folder = option(argv, "--remove-files");
+  if (folder === undefined) return undefined;
+  const { paths, state } = choicesFromStdin();
+  if (!Array.isArray(paths) || !paths.every((p) => typeof p === "string") || typeof state !== "boolean") {
+    throw new Error('--remove-files takes {"paths": [file, ...], "state": true or false} on standard input');
+  }
+  return removeFiles(folder, { paths, state });
+}
+
 async function run(argv) {
+  const removed = removal(argv);
+  if (removed !== undefined) return removed;
   const flags = [
     "--code", "--year", "--write", "--update", "--settings",
     "--export", "--remember", "--layer", "--doctor", "--report", "--audit",

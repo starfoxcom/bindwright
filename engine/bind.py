@@ -15,6 +15,8 @@
 #   python engine/bind.py --export DIR < choices.json    -> the project's setup object written (share.py)
 #   python engine/bind.py --remember DIR --layer L < choices.json -> one person's choices written to layer L
 #   python engine/bind.py --doctor DIR                   -> a health check of that repo and this machine (doctor.py)
+#   python engine/bind.py --remove-plan DIR              -> what setup wrote, sorted for removal
+#   python engine/bind.py --remove-files DIR < {"paths": [...], "state": true} -> files removed
 #   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
 #   python engine/bind.py --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.py)
 # A failed bind gives {"error": message} and, alone, exit status 1.
@@ -380,6 +382,34 @@ def _report(argv, read_file):
         return {"error": str(e)}
 
 
+def _removal_request():
+    """The {"paths", "state"} --remove-files reads from stdin, checked as cli.js checks it."""
+    request = _choices_from_stdin()
+    if not isinstance(request, dict):
+        request = {}
+    paths, state = request.get("paths"), request.get("state")
+    shaped = isinstance(paths, list) and all(isinstance(p, str) for p in paths)
+    if not (shaped and isinstance(state, bool)):
+        raise ValueError(
+            '--remove-files takes {"paths": [file, ...], "state": true or false} '
+            "on standard input")
+    return paths, state
+
+
+def _remove(argv):
+    """--remove-plan DIR sorts what setup wrote; --remove-files DIR takes the agreed files out."""
+    try:
+        # Imported here: remove.py imports MERGE_TARGETS from this module, so this import waits.
+        from remove import plan_removal, remove_files
+        if "--remove-plan" in argv:
+            return plan_removal(_option(argv, "--remove-plan"))
+        folder = _option(argv, "--remove-files")
+        paths, state = _removal_request()
+        return remove_files(folder, paths, state)
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
 def _clean_staging(argv):
     """--clean-staging DIR: removes setup's staging folders from that repo."""
     try:
@@ -426,6 +456,8 @@ def _main(argv):
 
     if "--clean-staging" in argv:
         result = _clean_staging(argv)
+    elif "--remove-plan" in argv or "--remove-files" in argv:
+        result = _remove(argv)
     elif "--local-exclude" in argv:
         result = _local_exclude(argv, read_file, core_files)
     elif "--batch" in argv:

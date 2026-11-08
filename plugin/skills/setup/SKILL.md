@@ -271,6 +271,7 @@ Tell the user, in plain words, in two parts.
 - That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive. With `"localOnly": true` they stay on this computer with the other assistant files, out of every commit.
 - With `"localOnly": true`, each `shared` file from step 4, one at a time: drop it (recommended: delete a new file, `git restore` a changed one) or keep it, for the user to commit when the team wants it.
 - That nothing is committed yet: they can read the changes with `git diff` and `git status`, and commit when happy.
+- That `/bindwright:remove` takes the setup back out at any time, keeping every file they changed.
 
 **This computer:**
 
