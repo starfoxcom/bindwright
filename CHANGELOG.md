@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
+
 ## [v2.4.0] — 2026-11-08
 
 v2.4.0 lets setup finish on a fresh machine, stops the layout check from leaving browsers running, and shows on the page how many pull requests merged and skipped the AI review.
@@ -13,7 +17,6 @@ v2.4.0 lets setup finish on a fresh machine, stops the layout check from leaving
 ### Added
 
 - The page's review results show how many pull requests merged and how many skipped the AI review, beside how many passed it on the first try, were fixed in 1 to 5 rounds, or needed deeper research: as totals, and under each project's bar with its exact counts.
-- `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
 
 ### Fixed
 
