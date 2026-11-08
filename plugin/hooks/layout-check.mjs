@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  isRunning, killTree, profilePrefix, removeProfile, stopProfile, sweepStaleProfiles,
+  isRunning, killTree, profilePrefix, removeProfile, stopOnSignals, stopProfile, sweepStaleProfiles,
+  waitWhileRunning,
 } from "./browser-cleanup.mjs";
 import { pageCheckScript } from "./layout-page.mjs";
 
@@ -29,8 +30,6 @@ const PORT_TIMEOUT_MS = 30000;
 const CALL_TIMEOUT_MS = 30000;
 // How long the browser gets to close itself before it is killed.
 const CLOSE_GRACE_MS = 2000;
-// A run stopped by one of these still stops its browser; the exit code is 128 + the signal.
-const STOP_SIGNALS = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
 const USAGE = "usage: layout-check.mjs <url> [--widths 390,1280] [--height 900]";
 const LINUX_BROWSER_NAMES = [
   "google-chrome",
@@ -226,11 +225,6 @@ function waitForExit(child, ms) {
   });
 }
 
-async function waitWhileRunning(pid, ms) {
-  const deadline = Date.now() + ms;
-  while (isRunning(pid) && Date.now() < deadline) await sleep(100);
-}
-
 // The browser's own process id. On Windows the spawned msedge.exe only launches the browser
 // and exits, so the child's pid cannot stop it. Null when the browser does not say.
 async function browserPid(client) {
@@ -248,21 +242,6 @@ function stopNow(browser, userDataDir) {
   if (browser.pid === null) stopProfile(userDataDir);
   else killTree(browser.pid);
   removeProfile(userDataDir);
-}
-
-// Stops the browser when the run gets a stop signal; returns the call that removes the handlers.
-function stopOnSignals(stop) {
-  const handlers = Object.entries(STOP_SIGNALS).map(([signal, code]) => {
-    const handler = () => {
-      stop();
-      process.exit(code);
-    };
-    process.once(signal, handler);
-    return [signal, handler];
-  });
-  return () => {
-    for (const [signal, handler] of handlers) process.off(signal, handler);
-  };
 }
 
 async function stopBrowser(browser, userDataDir) {

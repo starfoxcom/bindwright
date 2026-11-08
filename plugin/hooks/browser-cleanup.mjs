@@ -77,6 +77,30 @@ export function isRunning(pid) {
   }
 }
 
+/** Resolves once `pid` has exited, or after `ms`, whichever comes first. */
+export async function waitWhileRunning(pid, ms) {
+  const deadline = Date.now() + ms;
+  while (isRunning(pid) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 100));
+}
+
+// A run stopped by one of these still stops its browser; the exit code is 128 + the signal.
+const STOP_SIGNALS = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+
+/** Runs `stop` and exits when the process gets a stop signal; returns the call that undoes it. */
+export function stopOnSignals(stop) {
+  const handlers = Object.entries(STOP_SIGNALS).map(([signal, code]) => {
+    const handler = () => {
+      stop();
+      process.exit(code);
+    };
+    process.once(signal, handler);
+    return [signal, handler];
+  });
+  return () => {
+    for (const [signal, handler] of handlers) process.off(signal, handler);
+  };
+}
+
 /** Kills `pid` and, on Windows, every process it started. */
 export function killTree(pid, platform = process.platform) {
   if (platform === "win32") {
