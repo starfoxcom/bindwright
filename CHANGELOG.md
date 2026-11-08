@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
+
 ### Fixed
 
 - A team project without the AI reviews, on another site or on GitHub with them off, no longer reads in the collaboration rule that a 🔴 review verdict blocks its merge: a failing check or a reviewer's requested change does.
