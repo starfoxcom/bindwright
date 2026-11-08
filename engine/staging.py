@@ -5,7 +5,7 @@ import os
 import shutil
 import stat
 
-from apply import _code_units
+from apply import _code_units, _is_link
 
 # The staging folders, relative to the repo root, in the order they are removed.
 STAGING_FOLDERS = [".bindwright/incoming", ".bindwright/global"]
@@ -17,19 +17,6 @@ def _entry_at(path):
         return os.lstat(path)
     except FileNotFoundError:
         return None
-
-
-# The Windows reparse tags of a symlink and a junction. Other reparse points, such as OneDrive
-# placeholders, are ordinary folders, as Node's lstat reads them too.
-_LINK_TAGS = (
-    getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0xA000000C),
-    getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003),
-)
-
-
-def _is_link(entry):
-    # os.path.islink misses a junction, which is how os.path.isjunction tells them apart.
-    return stat.S_ISLNK(entry.st_mode) or getattr(entry, "st_reparse_tag", 0) in _LINK_TAGS
 
 
 def _check_folder(path, relative):
