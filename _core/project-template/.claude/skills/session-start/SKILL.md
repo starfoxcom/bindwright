@@ -5,7 +5,7 @@ description: Start a work session. Reads the project state and git state, then p
 
 # /session-start
 
-Planning only. Change no files and create no branches in this turn.
+Planning only. Create no branches and change no files in this turn, apart from the session's purpose note in step 4 where it applies.
 
 ## 1. Read
 
@@ -69,6 +69,10 @@ Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude 
 
 ## 4. Stop
 
+<!-- TOGGLE:guard_hooks_repo START -->
+Before ending the turn, write this session's purpose to `.bindwright/sessions/${CLAUDE_SESSION_ID}.purpose`: what the plan works on, in 10 words at most and as few as will do, without the project's name. That is the one file this turn writes; create the folder first when it is missing, with a `.gitignore` that holds `*`. From the next prompt, the one that approves the plan, the session's title reads `<Project> - <purpose>`. Rewrite the file when the user corrects the plan or the session's focus changes.
+
+<!-- TOGGLE:guard_hooks_repo END -->
 End the turn after the report. Once the user approves or corrects the plan, create the tasks per `.claude/rules/task-tracking.md` and start.
 
 Produce every section even when a branch with work in progress is already checked out.
