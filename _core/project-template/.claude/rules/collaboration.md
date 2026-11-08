@@ -28,6 +28,11 @@ Applies when more than one person pushes to the repo. Everything in `git.md` sti
 <!-- TOGGLE:ci_checks START -->
 ## When CI is red
 
+<!-- TOGGLE:github_actions_routine_review START -->
 - A 🔴 review verdict is fixed on the same PR branch. Never merge past it.
+<!-- TOGGLE:github_actions_routine_review END -->
+<!-- TOGGLE:github_actions_routine_review:off START -->
+- A failing check or a reviewer's requested change is fixed on the same PR branch. Never merge past it.
+<!-- TOGGLE:github_actions_routine_review:off END -->
 - A red check caused by infrastructure (flaky test, runner outage) goes to whoever maintains CI. Never disable a workflow to get a merge through.
 <!-- TOGGLE:ci_checks END -->

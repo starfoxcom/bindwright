@@ -1,6 +1,7 @@
 // The evidence section's counts, all from the projects whose owners chose to share them:
-// the four totals count up once and a bar per project grows with its checked pull
-// requests, split by how many review rounds they took. The counts stay
+// the five totals count up once and a bar per project grows with its merged pull
+// requests, split into the ones that skipped the review and how many review rounds the
+// rest took. The counts stay
 // hidden until the counter answers with at least one project. Each animation starts as
 // its block enters the view, while it fades in; reduced motion shows the final state.
 import { t } from "./i18n/index.js";
@@ -50,10 +51,12 @@ export function onEnter(node, start) {
   observer.observe(node);
 }
 
-// The four big numbers: checked, then passed first try, fixed in a few rounds and stalled.
+// The five big numbers: merged, then the parts that add up to it: skipped the review,
+// passed first try, fixed in a few rounds and stalled.
 function totalsOf(total) {
   return {
-    checked: total.checked,
+    merged: total.merged,
+    skipped: total.merged - total.checked,
     firstTry: total.checked - total.caught,
     fixed: total.caught - total.stalled,
     stalled: total.stalled,
@@ -72,10 +75,8 @@ function show(total) {
     held: total.caught,
     rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
     deep: total.deep,
-    skipped: total.merged - total.checked,
-    merged: total.merged,
   });
-  const largest = Math.max(...total.rows.map((row) => row.checked));
+  const largest = Math.max(...total.rows.map((row) => row.merged));
   chart.replaceChildren(...total.rows.map((row, index) => projectRow(row, index, largest)));
   legend.replaceChildren(...PARTS.map(legendItem));
   counts.hidden = false;

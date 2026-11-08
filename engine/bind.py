@@ -15,6 +15,7 @@
 #   python engine/bind.py --export DIR < choices.json    -> the project's setup object written (share.py)
 #   python engine/bind.py --remember DIR --layer L < choices.json -> one person's choices written to layer L
 #   python engine/bind.py --doctor DIR                   -> a health check of that repo and this machine (doctor.py)
+#   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
 # A failed bind gives {"error": message} and, alone, exit status 1.
 
 import json
@@ -39,6 +40,7 @@ from audit import run_audit
 from share import export_setup, remember_choices
 from doctor import cli_version_from, run_doctor
 from report import draft_report
+from staging import clean_staging
 
 CORE = "_core/project-template/"
 
@@ -376,6 +378,14 @@ def _report(argv, read_file):
         return {"error": str(e)}
 
 
+def _clean_staging(argv):
+    """--clean-staging DIR: removes setup's staging folders from that repo."""
+    try:
+        return clean_staging(_option(argv, "--clean-staging"), "--discard-incoming" in argv)
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
 def _main(argv):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cache = {}
@@ -398,7 +408,9 @@ def _main(argv):
         except Exception as e:  # every failure is reported, as the JS engine throws it
             return {"error": str(e)}
 
-    if "--batch" in argv:
+    if "--clean-staging" in argv:
+        result = _clean_staging(argv)
+    elif "--batch" in argv:
         result = [run(j["answers"], j.get("year"), j.get("version")) for j in _stdin_json()]
     elif "--update" in argv:
         result = _update(argv, read_file, core_files)

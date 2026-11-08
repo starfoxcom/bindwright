@@ -162,8 +162,12 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <p class="preview-note" id="evidence-note"></p>
     <div class="stats">
       <div class="stat">
-        <span class="stat-num" data-total="checked" data-count="0">0</span>
-        <p class="stat-label" data-t="evidence.checked.label">pull requests checked by the AI reviewer before they merged</p>
+        <span class="stat-num" data-total="merged" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.merged.label">pull requests merged, every one sent through the AI review gate</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-info" data-total="skipped" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.skipped.label">skipped the review, mostly docs-only changes with no code to check</p>
       </div>
       <div class="stat">
         <span class="stat-num stat-accent" data-total="firstTry" data-count="0">0</span>
@@ -179,7 +183,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       </div>
     </div>
     <p class="evidence-detail" id="evidence-detail"></p>
-    <p class="chart-title" data-t="evidence.chart">Each project: pull requests checked, and how many rounds each took to pass</p>
+    <p class="chart-title" data-t="evidence.chart">Each project: pull requests merged, the ones that skipped the review, and how many rounds each took to pass</p>
     <ul class="projects" id="projects"></ul>
     <ul class="legend" id="legend"></ul>
     </div>
