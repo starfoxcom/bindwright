@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- The layout check no longer stops at random on Windows with `EBUSY` while the browser starts: it waits while the browser still holds its DevTools port file locked.
+
 ## [v2.4.0] — 2026-11-08
 
 v2.4.0 lets setup finish on a fresh machine, stops the layout check from leaving browsers running, and shows on the page how many pull requests merged and skipped the AI review.

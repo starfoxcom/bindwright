@@ -193,6 +193,17 @@ function openSocket(url) {
   });
 }
 
+// The port file's lines, or none while it is missing or still being written: on Windows the
+// browser holds it locked while it writes, so a read then fails with EBUSY or EPERM.
+function portFileLines(file) {
+  try {
+    return readFileSync(file, "utf8").split(/\r?\n/);
+  } catch (error) {
+    if (["ENOENT", "EBUSY", "EPERM"].includes(error.code)) return [];
+    throw error;
+  }
+}
+
 // Chrome writes its DevTools port and browser path to this file once it is listening.
 async function readDevToolsPort(userDataDir, browser) {
   const file = join(userDataDir, "DevToolsActivePort");
@@ -207,7 +218,7 @@ async function readDevToolsPort(userDataDir, browser) {
     if ((exitCode !== null && exitCode !== 0) || signalCode !== null) {
       throw new Error(`the browser exited at start (${exitCode ?? signalCode})`);
     }
-    const lines = existsSync(file) ? readFileSync(file, "utf8").split(/\r?\n/) : [];
+    const lines = portFileLines(file);
     if (lines[0] && lines[1]) return { port: lines[0], path: lines[1] };
     await sleep(100);
   }
