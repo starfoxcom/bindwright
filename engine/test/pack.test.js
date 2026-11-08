@@ -58,7 +58,7 @@ test("the packed plugin binds what the repo's engine binds", { skip: !python && 
 
 // Packed paths with edits git has not recorded: the zip (built from git) and
 // the folder pack (from the working tree) would then differ on purpose.
-const PACKED = ["plugin", "engine", "_core", "VERSION"];
+const PACKED = ["plugin", "engine", "_core", "VERSION", "CHANGELOG.md"];
 const dirty = run("git", ["-C", repo, "status", "--porcelain", "--", ...PACKED]).stdout.trim() !== "";
 
 test("the release zip has the same bytes on every build and the folder pack's files", {
