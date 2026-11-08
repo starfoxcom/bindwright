@@ -75,7 +75,12 @@ function makeRepo(files, rule = SMALL_RULE) {
 }
 
 function check(root, args = [], { stub = {}, lizard = true } = {}) {
-  const env = { ...process.env, LIZARD_STUB: JSON.stringify(stub), PYTHONPATH: lizard ? join(root, "stub") : "" };
+  // A home of the repo's own, so a real ~/.bindwright on this machine is never read.
+  const home = join(root, "home");
+  const env = {
+    ...process.env, LIZARD_STUB: JSON.stringify(stub), PYTHONPATH: lizard ? join(root, "stub") : "",
+    HOME: home, USERPROFILE: home,
+  };
   const r = spawnSync(python, ["-S", ".github/scripts/size_check.py", ...args], { cwd: root, env, encoding: "utf8" });
   return { code: r.status, out: r.stdout + r.stderr };
 }
@@ -203,6 +208,16 @@ test("without lizard the check fails loudly and writes no baseline", { skip }, (
   r = check(root, ["--write-baseline"], { lizard: false });
   assert.equal(r.code, 1, r.out);
   assert.ok(!existsSync(join(root, ".github/size-check/baseline.txt")));
+});
+
+test("lizard in the environment setup installs it in counts as installed", { skip }, () => {
+  const { root, put } = makeRepo({ "app.py": "x\n" });
+  // Another Python version's folder than the one running, as after a Homebrew upgrade.
+  put("home/.bindwright/size-check-venv/lib/python3.99/site-packages/lizard.py", STUB);
+  const r = check(root, [], { lizard: false, stub: { "app.py": [{ name: "long", length: 9 }] } });
+  assert.equal(r.code, 1, r.out);
+  assert.doesNotMatch(r.out, /SIZE_CHECK_DEGRADED/);
+  assert.match(r.out, /app\.py: function long = 9 \(hard limit 8\)/);
 });
 
 test("a language lizard cannot read still gets its file rows, with a note", { skip }, () => {
