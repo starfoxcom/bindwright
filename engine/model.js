@@ -61,6 +61,8 @@ const TRACKER_PROJECT = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[1-9][0
 // "<owner>/<repo>" of a GitHub repo, such as the public roadmap or the private
 // tracker repo; the repo part follows GitHub's rule.
 const GITHUB_REPO = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/(?!\.+$)[A-Za-z0-9._-]{1,100}$/;
+// A GitHub user, or "<org>/<team>" for a team.
+const PR_REVIEWER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?$/;
 export const LICENSES = {
   MIT: "MIT.txt",
   "Apache-2.0": "Apache-2.0.txt",
@@ -124,6 +126,8 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       // With the github tracker: a short, git-ignored hand-off file that
       // points at the issues the last session worked on.
       handoffFile: true,
+      // GitHub names (user or org/team) asked on each PR that needs approval; null if none.
+      prReviewers: null,
     },
   };
 }
@@ -153,6 +157,17 @@ function checkCodeHost(adv) {
   check(unset(adv.trackerProject), `${host} has no GitHub Projects board: trackerProject must be null`);
   check(unset(adv.trackerRepo), `${host} has no GitHub issues repo: trackerRepo must be null`);
   check(unset(adv.publicRoadmap), `${host} has no GitHub public roadmap: publicRoadmap must be null`);
+}
+
+// The reviewers asked on each PR: null, or 1 to 10 distinct GitHub names.
+function checkPrReviewers(adv) {
+  const reviewers = adv.prReviewers;
+  if (reviewers === null) return;
+  check(Array.isArray(reviewers) && reviewers.length >= 1 && reviewers.length <= 10 &&
+    reviewers.every((name) => typeof name === "string" && PR_REVIEWER.test(name)) &&
+    new Set(reviewers).size === reviewers.length,
+  'prReviewers must be null or 1-10 GitHub names ("user" or "org/team")');
+  check(adv.codeHost === "github", 'prReviewers is for codeHost "github"');
 }
 
 const QUOTE_MAX = 40;
@@ -230,6 +245,7 @@ export function validate(saved) {
   + "without quotes, backslashes, line breaks or outer spaces");
   checkCodeHost(adv);
   check(!(a.team && adv.codeHost === "local"), 'codeHost "local" is one person on one computer: team must be false');
+  checkPrReviewers(adv);
   check(TRACKERS.includes(adv.tracker), `unknown tracker ${quoted(adv.tracker)}`);
   if (adv.tracker === "github") {
     check(adv.trackerProject === null ||
@@ -307,6 +323,7 @@ export function flagsFor(a) {
     code_size_check: adv.codeSizeCheck,
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
+    pr_reviewers: Array.isArray(adv.prReviewers),
     contributing_md: a.team,
     license_file: !a.client,
     audit_trail_commits: a.client && a.private,

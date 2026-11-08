@@ -155,6 +155,15 @@ export const PROJECT = [
     keys: ["advanced.codeHost", "advanced.githubApps"],
   },
   {
+    id: "pr-reviewers",
+    title: "Required reviewers",
+    text: "Asked for a team project on GitHub. The people or teams each PR asks for review, "
+      + "and the merge waits for their approval.",
+    value: "None",
+    keys: ["advanced.prReviewers"],
+    engine: [{ flags: {}, key: "advanced.prReviewers", value: null }],
+  },
+  {
     id: "work-state",
     title: "Where work is tracked",
     text: "A GitHub board, issues only, or a hand-off file in the repo.",

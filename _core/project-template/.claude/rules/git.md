@@ -136,6 +136,12 @@ Because `{{MAIN_BRANCH}}` is the default branch, a change to `.github/workflows/
 ## Pull requests
 
 Write the body to a file and pass `--body-file <path>`. Inline bodies get truncated or mangled by the shell.
+<!-- TOGGLE:pr_reviewers START -->
+
+### Required reviewers
+
+The base branch requires approvals from people. On `gh pr create`, pass `--reviewer <name>` for each name in `advanced.prReviewers` of `.bindwright/project.json` (a person's GitHub name, or `<org>/<team>` for a team). Merge only when `gh pr view <pr> --json reviewDecision` prints `APPROVED` and every check passes; while it prints `REVIEW_REQUIRED` or `CHANGES_REQUESTED`, wait, answer the review, and never try the merge first.
+<!-- TOGGLE:pr_reviewers END -->
 
 ```
 ## What
