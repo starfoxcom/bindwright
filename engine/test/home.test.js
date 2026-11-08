@@ -377,3 +377,61 @@ test("find-python names a system interpreter", { skip }, () => {
   assert.ok(out.python || out.error, r.stdout);
   if (out.python) assert.ok(existsSync(out.python), out.python);
 });
+
+test("a removed mod leaves the folder list, keeps the user's other entries, and its folder goes", { skip }, () => {
+  withHome((dir) => {
+    const mod = join(dir, "pack", "session-facts");
+    mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
+    writeSettings(dir, { env: { CLAUDE_CODE_PLUGIN_DIRS: "/other/mod", KEEP: "1" } });
+    const target = home(dir, "add-mod", mod).out.installed;
+    const removed = home(dir, "remove-mod", "session-facts");
+    assert.equal(removed.status, 0, removed.stderr);
+    assert.deepEqual(removed.out, { removed: target, unlisted: true, deleted_folder: true });
+    assert.deepEqual(settings(dir).env, { CLAUDE_CODE_PLUGIN_DIRS: "/other/mod", KEEP: "1" });
+    assert.ok(!existsSync(target));
+    assert.deepEqual(home(dir, "remove-mod", "session-facts").out,
+      { removed: target, unlisted: false, deleted_folder: false });
+  });
+});
+
+test("the last listed mod takes the folder list with it", { skip }, () => {
+  withHome((dir) => {
+    const mod = join(dir, "pack", "tasks");
+    mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
+    writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
+    home(dir, "add-mod", mod);
+    home(dir, "remove-mod", "tasks");
+    assert.deepEqual(settings(dir).env, {});
+  });
+});
+
+test("an agent file is removed, and a name that is a path is refused", { skip }, () => {
+  withHome((dir) => {
+    const agent = join(dir, "pack", "builder.md");
+    mkdirSync(dirname(agent), { recursive: true });
+    writeFileSync(agent, "# builder\n");
+    const target = home(dir, "add-agent", agent).out.installed;
+    assert.deepEqual(home(dir, "remove-agent", "builder.md").out, { removed: target, deleted_file: true });
+    assert.ok(!existsSync(target));
+    for (const name of ["../settings.json", "..", "a\\b.md"]) {
+      const refused = home(dir, "remove-agent", name);
+      assert.equal(refused.status, 1, name);
+      assert.match(refused.out.error, /Not an agent file name/, name);
+    }
+  });
+});
+
+test("a removed output style is turned off only when it is the one in use", { skip }, () => {
+  withHome((dir) => {
+    writeSettings(dir, { model: "opus" });
+    const target = home(dir, "add-style", styleFile(dir)).out.installed;
+    const removed = home(dir, "remove-style", "straight-talk.md").out;
+    assert.deepEqual(removed, { removed: target, deleted_file: true, turned_off: true, outputStyle: "Straight Talk" });
+    assert.deepEqual(settings(dir), { model: "opus" });
+    home(dir, "add-style", styleFile(dir));
+    writeSettings(dir, { outputStyle: "Explanatory" });
+    assert.equal(home(dir, "remove-style", "straight-talk.md").out.turned_off, false);
+    assert.deepEqual(settings(dir), { outputStyle: "Explanatory" });
+  });
+});
