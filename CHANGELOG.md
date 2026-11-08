@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v2.3.1] — 2026-11-08
+
 ### Added
 
 - The page's review results show how many pull requests merged and how many skipped the AI review, beside how many passed it on the first try, were fixed in 1 to 5 rounds, or needed deeper research: as totals, and under each project's bar with its exact counts.
