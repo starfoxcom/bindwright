@@ -36,6 +36,8 @@ For each extra in `extras` whose `want` is not `false` and that `installed` says
 
 Choices are passed on standard input to `--remember <repo root> --layer personal` (every project on this machine) or `--layer local` (only this repo; the engine keeps that file out of git). On `{"error": ...}`, show it and go on with the next extra.
 
+When this run rendered `.bindwright/global/`, remove it at the end the way setup step 7 does, with the engine's `--clean-staging <repo root>`.
+
 Mods load at start-up: if any were installed, say the CLI needs a restart.
 
 ## 5. Start
