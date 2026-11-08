@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- The layout check no longer leaves headless browsers running. On Windows, Edge's launcher exits at once and hands off to the real browser, which only a clean finish used to close: the check now stops the browser itself, on a stop signal too, and each run first stops browsers that runs killed outright left behind.
 - A team project without the AI reviews, on another site or on GitHub with them off, no longer reads in the collaboration rule that a 🔴 review verdict blocks its merge: a failing check or a reviewer's requested change does.
 
 ## [v2.3.0] — 2026-11-06
