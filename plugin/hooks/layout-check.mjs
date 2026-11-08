@@ -278,8 +278,9 @@ async function withBrowser(browserPath, use) {
       socket.close();
     }
   } finally {
-    removeHandlers();
+    // The handlers stay through the shutdown wait, so a stop signal during it still stops the browser.
     await stopBrowser(browser, userDataDir);
+    removeHandlers();
   }
 }
 
