@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- Setup installs lizard, which the size check needs, on a Python that refuses `pip install --user` because the system or Homebrew manages it (macOS with Homebrew, Debian, Ubuntu): it installs it into its own environment at `~/.bindwright/size-check-venv`, and the size check looks there too.
+
 ## [v2.4.0] — 2026-11-08
 
 v2.4.0 lets setup finish on a fresh machine, stops the layout check from leaving browsers running, and shows on the page how many pull requests merged and skipped the AI review.
