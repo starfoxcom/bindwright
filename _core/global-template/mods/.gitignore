@@ -1,3 +1,0 @@
-# Editor typings the engine writes on every load (it also drops its own .gitignore inside).
-*/.claude-plugin/types/
-node_modules/

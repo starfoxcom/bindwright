@@ -1,8 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test",
-    "list-core": "node list-core.js"
-  }
-}
