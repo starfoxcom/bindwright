@@ -14,9 +14,11 @@ LOCAL_FOLDERS = [
     ("docs/lazy/", False),
     (".github/size-check/", False),
 ]
+# Files the sessions write when the work state lives in the repo, listed on every run.
+ALWAYS_FILES = ["ROADMAP.md"]
 # Files, listed only when the plan writes them.
 LOCAL_FILES = [
-    "CLAUDE.md", "ROADMAP.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
+    "CLAUDE.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
     "docs/security-posture.md", ".github/scripts/size_check.py", ".github/workflows/size-check.yml",
 ]
 
@@ -46,7 +48,7 @@ def exclude_lines(paths):
     """The exclude lines for the planned repo paths: folders, then files, each anchored with "/"."""
     folders = ["/" + path for path, always in LOCAL_FOLDERS
                if always or any(p.startswith(path) for p in paths)]
-    files = ["/" + name for name in LOCAL_FILES if name in paths]
+    files = ["/" + name for name in ALWAYS_FILES + [n for n in LOCAL_FILES if n in paths]]
     return folders + files
 
 
@@ -99,9 +101,16 @@ def _with_block(text, lines, file):
 
 
 def _without_block(text, file):
-    """`text` without its block, or None when there is none."""
+    """`text` without its block, or None when there is none.
+
+    The line break the block added stays when a line follows the block, so that line does not
+    join the user's last one.
+    """
     span = _block_span(text, file)
-    return None if span is None else text[:span[0]] + text[span[1]:]
+    if span is None:
+        return None
+    start = span[0] + 1 if span[2] and span[1] < len(text) else span[0]
+    return text[:start] + text[span[1]:]
 
 
 def _exclude_file(folder):
@@ -130,6 +139,14 @@ def _tracked_under(folder, lines):
     return sorted((path for path in done.stdout.split("\0") if path), key=_code_units)
 
 
+def _require_work_tree(folder):
+    """Refuses a clone with no work tree (a bare repo): there is nothing to keep out of it."""
+    done = subprocess.run(["git", "-C", folder, "rev-parse", "--is-inside-work-tree"],
+                          capture_output=True, check=True, encoding="utf-8")
+    if done.stdout.strip() != "true":
+        raise ValueError(f"Not a work tree: {folder}")
+
+
 def local_exclude(folder, dests):
     """Lists the files the bind would write (`dests`, the keys of its plan) in the clone's exclude file.
 
@@ -140,6 +157,8 @@ def local_exclude(folder, dests):
     file = _exclude_file(folder)
     paths = planned_paths(dests)
     lines = exclude_lines(paths)
+    _require_work_tree(folder)
+    tracked = _tracked_under(folder, lines)
     updated = _with_block(_read_exclude_file(file), lines, file)
     os.makedirs(os.path.dirname(file), exist_ok=True)
     with open(file, "w", encoding=EXCLUDE_ENCODING, newline="") as fh:
@@ -148,7 +167,7 @@ def local_exclude(folder, dests):
         "exclude": file.replace("\\", "/"),
         "lines": lines,
         "shared": sorted((p for p in paths if not any(_covers(line, p) for line in lines)), key=_code_units),
-        "tracked": _tracked_under(folder, lines),
+        "tracked": tracked,
     }
 
 

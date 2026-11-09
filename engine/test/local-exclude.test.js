@@ -92,6 +92,35 @@ for (const [name, run] of ENGINES) {
       });
   }
 
+  test(`${name}: --undo keeps a line the user added after the block on its own line`, { skip }, () => {
+    withFolder((repo) => {
+      writeFileSync(excludeOf(repo), "*.log");
+      assert.equal(call(run, ["--local-exclude", repo], ANSWERS).status, 0);
+      writeFileSync(excludeOf(repo), `${readFileSync(excludeOf(repo), "utf8")}*.tmp\n`);
+      assert.equal(call(run, ["--local-exclude", repo, "--undo"]).status, 0);
+      assert.equal(readFileSync(excludeOf(repo), "utf8"), "*.log\n*.tmp\n");
+    });
+  });
+
+  test(`${name}: the sessions' ROADMAP.md is listed even though the plan does not write it`, { skip }, () => {
+    withFolder((repo) => {
+      const done = call(run, ["--local-exclude", repo], ANSWERS);
+      assert.ok(done.result.lines.includes("/ROADMAP.md"), done.result.lines.join(", "));
+    });
+  });
+
+  test(`${name}: a clone with no work tree is refused and its exclude file is left alone`, { skip }, () => {
+    withFolder((folder) => {
+      spawnSync("git", ["init", "-q", "--bare", folder], { encoding: "utf8" });
+      const exclude = join(folder, "info", "exclude");
+      const before = existsSync(exclude) ? readFileSync(exclude, "utf8") : null;
+      const done = call(run, ["--local-exclude", folder], ANSWERS);
+      assert.equal(done.status, 1);
+      assert.deepEqual(done.result, { error: `Not a work tree: ${folder}` });
+      assert.equal(existsSync(exclude) ? readFileSync(exclude, "utf8") : null, before);
+    }, { initGit: false });
+  });
+
   test(`${name}: --undo with no exclude file reports removed false and creates nothing`, { skip }, () => {
     withFolder((repo) => {
       rmSync(excludeOf(repo));
