@@ -65,6 +65,8 @@ TRACKER_PROJECT = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[1-
 # "<owner>/<repo>" of a GitHub repo, such as the public roadmap or the private
 # tracker repo; the repo part follows GitHub's rule.
 GITHUB_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/(?!\.+$)[A-Za-z0-9._-]{1,100}")
+# A GitHub user, or "<org>/<team>" for a team.
+PR_REVIEWER = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}(/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?")
 LICENSES = {
     "MIT": "MIT.txt",
     "Apache-2.0": "Apache-2.0.txt",
@@ -179,6 +181,8 @@ def defaults(team=False, client=False, private=None):
             "trackerRepo": None,
             "publicRoadmap": None,
             "handoffFile": True,
+            # GitHub names (user or org/team) asked on each PR that needs approval; null if none.
+            "prReviewers": None,
             # True runs two local reviewer subagents before each merge, for a project
             # with no AI review in CI, and posts nothing to the host.
             "localReview": False,
@@ -275,6 +279,7 @@ def validate(saved):
     _check_local_review(adv)
     _check(not (a["team"] and adv["codeHost"] == "local"),
            'codeHost "local" is one person on one computer: team must be false')
+    _check_pr_reviewers(adv)
     _check_tracker(get(adv, "tracker"), get(adv, "trackerProject"))
     _check_repos(get(adv, "tracker"), get(adv, "publicRoadmap"), get(adv, "trackerRepo"))
     return a
@@ -333,11 +338,24 @@ def _check_code_host(adv):
            label + " has no GitHub public roadmap: publicRoadmap must be null")
 
 
-def _check_local_review(adv):
-    if not adv["localReview"]:
+def _check_pr_reviewers(adv):
+    reviewers = adv.get("prReviewers", UNDEFINED)
+    if reviewers is None:
         return
-    _check(adv["aiReview"] is False, "localReview is for projects without CI reviews: aiReview must be false")
-    without_actions = adv["codeHost"] == "other" or (adv["codeHost"] == "github" and adv["githubApps"] is False)
+    _check(isinstance(reviewers, list) and 1 <= len(reviewers) <= 10
+           and all(isinstance(name, str) and PR_REVIEWER.fullmatch(name) is not None
+                   for name in reviewers)
+           and len(set(reviewers)) == len(reviewers),
+           'prReviewers must be null or 1-10 GitHub names ("user" or "org/team")')
+    _check(adv.get("codeHost") == "github", 'prReviewers is for codeHost "github"')
+
+
+def _check_local_review(adv):
+    if not adv.get("localReview"):
+        return
+    _check(adv.get("aiReview") is False, "localReview is for projects without CI reviews: aiReview must be false")
+    host = adv.get("codeHost")
+    without_actions = host == "other" or (host == "github" and adv.get("githubApps") is False)
     _check(without_actions, 'localReview needs codeHost "other", or "github" with githubApps false')
 
 
@@ -409,6 +427,7 @@ def flags_for(a):
         "code_size_check": adv["codeSizeCheck"],
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
+        "pr_reviewers": isinstance(adv["prReviewers"], list),
         "local_review": adv["localReview"],
         "assistant_files_local": adv["localOnly"],
         "contributing_md": a["team"],

@@ -155,6 +155,15 @@ export const PROJECT = [
     keys: ["advanced.codeHost", "advanced.githubApps"],
   },
   {
+    id: "pr-reviewers",
+    title: "Required reviewers",
+    text: "Asked for a team project on GitHub. The people or teams each PR asks for review, "
+      + "and the merge waits for their approval.",
+    value: "None",
+    keys: ["advanced.prReviewers"],
+    engine: [{ flags: {}, key: "advanced.prReviewers", value: null }],
+  },
+  {
     id: "local-review",
     title: "Local review before each merge",
     text: "Offered when GitHub can't run CI workflows, on hosted or local runners. Two fresh "

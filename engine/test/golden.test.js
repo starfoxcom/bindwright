@@ -169,6 +169,7 @@ function refused() {
     (a) => { a.advanced.publicRoadmap = 6; },
     (a) => { a.advanced.tracker = "file"; a.advanced.publicRoadmap = "owner/roadmap"; },
     (a) => { delete a.advanced.trackerRepo; },
+    (a) => { delete a.advanced.prReviewers; },
     (a) => { a.advanced.trackerRepo = "owner"; },
     (a) => { a.advanced.trackerRepo = "owner/.."; },
     (a) => { a.advanced.trackerRepo = 6; },

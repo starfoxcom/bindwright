@@ -334,6 +334,10 @@ export default {
     + "u otro sitio. GitHub bloqueado conserva los pull requests y los issues; solo esta computadora no necesita "
     + "cuenta; otro sitio recibe las partes de GitHub para adaptarlas.",
   "settings.code-host.value": "GitHub",
+  "settings.pr-reviewers.title": "Revisores requeridos",
+  "settings.pr-reviewers.text": "Se pregunta para un proyecto en equipo en GitHub. Las personas o equipos "
+    + "a los que cada PR pide revisión, y el merge espera su aprobación.",
+  "settings.pr-reviewers.value": "Ninguno",
   "settings.local-review.title": "Revisión local antes de cada merge",
   "settings.local-review.text": "Se ofrece cuando GitHub no puede correr workflows de CI, ni en runners "
     + "alojados ni locales. Dos revisores nuevos revisan cada cambio antes de su merge, y nada de ellos "

@@ -110,6 +110,10 @@ For someone else's project (a client or an employer), ask one more:
 
 - **Keep the assistant's files on this computer only?** No, they go in the repo like any other file (recommended); or yes, for a team or organization whose repo must not carry them. Yes saves `"localOnly": true`: setup lists `CLAUDE.md`, `.claude/`, `.bindwright/` and its other files for the assistant in this clone's `.git/info/exclude`, an ignore list git keeps out of every commit, and step 8 offers each file meant for the whole team (README and CHANGELOG sections, issue and PR templates, `.gitattributes`) to keep or drop. Say that a new clone needs setup again, since the files and the list stay in this one.
 
+For a team project on GitHub, ask one more:
+
+- **Do pull requests need named reviewers?** No (recommended when nothing on GitHub asks for one), or yes: ask for each reviewer's GitHub name, or `<org>/<team>` for a team, up to 10, and save them as `"prReviewers": ["<name>", ...]`. Setup then has each PR request those reviewers and merge only once GitHub reports it approved. No saves `"prReviewers": null`.
+
 ### Where the work state lives
 
 GitHub works here when the repo's remote is on GitHub and `gh auth status` works. When it does not, say why in one line and use the detailed hand-off file (`"tracker": "file"`). Otherwise ask the question below; with `"githubApps": false`, offer only its "GitHub issues only" and hand-off file choices, and skip the board:
@@ -178,6 +182,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
     "codeResearch": "<the computer's code-search tool>",
     "codeHost": "github",
     "githubApps": true,
+    "prReviewers": null,
     "localReview": false,
     "localOnly": false,
     "tracker": "github",

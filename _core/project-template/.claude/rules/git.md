@@ -160,6 +160,13 @@ Write the body to a file and pass `--body-file <path>`. Inline bodies get trunca
 
 No empty sections and no generic testing checklist. The body carries what the diff cannot show.
 
+<!-- TOGGLE:pr_reviewers START -->
+
+### Required reviewers
+
+The base branch requires approvals from people. On `gh pr create`, pass `--reviewer <name>` for each name in `advanced.prReviewers` of `.bindwright/project.json` (a person's GitHub name, or `<org>/<team>` for a team). Merge only when `gh pr view <pr> --json reviewDecision` prints `APPROVED` and every check passes; while it prints `REVIEW_REQUIRED` or `CHANGES_REQUESTED`, wait, answer the review, and never try the merge first.
+<!-- TOGGLE:pr_reviewers END -->
+
 <!-- TOGGLE:github_actions START -->
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.
 <!-- TOGGLE:github_actions END -->
