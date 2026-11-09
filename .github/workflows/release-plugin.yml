@@ -1,8 +1,15 @@
 name: Release plugin
 
-# Attaches the Bindwright plugin zip to a published release, for the
-# marketplace's archive source. The zip is rebuilt from the release tag by
-# tools/pack_plugin.py, which reads the files git stores. The job refuses to
+# Publishes a release: first the helper package (`bindwright` on npm and
+# PyPI, built from the tag by tools/pack_plugin.py, with provenance and trusted
+# publishing, so no token is stored), then the Bindwright plugin zip, attached
+# to the release for the marketplace's archive source. The helper goes first
+# because the plugin names its exact version. Releases before the helper
+# existed have no helper/ folder, and both helper jobs skip them; a version
+# already on a registry is skipped too, so a run can be repeated.
+#
+# The zip is rebuilt from the release tag by tools/pack_plugin.py, which
+# reads the files git stores. The job refuses to
 # upload a zip whose SHA-256 differs from the one the default branch's
 # .claude-plugin/marketplace.json pins, since that copy is the one every
 # machine reads, and the marketplace would refuse the zip anyway. The pin may
@@ -25,7 +32,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-plugin
@@ -35,15 +42,16 @@ defaults:
   run:
     shell: bash
 
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
 jobs:
-  zip:
-    name: Plugin zip
+  check:
+    name: Release check
     # By hand, only the default branch's copy of this workflow runs.
     if: github.event_name == 'release' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    timeout-minutes: 5
     steps:
       - name: Check the release
         env:
@@ -62,6 +70,103 @@ jobs:
             exit 1
           fi
 
+  npm:
+    name: Helper on npm
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      # Node 24's npm signs in through the trusted publisher set up on npmjs.com.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish the helper
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if [ ! -d helper ]; then
+            echo "::notice::$TAG has no helper package to publish"
+            exit 0
+          fi
+          if npm view "bindwright@$version" version >/dev/null 2>&1; then
+            echo "::notice::bindwright $version is already on npm"
+            exit 0
+          fi
+          dir="$RUNNER_TEMP/helper"
+          python3 tools/pack_plugin.py --helper-out "$dir" --ref HEAD
+          built=$(node -p "require(process.argv[1]).version" "$dir/package.json")
+          if [ "$built" != "$version" ]; then
+            echo "::error::the helper is version $built, the tag is $TAG"
+            exit 1
+          fi
+          cd "$dir"
+          npm publish --provenance --access public
+        # Empty once the trusted publisher is set up. npm can set one up only on a
+        # package that exists, so the first version publishes with this token,
+        # which is deleted afterwards.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  pypi:
+    name: Helper on PyPI
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Build the wheel
+        id: wheel
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if [ ! -d helper ]; then
+            echo "::notice::$TAG has no helper package to publish"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/bindwright/$version/json")
+          if [ "$code" = 200 ]; then
+            echo "::notice::bindwright $version is already on PyPI"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 tools/pack_plugin.py --wheel "$RUNNER_TEMP/wheel" --ref HEAD
+          ls "$RUNNER_TEMP/wheel/bindwright-$version-py3-none-any.whl"
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+      # Signs in through the trusted publisher set up on pypi.org, for this workflow and environment.
+      - name: Publish the wheel
+        if: steps.wheel.outputs.build == 'true'
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: ${{ runner.temp }}/wheel
+
+  zip:
+    name: Plugin zip
+    needs: [check, npm, pypi]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
       - uses: actions/checkout@v6
         with:
           ref: refs/tags/${{ env.TAG }}
