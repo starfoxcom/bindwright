@@ -14,6 +14,16 @@ One logical change per commit. Never mix a feature with a refactor, or a fix wit
 <!-- TOGGLE:attribution_guard START -->
 - No AI-attribution lines anywhere: no co-author trailers, "generated with" footers or session links in commits, PR titles, PR bodies or comments. `.claude/settings.json` turns off the harness's own trailers, and the `no-ai-attribution` hook catches the ones written by hand.
 <!-- TOGGLE:attribution_guard END -->
+<!-- TOGGLE:assistant_files_local START -->
+
+### The assistant's files stay on this computer
+
+`CLAUDE.md`, `.claude/`, `.bindwright/` and the other files setup wrote for the assistant are listed in this clone's `.git/info/exclude`, an ignore list git keeps out of every commit, so they never reach a commit, a push or a pull request.
+
+- Stage files by name. Never `git add -f` an excluded file, and never move its line into `.gitignore`, which the whole team shares.
+- Leave those files' names out of commit messages, PR bodies and comments.
+- A fresh clone has neither the files nor the list: run `/bindwright:setup` there, which writes the list before any file.
+<!-- TOGGLE:assistant_files_local END -->
 <!-- TOGGLE:code_host_local START -->
 
 ## Save points
@@ -149,6 +159,13 @@ Write the body to a file and pass `--body-file <path>`. Inline bodies get trunca
 ```
 
 No empty sections and no generic testing checklist. The body carries what the diff cannot show.
+
+<!-- TOGGLE:pr_reviewers START -->
+
+### Required reviewers
+
+The base branch requires approvals from people. On `gh pr create`, pass `--reviewer <name>` for each name in `advanced.prReviewers` of `.bindwright/project.json` (a person's GitHub name, or `<org>/<team>` for a team). Merge only when `gh pr view <pr> --json reviewDecision` prints `APPROVED` and every check passes; while it prints `REVIEW_REQUIRED` or `CHANGES_REQUESTED`, wait, answer the review, and never try the merge first.
+<!-- TOGGLE:pr_reviewers END -->
 
 <!-- TOGGLE:github_actions START -->
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.

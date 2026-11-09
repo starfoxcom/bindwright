@@ -26,9 +26,10 @@
 @keyframes scene-cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
 
 /* Terminal window: the common width (the hero split column), with the cards in a row under it. */
-/* Every terminal is one height, the tallest any scene needs; almost square on phones (below). */
+/* Every window has one shape, tall enough for any scene, and terminal.js sizes its text to its
+   width, so all of them show the same layout at any size; almost square on phones (below). */
 .stage .term {
-  width: 100%; max-width: 727px; margin: 2cqi auto 0; height: 620px;
+  width: 100%; max-width: 727px; margin: 2cqi auto 0; aspect-ratio: 727 / 620;
   display: flex; flex-direction: column;
   background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
   box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
@@ -224,4 +225,102 @@
   }
   .stage .cards:has(.card.on) .placeholder { opacity: 0; }
   .stage .card { grid-area: 1 / 1; font-size: 3.8cqi; }
+}
+
+/* The desktop app's view of every scene (view.js): the same window as the terminal, drawn
+   as Claude Code's desktop app. A sessions sidebar when the window is wide enough, the
+   session's title in the title bar, the user's messages as bubbles, the replies as plain
+   text, tool calls named in words, and a rounded message box with the folder and mode
+   under it. The terminal view hides the desktop's own parts. */
+.stage .desk-side, .stage .desk-title, .stage .desk-placeholder, .stage .desk-modes,
+:root:not([data-view="desktop"]) .stage .desk-only, :root[data-view="desktop"] .stage .term-only { display: none; }
+:root[data-view="desktop"] .stage {
+  --desk-bg: oklch(0.205 0 0);
+  --desk-side: oklch(0.175 0 0);
+  --desk-raised: oklch(0.255 0 0);
+  --desk-line: oklch(0.31 0 0);
+  --dim: oklch(0.66 0 0);
+}
+:root[data-view="desktop"] .stage .term {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
+  background: var(--desk-bg); border-color: var(--desk-line); border-radius: 12px;
+  font-family: "Hubot Sans", system-ui, sans-serif; line-height: 1.6;
+  container: win / inline-size;
+}
+:root[data-view="desktop"] .stage .term > :not(.desk-side) { grid-column: 2; }
+:root[data-view="desktop"] .stage .desk-side {
+  grid-column: 1; grid-row: 1 / -1; flex-direction: column; gap: .15em; width: 12em;
+  padding: .9em .6em; background: var(--desk-side); border-right: 1px solid var(--desk-line);
+  color: oklch(0.78 0 0); font-size: .9em; overflow: hidden;
+}
+@container win (min-width: 600px) {
+  :root[data-view="desktop"] .stage .desk-side { display: flex; }
+}
+.stage .desk-new {
+  padding: .45em .7em; border-radius: 8px; background: var(--desk-raised); color: var(--text); font-weight: 600;
+}
+.stage .desk-new::before { content: "+"; margin-right: .55em; color: var(--dim); }
+.stage .desk-label { margin: 1.1em .7em .3em; color: var(--dim); font-size: .88em; }
+.stage .desk-session {
+  padding: .35em .7em; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stage .desk-session.on { background: var(--desk-raised); color: var(--text); }
+
+:root[data-view="desktop"] .stage .bar { border-bottom: 0; padding: .85em 1.3em .4em; }
+:root[data-view="desktop"] .stage .bar i, :root[data-view="desktop"] .stage .bar > span { display: none; }
+:root[data-view="desktop"] .stage .desk-title {
+  display: block; color: var(--text); font-weight: 600; font-size: .95em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+:root[data-view="desktop"] .stage .pane { padding: 0 1.6em; }
+:root[data-view="desktop"] .stage .lines { left: 1.6em; right: 1.6em; }
+:root[data-view="desktop"] .stage .line { margin-bottom: .25em; }
+:root[data-view="desktop"] .stage .line:not(.tool) > .dot,
+:root[data-view="desktop"] .stage .elbow { display: none; }
+:root[data-view="desktop"] .stage .line.user { display: flex; justify-content: flex-end; }
+.stage .bubble {
+  max-width: 80%; padding: .45em .95em; border-radius: 16px; background: var(--desk-raised); color: var(--text);
+}
+:root[data-view="desktop"] .stage .line.tool { display: flex; align-items: baseline; gap: .5em; color: var(--text-2); }
+:root[data-view="desktop"] .stage .tool .dot { width: auto; }
+.stage .tool .act { flex: none; }
+.stage .tool .target {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: .05em .5em; border-radius: 6px; background: oklch(1 0 0 / .05); color: var(--text);
+  font: .88em "Fragment Mono", ui-monospace, monospace;
+}
+.stage .tool .fail { flex: none; color: var(--bad); font-weight: 600; }
+.stage .tool:not(.failed) .fail { display: none; }
+:root[data-view="desktop"] .stage .line.out {
+  margin-left: .25em; padding-left: 1em; border-left: 2px solid var(--desk-line); color: var(--dim);
+}
+/* Focused lines stay one tinted block: no gaps between them, and a result line drops its
+   guide line while keeping its text where it was. */
+:root[data-view="desktop"] .stage .line.focus:has(+ .focus) { margin-bottom: 0; }
+:root[data-view="desktop"] .stage .line.out.focus { margin-left: -.5em; padding-left: 1.75em; border-left: 0; }
+:root[data-view="desktop"] .stage .diff {
+  margin-left: .25em; font: .88em/1.7 "Fragment Mono", ui-monospace, monospace;
+}
+:root[data-view="desktop"] .stage .todo .box {
+  width: .95em; height: .95em; margin-right: .6em; vertical-align: -.12em; overflow: hidden;
+  border: 1.5px solid var(--dim); border-radius: 50%; color: transparent; line-height: 0;
+}
+:root[data-view="desktop"] .stage .todo.done .box { background: var(--ok); border-color: var(--ok); }
+:root[data-view="desktop"] .stage .thought { font-style: normal; }
+:root[data-view="desktop"] .stage .spinrow { padding-inline: 1.6em; }
+:root[data-view="desktop"] .stage .meta { display: none; }
+:root[data-view="desktop"] .stage .band { margin-inline: 1.6em; font-family: "Fragment Mono", ui-monospace, monospace; }
+:root[data-view="desktop"] .stage .input {
+  position: relative; margin: 0 1.2em .5em; padding: .8em 1em;
+  background: var(--desk-raised); border-color: var(--desk-line); border-radius: 16px;
+}
+:root[data-view="desktop"] .stage .input .p, :root[data-view="desktop"] .stage .hint { display: none; }
+:root[data-view="desktop"] .stage .caret { width: 1.5px; }
+:root[data-view="desktop"] .stage .desk-placeholder {
+  display: block; position: absolute; left: 1.4em; color: var(--dim); pointer-events: none;
+}
+:root[data-view="desktop"] .stage .input:has(.typed:not(:empty)) .desk-placeholder { display: none; }
+:root[data-view="desktop"] .stage .desk-modes {
+  display: flex; justify-content: space-between; padding: 0 2.2em .8em; color: var(--dim); font-size: .82em;
 }

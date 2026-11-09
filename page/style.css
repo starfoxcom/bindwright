@@ -316,22 +316,38 @@ h1 {
   overflow-wrap: anywhere; user-select: all;
 }
 /* Claude Code CLI or the desktop app: two equal halves, the thumb slides under the chosen one. */
-.install-switch {
+.install-switch, .view-switch {
   position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; padding: 4px;
   border-radius: 999px; background: var(--panel);
 }
-.install-switch::before {
+.install-switch::before, .view-switch::before {
   content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
   border-radius: 999px; background: var(--accent); transition: transform 200ms ease;
 }
-.install-switch[data-active="desktop"]::before { transform: translateX(100%); }
-.install-switch button {
+.install-switch[data-active="cli"]::before, .view-switch[data-active="terminal"]::before {
+  transform: translateX(100%);
+}
+.install-switch button, .view-switch button {
   position: relative; min-height: 40px; padding: 0 18px; font: 600 14px/1 "Hubot Sans", sans-serif;
   color: var(--text-2); background: none; border: 0; border-radius: 999px; cursor: pointer;
 }
-.install-switch button[aria-selected="true"] { color: var(--on-accent); }
-.install-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .install-switch::before { transition: none; } }
+.install-switch button[aria-selected="true"], .view-switch button[aria-checked="true"] { color: var(--on-accent); }
+.install-switch button:focus-visible, .view-switch button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .install-switch::before, .view-switch::before { transition: none; }
+}
+/* The floating switch between the desktop app and the terminal, for every scene on the page. */
+.view-switch {
+  position: fixed; z-index: 40; right: 16px; bottom: 16px;
+  background: oklch(0.245 0.007 240 / .92); border: 1px solid var(--rule);
+  box-shadow: 0 16px 40px -12px oklch(0 0 0 / .7); backdrop-filter: blur(10px);
+}
+.view-switch button { min-height: 36px; padding: 0 14px; font-size: 13px; white-space: nowrap; }
+@media (max-width: 640px) {
+  .view-switch { left: 0; right: 0; width: max-content; margin-inline: auto; bottom: 12px; }
+}
 
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
 

@@ -26,6 +26,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="../evidence.js"></script>
 <script type="module" src="../reveal.js"></script>
 <script>if (!matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("reveal");</script>
+<script>try { document.documentElement.dataset.view = localStorage.getItem("bindwright.view") === "terminal" ? "terminal" : "desktop"; } catch { document.documentElement.dataset.view = "desktop"; }</script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Ir a la instalación</a>
@@ -41,11 +42,16 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <a href="../" hreflang="en" lang="en">English</a>
   </nav>
 </header>
+<div class="view-switch" id="view-switch" role="radiogroup" aria-label="Ver Claude Code como"
+  data-t-attr="aria-label:view.label" data-active="desktop">
+  <button type="button" role="radio" aria-checked="true" data-pick="desktop" data-t="view.desktop">App de escritorio</button>
+  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-pick="terminal" data-t="view.terminal">Terminal</button>
+</div>
 <main id="main">
   <section class="hero">
     <div class="pitch">
-      <h1 data-t="hero.title">Deja de explicarle tu proyecto a Claude cada vez.</h1>
-      <p class="lede" data-t="hero.lede">Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la configuración es un solo comando.</p>
+      <h1 data-t="hero.title">Claude recuerda cómo te gusta trabajar.</h1>
+      <p class="lede" data-t="hero.lede">Responde unas preguntas una vez, y cada sesión de Claude en tu proyecto empieza sabiendo tus reglas, recibe una segunda revisión en cada cambio y frena todo lo riesgoso antes de que pase. Un solo comando, sin saber programar.</p>
       <div class="actions">
         <a class="go" href="#install" data-t="hero.go">Instalar Bindwright</a>
         <a class="source" href="https://github.com/starfoxcom/bindwright"
@@ -55,7 +61,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <div class="stage" id="scene-stage">
       <h2 class="caption" id="scene-caption"><span><b>1.</b><span data-t="scene.caption.1">Arranca sin complicaciones desde donde lo dejaste</span></span></h2>
 
-      <div class="term" role="img" aria-label="Una sesión de programación en la terminal con Bindwright configurado"
+      <div class="term" data-desk="desk.session.hero" role="img" aria-label="Una sesión de programación en Claude Code con Bindwright configurado"
         data-t-attr="aria-label:scene.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
         <div class="pane"><div class="lines"></div></div>
@@ -122,7 +128,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         </div>
         <p class="preview-note" data-t="result.note">Se muestra para el proyecto público de una sola persona con todo activado. La configuración lo ajusta al tuyo según tus respuestas.</p>
         <div class="stage split" id="lands-stage">
-          <div class="term" role="img" aria-label="Una terminal con /bindwright:setup, donde cada archivo que escribe vuela a una de dos cajas"
+          <div class="term" data-desk="desk.session.lands" role="img" aria-label="Claude Code con /bindwright:setup, donde cada archivo que escribe vuela a una de dos cajas"
             data-t-attr="aria-label:lands.aria">
             <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
             <div class="pane"><div class="lines"></div></div>
@@ -269,7 +275,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       <div class="mods-viewer">
         <button class="mods-step" id="mods-prev" type="button" aria-label="Mod anterior"
           data-t-attr="aria-label:mods.prev">&lsaquo;</button>
-      <div class="term" role="img" aria-label="Una terminal que muestra el mod elegido en uso"
+      <div class="term" data-desk="desk.session.mods" role="img" aria-label="Claude Code mostrando el mod elegido en uso"
         data-t-attr="aria-label:mods.term.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
         <div class="pane"><div class="lines"></div></div>
@@ -291,10 +297,10 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <h2 id="install-title" data-t="install.title">Instalar</h2>
     <div class="install-switch" role="tablist" aria-label="Dónde usas Claude Code"
       data-t-attr="aria-label:install.switch.label" data-active="cli">
-      <button type="button" role="tab" id="install-tab-cli" aria-selected="true"
-        aria-controls="install-cli" data-t="install.switch.cli">Claude Code CLI</button>
       <button type="button" role="tab" id="install-tab-desktop" aria-selected="false" tabindex="-1"
         aria-controls="install-desktop" data-t="install.switch.desktop">App de escritorio</button>
+      <button type="button" role="tab" id="install-tab-cli" aria-selected="true"
+        aria-controls="install-cli" data-t="install.switch.cli">Claude Code CLI</button>
     </div>
     </div>
     <ol class="command-steps" id="install-cli" role="tabpanel" aria-labelledby="install-tab-cli">

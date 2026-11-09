@@ -4,27 +4,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { bind } from "../bind.js";
 import { python } from "./python.js";
 import { HOST_VARIANTS, withoutActions, withoutGithub } from "./code-host.js";
+import { bindResult, clone, firstDifference, pythonBind } from "./both-engines.js";
 import {
   defaults, LICENSES, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES, MERGE_STYLES, HOOK_LOCATIONS, DENY_PROFILES, TRACKERS,
 } from "../model.js";
-
-const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
-const repo = join(engine, "..");
-const cache = new Map();
-const readFile = async (p) => {
-  if (!cache.has(p)) cache.set(p, readFileSync(join(repo, p), "utf8"));
-  return cache.get(p);
-};
-const coreFiles = JSON.parse(readFileSync(join(engine, "core-files.json"), "utf8"));
-
-const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // The custom code-research tool needs its own name and URL to bind.
 const CUSTOM = { name: "My Tool.v2+", url: "https://example.com/tools/my-tool?ref=a&b=1" };
@@ -184,6 +169,7 @@ function refused() {
     (a) => { a.advanced.publicRoadmap = 6; },
     (a) => { a.advanced.tracker = "file"; a.advanced.publicRoadmap = "owner/roadmap"; },
     (a) => { delete a.advanced.trackerRepo; },
+    (a) => { delete a.advanced.prReviewers; },
     (a) => { a.advanced.trackerRepo = "owner"; },
     (a) => { a.advanced.trackerRepo = "owner/.."; },
     (a) => { a.advanced.trackerRepo = 6; },
@@ -192,40 +178,6 @@ function refused() {
   ];
   // An edit that returns a value replaces the answers outright.
   return edits.map((edit) => { const a = defaults(); const whole = edit(a); return whole === undefined ? a : whole; });
-}
-
-// Both engines bind each answers object; a refusal comes back as its message.
-async function bindResult(answers) {
-  try {
-    return { files: [...(await bind(clone(answers), { readFile, coreFiles, year: 2026, version: "2.0.0" })).entries()] };
-  } catch (err) {
-    return { error: err.message };
-  }
-}
-
-// One Python run binds every case, in order: each result is { files } or { error }.
-function pythonBind(cases) {
-  const out = spawnSync(python, [join(engine, "bind.py"), "--batch"], {
-    input: JSON.stringify(cases.map((answers) => ({ answers, year: 2026, version: "2.0.0" }))), encoding: "utf8", maxBuffer: 1 << 30,
-  });
-  assert.equal(out.status, 0, out.stderr);
-  return JSON.parse(out.stdout);
-}
-
-// First differing file and line, so a failure names what to fix.
-function firstDifference(js, py) {
-  const jsKeys = js.map(([k]) => k);
-  const pyKeys = py.map(([k]) => k);
-  if (jsKeys.join("\n") !== pyKeys.join("\n")) return `file lists differ:\n  js: ${jsKeys.join(", ")}\n  py: ${pyKeys.join(", ")}`;
-  for (let i = 0; i < js.length; i++) {
-    if (js[i][1] === py[i][1]) continue;
-    const a = js[i][1].split("\n");
-    const b = py[i][1].split("\n");
-    const line = a.findIndex((l, n) => l !== b[n]);
-    const n = line === -1 ? a.length : line;
-    return `${js[i][0]} line ${n + 1}:\n  js: ${JSON.stringify(a[n])}\n  py: ${JSON.stringify(b[n])}`;
-  }
-  return null;
 }
 
 test("the Python engine binds exactly what the JS engine binds", { skip: !python && "needs Python 3.8+" }, async () => {

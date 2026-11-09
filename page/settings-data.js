@@ -155,6 +155,33 @@ export const PROJECT = [
     keys: ["advanced.codeHost", "advanced.githubApps"],
   },
   {
+    id: "pr-reviewers",
+    title: "Required reviewers",
+    text: "Asked for a team project on GitHub. The people or teams each PR asks for review, "
+      + "and the merge waits for their approval.",
+    value: "None",
+    keys: ["advanced.prReviewers"],
+    engine: [{ flags: {}, key: "advanced.prReviewers", value: null }],
+  },
+  {
+    id: "local-review",
+    title: "Local review before each merge",
+    text: "Offered when GitHub can't run CI workflows, on hosted or local runners. Two fresh "
+      + "reviewers check each change before it merges, and nothing about them reaches GitHub.",
+    value: "No",
+    keys: ["advanced.localReview"],
+    engine: [{ flags: {}, key: "advanced.localReview", value: false }],
+  },
+  {
+    id: "local-only",
+    title: "Assistant files on this computer only",
+    text: "Asked for a client's or employer's project. CLAUDE.md, .claude/ and setup's own files "
+      + "stay out of every commit, listed in the clone's own ignore list.",
+    value: "No",
+    keys: ["advanced.localOnly"],
+    engine: [{ flags: {}, key: "advanced.localOnly", value: false }],
+  },
+  {
     id: "work-state",
     title: "Where work is tracked",
     text: "A GitHub board, issues only, or a hand-off file in the repo.",
