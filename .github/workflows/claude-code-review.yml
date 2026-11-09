@@ -1023,14 +1023,15 @@ jobs:
           echo "--- review_context.md ---"
           cat "$RUNNER_TEMP/review_context.md"
 
-      # npm needs a Linux Node 22 or newer. Hosted runners have one. A
-      # self-hosted runner may have none, or may reach a Windows npm through
-      # WSL's Windows path, which installs a package with no Linux binary.
-      # Then this step brings the official Node build into the job's temp
-      # folder, checked against the SHA-256 pinned here (from the release's
-      # signed SHASUMS256.txt). Only the install steps put it on their PATH,
-      # and no setup action runs: setup-node runs a package manager in the
-      # PR's checkout, whose config files could start the PR's own code.
+      # npm needs a Linux Node, 22 or newer for the CLI, and a Linux npm.
+      # Hosted runners have both. A self-hosted runner may have none, or may
+      # reach a Windows npm through WSL's Windows path, which installs a
+      # package with no Linux binary. Then this step brings the official Node
+      # build (npm included) into the job's temp folder, checked against the
+      # SHA-256 pinned here (from the release's signed SHASUMS256.txt). Only
+      # the install steps put it on their PATH, and no setup action runs:
+      # setup-node runs a package manager in the PR's checkout, whose config
+      # files could start the PR's own code.
       - name: Bring a Linux Node for the CLI install
         id: linux-node
         working-directory: ${{ runner.temp }}
@@ -1044,30 +1045,31 @@ jobs:
         run: |
           set -euo pipefail
           found="$(timeout 30 node -p 'process.platform + ":" + process.versions.node.split(".")[0]' 2>/dev/null || true)"
-          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ]; then
-            echo "The runner's Node ${BASH_REMATCH[1]} installs the CLI"
+          npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
+          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ] && [ -n "$npm_at" ] && [[ "$npm_at" != /mnt/* ]]; then
+            echo "The runner's Node ${BASH_REMATCH[1]} and npm install the CLI"
             exit 0
           fi
           case "$(uname -m)" in
             x86_64) arch=x64; sum="$NODE_SHA256_X64" ;;
             aarch64 | arm64) arch=arm64; sum="$NODE_SHA256_ARM64" ;;
             *)
-              echo "::warning::No Linux Node 22 here and no Node build for $(uname -m): the review runs on the action's own CLI, with no credits run and no backup review"
+              echo "::warning::No usable Linux Node and npm here, and no Node build for $(uname -m): the CLI install tries the runner's own Node, if it has one"
               exit 1
               ;;
           esac
           name="node-v$NODE_VERSION-linux-$arch"
-          if ! curl --fail --silent --show-error --location --proto '=https' --retry 3 --max-time 300 -o "$RUNNER_TEMP/$name.tar.gz" "https://nodejs.org/dist/v$NODE_VERSION/$name.tar.gz"; then
-            echo "::warning::No Linux Node 22 here and the Node $NODE_VERSION download failed: the review runs on the action's own CLI, with no credits run and no backup review"
+          if ! curl --fail --silent --show-error --location --proto '=https' --retry 2 --max-time 120 -o "$RUNNER_TEMP/$name.tar.gz" "https://nodejs.org/dist/v$NODE_VERSION/$name.tar.gz"; then
+            echo "::warning::No usable Linux Node and npm here, and the Node $NODE_VERSION download failed: the CLI install tries the runner's own Node, if it has one"
             exit 1
           fi
           if ! printf '%s  %s\n' "$sum" "$RUNNER_TEMP/$name.tar.gz" | sha256sum --check --status; then
-            echo "::warning::The Node $NODE_VERSION download does not match its pinned checksum: the review runs on the action's own CLI, with no credits run and no backup review"
+            echo "::warning::The Node $NODE_VERSION download does not match its pinned checksum: the CLI install tries the runner's own Node, if it has one"
             exit 1
           fi
           rm -rf "$RUNNER_TEMP/linux-node"
           mkdir -p "$RUNNER_TEMP/linux-node"
-          tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP/linux-node" --strip-components=1
+          tar --no-same-owner -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP/linux-node" --strip-components=1
           rm -f "$RUNNER_TEMP/$name.tar.gz"
           echo "::notice::The CLI install runs on Node $NODE_VERSION, brought by this job"
           echo "bin=$RUNNER_TEMP/linux-node/bin" >> "$GITHUB_OUTPUT"
@@ -1103,8 +1105,9 @@ jobs:
           if [ -n "$NODE_BIN" ]; then
             PATH="$NODE_BIN:$PATH"
           fi
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ]; then
-            echo "::warning::No Linux Node for npm on this runner: the review runs on the action's own CLI; the backup tries the stable release"
+          npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [ -z "$npm_at" ] || [[ "$npm_at" == /mnt/* ]]; then
+            echo "::warning::No Linux Node and npm on this runner: the review runs on the action's own CLI; the backup tries the stable release"
             exit 1
           fi
           CLI_VERSION=""
@@ -1520,8 +1523,9 @@ jobs:
           if [ -n "$NODE_BIN" ]; then
             PATH="$NODE_BIN:$PATH"
           fi
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ]; then
-            no_stable "No Linux Node for npm on this runner"
+          npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [ -z "$npm_at" ] || [[ "$npm_at" == /mnt/* ]]; then
+            no_stable "No Linux Node and npm on this runner"
           fi
           STABLE=""
           for attempt in 1 2 3; do
