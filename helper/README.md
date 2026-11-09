@@ -5,5 +5,5 @@ The files the [Bindwright](https://starfoxcom.github.io/bindwright/) Claude Code
 You do not install this by hand. `/bindwright:setup` offers to install it, at the exact version the plugin names, into `~/.bindwright/helper`, with no admin rights and no global install, and `/bindwright:update` keeps it at the plugin's version. It has no dependencies and no install scripts.
 
 - Source and issues: https://github.com/starfoxcom/bindwright
-- Each version is built from the release tag of that repository and published by its release workflow.
+- Each version is built from the release tag of that repository and attached to that release by its release workflow.
 - License: MIT

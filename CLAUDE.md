@@ -117,7 +117,7 @@ bindwright/
 ├── page/                   # the live page
 ├── engine/                 # the bind engine
 ├── plugin/                 # the Claude Code plugin: skills only
-├── helper/                 # the helper package's scripts (npm and PyPI)
+├── helper/                 # the helper package's scripts (release files)
 ├── README.md               # public-facing
 ├── CLAUDE.md               # this file
 ├── CHANGELOG.md            # version history

@@ -33,7 +33,7 @@ In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 
 3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
 
-Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. The first time, it also asks to install Bindwright's helper, the part that runs on your computer (the setup engine, the templates and the scripts), from npm or PyPI at the plugin's exact version, into `~/.bindwright/helper` for your user only. Then, in each project, open Claude Code in the project's folder and run:
+Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. The first time, it also asks to install Bindwright's helper, the part that runs on your computer (the setup engine, the templates and the scripts), from the files attached to the plugin's GitHub release, checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Then, in each project, open Claude Code in the project's folder and run:
 
 ```
 /bindwright:setup
@@ -83,7 +83,7 @@ The plugin writes only into the project you run it in and, for the extras you sa
 
 | Call | What it sends | When | How to stop it |
 |---|---|---|---|
-| Helper install | A download of the `bindwright` package at the plugin's version from `registry.npmjs.org` or `pypi.org`; nothing about you or the repo | When setup or `/bindwright:update` installs it, after your yes | Answer no; setup then stops |
+| Helper install | A download of the helper file the plugin pins, from the plugin's release on `github.com`; nothing about you or the repo | When setup or `/bindwright:update` installs it, after your yes | Answer no; setup then stops |
 | Plugin version check | A plain request for the released version number from `raw.githubusercontent.com`; nothing about you or the repo | At most once a day, when `/session-start` runs | Disable the plugin (`/plugin`) |
 | Review counts, opt-in | A random project id, the project kind you picked, and six numbers: your merged pull requests that the AI review checked, caught a problem in, sent to a deeper review, held back 6 or more rounds, and merged, plus the red review rounds summed over them, with the start and end time of the span they cover. The first send covers the project's past pull requests; a history past 500 goes out in daily batches only if you say yes. Cloudflare sees your IP address for its rate limiter; the counter never stores it, only the country Cloudflare reads from it, and publishes just how many projects each country has ([`counter/`](counter/README.md)) | At most once a day per set-up repo, only after a yes at setup | `/bindwright:setup global`, or `node ~/.bindwright/helper/node_modules/bindwright/hooks/counts.mjs share off` |
 | GitHub, through your own `gh` login | The counts read your merged pull requests; setup and `/bindwright:code-style` read and create what you ask for (repos, boards, issues) | When that step runs | Answer no to the step |

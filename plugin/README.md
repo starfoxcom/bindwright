@@ -10,7 +10,7 @@ From the plugin directory: in Claude Code, run `/plugin`, open Discover and inst
 /plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
 ```
 
-Then open a session in your project's folder and run `/bindwright:setup`. The first time, it asks to install Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the `bindwright` package from npm, or from PyPI on a computer with Python and no Node, at the plugin's exact version, into `~/.bindwright/helper` for your user only. Say yes and setup goes on; `/bindwright:update` keeps the helper at the plugin's version.
+Then open a session in your project's folder and run `/bindwright:setup`. The first time, it asks to install Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the files attached to the plugin's GitHub release (one for Node, one for a computer with Python and no Node), checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Say yes and setup goes on; `/bindwright:update` keeps the helper at the plugin's version.
 
 ## Use
 
@@ -28,7 +28,7 @@ When a session starts with `/session-start`, a notice says at most once a day wh
 
 The plugin sends nothing about you or your code. It makes three kinds of network call of its own:
 
-- **The helper install**, after your yes, downloads the `bindwright` package at the plugin's version from `registry.npmjs.org` or `pypi.org`.
+- **The helper install**, after your yes, downloads the helper file the plugin pins from the plugin's release at `github.com/starfoxcom/bindwright/releases`.
 - **The version check** (the helper's `hooks/notice.mjs`) reads one version number a day from `https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION`.
 - **Review counts** (the helper's `hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, six numbers (review counts and red review rounds) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests with the GitHub CLI you are already signed in to; no token or code leaves your computer.
 
