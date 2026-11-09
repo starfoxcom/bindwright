@@ -1,5 +1,5 @@
-// Deploys the opt-in review counter: `npx wrangler deploy` from this folder.
-// First time on a new database: `npx wrangler d1 execute bindwright-counter --remote --file schema.sql`.
+// Deploys the opt-in review counter: `npx wrangler@4.152.0 deploy` from this folder.
+// First time on a new database: `npx wrangler@4.152.0 d1 execute bindwright-counter --remote --file schema.sql`.
 {
   "name": "bindwright-counter",
   "main": "src/worker.js",

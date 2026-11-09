@@ -113,6 +113,9 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       // false: the code is on GitHub, but its organization blocks GitHub apps, Actions
       // and project boards, so no AI review, no workflow and no board (checkCodeHost).
       githubApps: true,
+      // true: the assistant's files (CLAUDE.md, .claude/, .bindwright/ and the like) stay on
+      // this computer, listed in the clone's .git/info/exclude, and never reach a commit.
+      localOnly: false,
       tracker: "github",
       // "<owner>/<number>" when tracker is "github" and the project has a
       // board; null keeps project status in a pinned issue instead.
@@ -204,7 +207,7 @@ export function validate(saved) {
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
   check(typeof a.private === "boolean", "private must be true or false");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps"];
+    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localOnly"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
   }
@@ -324,6 +327,7 @@ export function flagsFor(a) {
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     pr_reviewers: Array.isArray(adv.prReviewers),
+    assistant_files_local: adv.localOnly,
     contributing_md: a.team,
     license_file: !a.client,
     audit_trail_commits: a.client && a.private,

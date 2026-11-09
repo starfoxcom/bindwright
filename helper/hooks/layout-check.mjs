@@ -2,7 +2,7 @@
 // and reports elements that overlap, text that overflows its box, or a page that
 // scrolls sideways. Run it after a visual change:
 //
-//   node plugin/hooks/layout-check.mjs <url> [--widths 390,1280] [--height 900]
+//   node helper/hooks/layout-check.mjs <url> [--widths 390,1280] [--height 900]
 //
 // Exit 0 when clean, 1 with one line per finding, 2 when the check cannot run (no
 // browser, the URL does not load, bad arguments). BROWSER_PATH picks the browser.

@@ -11,7 +11,7 @@ The argument is: `$ARGUMENTS`
 
 This skill undoes what `/bindwright:setup` did: first in this repo, then on this computer, then the plugin itself. It removes only what setup wrote and the user did not change, asks before anything else, and never touches the user's own files. With the argument `computer`, skip the repo part and start at step 4.
 
-Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
+Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin.
 
 ## 1. Check the repo
 
@@ -36,31 +36,37 @@ Also offer to take out what setup changed outside those files: the `.claude/sett
 
 ## 3. Remove the files
 
+First read `advanced.localOnly` in `.bindwright/project.json`, since `state` removes that file.
+
 Run the engine with `--remove-files <repo root>`, passing on standard input `{"paths": [<every file the user agreed to remove>], "state": true}`. `state` removes `.bindwright/` last, with the saved answers, so a later `/bindwright:setup` starts fresh. It refuses a path setup did not write, one reached through a link, and one that is not a plain file, before removing anything; on `{"error": ...}`, show the message and stop. Otherwise it prints `{"removed": [...], "folders": [...], "state": true}`: the files removed and the folders that were left empty and removed with them.
 
-When anonymous review counts are on (`node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" status`), leave this repo out of them with `counts.mjs project <repo root> none`.
+When `localOnly` was true, run the engine with `--local-exclude <repo root> --undo`. It takes setup's block out of the clone's `.git/info/exclude` and keeps the user's own lines; it prints `{"exclude": "<file>", "removed": true}`, or `false` when the block was already gone.
 
-Nothing is committed. Say that `git status` shows the removal, and offer to commit it as one commit (`chore: remove Bindwright`), which the user can revert to get the setup back.
+When anonymous review counts are on (`node "<helper>/hooks/counts.mjs" status`), leave this repo out of them with `counts.mjs project <repo root> none`.
+
+Nothing is committed. Say that `git status` shows the removal, and offer to commit it as one commit (`chore: remove Bindwright`), which the user can revert to get the setup back. With `localOnly`, the assistant's files were never in git, so there is nothing of theirs to commit: say so, and offer the commit only for a shared file the user kept and committed earlier.
 
 ## 4. This computer
 
 Run the engine with `--settings <repo root or any folder>`: `installed` lists the extras setup added to the user's config folder. Ask about each one that is there, one yes or no each, and say what it does today so the user can choose:
 
-- **Push guard, attribution guard and the code-search hook:** `python "${CLAUDE_PLUGIN_ROOT}/engine/home.py" remove-hook <name>.py` for each, after `home.py list-hooks` shows which are installed (`push-guard.py`, `no-ai-attribution.py`, the `*-first.py` search hook). It removes the hook's entry from `~/.claude/settings.json` and its file, and keeps the user's other hooks.
+- **Push guard, attribution guard and the code-search hook:** `python "<helper>/engine/home.py" remove-hook <name>.py` for each, after `home.py list-hooks` shows which are installed (`push-guard.py`, `no-ai-attribution.py`, the `*-first.py` search hook). It removes the hook's entry from `~/.claude/settings.json` and its file, and keeps the user's other hooks.
 - **The `git push` allow rule** setup offered with the push guard: `home.py disallow "Bash(git push:*)"`.
 - **Mods:** `home.py remove-mod <name>` for each installed one. It takes the mod out of the plugin folders list and deletes its folder.
 - **Builder agent:** `home.py remove-agent builder.md`.
 - **Reply style:** `home.py remove-style straight-talk.md`, which also turns it off when it is the style in use.
 - **Code-style profile:** delete `~/.claude/rules/code-style.md`, after showing it, since the user may want to keep it.
 - **Work language:** `home.py set-language english` removes the language setting and the commit-language rule setup added.
-- **Global instructions:** in `~/.claude/CLAUDE.md`, take out the sections that match `${CLAUDE_PLUGIN_ROOT}/_core/global-template/CLAUDE.md.additions` and the `<!-- bindwright:global-instructions -->` line, keeping everything else. Show the result and save it only on a yes.
-- **Anonymous review counts:** `node "${CLAUDE_PLUGIN_ROOT}/hooks/counts.mjs" share off` stops every send.
+- **Global instructions:** in `~/.claude/CLAUDE.md`, take out the sections that match `<helper>/_core/global-template/CLAUDE.md.additions` and the `<!-- bindwright:global-instructions -->` line, keeping everything else. Show the result and save it only on a yes.
+- **Anonymous review counts:** `node "<helper>/hooks/counts.mjs" share off` stops every send.
 - **The code-search tool** (tokensave): it is a program of its own, so it stays; give its own uninstall steps if the user asks.
 
 Each `home.py` change backs up `~/.claude/settings.json` first, as `settings.json.bak`. Hooks, mods and agents stop at the next start of Claude Code, so say to restart it.
 
 ## 5. The plugin
 
-Last, the plugin itself: in Claude Code, `/plugin`, then uninstall `bindwright`; from a terminal, `claude plugin uninstall bindwright@bindwright`, then `claude plugin marketplace remove bindwright` to drop its marketplace. The choices setup saved for this computer stay in `<config>/bindwright/` (`<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`), so a later install remembers them; say the user can delete that folder for a clean slate.
+Then the helper, after every step above that runs it: delete `$HOME/.bindwright/helper`, and `$HOME/.bindwright/size-check-venv` when setup made it for the size check, on a yes. Both live only in that folder, so nothing else on the computer changes. Other set-up repos on this computer stop working until the helper is installed again, so say so when there are any.
+
+Last, the plugin itself: in Claude Code, `/plugin`, then uninstall `bindwright`; from a terminal, `claude plugin uninstall bindwright`, adding `@bindwright` and then `claude plugin marketplace remove bindwright` when it came from Bindwright's own marketplace rather than the plugin directory. The choices setup saved for this computer stay in `<config>/bindwright/` (`<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`), so a later install remembers them; say the user can delete that folder for a clean slate.
 
 Tell the user, in plain words, what was removed, what stayed and why (their edits, their own files, anything they said no to), and what they still do by hand.

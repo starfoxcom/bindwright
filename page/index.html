@@ -26,6 +26,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
 <script type="module" src="evidence.js"></script>
 <script type="module" src="reveal.js"></script>
 <script>if (!matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("reveal");</script>
+<script>try { document.documentElement.dataset.view = localStorage.getItem("bindwright.view") === "terminal" ? "terminal" : "desktop"; } catch { document.documentElement.dataset.view = "desktop"; }</script>
 </head>
 <body>
 <a class="skip" href="#install" data-t="skip.link">Skip to install</a>
@@ -41,11 +42,16 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <a href="es/" hreflang="es" lang="es">Español</a>
   </nav>
 </header>
+<div class="view-switch" id="view-switch" role="radiogroup" aria-label="Show Claude Code as"
+  data-t-attr="aria-label:view.label" data-active="desktop">
+  <button type="button" role="radio" aria-checked="true" data-pick="desktop" data-t="view.desktop">Desktop app</button>
+  <button type="button" role="radio" aria-checked="false" tabindex="-1" data-pick="terminal" data-t="view.terminal">Terminal</button>
+</div>
 <main id="main">
   <section class="hero">
     <div class="pitch">
-      <h1 data-t="hero.title">Stop re&#8209;explaining your project to Claude.</h1>
-      <p class="lede" data-t="hero.lede">Bindwright writes the rules Claude Code reads at the start of every session and sets up an AI review on every pull request, so each session already knows how you work, and the whole setup is just one command.</p>
+      <h1 data-t="hero.title">Claude remembers how you like to work.</h1>
+      <p class="lede" data-t="hero.lede">Answer a few questions once, and every Claude session in your project starts knowing your rules, gets a second check on every change, and stops anything risky before it runs. One command, no coding knowledge needed.</p>
       <div class="actions">
         <a class="go" href="#install" data-t="hero.go">Install Bindwright</a>
         <a class="source" href="https://github.com/starfoxcom/bindwright"
@@ -55,7 +61,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <div class="stage" id="scene-stage">
       <h2 class="caption" id="scene-caption"><span><b>1.</b><span data-t="scene.caption.1">Starts right where you left off, no hassle</span></span></h2>
 
-      <div class="term" role="img" aria-label="A coding session in the terminal with Bindwright set up"
+      <div class="term" data-desk="desk.session.hero" role="img" aria-label="A coding session in Claude Code with Bindwright set up"
         data-t-attr="aria-label:scene.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
         <div class="pane"><div class="lines"></div></div>
@@ -122,7 +128,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         </div>
         <p class="preview-note" data-t="result.note">Shown for one person's own public project with everything on. Setup fits it to yours from your answers.</p>
         <div class="stage split" id="lands-stage">
-          <div class="term" role="img" aria-label="A terminal running /bindwright:setup, with each file it writes flying into one of two boxes"
+          <div class="term" data-desk="desk.session.lands" role="img" aria-label="Claude Code running /bindwright:setup, with each file it writes flying into one of two boxes"
             data-t-attr="aria-label:lands.aria">
             <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
             <div class="pane"><div class="lines"></div></div>
@@ -269,7 +275,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       <div class="mods-viewer">
         <button class="mods-step" id="mods-prev" type="button" aria-label="Previous mod"
           data-t-attr="aria-label:mods.prev">&lsaquo;</button>
-      <div class="term" role="img" aria-label="A terminal showing the selected mod at work"
+      <div class="term" data-desk="desk.session.mods" role="img" aria-label="Claude Code showing the selected mod at work"
         data-t-attr="aria-label:mods.term.aria">
         <div class="bar"><i></i><i></i><i></i><span>~/shop</span></div>
         <div class="pane"><div class="lines"></div></div>

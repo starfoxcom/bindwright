@@ -15,7 +15,7 @@ This skill writes the team's half of the setup into `.bindwright/project.json`, 
 
 ## 2. Read the current setup
 
-Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`. With neither, say the export needs Node 18 or later, or Python 3.8 or later, and stop.
+Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin. With neither, say the export needs Node 18 or later, or Python 3.8 or later, and stop.
 
 Run it with `--settings <repo root>`. It prints one line of JSON: `settings` (each with its `value`, the layer it came `from`, and whether the project `required` it), `extras` (each with the project's rating and this person's choice), `installed` (which extras this machine has), `drift` and `ignored`. On `{"error": "..."}`, show the message and stop.
 
@@ -23,7 +23,7 @@ If `ignored` is not empty, list it in plain words: those values in someone's set
 
 ## 3. Ask what to share
 
-Ask in one message, with a short line on what each extra does (from `${CLAUDE_PLUGIN_ROOT}/_core/global-template/mods/README.md` for the mods; `push-guard` blocks force pushes and direct pushes to the main branches; `attribution-guard` blocks AI credit lines in commits and PRs; `global-instructions` adds Bindwright's working rules to every project on the machine):
+Ask in one message, with a short line on what each extra does (from `<helper>/_core/global-template/mods/README.md` for the mods; `push-guard` blocks force pushes and direct pushes to the main branches; `attribution-guard` blocks AI credit lines in commits and PRs; `global-instructions` adds Bindwright's working rules to every project on the machine):
 
 - **Extras:** for each extra this machine has installed, and each one the project already rates, whether teammates should be told it is `required`, `recommended`, or nothing. Suggest `recommended` by default; `required` only for something the team's workflow depends on, since `/bindwright:join` then installs it without the choice to skip.
 - **Settings to lock:** whether the code-research tool (now `<value>`) and the tracker (now `<value>`) should be `required`, so no one's personal settings can change them for this project.

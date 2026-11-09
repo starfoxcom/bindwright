@@ -4,6 +4,7 @@
 import { defaults } from "../engine/model.js";
 import { repoFiles, byFolder } from "./files.js";
 import { t } from "./i18n/index.js";
+import { currentView, setView } from "./view.js";
 
 const $ = (id) => document.getElementById(id);
 const answers = defaults();
@@ -70,9 +71,11 @@ function copyInstallLine(event) {
 }
 
 // The install switch: Claude Code CLI or the desktop app, each tab showing its own steps.
+// It follows the page's view (view.js), and picking a tab switches the view too.
 const installTabs = [$("install-tab-cli"), $("install-tab-desktop")];
+const installTabFor = (view) => installTabs[view === "terminal" ? 0 : 1];
 
-function pickInstallTab(tab) {
+function showInstallTab(tab) {
   for (const each of installTabs) {
     const isPicked = each === tab;
     each.setAttribute("aria-selected", String(isPicked));
@@ -80,6 +83,11 @@ function pickInstallTab(tab) {
     $(each.getAttribute("aria-controls")).hidden = !isPicked;
   }
   tab.parentElement.dataset.active = tab === installTabs[0] ? "cli" : "desktop";
+}
+
+function pickInstallTab(tab) {
+  showInstallTab(tab);
+  setView(tab === installTabs[0] ? "terminal" : "desktop");
 }
 
 // Arrow keys move between the two tabs, as a tab list expects.
@@ -215,6 +223,8 @@ $("tree").addEventListener("click", (event) => {
 $("browse").addEventListener("click", () => setBrowse($("files").hidden));
 $("back-files").addEventListener("click", () => setReading(false));
 $("install").addEventListener("click", copyInstallLine);
+showInstallTab(installTabFor(currentView()));
+document.addEventListener("viewchange", () => showInstallTab(installTabFor(currentView())));
 for (const tab of installTabs) {
   tab.addEventListener("click", () => pickInstallTab(tab));
   tab.addEventListener("keydown", onInstallTabKey);

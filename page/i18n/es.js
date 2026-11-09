@@ -10,10 +10,10 @@ export default {
   "nav.home": "Inicio",
   "nav.github": "GitHub",
   "nav.language": "Idioma",
-  "hero.title": "Deja de explicarle tu proyecto a Claude cada vez.",
-  "hero.lede": "Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una "
-    + "revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la "
-    + "configuración es un solo comando.",
+  "hero.title": "Claude recuerda cómo te gusta trabajar.",
+  "hero.lede": "Responde unas preguntas una vez, y cada sesión de Claude en tu proyecto empieza sabiendo "
+    + "tus reglas, recibe una segunda revisión en cada cambio y frena todo lo riesgoso antes de que pase. "
+    + "Un solo comando, sin saber programar.",
   "hero.go": "Instalar Bindwright",
   "hero.source": "Ver en GitHub",
   "changes.title": "Qué cambia",
@@ -64,6 +64,9 @@ export default {
   "install.switch.label": "Dónde usas Claude Code",
   "install.switch.cli": "Claude Code CLI",
   "install.switch.desktop": "App de escritorio",
+  "view.label": "Ver Claude Code como",
+  "view.desktop": "App de escritorio",
+  "view.terminal": "Terminal",
   "install.plugin.title": "En tu computadora, una vez",
   "install.plugin.text": "Agrega los comandos /bindwright a todos tus proyectos, listos en esta "
     + "sesión. No necesita Git.",
@@ -97,7 +100,7 @@ export default {
   "failure": "Esta parte de la página no pudo cargar ({error}), así que recarga la página para intentarlo "
     + "de nuevo.",
 
-  "scene.aria": "Una sesión de programación en la terminal con Bindwright configurado",
+  "scene.aria": "Una sesión de programación en Claude Code con Bindwright configurado",
   "scene.placeholder": "Lo que hace Bindwright aparece aquí",
   "scene.guard.title": "Guardia de push",
   "scene.guard.text": "Detuvo un push forzado a main antes de que llegara a GitHub.",
@@ -129,7 +132,27 @@ export default {
   "scene.verb.thinking": "Pensando",
   "scene.verb.handoff": "Escribiendo el traspaso",
 
-  "lands.aria": "Una terminal con /bindwright:setup, donde cada archivo que escribe vuela a una de "
+  "desk.session.hero": "Arreglar el total del carrito",
+  "desk.session.lands": "Configurar este proyecto",
+  "desk.session.mods": "Códigos de cupón",
+  "desk.recent.1": "Diseño de la página de pago",
+  "desk.recent.2": "Redondeo de impuestos",
+  "desk.recent.3": "Actualizar el README",
+  "desk.new": "Nueva sesión",
+  "desk.recents": "Recientes",
+  "desk.placeholder": "Escribe / para comandos",
+  "desk.mode": "Automático",
+  "desk.thought": "Pensó durante {seconds} s",
+  "desk.failed": "Falló",
+  "desk.tool.Bash": "Ejecutó",
+  "desk.tool.Write": "Creó",
+  "desk.tool.Update": "Editó",
+  "desk.tool.Read": "Leyó",
+  "desk.tool.Skill": "Usó la skill",
+  "desk.tool.TaskCreate": "Añadió tareas",
+  "desk.tool.TaskUpdate": "Actualizó tareas",
+
+  "lands.aria": "Claude Code con /bindwright:setup, donde cada archivo que escribe vuela a una de "
     + "dos cajas",
   "lands.computer.title": "Tu computadora",
   "lands.computer.tag": "Se pregunta una vez",
@@ -315,6 +338,11 @@ export default {
   "settings.pr-reviewers.text": "Se pregunta para un proyecto en equipo en GitHub. Las personas o equipos "
     + "a los que cada PR pide revisión, y el merge espera su aprobación.",
   "settings.pr-reviewers.value": "Ninguno",
+  "settings.local-only.title": "Archivos del asistente solo en esta computadora",
+  "settings.local-only.text": "Se pregunta para el proyecto de un cliente o de un empleador. CLAUDE.md, .claude/ "
+    + "y los archivos propios de la configuración quedan fuera de todo commit, en la lista de ignorados propia "
+    + "del clon.",
+  "settings.local-only.value": "No",
   "settings.work-state.title": "Dónde se sigue el trabajo",
   "settings.work-state.text": "Un tablero de GitHub, solo issues, o un archivo de traspaso en el repo.",
   "settings.work-state.value": "Tablero de GitHub",
@@ -368,7 +396,7 @@ export default {
   "mods.more": "Ver todos los mods y su valor por defecto",
   "mods.prev": "Mod anterior",
   "mods.next": "Mod siguiente",
-  "mods.term.aria": "Una terminal que muestra el mod elegido en uso",
+  "mods.term.aria": "Claude Code mostrando el mod elegido en uso",
   "mods.all.title": "Todos juntos",
   "mods.all.text": "Cada mod encendido a la vez: la configuración con la que se construye este proyecto.",
   "mods.all.value": "Los 10 activados",

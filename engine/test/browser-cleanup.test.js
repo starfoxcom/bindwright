@@ -1,4 +1,4 @@
-// Stopping the layout check's browsers (plugin/hooks/browser-cleanup.mjs): finding a browser
+// Stopping the layout check's browsers (helper/hooks/browser-cleanup.mjs): finding a browser
 // by its profile folder, and sweeping the profiles of runs that were cut off. The live check
 // that a stopped run leaves no browser is in layout-check.test.js.
 
@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   STALE_AFTER_MS, browserProcesses, isStaleProfile, profilePrefix, sweepStaleProfiles, usesProfile,
-} from "../../plugin/hooks/browser-cleanup.mjs";
+} from "../../helper/hooks/browser-cleanup.mjs";
 
 const FOLDER = "C:\\Users\\Ana Paz\\AppData\\Local\\Temp\\layout-check-1700000000000-Ab3dE9";
 const ACCENTED = "C:\\Users\\José Müller\\AppData\\Local\\Temp\\layout-check-1700000000000-Ab3dE9";
