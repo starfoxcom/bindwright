@@ -344,9 +344,9 @@ h1 {
   background: oklch(0.245 0.007 240 / .92); border: 1px solid var(--rule);
   box-shadow: 0 16px 40px -12px oklch(0 0 0 / .7); backdrop-filter: blur(10px);
 }
-.view-switch button { min-height: 36px; padding: 0 14px; font-size: 13px; }
+.view-switch button { min-height: 36px; padding: 0 14px; font-size: 13px; white-space: nowrap; }
 @media (max-width: 640px) {
-  .view-switch { right: 50%; transform: translateX(50%); bottom: 12px; }
+  .view-switch { left: 0; right: 0; width: max-content; margin-inline: auto; bottom: 12px; }
 }
 
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } }
