@@ -402,7 +402,9 @@ jobs:
       # SHA-256 pinned here (from the release's signed SHASUMS256.txt). Only
       # the install steps put it on their PATH, and no setup action runs:
       # setup-node runs a package manager in the PR's checkout, whose config
-      # files could start the PR's own code.
+      # files could start the PR's own code. npm counts as Linux when its
+      # real path is npm's own script (npm-cli.js), which the Linux Node on
+      # PATH then runs; a Windows npm reached through WSL is a shim instead.
       - name: Bring a Linux Node for the CLI install
         id: linux-node
         working-directory: ${{ runner.temp }}
@@ -418,7 +420,7 @@ jobs:
           set -euo pipefail
           found="$(timeout 30 node -p 'process.platform + ":" + process.versions.node.split(".")[0]' 2>/dev/null || true)"
           npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
-          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ] && [ -n "$npm_at" ] && [[ "$npm_at" != /mnt/* ]]; then
+          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ] && [[ "$npm_at" == */bin/npm-cli.js ]]; then
             echo "The runner's Node ${BASH_REMATCH[1]} and npm install the CLI"
             exit 0
           fi
@@ -443,6 +445,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/linux-node"
           tar --no-same-owner -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP/linux-node" --strip-components=1
           rm -f "$RUNNER_TEMP/$name.tar.gz"
+          if [ "$(timeout 30 "$RUNNER_TEMP/linux-node/bin/node" --version 2>/dev/null || true)" != "v$NODE_VERSION" ]; then
+            echo "::warning::The Node $NODE_VERSION build does not run on this runner: the CLI install tries the runner's own Node, if it has one"
+            exit 1
+          fi
           echo "::notice::The CLI install runs on Node $NODE_VERSION, brought by this job"
           echo "bin=$RUNNER_TEMP/linux-node/bin" >> "$GITHUB_OUTPUT"
 
@@ -478,7 +484,7 @@ jobs:
             PATH="$NODE_BIN:$PATH"
           fi
           npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [ -z "$npm_at" ] || [[ "$npm_at" == /mnt/* ]]; then
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [[ "$npm_at" != */bin/npm-cli.js ]]; then
             echo "::warning::No Linux Node and npm on this runner: the deep review runs on the action's own CLI; the fallback model tries the stable release"
             exit 1
           fi
@@ -927,7 +933,7 @@ jobs:
             PATH="$NODE_BIN:$PATH"
           fi
           npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [ -z "$npm_at" ] || [[ "$npm_at" == /mnt/* ]]; then
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [[ "$npm_at" != */bin/npm-cli.js ]]; then
             no_stable "No Linux Node and npm on this runner"
           fi
           STABLE=""
