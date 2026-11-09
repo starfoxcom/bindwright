@@ -21,6 +21,8 @@ Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROO
 
 First say what the releases changed: run the engine with `--releases-since <repo root>`. It reads only the plugin's own changelog, never the repo's `CHANGELOG.md`, and prints `{"from": "<bound version>", "to": "<plugin version>", "releases": [{"version", "date", "text"}, ...]}`, newest first. When `releases` holds any, open with a plain summary of each release in the range, newest first and a few short lines each: what is new, what changed and what was fixed, then anything the user may want to act on, such as a new setup answer to consider or a behaviour that now works differently. When it holds an `unavailable` reason, say in one line that the summary is not available and why, and go on.
 
+When `advanced.localOnly` is true in `.bindwright/project.json`, first refresh the exclude list: run the engine with `--local-exclude <repo root>`, passing that file on standard input, so a file the new version adds for the assistant stays out of commits from its first write. Name any `tracked` path it prints, as setup does.
+
 Run it with `--update <repo root>`. It prints one line of JSON:
 
 - `{"error": "..."}`: show the message and stop; nothing was written. Unless it is the symbolic-link message below, offer `/bindwright:report`. A message starting `Refusing to write through a symbolic link` names repo files that are links: the update never writes through one. Offer to list each in `.bindwright/owned`, so later updates leave it alone, or to replace the link with a plain file, then run the update again.

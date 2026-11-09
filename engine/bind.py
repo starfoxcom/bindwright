@@ -18,6 +18,7 @@
 #   python engine/bind.py --remove-plan DIR              -> what setup wrote, sorted for removal
 #   python engine/bind.py --remove-files DIR < {"paths": [...], "state": true} -> files removed
 #   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
+#   python engine/bind.py --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.py)
 #   python engine/bind.py --releases-since DIR -> the plugin's releases since DIR's bound version (releases.py)
 # A failed bind gives {"error": message} and, alone, exit status 1.
 
@@ -44,6 +45,7 @@ from share import export_setup, remember_choices
 from doctor import cli_version_from, run_doctor
 from report import draft_report
 from staging import clean_staging
+from exclude import local_exclude, undo_local_exclude
 from releases import releases_for_repo
 
 CORE = "_core/project-template/"
@@ -419,6 +421,20 @@ def _clean_staging(argv):
         return {"error": str(e)}
 
 
+def _local_exclude(argv, read_file, core_files):
+    """--local-exclude DIR: lists the bind's files in the clone's exclude file; --undo removes that block."""
+    try:
+        folder = _option(argv, "--local-exclude")
+        if "--undo" in argv:
+            return undo_local_exclude(folder)
+        answers = expand_answers(_stdin_json())
+        version = read_file("VERSION").strip(JS_WHITESPACE).lstrip("v")
+        planned = bind(answers, read_file, core_files, None, version)
+        return local_exclude(folder, list(planned))
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
 def _releases(argv, root):
     """--releases-since DIR: the plugin's releases newer than the version DIR was bound with."""
     try:
@@ -455,6 +471,8 @@ def _main(argv):
         result = _releases(argv, root)
     elif "--remove-plan" in argv or "--remove-files" in argv:
         result = _remove(argv)
+    elif "--local-exclude" in argv:
+        result = _local_exclude(argv, read_file, core_files)
     elif "--batch" in argv:
         result = [run(j["answers"], j.get("year"), j.get("version")) for j in _stdin_json()]
     elif "--update" in argv:
