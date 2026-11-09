@@ -312,8 +312,9 @@ export default {
     + "cuenta; otro sitio recibe las partes de GitHub para adaptarlas.",
   "settings.code-host.value": "GitHub",
   "settings.local-review.title": "Revisión local antes de cada merge",
-  "settings.local-review.text": "Se ofrece cuando ningún CI puede correr las revisiones de IA. Dos revisores "
-    + "nuevos revisan cada cambio antes de su merge, y nada de ellos llega a GitHub.",
+  "settings.local-review.text": "Se ofrece cuando GitHub no puede correr workflows de CI, ni en runners "
+    + "alojados ni locales. Dos revisores nuevos revisan cada cambio antes de su merge, y nada de ellos "
+    + "llega a GitHub.",
   "settings.local-review.value": "No",
   "settings.work-state.title": "Dónde se sigue el trabajo",
   "settings.work-state.text": "Un tablero de GitHub, solo issues, o un archivo de traspaso en el repo.",

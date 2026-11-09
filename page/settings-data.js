@@ -157,8 +157,8 @@ export const PROJECT = [
   {
     id: "local-review",
     title: "Local review before each merge",
-    text: "Offered when no CI can run the AI reviews. Two fresh reviewers check each change "
-      + "before it merges, and nothing about them reaches GitHub.",
+    text: "Offered when GitHub can't run CI workflows, on hosted or local runners. Two fresh "
+      + "reviewers check each change before it merges, and nothing about them reaches GitHub.",
     value: "No",
     keys: ["advanced.localReview"],
     engine: [{ flags: {}, key: "advanced.localReview", value: false }],
