@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.0.0] — 2026-11-09
+
+v3.0.0 gets Bindwright into the plugin directory: the plugin is now skills only, and everything that runs on your computer installs as a helper pinned by the plugin, after your yes. It also titles sessions after the project, sums up what changed when you update, and takes Bindwright back out cleanly with `/bindwright:remove`.
+
 ### Added
 
 - Sessions in a set-up repo are titled after the project, then `<Project> - <purpose>` once `/session-start`'s plan is approved, instead of the CLI's title from the first message, so several sessions and their peer lists tell projects and tasks apart. A new project hook, `session-title.py`, sets each title once, so one picked with `/rename` stays until the purpose changes.
