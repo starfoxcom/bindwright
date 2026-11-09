@@ -1032,8 +1032,8 @@ jobs:
       # the install steps put it on their PATH, and no setup action runs:
       # setup-node runs a package manager in the PR's checkout, whose config
       # files could start the PR's own code. npm counts as Linux when its
-      # real path is npm's own script (npm-cli.js), which the Linux Node on
-      # PATH then runs; a Windows npm reached through WSL is a shim instead.
+      # global folder (`npm root -g`) is a Linux path; a Windows npm reached
+      # through WSL names a C:\ one, however npm was installed.
       - name: Bring a Linux Node for the CLI install
         id: linux-node
         working-directory: ${{ runner.temp }}
@@ -1047,8 +1047,7 @@ jobs:
         run: |
           set -euo pipefail
           found="$(timeout 30 node -p 'process.platform + ":" + process.versions.node.split(".")[0]' 2>/dev/null || true)"
-          npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
-          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ] && [[ "$npm_at" == */bin/npm-cli.js ]]; then
+          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ] && [[ "$(timeout 60 npm root -g 2>/dev/null || true)" == /* ]]; then
             echo "The runner's Node ${BASH_REMATCH[1]} and npm install the CLI"
             exit 0
           fi
@@ -1111,8 +1110,7 @@ jobs:
           if [ -n "$NODE_BIN" ]; then
             PATH="$NODE_BIN:$PATH"
           fi
-          npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [[ "$npm_at" != */bin/npm-cli.js ]]; then
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [[ "$(timeout 60 npm root -g 2>/dev/null || true)" != /* ]]; then
             echo "::warning::No Linux Node and npm on this runner: the review runs on the action's own CLI; the backup tries the stable release"
             exit 1
           fi
@@ -1529,8 +1527,7 @@ jobs:
           if [ -n "$NODE_BIN" ]; then
             PATH="$NODE_BIN:$PATH"
           fi
-          npm_at="$(readlink -f "$(command -v npm 2>/dev/null || true)" 2>/dev/null || true)"
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [[ "$npm_at" != */bin/npm-cli.js ]]; then
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" != linux ] || [[ "$(timeout 60 npm root -g 2>/dev/null || true)" != /* ]]; then
             no_stable "No Linux Node and npm on this runner"
           fi
           STABLE=""
