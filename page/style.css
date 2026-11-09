@@ -324,7 +324,7 @@ h1 {
   content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
   border-radius: 999px; background: var(--accent); transition: transform 200ms ease;
 }
-.install-switch[data-active="desktop"]::before, .view-switch[data-active="terminal"]::before {
+.install-switch[data-active="cli"]::before, .view-switch[data-active="terminal"]::before {
   transform: translateX(100%);
 }
 .install-switch button, .view-switch button {
