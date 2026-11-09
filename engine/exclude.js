@@ -17,10 +17,13 @@ export const LOCAL_FOLDERS = [
 // Files, listed only when the plan writes them.
 export const LOCAL_FILES = [
   "CLAUDE.md", "ROADMAP.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
-  "docs/security-posture.md", ".github/scripts/size_check.py",
+  "docs/security-posture.md", ".github/scripts/size_check.py", ".github/workflows/size-check.yml",
 ];
 
 const BEGIN = "# Bindwright: the assistant's files, kept on this computer";
+// The first line of a block appended to a file whose last line had no line break: the break
+// written before the block belongs to it, and leaves with it.
+const BEGIN_AFTER_BREAK = `${BEGIN}, after the line break it added`;
 const END = "# End of Bindwright's lines";
 const INCOMING = ".bindwright/incoming/";
 const GLOBAL = ".bindwright/global/";
@@ -50,32 +53,39 @@ function covers(line, path) {
 }
 
 // The block's lines, marker lines included, each ending in LF.
-function blockText(lines) {
-  return [BEGIN, ...lines, END].map((line) => `${line}\n`).join("");
+function blockText(lines, begin = BEGIN) {
+  return [begin, ...lines, END].map((line) => `${line}\n`).join("");
 }
 
-// The [start, end) offsets of the block in `text`, or null when there is none. A block with no
-// end line is refused: removing it could take the user's own lines with it.
+// The block's { start, end, isAfterBreak } offsets in `text`, the line break it added included,
+// or null when there is none. A block with no end line is refused: removing it could take the
+// user's own lines with it.
 function blockSpan(text, file) {
   let start = -1;
+  let isAfterBreak = false;
   let offset = 0;
   for (const raw of text.split("\n")) {
     const next = offset + raw.length + 1;
     const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
-    if (start === -1 && line === BEGIN) start = offset;
-    if (start !== -1 && line === END) return { start, end: Math.min(next, text.length) };
+    if (start === -1 && (line === BEGIN || line === BEGIN_AFTER_BREAK)) {
+      isAfterBreak = line === BEGIN_AFTER_BREAK && offset > 0;
+      start = isAfterBreak ? offset - 1 : offset;
+    }
+    if (start !== -1 && line === END) return { start, end: Math.min(next, text.length), isAfterBreak };
     offset = next;
   }
   if (start === -1) return null;
   throw new Error(`${file} has a Bindwright block with no end line; remove it by hand`);
 }
 
-// `text` with the block replaced in place, or appended after a newline when there is none.
-function withBlock(text, block, file) {
+// `text` with the block of `lines` replaced in place, or appended when there is none. A file whose
+// last line has no line break gets one before the block, marked so that removal takes it too.
+function withBlock(text, lines, file) {
   const span = blockSpan(text, file);
-  if (span !== null) return text.slice(0, span.start) + block + text.slice(span.end);
-  const lead = text === "" || text.endsWith("\n") ? "" : "\n";
-  return text + lead + block;
+  const before = span === null ? text : text.slice(0, span.start);
+  const after = span === null ? "" : text.slice(span.end);
+  const needsBreak = span === null ? before !== "" && !before.endsWith("\n") : span.isAfterBreak;
+  return before + (needsBreak ? `\n${blockText(lines, BEGIN_AFTER_BREAK)}` : blockText(lines)) + after;
 }
 
 // `text` without its block, or null when there is none.
@@ -120,7 +130,7 @@ export function localExclude(folder, dests) {
   const file = excludeFile(folder);
   const paths = plannedPaths(dests);
   const lines = excludeLines(paths);
-  const next = withBlock(readExcludeFile(file), blockText(lines), file);
+  const next = withBlock(readExcludeFile(file), lines, file);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, next);
   return {
