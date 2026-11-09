@@ -179,6 +179,9 @@ def defaults(team=False, client=False, private=None):
             "trackerRepo": None,
             "publicRoadmap": None,
             "handoffFile": True,
+            # True runs two local reviewer subagents before each merge, for a project
+            # with no AI review in CI, and posts nothing to the host.
+            "localReview": False,
         },
     }
 
@@ -235,7 +238,7 @@ def validate(saved):
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
     _check(_is_bool(get(a, "private")), "private must be true or false")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localOnly"]
+                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localReview", "localOnly"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
     name = get(project, "name")
@@ -269,6 +272,7 @@ def validate(saved):
            "shippedTextPaths must be null or a non-empty list of globs "
            "without quotes, backslashes, line breaks or outer spaces")
     _check_code_host(adv)
+    _check_local_review(adv)
     _check(not (a["team"] and adv["codeHost"] == "local"),
            'codeHost "local" is one person on one computer: team must be false')
     _check_tracker(get(adv, "tracker"), get(adv, "trackerProject"))
@@ -327,6 +331,14 @@ def _check_code_host(adv):
     _check(_unset(adv.get("trackerRepo", UNDEFINED)), label + " has no GitHub issues repo: trackerRepo must be null")
     _check(_unset(adv.get("publicRoadmap", UNDEFINED)),
            label + " has no GitHub public roadmap: publicRoadmap must be null")
+
+
+def _check_local_review(adv):
+    if not adv["localReview"]:
+        return
+    _check(adv["aiReview"] is False, "localReview is for projects without CI reviews: aiReview must be false")
+    without_actions = adv["codeHost"] == "other" or (adv["codeHost"] == "github" and adv["githubApps"] is False)
+    _check(without_actions, 'localReview needs codeHost "other", or "github" with githubApps false')
 
 
 def _given(d, key):
@@ -397,6 +409,7 @@ def flags_for(a):
         "code_size_check": adv["codeSizeCheck"],
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
+        "local_review": adv["localReview"],
         "assistant_files_local": adv["localOnly"],
         "contributing_md": a["team"],
         "license_file": not a["client"],

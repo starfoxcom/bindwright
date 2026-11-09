@@ -28,7 +28,12 @@ The other rules and skills name GitHub's tools. Read each one as the same step o
 These need GitHub, so setup did not write them. Set one up on this host only when the user asks for it:
 
 - **The size check in CI.** `code-size.md` names `.github/workflows/size-check.yml`, which setup did not write. `.github/scripts/size_check.py` runs anywhere: add a step that runs `python .github/scripts/size_check.py` to the host's pipeline, or run it before each push.
+<!-- TOGGLE:local_review START -->
+- **AI reviews in CI.** They run as GitHub Actions, so the session runs its own two reviewers before each merge instead, as `local-review.md` describes, and nothing about them reaches the host.
+<!-- TOGGLE:local_review END -->
+<!-- TOGGLE:local_review:off START -->
 - **AI reviews on every PR.** They run as GitHub Actions; no template exists for other hosts yet.
+<!-- TOGGLE:local_review:off END -->
 - **Issue and PR templates.** Each host reads its own folder (`.gitlab/` on GitLab, `.gitea/` on Gitea and Forgejo); copy the wording there if the user wants them.
 - **The issue board.** The work state lives in `ROADMAP.md` and the hand-off file instead, which need no host.
 <!-- TOGGLE:code_host_other END -->
@@ -38,7 +43,12 @@ This project's code lives on GitHub, but its organization blocks GitHub apps, Gi
 ## Left out of this setup
 
 - **CI checks.** No workflow runs, so nothing tests a PR after it is pushed. Run the project's tests before every push, and the size check too when the project has one: `python .github/scripts/size_check.py`.
+<!-- TOGGLE:local_review START -->
+- **AI reviews in CI.** They run as GitHub Actions with the review app, so the session runs its own two reviewers before each merge instead, as `local-review.md` describes, and nothing about them reaches GitHub.
+<!-- TOGGLE:local_review END -->
+<!-- TOGGLE:local_review:off START -->
 - **AI reviews on every PR.** They run as GitHub Actions with the review app. A PR is reviewed by people, or by a local review the user asks for in the session.
+<!-- TOGGLE:local_review:off END -->
 <!-- TOGGLE:tracker:github START -->
 - **The project board.** The work state lives in the issues alone, as `tracker.md` describes for a project without a board.
 <!-- TOGGLE:tracker:github END -->

@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
+- A local review gate for projects where no CI can run the AI reviews (GitHub with apps and Actions blocked, or another site): setup offers it, off unless picked (`"localReview": true`), and `.claude/rules/local-review.md` has the session run two fresh reviewers on each change before it merges, with the CI reviews' bar and verdict rule. Nothing about the review is posted to the host.
 - For someone else's project, setup asks whether to keep the assistant's files on this computer only. On a yes (`"localOnly": true`), `CLAUDE.md`, `.claude/`, `.bindwright/` and its other files for the assistant go into the clone's `.git/info/exclude`, never `.gitignore`, before any file is written, and the files meant for the whole team are offered one by one to keep or drop. A new engine command, `--local-exclude`, writes that list, and `/bindwright:update` refreshes it.
 
 ## [v3.0.1] — 2026-11-09

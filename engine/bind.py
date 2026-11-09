@@ -109,6 +109,7 @@ def _included(path, a, flags):
         "LICENSE.template": flags["license_file"],
         ".claude/rules/collaboration.md": a["team"],
         ".claude/rules/code-host.md": flags["code_host_other"] or flags["github_no_actions"],
+        ".claude/rules/local-review.md": flags["local_review"],
         ".claude/rules/confidentiality.md": adv["confidentiality"],
         ".claude/rules/clean-room.md": adv["cleanRoom"],
         ".claude/rules/shipped-text.md": adv["plainWriting"],
