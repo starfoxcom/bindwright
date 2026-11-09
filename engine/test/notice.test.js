@@ -1,11 +1,11 @@
 // The plugin's session-start notice (helper/hooks/notice.mjs): what it says,
 // that it says it at most once a day per repo, asks the network at most once
 // a day, and stays quiet offline. The last case runs the script from a fresh
-// pack, as /session-start does, and checks the pack declares no hooks.
+// helper pack, as /session-start does.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -186,33 +186,51 @@ test("drift names the extras the repo's setup expects, and nothing else", async 
   }
 });
 
+test("a helper at another version than the plugin points at /bindwright:update", async () => {
+  const s = scene("1.4.0");
+  try {
+    const text = await notice({
+      cwd: s.repo, today: "2026-11-08", cacheFile: s.cacheFile, pluginVersion: "1.4.0", helperVersion: "1.3.0",
+      fetchLatest: latest(null),
+    });
+    assert.equal(text, "Bindwright's helper is 1.3.0 and the plugin is 1.4.0: "
+      + "/bindwright:update brings the helper to the plugin's version.");
+  } finally {
+    rmSync(s.root, { recursive: true, force: true });
+  }
+});
+
 const needs = { skip: !python && "needs Python 3.8+" };
 
-test("the notice, run from a pack as /session-start runs it, tells the user and then stays quiet", needs, () => {
+test("the notice, run from the helper as /session-start runs it, tells the user and then stays quiet", needs, () => {
   const s = scene("0.1.0");
   try {
-    const plugin = join(s.root, "bindwright");
-    const pack = [join(repoRoot, "tools", "pack_plugin.py"), "--out", plugin];
+    const helper = join(s.root, "helper");
+    const pack = [join(repoRoot, "tools", "pack_plugin.py"), "--helper-out", helper];
     const packed = spawnSync(python, pack, { encoding: "utf8" });
     assert.equal(packed.status, 0, packed.stderr);
-    assert.equal(existsSync(join(plugin, "hooks", "hooks.json")), false, "the plugin declares no hooks");
-    // The plugin folder reached through a link too, as a linked ~/.claude does.
+    // The plugin folder holds only its VERSION here, at the helper's version.
+    const plugin = join(s.root, "plugin");
+    mkdirSync(plugin);
+    writeFileSync(join(plugin, "VERSION"), readFileSync(join(helper, "VERSION")));
+    // The helper reached through a link too, as a linked home folder does.
     const linked = join(s.root, "linked");
-    symlinkSync(plugin, linked, "junction");
-    for (const root of [plugin, linked]) {
+    symlinkSync(helper, linked, "junction");
+    for (const root of [helper, linked]) {
       const env = {
-        ...process.env, CLAUDE_CONFIG_DIR: join(s.root, `config-${root === plugin}`),
+        ...process.env, CLAUDE_CONFIG_DIR: join(s.root, `config-${root === helper}`),
         BINDWRIGHT_LATEST_URL: "http://127.0.0.1:9/VERSION", // nothing listens there: offline
       };
       const setup = { schema: 1, extras: { tasks: "recommended" } };
       const project = { team: true, client: false, project: {}, advanced: { tracker: "github" }, setup };
       writeFileSync(join(s.repo, ".bindwright", "project.json"), JSON.stringify(project));
       const script = join(root, "hooks", "notice.mjs");
-      const run = () => spawnSync(process.execPath, [script], { cwd: s.repo, env, encoding: "utf8" });
+      const run = () => spawnSync(process.execPath, [script, "--plugin", plugin], { cwd: s.repo, env, encoding: "utf8" });
       const first = run();
       assert.equal(first.status, 0, first.stderr);
       assert.match(first.stdout, /from 0\.1\.0 .*\/bindwright:update/, root);
       assert.match(first.stdout, /expects extras this machine lacks \(tasks\)/);
+      assert.doesNotMatch(first.stdout, /helper/, "a helper at the plugin's version says nothing");
       const second = run();
       assert.equal(second.status, 0, second.stderr);
       assert.equal(second.stdout, "");

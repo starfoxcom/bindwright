@@ -1,7 +1,8 @@
-// Bindwright's session-start notice, run by the repo's /session-start skill
-// from the repo root. At most once a day per repo it says when the repo's
-// Bindwright files are older than the plugin (/bindwright:update brings them
-// up) or a newer plugin is out. It asks the network at most once a day, with
+// Bindwright's session-start notice, run from the helper by the repo's
+// /session-start skill from the repo root, with `--plugin <plugin folder>`. At
+// most once a day per repo it says when the repo's Bindwright files are older
+// than the plugin (/bindwright:update brings them up), when the helper is not
+// at the plugin's version, or when a newer plugin is out. It asks the network at most once a day, with
 // a short timeout, and prints nothing when offline, when nothing is behind, or
 // on any error. Node 18+.
 
@@ -64,9 +65,11 @@ function save(cacheFile, cache, today) {
 
 // The notice text, or null. `fetchLatest()` gives the released version or
 // null; `driftFor(repo)` the extras the repo's setup expects that this machine
-// lacks; `cacheFile` remembers the day of the last check, what it found, and
-// the day each repo last saw a notice.
-export async function notice({ cwd, today, cacheFile, pluginVersion, fetchLatest, driftFor = async () => [] }) {
+// lacks; `helperVersion` is the helper's own version; `cacheFile` remembers
+// the day of the last check, what it found, and the day each repo last saw a notice.
+export async function notice({
+  cwd, today, cacheFile, pluginVersion, helperVersion = null, fetchLatest, driftFor = async () => [],
+}) {
   const cache = { checked: null, latest: null, ...readJson(cacheFile) };
   cache.shown = Object.fromEntries(todays(cache.shown, today));
   const repo = findRepo(cwd);
@@ -83,6 +86,11 @@ export async function notice({ cwd, today, cacheFile, pluginVersion, fetchLatest
   const latest = clean(cache.latest);
   if (older(pluginVersion, latest)) {
     lines.push(`Bindwright ${latest} is out; this machine has ${pluginVersion}. Update the plugin with /plugin.`);
+  }
+  const helper = clean(helperVersion);
+  if (helper && helper !== clean(pluginVersion)) {
+    lines.push(`Bindwright's helper is ${helper} and the plugin is ${pluginVersion}: `
+      + "/bindwright:update brings the helper to the plugin's version.");
   }
   const repoVersion = repo && clean(readJson(join(repo, PRISTINE))?.version);
   if (older(repoVersion, pluginVersion)) {
@@ -118,7 +126,7 @@ export async function fetchVersion(url) {
   return parse(text) ? text.replace(/^v+/, "") : null;
 }
 
-// The engine ships beside this script in the packed plugin.
+// The engine ships beside this script in the helper.
 async function driftOf(root, repo, config) {
   const { runSettings } = await import(pathToFileURL(join(root, "engine", "layers.js")).href);
   return runSettings(repo, config).drift;
@@ -144,7 +152,11 @@ async function main() {
   } catch {
     // The counts never stand in the way of the notice.
   }
-  const pluginVersion = existsSync(join(root, "VERSION")) ? readFileSync(join(root, "VERSION"), "utf8").trim() : null;
+  const versionIn = (folder) => (existsSync(join(folder, "VERSION")) ? readFileSync(join(folder, "VERSION"), "utf8").trim() : null);
+  const flag = process.argv.indexOf("--plugin");
+  const helperVersion = versionIn(root);
+  // Without --plugin, the helper's version stands in for the plugin's.
+  const pluginVersion = flag !== -1 && process.argv[flag + 1] ? versionIn(process.argv[flag + 1]) : helperVersion;
   if (!parse(pluginVersion)) return;
   const url = process.env.BINDWRIGHT_LATEST_URL || LATEST_URL;
   const text = await notice({
@@ -152,6 +164,7 @@ async function main() {
     today: new Date().toLocaleDateString("en-CA"),
     cacheFile: join(config, "bindwright", "notice.json"),
     pluginVersion: pluginVersion.replace(/^v+/, ""),
+    helperVersion,
     fetchLatest: () => fetchVersion(url),
     driftFor: (repo) => driftOf(root, repo, config),
   });
