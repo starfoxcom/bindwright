@@ -1,7 +1,8 @@
 """Assembles the Bindwright plugin and its helper package.
 
 The plugin holds only what the plugin directory accepts from an organization
-that is not Verified: `plugin/` (manifest, icon, README, skills) and helper.json. Everything that runs on the user's computer ships as the helper
+that is not Verified: `plugin/` (manifest, icon, README, skills) and helper.json.
+Everything that runs on the user's computer ships as the helper
 package, attached to each GitHub release as `bindwright-X.Y.Z.tgz` (npm
 installs it) and `bindwright-X.Y.Z-py3-none-any.whl` (pip installs it): both
 engines, the templates the engine reads, the extras for the user's config
