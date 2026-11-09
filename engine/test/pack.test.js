@@ -1,5 +1,6 @@
-// The packed plugin (tools/pack_plugin.py) carries everything setup needs:
-// its engine, run from the pack alone, binds what the repo's engine binds.
+// The packed plugin (tools/pack_plugin.py) holds only what the plugin directory
+// accepts, and the helper package carries everything setup runs: its engine,
+// run from the helper alone, binds what the repo's engine binds.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,15 +18,28 @@ const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = join(engine, "..");
 const run = (cmd, args) => spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 1 << 28 });
 
-test("the packed plugin binds what the repo's engine binds", { skip: !python && "needs Python 3.8+" }, () => {
+test("the helper binds what the repo's engine binds, and the plugin ships no code", { skip: !python && "needs Python 3.8+" }, () => {
   const root = mkdtempSync(join(tmpdir(), "bw-pack-"));
   try {
     const out = join(root, "bindwright");
     const packed = run(python, [join(repo, "tools", "pack_plugin.py"), "--out", out]);
     assert.equal(packed.status, 0, packed.stderr);
+    const version = readFileSync(join(repo, "VERSION"), "utf8").trim().replace(/^v/, "");
     const manifest = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf8"));
-    assert.equal(manifest.version, readFileSync(join(repo, "VERSION"), "utf8").trim().replace(/^v/, ""));
+    assert.equal(manifest.version, version);
     assert.ok(existsSync(join(out, "skills", "setup", "SKILL.md")));
+    assert.ok(!existsSync(join(out, "engine")) && !existsSync(join(out, "hooks")));
+    const checked = run(python, [join(repo, "tools", "directory_check.py"), out]);
+    assert.equal(checked.status, 0, checked.stdout);
+
+    const helper = join(root, "helper");
+    const built = run(python, [join(repo, "tools", "pack_plugin.py"), "--helper-out", helper]);
+    assert.equal(built.status, 0, built.stderr);
+    const pkg = JSON.parse(readFileSync(join(helper, "package.json"), "utf8"));
+    assert.equal(pkg.version, version);
+    assert.equal(pkg.dependencies, undefined);
+    assert.equal(pkg.scripts, undefined);
+    assert.ok(existsSync(join(helper, "hooks", "counts.mjs")));
 
     const team = defaults({ team: true, client: true });
     // Every template family: pre-commit, architecture, the research hook and the home guards.
@@ -36,8 +50,8 @@ test("the packed plugin binds what the repo's engine binds", { skip: !python && 
       const args = ["--code", encodeSetupCode(answers), "--year", "2026"];
       const expected = run(process.execPath, [join(engine, "cli.js"), ...args]);
       assert.equal(expected.status, 0, expected.stderr);
-      const js = run(process.execPath, [join(out, "engine", "cli.js"), ...args]);
-      const py = run(python, ["-I", join(out, "engine", "bind.py"), ...args]);
+      const js = run(process.execPath, [join(helper, "engine", "cli.js"), ...args]);
+      const py = run(python, ["-I", join(helper, "engine", "bind.py"), ...args]);
       assert.equal(js.stdout, expected.stdout, js.stderr);
       assert.equal(py.stdout, expected.stdout, py.stderr);
     }
@@ -58,7 +72,7 @@ test("the packed plugin binds what the repo's engine binds", { skip: !python && 
 
 // Packed paths with edits git has not recorded: the zip (built from git) and
 // the folder pack (from the working tree) would then differ on purpose.
-const PACKED = ["plugin", "engine", "_core", "VERSION", "CHANGELOG.md"];
+const PACKED = ["plugin", "helper", "engine", "_core", "VERSION", "CHANGELOG.md", "LICENSE", "tools"];
 const dirty = run("git", ["-C", repo, "status", "--porcelain", "--", ...PACKED]).stdout.trim() !== "";
 
 test("the release zip has the same bytes on every build and the folder pack's files", {
@@ -78,7 +92,7 @@ test("the release zip has the same bytes on every build and the folder pack's fi
     const walk = run(python, ["-c", "import os, sys; r = sys.argv[1]; print('\\n'.join(sorted("
       + "os.path.relpath(os.path.join(d, f), r).replace(os.sep, '/') for d, _, fs in os.walk(r) for f in fs)))",
     join(root, "dir")]).stdout.trim().split(/\r?\n/);
-    assert.deepEqual(names, walk.filter((p) => p !== ".bindwright-pack"));
+    assert.deepEqual(names, walk.filter((p) => p !== ".bindwright-pack.txt"));
 
     // --marketplace creates its folder and pins the zip just built.
     const file = join(root, "new", ".claude-plugin", "marketplace.json");
@@ -110,4 +124,68 @@ test("the marketplace file lists the release zip by version and SHA-256", needsP
       sha256: "ab".repeat(32),
     },
   }]);
+});
+
+test("the helper's wheel installs with pip and binds what the repo's engine binds", {
+  skip: (!python && "needs Python 3.8+") || (dirty && "packed files have uncommitted edits"),
+}, () => {
+  const root = mkdtempSync(join(tmpdir(), "bw-wheel-"));
+  try {
+    const build = (name) => {
+      const out = run(python, [join(repo, "tools", "pack_plugin.py"), "--wheel", join(root, name)]);
+      assert.equal(out.status, 0, out.stderr);
+      return out.stdout.trim().replace(/^Built /, "");
+    };
+    const wheel = build("a");
+    assert.ok(readFileSync(wheel).equals(readFileSync(build("b"))), "two builds, one set of bytes");
+    const target = join(root, "target");
+    const pip = run(python, ["-m", "pip", "install", "--quiet", "--no-deps", "--no-index", "--target", target, wheel]);
+    assert.equal(pip.status, 0, pip.stderr);
+    const args = ["--code", encodeSetupCode(defaults()), "--year", "2026"];
+    const expected = run(process.execPath, [join(engine, "cli.js"), ...args]);
+    const py = run(python, ["-I", join(target, "bindwright", "engine", "bind.py"), ...args]);
+    assert.equal(py.stdout, expected.stdout, py.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Each row breaks one rule the directory applies to organizations that are not Verified.
+const PNG = Buffer.from("89504e470d0a1a0a0000", "hex");
+const DIRECTORY_CASES = [
+  ["a script", "skills/x/run.mjs", "export {};\n", /not Markdown, text, JSON, YAML/],
+  ["a shebang in a text file", "notes.txt", "#!/bin/sh\necho hi\n", /starts with #!/],
+  ["a NUL byte", "notes.md", Buffer.from("a\0b"), /NUL byte/],
+  ["text that is not UTF-8", "notes.md", Buffer.from([0xff, 0xfe, 0x41]), /not UTF-8/],
+  ["a package manager's file", "package.json", "{}\n", /package manager/],
+  ["declared hooks", "hooks/hooks.json", "{}\n", /declares hooks/],
+  ["allowed-tools in a skill", "skills/x/SKILL.md", "---\nname: x\nallowed-tools: Bash\n---\n", /allowed-tools/],
+  ["hooks in the manifest", ".claude-plugin/plugin.json", '{"name":"x","hooks":{}}\n', /declares hooks/],
+  ["an image that is not one", "icon.png", "not a png", /not the image/],
+];
+
+test("the directory check refuses each kind of file the directory refuses", needsPython, () => {
+  const root = mkdtempSync(join(tmpdir(), "bw-dircheck-"));
+  try {
+    const check = (name, files) => {
+      const dir = join(root, name.replace(/\W+/g, "-"));
+      for (const [rel, data] of Object.entries(files)) {
+        mkdirSync(dirname(join(dir, rel)), { recursive: true });
+        writeFileSync(join(dir, rel), data);
+      }
+      return run(python, [join(repo, "tools", "directory_check.py"), dir]);
+    };
+    const clean = {
+      "skills/x/SKILL.md": "---\nname: x\ndescription: d\ndisable-model-invocation: true\n---\n# x\n",
+      ".claude-plugin/plugin.json": '{"name":"x"}\n', "VERSION": "1.0.0\n", ".claude-plugin/icon.png": PNG,
+    };
+    assert.equal(check("clean", clean).status, 0);
+    for (const [name, rel, data, message] of DIRECTORY_CASES) {
+      const out = check(name, { ...clean, [rel]: data });
+      assert.equal(out.status, 1, name);
+      assert.match(out.stdout, message, name);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
