@@ -1,4 +1,4 @@
-// The opt-in review counts (plugin/hooks/counts.mjs): what a repo's merged
+// The opt-in review counts (helper/hooks/counts.mjs): what a repo's merged
 // pull requests add up to, and what a daily send does with the counter's answer.
 // Nothing here touches the network or gh: both are injected.
 
@@ -22,14 +22,14 @@ import {
   setProject,
   setShare,
   statusOf,
-} from "../../plugin/hooks/counts.mjs";
+} from "../../helper/hooks/counts.mjs";
 import {
   KINDS as COUNTER_KINDS,
   MAX_ROUNDS_PER_SEND,
   STALL_ROUNDS as COUNTER_STALL_ROUNDS,
 } from "../../counter/src/rules.js";
 
-const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "hooks", "counts.mjs");
+const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "helper", "hooks", "counts.mjs");
 const SEND_URL = "http://127.0.0.1:8787/increment";
 const ID = "0123456789abcdef0123456789abcdef";
 const OK = { status: 200, error: "" };

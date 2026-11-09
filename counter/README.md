@@ -31,11 +31,11 @@ These keep casual inflation out, but an anonymous counter cannot prove a count i
 
 ## Deploy
 
-From this folder, signed in with `npx wrangler login`:
+From this folder, signed in with `npx wrangler@4.152.0 login` (wrangler stays pinned to a release at least two weeks old, so a hijacked new release never runs here; move the pin on purpose):
 
 ```
-npx wrangler d1 execute bindwright-counter --remote --file schema.sql   # first time only
-npx wrangler deploy
+npx wrangler@4.152.0 d1 execute bindwright-counter --remote --file schema.sql   # first time only
+npx wrangler@4.152.0 deploy
 ```
 
 Tests: `node --test engine/test/counter.test.js` from the repo root.

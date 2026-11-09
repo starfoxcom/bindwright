@@ -48,7 +48,7 @@ Run `git branch --show-current` before editing. Switch or branch first, then edi
 - Every PR merges with a merge commit: `gh pr merge <pr> --merge --delete-branch`. Keep each commit buildable, and read history with `git log --first-parent`.
 - Release PRs (`develop` into `main`) and cascade PRs (`main` into `develop`) always use `--merge`. Squashing them makes the two branches diverge and turns the next release into a conflict.
 - After merging: `--delete-branch` removes the remote branch, but the local one only when it is checked out. Run `git branch -D <name>` if it remains, then confirm with `git branch`.
-- Then, when the Bindwright plugin is installed (`bindwright` in `~/.claude/plugins/installed_plugins.json`, whose `installPath` is the plugin folder), run `node "<plugin folder>/hooks/counts.mjs" send <repo root>` in the background. It sends nothing unless this computer turned on the anonymous review counts, and at most once in 24 hours, so a merge never waits on it.
+- Then, when Bindwright's helper is installed (`~/.bindwright/helper/node_modules/bindwright`, which setup installs), run `node "$HOME/.bindwright/helper/node_modules/bindwright/hooks/counts.mjs" send <repo root>` in the background. It sends nothing unless this computer turned on the anonymous review counts, and at most once in 24 hours, so a merge never waits on it.
 - Re-run a failed CI workflow as a whole (or push again). Re-running only the failed job can leave a required check stuck.
 
 ### Cascade after every merge into `main`
