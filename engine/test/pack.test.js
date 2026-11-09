@@ -138,25 +138,49 @@ test("the marketplace file lists the release zip by version and SHA-256", needsP
   }]);
 });
 
-test("the helper's wheel installs with pip and binds what the repo's engine binds", {
-  skip: (!python && "needs Python 3.8+") || (dirty && "packed files have uncommitted edits"),
+// npm's own script, run with this Node: where Node installers put it on Windows and elsewhere.
+const npmCli = [
+  join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  join(dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+].find((p) => existsSync(p));
+
+// Each helper file the release attaches, the way setup installs it, and the engine it then runs.
+const HELPER_KINDS = [
+  ["node", "--tgz", (file, target) => [process.execPath, [npmCli, "install", "--prefix", target, "--no-save",
+    "--ignore-scripts", "--no-audit", "--no-fund", "--offline", file]],
+  (target, args) => [process.execPath, [join(target, "node_modules", "bindwright", "engine", "cli.js"), ...args]]],
+  ["python", "--wheel", (file, target) => [python, ["-m", "pip", "install", "--quiet", "--no-deps", "--no-index",
+    "--target", target, file]],
+  (target, args) => [python, ["-I", join(target, "bindwright", "engine", "bind.py"), ...args]]],
+];
+
+test("each helper file has the same bytes on every build, matches the plugin's pin, installs and binds", {
+  skip: (!python && "needs Python 3.8+") || (!npmCli && "needs npm") || (dirty && "packed files have uncommitted edits"),
 }, () => {
-  const root = mkdtempSync(join(tmpdir(), "bw-wheel-"));
+  const root = mkdtempSync(join(tmpdir(), "bw-helper-"));
   try {
-    const build = (name) => {
-      const out = run(python, [join(repo, "tools", "pack_plugin.py"), "--wheel", join(root, name)]);
-      assert.equal(out.status, 0, out.stderr);
-      return out.stdout.trim().replace(/^Built /, "");
-    };
-    const wheel = build("a");
-    assert.ok(readFileSync(wheel).equals(readFileSync(build("b"))), "two builds, one set of bytes");
-    const target = join(root, "target");
-    const pip = run(python, ["-m", "pip", "install", "--quiet", "--no-deps", "--no-index", "--target", target, wheel]);
-    assert.equal(pip.status, 0, pip.stderr);
+    const zip = join(root, "plugin.zip");
+    assert.equal(run(python, [join(repo, "tools", "pack_plugin.py"), "--zip", zip]).status, 0);
+    const read = "import sys, zipfile; print(zipfile.ZipFile(sys.argv[1]).read('helper.json').decode())";
+    const pins = JSON.parse(run(python, ["-c", read, zip]).stdout);
     const args = ["--code", encodeSetupCode(defaults()), "--year", "2026"];
     const expected = run(process.execPath, [join(engine, "cli.js"), ...args]);
-    const py = run(python, ["-I", join(target, "bindwright", "engine", "bind.py"), ...args]);
-    assert.equal(py.stdout, expected.stdout, py.stderr);
+    for (const [kind, flag, install, bind] of HELPER_KINDS) {
+      const build = (name) => {
+        const out = run(python, [join(repo, "tools", "pack_plugin.py"), flag, join(root, kind, name)]);
+        assert.equal(out.status, 0, out.stderr);
+        return out.stdout.trim().replace(/^Built /, "");
+      };
+      const file = build("a");
+      assert.ok(readFileSync(file).equals(readFileSync(build("b"))), `${kind}: two builds, one set of bytes`);
+      assert.equal(createHash("sha256").update(readFileSync(file)).digest("hex"), pins[kind].sha256, kind);
+      assert.ok(pins[kind].url.endsWith(`/v${pins.version}/${pins[kind].file}`), kind);
+      const target = join(root, kind, "target");
+      const installed = run(...install(file, target));
+      assert.equal(installed.status, 0, installed.stderr);
+      const bound = run(...bind(target, args));
+      assert.equal(bound.stdout, expected.stdout, `${kind}: ${bound.stderr}`);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
