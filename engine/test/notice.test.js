@@ -1,4 +1,4 @@
-// The plugin's session-start notice (plugin/hooks/notice.mjs): what it says,
+// The plugin's session-start notice (helper/hooks/notice.mjs): what it says,
 // that it says it at most once a day per repo, asks the network at most once
 // a day, and stays quiet offline. The last case runs the script from a fresh
 // pack, as /session-start does, and checks the pack declares no hooks.
@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { notice, older, findRepo } from "../../plugin/hooks/notice.mjs";
+import { notice, older, findRepo } from "../../helper/hooks/notice.mjs";
 import { python } from "./python.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");

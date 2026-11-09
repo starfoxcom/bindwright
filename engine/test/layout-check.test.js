@@ -1,4 +1,4 @@
-// The layout check (plugin/hooks/layout-check.mjs). The browser lookup runs everywhere;
+// The layout check (helper/hooks/layout-check.mjs). The browser lookup runs everywhere;
 // the page checks run only where Chrome, Chromium or Edge is installed, which the CI
 // Ubuntu image has, and skip with the reason elsewhere.
 
@@ -10,10 +10,10 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { browserProcesses, usesProfile } from "../../plugin/hooks/browser-cleanup.mjs";
-import { findBrowser } from "../../plugin/hooks/layout-check.mjs";
+import { browserProcesses, usesProfile } from "../../helper/hooks/browser-cleanup.mjs";
+import { findBrowser } from "../../helper/hooks/layout-check.mjs";
 
-const CLI = fileURLToPath(new URL("../../plugin/hooks/layout-check.mjs", import.meta.url));
+const CLI = fileURLToPath(new URL("../../helper/hooks/layout-check.mjs", import.meta.url));
 const SPAWN_TIMEOUT_MS = 60000;
 const browser = findBrowser(process.env, process.platform);
 const SKIP = browser ? false : "no Chrome, Chromium or Edge installed";
