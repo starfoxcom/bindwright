@@ -14,6 +14,11 @@ const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "�
   .map((g) => `${g}︎`);
 // The clock ticks in steps and stops while paused, so every wait and loop pauses with it.
 const STEP = 40;
+// Text size per pixel of window width, and its bounds: every window keeps one layout at any
+// width, a 727 px window at 15 px text, and text never shrinks below 11 px on a phone.
+const FONT_PER_WIDTH = 15 / 727;
+const MIN_FONT_PX = 11;
+const MAX_FONT_PX = 15;
 // Under reduced motion, a wait this long or longer holds as a slide; shorter ones skip.
 const SLIDE_MS = 1000;
 // Every story pause runs this many times its scripted length: at 1, a line is gone before
@@ -71,7 +76,12 @@ class Terminal {
     this.verb = stage.querySelector(".verb");
     this.meta = stage.querySelector(".meta");
     this.typed = stage.querySelector(".typed");
-    addDesktopParts(stage.matches(".term") ? stage : stage.querySelector(".term"));
+    const win = stage.matches(".term") ? stage : stage.querySelector(".term");
+    addDesktopParts(win);
+    new ResizeObserver(([entry]) => {
+      const size = entry.contentRect.width * FONT_PER_WIDTH;
+      win.style.fontSize = `${Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, size))}px`;
+    }).observe(win);
     // The two looks set lines at different heights, so the newest line moves back into view.
     document.addEventListener("viewchange", () => requestAnimationFrame(() => this.follow()));
     new IntersectionObserver(([entry]) => {

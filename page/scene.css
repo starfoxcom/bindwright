@@ -26,9 +26,10 @@
 @keyframes scene-cap { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
 
 /* Terminal window: the common width (the hero split column), with the cards in a row under it. */
-/* Every terminal is one height, the tallest any scene needs; almost square on phones (below). */
+/* Every window has one shape, tall enough for any scene, and terminal.js sizes its text to its
+   width, so all of them show the same layout at any size; almost square on phones (below). */
 .stage .term {
-  width: 100%; max-width: 727px; margin: 2cqi auto 0; height: 620px;
+  width: 100%; max-width: 727px; margin: 2cqi auto 0; aspect-ratio: 727 / 620;
   display: flex; flex-direction: column;
   background: var(--term); border: 1px solid var(--rule); border-radius: 14px;
   box-shadow: 0 30px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(1 0 0 / .03) inset;
