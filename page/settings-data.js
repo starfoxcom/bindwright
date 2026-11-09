@@ -164,6 +164,15 @@ export const PROJECT = [
     engine: [{ flags: {}, key: "advanced.prReviewers", value: null }],
   },
   {
+    id: "local-review",
+    title: "Local review before each merge",
+    text: "Offered when GitHub can't run CI workflows, on hosted or local runners. Two fresh "
+      + "reviewers check each change before it merges, and nothing about them reaches GitHub.",
+    value: "No",
+    keys: ["advanced.localReview"],
+    engine: [{ flags: {}, key: "advanced.localReview", value: false }],
+  },
+  {
     id: "local-only",
     title: "Assistant files on this computer only",
     text: "Asked for a client's or employer's project. CLAUDE.md, .claude/ and setup's own files "

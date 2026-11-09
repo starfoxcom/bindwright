@@ -131,6 +131,9 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       handoffFile: true,
       // GitHub names (user or org/team) asked on each PR that needs approval; null if none.
       prReviewers: null,
+      // true runs two local reviewer subagents before each merge, for a project
+      // with no AI review in CI, and posts nothing to the host.
+      localReview: false,
     },
   };
 }
@@ -173,6 +176,14 @@ function checkPrReviewers(adv) {
   check(adv.codeHost === "github", 'prReviewers is for codeHost "github"');
 }
 
+// The local review stands in for the CI reviews, so it needs a host where none run.
+function checkLocalReview(adv) {
+  if (!adv.localReview) return;
+  check(adv.aiReview === false, "localReview is for projects without CI reviews: aiReview must be false");
+  const hostWithoutActions = adv.codeHost === "other" || (adv.codeHost === "github" && adv.githubApps === false);
+  check(hostWithoutActions, 'localReview needs codeHost "other", or "github" with githubApps false');
+}
+
 const QUOTE_MAX = 40;
 
 // An untrusted value as a message quotes it: at most QUOTE_MAX code points, then
@@ -207,7 +218,7 @@ export function validate(saved) {
   check(typeof a.team === "boolean" && typeof a.client === "boolean", "team and client must be true or false");
   check(typeof a.private === "boolean", "private must be true or false");
   const switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localOnly"];
+    "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localReview", "localOnly"];
   for (const key of switches) {
     check(typeof adv[key] === "boolean", `${key} must be true or false`);
   }
@@ -247,6 +258,7 @@ export function validate(saved) {
   "shippedTextPaths must be null or a non-empty list of globs "
   + "without quotes, backslashes, line breaks or outer spaces");
   checkCodeHost(adv);
+  checkLocalReview(adv);
   check(!(a.team && adv.codeHost === "local"), 'codeHost "local" is one person on one computer: team must be false');
   checkPrReviewers(adv);
   check(TRACKERS.includes(adv.tracker), `unknown tracker ${quoted(adv.tracker)}`);
@@ -327,6 +339,7 @@ export function flagsFor(a) {
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     pr_reviewers: Array.isArray(adv.prReviewers),
+    local_review: adv.localReview,
     assistant_files_local: adv.localOnly,
     contributing_md: a.team,
     license_file: !a.client,

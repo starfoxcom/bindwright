@@ -183,6 +183,9 @@ def defaults(team=False, client=False, private=None):
             "handoffFile": True,
             # GitHub names (user or org/team) asked on each PR that needs approval; null if none.
             "prReviewers": None,
+            # True runs two local reviewer subagents before each merge, for a project
+            # with no AI review in CI, and posts nothing to the host.
+            "localReview": False,
         },
     }
 
@@ -239,7 +242,7 @@ def validate(saved):
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
     _check(_is_bool(get(a, "private")), "private must be true or false")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localOnly"]
+                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localReview", "localOnly"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
     name = get(project, "name")
@@ -273,6 +276,7 @@ def validate(saved):
            "shippedTextPaths must be null or a non-empty list of globs "
            "without quotes, backslashes, line breaks or outer spaces")
     _check_code_host(adv)
+    _check_local_review(adv)
     _check(not (a["team"] and adv["codeHost"] == "local"),
            'codeHost "local" is one person on one computer: team must be false')
     _check_pr_reviewers(adv)
@@ -346,6 +350,15 @@ def _check_pr_reviewers(adv):
     _check(adv.get("codeHost") == "github", 'prReviewers is for codeHost "github"')
 
 
+def _check_local_review(adv):
+    if not adv.get("localReview"):
+        return
+    _check(adv.get("aiReview") is False, "localReview is for projects without CI reviews: aiReview must be false")
+    host = adv.get("codeHost")
+    without_actions = host == "other" or (host == "github" and adv.get("githubApps") is False)
+    _check(without_actions, 'localReview needs codeHost "other", or "github" with githubApps false')
+
+
 def _given(d, key):
     """d[key] as JavaScript reads it: a missing key counts as its default."""
     return False if d.get(key, UNDEFINED) is UNDEFINED else d[key]
@@ -415,6 +428,7 @@ def flags_for(a):
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
         "pr_reviewers": isinstance(adv["prReviewers"], list),
+        "local_review": adv["localReview"],
         "assistant_files_local": adv["localOnly"],
         "contributing_md": a["team"],
         "license_file": not a["client"],
