@@ -21,6 +21,9 @@ LOCAL_FILES = [
 ]
 
 BEGIN = "# Bindwright: the assistant's files, kept on this computer"
+# The exclude file is read and written as latin-1, one character per byte, so the user's lines
+# come back byte for byte in any encoding; every line the engine writes is ASCII.
+EXCLUDE_ENCODING = "latin-1"
 # The first line of a block appended to a file whose last line had no line break: the break
 # written before the block belongs to it, and leaves with it.
 BEGIN_AFTER_BREAK = f"{BEGIN}, after the line break it added"
@@ -115,7 +118,7 @@ def _read_exclude_file(file):
     """The text of the exclude file, or "" when it does not exist yet."""
     if not os.path.exists(file):
         return ""
-    with open(file, encoding="utf-8", newline="") as fh:
+    with open(file, encoding=EXCLUDE_ENCODING, newline="") as fh:
         return fh.read()
 
 
@@ -139,7 +142,7 @@ def local_exclude(folder, dests):
     lines = exclude_lines(paths)
     updated = _with_block(_read_exclude_file(file), lines, file)
     os.makedirs(os.path.dirname(file), exist_ok=True)
-    with open(file, "w", encoding="utf-8", newline="") as fh:
+    with open(file, "w", encoding=EXCLUDE_ENCODING, newline="") as fh:
         fh.write(updated)
     return {
         "exclude": file.replace("\\", "/"),
@@ -154,6 +157,6 @@ def undo_local_exclude(folder):
     file = _exclude_file(folder)
     rest = _without_block(_read_exclude_file(file), file)
     if rest is not None:
-        with open(file, "w", encoding="utf-8", newline="") as fh:
+        with open(file, "w", encoding=EXCLUDE_ENCODING, newline="") as fh:
             fh.write(rest)
     return {"exclude": file.replace("\\", "/"), "removed": rest is not None}

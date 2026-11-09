@@ -106,9 +106,12 @@ function excludeFile(folder) {
   return resolve(folder, out.trim());
 }
 
-// The text of the exclude file, or "" when it does not exist yet.
+// The text of the exclude file, or "" when it does not exist yet. Read and written as latin1,
+// one character per byte, so the user's lines come back byte for byte in any encoding; every
+// line the engine writes is ASCII.
+const EXCLUDE_ENCODING = "latin1";
 function readExcludeFile(file) {
-  return existsSync(file) ? readFileSync(file, "utf8") : "";
+  return existsSync(file) ? readFileSync(file, EXCLUDE_ENCODING) : "";
 }
 
 // The clone's tracked files that the lines cover, sorted. An exclude line cannot hide these.
@@ -132,7 +135,7 @@ export function localExclude(folder, dests) {
   const lines = excludeLines(paths);
   const next = withBlock(readExcludeFile(file), lines, file);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, next);
+  writeFileSync(file, next, EXCLUDE_ENCODING);
   return {
     exclude: forwardSlashes(file),
     lines,
@@ -145,6 +148,6 @@ export function localExclude(folder, dests) {
 export function undoLocalExclude(folder) {
   const file = excludeFile(folder);
   const rest = withoutBlock(readExcludeFile(file), file);
-  if (rest !== null) writeFileSync(file, rest);
+  if (rest !== null) writeFileSync(file, rest, EXCLUDE_ENCODING);
   return { exclude: forwardSlashes(file), removed: rest !== null };
 }

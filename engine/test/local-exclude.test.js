@@ -66,24 +66,30 @@ for (const [name, run] of ENGINES) {
     });
   });
 
-  // The user's last line ends with a line break or without one; either way --undo restores it.
-  for (const ending of ["\n", ""]) {
-    test(`${name}: the user's exclude lines survive a write, and --undo restores them exactly`
-      + ` (last line ${ending ? "with" : "without"} a line break)`, { skip }, () => {
-      withFolder((repo) => {
-        const theirs = `${readFileSync(excludeOf(repo), "utf8")}*.log${ending}`;
-        writeFileSync(excludeOf(repo), theirs);
-        const { result } = call(run, ["--local-exclude", repo], ANSWERS);
-        assert.equal(call(run, ["--local-exclude", repo], ANSWERS).status, 0);
-        assert.equal(call(run, ["--write", repo], ANSWERS).status, 0);
-        assert.ok(readFileSync(excludeOf(repo), "utf8").startsWith(theirs));
-        assert.deepEqual(call(run, ["--local-exclude", repo, "--undo"]).result,
-          { exclude: result.exclude, removed: true });
-        assert.equal(readFileSync(excludeOf(repo), "utf8"), theirs);
-        assert.deepEqual(call(run, ["--local-exclude", repo, "--undo"]).result,
-          { exclude: result.exclude, removed: false });
+  // The user's own lines, ending with a line break or without one, or in an encoding that is
+  // not UTF-8: --undo restores every byte.
+  const THEIR_LINES = [
+    ["last line with a line break", Buffer.from("*.log\n")],
+    ["last line without a line break", Buffer.from("*.log")],
+    ["a Windows-1252 comment", Buffer.from("# configuraci\xf3n\n", "latin1")],
+  ];
+  for (const [label, extra] of THEIR_LINES) {
+    test(`${name}: the user's exclude lines survive a write, and --undo restores them exactly (${label})`,
+      { skip }, () => {
+        withFolder((repo) => {
+          const theirs = Buffer.concat([readFileSync(excludeOf(repo)), extra]);
+          writeFileSync(excludeOf(repo), theirs);
+          const { result } = call(run, ["--local-exclude", repo], ANSWERS);
+          assert.equal(call(run, ["--local-exclude", repo], ANSWERS).status, 0);
+          assert.equal(call(run, ["--write", repo], ANSWERS).status, 0);
+          assert.ok(readFileSync(excludeOf(repo)).subarray(0, theirs.length).equals(theirs));
+          assert.deepEqual(call(run, ["--local-exclude", repo, "--undo"]).result,
+            { exclude: result.exclude, removed: true });
+          assert.ok(readFileSync(excludeOf(repo)).equals(theirs));
+          assert.deepEqual(call(run, ["--local-exclude", repo, "--undo"]).result,
+            { exclude: result.exclude, removed: false });
+        });
       });
-    });
   }
 
   test(`${name}: --undo with no exclude file reports removed false and creates nothing`, { skip }, () => {
