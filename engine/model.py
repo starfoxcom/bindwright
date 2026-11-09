@@ -167,6 +167,9 @@ def defaults(team=False, client=False, private=None):
             # False: the code is on GitHub, but its organization blocks GitHub apps, Actions
             # and project boards, so no AI review, no workflow and no board (_check_code_host).
             "githubApps": True,
+            # True: the assistant's files (CLAUDE.md, .claude/, .bindwright/ and the like) stay on
+            # this computer, listed in the clone's .git/info/exclude, and never reach a commit.
+            "localOnly": False,
             "tracker": "github",
             # "<owner>/<number>" when tracker is "github" and the project has a
             # board; None keeps project status in a pinned issue instead.
@@ -235,7 +238,7 @@ def validate(saved):
     _check(_is_bool(get(a, "team")) and _is_bool(get(a, "client")), "team and client must be true or false")
     _check(_is_bool(get(a, "private")), "private must be true or false")
     switches = ["aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom",
-                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localReview"]
+                "plainWriting", "codeSizeCheck", "handoffFile", "githubApps", "localReview", "localOnly"]
     for key in switches:
         _check(_is_bool(get(adv, key)), key + " must be true or false")
     name = get(project, "name")
@@ -407,6 +410,7 @@ def flags_for(a):
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
         "local_review": adv["localReview"],
+        "assistant_files_local": adv["localOnly"],
         "contributing_md": a["team"],
         "license_file": not a["client"],
         "audit_trail_commits": a["client"] and a["private"],

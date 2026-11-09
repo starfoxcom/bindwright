@@ -14,6 +14,8 @@
 //   node engine/cli.js --remove-plan DIR             -> what setup wrote there, sorted for removal (remove.js)
 //   node engine/cli.js --remove-files DIR < {"paths": [...], "state": true} -> those files removed
 //   node engine/cli.js --clean-staging DIR [--discard-incoming] -> setup's staging folders removed (staging.js)
+//   node engine/cli.js --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.js)
+//   node engine/cli.js --releases-since DIR -> the plugin's releases since DIR's bound version (releases.js)
 // A failure gives {"error": message} and exit status 1.
 
 import { readFileSync } from "node:fs";
@@ -32,6 +34,8 @@ import { cliVersionFrom, runDoctor } from "./doctor.js";
 import { draftReport } from "./report.js";
 import { planRemoval, removeFiles } from "./remove.js";
 import { cleanStaging } from "./staging.js";
+import { localExclude, undoLocalExclude } from "./exclude.js";
+import { releasesForRepo } from "./releases.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,6 +73,10 @@ async function run(argv) {
   const staging = option(argv, "--clean-staging");
   const discardIncoming = argv.includes("--discard-incoming");
   if (staging !== undefined) return cleanStaging(staging, { discardIncoming });
+  const exclude = option(argv, "--local-exclude");
+  if (exclude !== undefined) return localExcludeRepo(exclude, argv.includes("--undo"));
+  const releases = option(argv, "--releases-since");
+  if (releases !== undefined) return releasesForRepo(releases, root);
   if (report !== undefined) return reportRepo(report, config);
   if (doctor !== undefined) return doctorRepo(doctor, config);
   if (update !== undefined) return updateRepo(update);
@@ -83,18 +91,27 @@ async function run(argv) {
   const answers = expandAnswers(code === undefined
     ? JSON.parse(readFileSync(0, "utf8"))
     : decodeSetupCode(code));
+  const bound = await bindAnswers(answers, year === undefined ? undefined : Number(year));
+  const files = [...bound.entries()];
+  return folder === undefined ? { files } : applyFiles(files, folder, { adopt });
+}
+
+// The plan of a bind: the files as a Map of destination to text, from the answers.
+async function bindAnswers(answers, year) {
   const coreFiles = JSON.parse(readFileSync(join(root, "engine", "core-files.json"), "utf8"));
   const readFile = async (p) => readFileSync(join(root, p), "utf8");
   // The template version the pristine render records: VERSION without its "v".
   const version = (await readFile("VERSION")).trim().replace(/^v+/, "");
-  const bound = await bind(answers, {
-    readFile,
-    coreFiles,
-    year: year === undefined ? undefined : Number(year),
-    version,
-  });
-  const files = [...bound.entries()];
-  return folder === undefined ? { files } : applyFiles(files, folder, { adopt });
+  return bind(answers, { readFile, coreFiles, year, version });
+}
+
+// --local-exclude DIR: the bind's files listed in the clone's exclude file, from the answers on
+// standard input. --undo removes that block and reads nothing.
+async function localExcludeRepo(folder, undo) {
+  if (undo) return undoLocalExclude(folder);
+  const answers = expandAnswers(JSON.parse(readFileSync(0, "utf8")));
+  const planned = await bindAnswers(answers, undefined);
+  return localExclude(folder, [...planned.keys()]);
 }
 
 // A scrubbed bug report for the repo at `folder`, from { title, command, error, expected } on stdin.

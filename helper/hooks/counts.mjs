@@ -1,8 +1,8 @@
-// Bindwright's opt-in review counts. `send <repo root>` runs at session start: at
-// most once a day per repo it counts the user's merged pull requests and posts the
-// review counts to the counter. A repo's count covers its whole history, from GitHub's
-// first day. A history past one send's cap goes out one batch a day: oldest first
-// when backfill is on, otherwise only the newest batch is sent. The other commands
+// Bindwright's opt-in review counts. `send <repo root>` counts the user's merged pull
+// requests and posts the review counts to the counter, at most once every 24 hours per
+// repo. A repo's count covers its whole history, from GitHub's first day. A history past
+// one send's cap goes out one batch per cooldown: oldest first when backfill is on,
+// otherwise only the newest batch is sent. The other commands
 // (`share on|off`, `project <root> <kind>`, `backfill <root> on|off`, `history <root>`,
 // `status`) keep the answer in <config>/bindwright/counts.json. Node 18+, no
 // dependencies; failures change nothing.
@@ -47,6 +47,8 @@ const SEARCH_LIMIT = 1000;
 const PROBE_INDEX = 449;
 const SECOND_IN_MILLISECONDS = 1000;
 const RETRY_GAP_IN_MILLISECONDS = 60 * 1000;
+// Above the counter's minimum gap between two sends (MIN_SEND_GAP_IN_MILLISECONDS, 20 hours).
+const SEND_COOLDOWN_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
 // A batch's PRs with all their comments can take three minutes on a busy repo; the send
 // runs detached at session start, so nobody waits on it.
 const GH_TIMEOUT_IN_MILLISECONDS = 10 * 60 * 1000;
@@ -232,7 +234,7 @@ export function setProject(file, root, kind) {
     id: randomBytes(16).toString("hex"),
     since: HISTORY_START,
     backfill: false,
-    lastSendDay: null,
+    nextSendAt: null,
     failedAt: null,
   };
   entry.kind = kind === LEFT_OUT ? null : kind;
@@ -266,7 +268,7 @@ export function statusOf(file) {
     projects: Object.entries(state.projects).map(([root, entry]) => ({
       root,
       kind: entry.kind,
-      lastSendDay: entry.lastSendDay,
+      nextSendAt: entry.nextSendAt ?? null,
     })),
   };
 }
@@ -394,32 +396,50 @@ async function postJson(url, body) {
   return { status: res.status, error: reply?.error ?? "", coveredTo: reply?.coveredTo };
 }
 
+// Whether the cooldown has passed. An entry from before the cooldown has only `lastSendDay`,
+// and keeps the once-a-local-day rule until its next send writes `nextSendAt`.
+function isCooledDown(entry, current) {
+  // A saved time that is not a date counts as none, so a damaged entry cannot stop every send.
+  const next = Date.parse(entry.nextSendAt ?? "");
+  if (!Number.isNaN(next)) return current.getTime() >= next;
+  if (entry.lastSendDay) return localDay(current) !== entry.lastSendDay;
+  return true;
+}
+
 function isDue(entry, current) {
-  if (entry.lastSendDay === localDay(current)) return false;
+  if (!isCooledDown(entry, current)) return false;
   if (typeof entry.failedAt !== "number") return true;
   return current.getTime() - entry.failedAt >= RETRY_GAP_IN_MILLISECONDS;
+}
+
+// What a send the counter took, or found already counted, leaves in the entry: the next
+// send waits a cooldown, and the old day field is cleared.
+function cooldownFrom(current) {
+  const nextSendAt = new Date(current.getTime() + SEND_COOLDOWN_IN_MILLISECONDS).toISOString();
+  return { nextSendAt, lastSendDay: null };
 }
 
 // What the counter's answer changes in the repo's entry. A 409 means an earlier
 // send of this window was counted though its answer was lost: counting resumes
 // one second after the counter's count stops, since a window's end is inclusive.
-// A 429 saying the project already sent today keeps `since`, so those PRs go in the next send.
-function outcomeChange(outcome, { batch, today, failedAt }) {
+// A 429 saying the project already sent keeps `since`, so those PRs go in the next send.
+function outcomeChange(outcome, { batch, current }) {
   if (outcome?.status === 200) {
-    return { since: batch.nextSince, lastSendDay: today, failedAt: null };
+    return { since: batch.nextSince, failedAt: null, ...cooldownFrom(current) };
   }
   if (outcome?.status === 409 && Number.isSafeInteger(outcome.coveredTo)) {
     const resume = new Date(outcome.coveredTo + SECOND_IN_MILLISECONDS);
     return { since: resume.toISOString(), failedAt: null };
   }
-  if (outcome?.status === 429 && ALREADY_SENT.test(outcome.error)) return { lastSendDay: today };
-  return { failedAt };
+  if (outcome?.status === 429 && ALREADY_SENT.test(outcome.error)) return cooldownFrom(current);
+  return { failedAt: current.getTime() };
 }
 
 /**
- * The daily send for one repo: the next batch of its merged PRs (see `planWindow`). It
- * changes the state only through `changeProject`, after each outcome. `ghJson(args, cwd)`,
- * `post(url, body)` and `now()` are injectable so tests run without gh or the network.
+ * The send for one repo, once its cooldown has passed: the next batch of its merged PRs
+ * (see `planWindow`). It changes the state only through `changeProject`, after each
+ * outcome. `ghJson(args, cwd)`, `post(url, body)` and `now()` are injectable so tests run
+ * without gh or the network.
  */
 export async function send({
   root,
@@ -434,7 +454,6 @@ export async function send({
   const entry = state.share ? state.projects[key] : undefined;
   const current = now();
   if (!entry?.kind || !isDue(entry, current)) return;
-  const today = localDay(current);
   const batch = await planWindow({
     since: entry.since,
     current,
@@ -447,11 +466,11 @@ export async function send({
   if (!prs) return;
   const counts = countPrs(prs);
   if (Object.values(counts).every((count) => count === 0)) {
-    return changeProject(stateFile, key, { since: batch.nextSince, lastSendDay: today });
+    return changeProject(stateFile, key, { since: batch.nextSince, ...cooldownFrom(current) });
   }
   const body = { project: entry.id, kind: entry.kind, ...counts, from: batch.from, to: batch.to };
   const outcome = await post(url, body).catch(() => null);
-  const change = outcomeChange(outcome, { batch, today, failedAt: current.getTime() });
+  const change = outcomeChange(outcome, { batch, current });
   return changeProject(stateFile, key, change);
 }
 

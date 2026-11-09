@@ -1,4 +1,4 @@
-// The opt-in review counts (plugin/hooks/counts.mjs): what a repo's merged
+// The opt-in review counts (helper/hooks/counts.mjs): what a repo's merged
 // pull requests add up to, and what a daily send does with the counter's answer.
 // Nothing here touches the network or gh: both are injected.
 
@@ -22,14 +22,14 @@ import {
   setProject,
   setShare,
   statusOf,
-} from "../../plugin/hooks/counts.mjs";
+} from "../../helper/hooks/counts.mjs";
 import {
   KINDS as COUNTER_KINDS,
   MAX_ROUNDS_PER_SEND,
   STALL_ROUNDS as COUNTER_STALL_ROUNDS,
 } from "../../counter/src/rules.js";
 
-const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "hooks", "counts.mjs");
+const hook = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "helper", "hooks", "counts.mjs");
 const SEND_URL = "http://127.0.0.1:8787/increment";
 const ID = "0123456789abcdef0123456789abcdef";
 const OK = { status: 200, error: "" };
@@ -43,12 +43,16 @@ const green = comment("🟢 LGTM");
 // Local noon of a November 2026 day, so the local calendar day is the one named.
 const noon = (day, hour = 12) => new Date(2026, 10, day, hour);
 const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
 const SECOND = 1000;
 const CAP = 500;
 const GH_LIMIT = 1000;
 
 // gh writes times in whole seconds.
 const ghTime = (date) => date.toISOString().replace(".000Z", "Z");
+
+// The time `milliseconds` after a date, as the state file stores it.
+const after = (date, milliseconds) => new Date(date.getTime() + milliseconds).toISOString();
 
 // A merged PR of the author as gh lists it, created and merged at noon of day 2 unless told.
 const pr = (comments = [], labels = [], { number = 1, mergedAt = noon(2) } = {}) => ({
@@ -177,7 +181,7 @@ function projectEntry(overrides = {}) {
     id: ID,
     kind: "game",
     since: noon(1).toISOString(),
-    lastSendDay: null,
+    nextSendAt: null,
     failedAt: null,
     ...overrides,
   };
@@ -274,19 +278,36 @@ test("a repo left out of the counts sends nothing and stays listed", () => inSce
   await sendAt(s, noon(3), gh, counter);
   assert.deepEqual(gh.calls, []);
   assert.deepEqual(counter.posts, []);
-  assert.deepEqual(statusOf(s.stateFile).projects, [{ root: s.repo, kind: null, lastSendDay: null }]);
+  assert.deepEqual(statusOf(s.stateFile).projects, [{ root: s.repo, kind: null, nextSendAt: null }]);
 }));
 
-test("a repo that already sent today does not ask gh", () => inScene(async (s) => {
-  seedState(s, { projects: { [s.repo]: projectEntry({ lastSendDay: "2026-11-03" }) } });
-  const gh = fakeGh([GREEN_PR]);
-  const counter = fakeCounter(OK);
-  await sendAt(s, noon(3, 18), gh, counter);
-  assert.deepEqual(gh.calls, []);
-  assert.deepEqual(counter.posts, []);
-}));
+// Each row: the entry as saved, the time of one trigger, the posts the counter then gets,
+// and the nextSendAt the entry holds afterwards.
+const due = noon(3);
+const cooldownRows = [
+  ["a trigger a minute before nextSendAt sends nothing", { nextSendAt: due.toISOString() },
+    new Date(due.getTime() - MINUTE), 0, due.toISOString()],
+  ["a trigger at nextSendAt sends, and the next send waits 24 hours", { nextSendAt: due.toISOString() },
+    due, 1, after(due, DAY)],
+  ["an entry from before the cooldown sends nothing on its own local day", { lastSendDay: "2026-11-03" },
+    noon(3, 18), 0, null],
+  ["an entry from before the cooldown sends on the next local day", { lastSendDay: "2026-11-03" },
+    noon(4), 1, after(noon(4), DAY)],
+  ["a saved time that is not a date sends, as if none were saved", { nextSendAt: "soon" },
+    due, 1, after(due, DAY)],
+];
 
-test("an accepted send moves since and the day forward", () => inScene(async (s) => {
+for (const [name, saved, when, posts, nextSendAt] of cooldownRows) {
+  test(`cooldown: ${name}`, () => inScene(async (s) => {
+    seedState(s, { projects: { [s.repo]: projectEntry(saved) } });
+    const counter = fakeCounter(OK);
+    await sendAt(s, when, fakeGh([GREEN_PR]), counter);
+    assert.equal(counter.posts.length, posts);
+    assert.equal(projectOf(s).nextSendAt, nextSendAt);
+  }));
+}
+
+test("an accepted send moves since forward and waits 24 hours", () => inScene(async (s) => {
   seedState(s);
   const when = noon(3);
   const gh = fakeGh([GREEN_PR]);
@@ -300,13 +321,16 @@ test("an accepted send moves since and the day forward", () => inScene(async (s)
       stalled: 0, rounds: 0, from: noon(1).getTime(), to: when.getTime(),
     },
   }]);
-  assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString(), lastSendDay: "2026-11-03" }));
+  assert.deepEqual(projectOf(s), projectEntry({
+    since: when.toISOString(), nextSendAt: after(when, DAY), lastSendDay: null,
+  }));
 }));
 
-test("a project the counter already has today keeps since and marks the day", () => inScene(async (s) => {
+test("a send the counter already counted keeps since and waits 24 hours", () => inScene(async (s) => {
   seedState(s);
-  await sendAt(s, noon(3), fakeGh([GREEN_PR]), fakeCounter(ALREADY_SENT));
-  assert.deepEqual(projectOf(s), projectEntry({ lastSendDay: "2026-11-03" }));
+  const when = noon(3);
+  await sendAt(s, when, fakeGh([GREEN_PR]), fakeCounter(ALREADY_SENT));
+  assert.deepEqual(projectOf(s), projectEntry({ nextSendAt: after(when, DAY), lastSendDay: null }));
 }));
 
 test("a send carries the stalled PRs and the red rounds", () => inScene(async (s) => {
@@ -346,11 +370,11 @@ test("a failed send is not retried for a minute, and is retried after it", () =>
   assert.equal(counter.posts.length, 1);
   await sendAt(s, new Date(failedAt.getTime() + 61 * 1000), gh, counter);
   assert.equal(counter.posts.length, 2);
-  assert.equal(projectOf(s).lastSendDay, "2026-11-03");
+  assert.equal(projectOf(s).nextSendAt, after(new Date(failedAt.getTime() + 61 * 1000), DAY));
   assert.equal(projectOf(s).failedAt, null);
 }));
 
-test("a repo with no merged PRs moves since forward and does not ask gh again that day", () => inScene(async (s) => {
+test("no merged PRs moves since forward and gh is not asked again within the cooldown", () => inScene(async (s) => {
   seedState(s);
   const when = noon(3);
   const gh = fakeGh([]);
@@ -360,7 +384,9 @@ test("a repo with no merged PRs moves since forward and does not ask gh again th
   await sendAt(s, noon(3, 18), gh, counter);
   assert.deepEqual(counter.posts, []);
   assert.equal(gh.calls.length, asked);
-  assert.deepEqual(projectOf(s), projectEntry({ since: when.toISOString(), lastSendDay: "2026-11-03" }));
+  assert.deepEqual(projectOf(s), projectEntry({
+    since: when.toISOString(), nextSendAt: after(when, DAY), lastSendDay: null,
+  }));
 }));
 
 test("a send whose answer was lost is not counted twice", () => inScene(async (s) => {
@@ -403,7 +429,7 @@ test("a project call made while the send waits is kept", () => inScene(async (s)
   const state = JSON.parse(readFileSync(s.stateFile, "utf8"));
   assert.equal(state.projects[s.repo].kind, "website");
   assert.equal(state.projects[realpathSync(other)].kind, "mobile-app");
-  assert.equal(state.projects[s.repo].lastSendDay, "2026-11-03");
+  assert.equal(state.projects[s.repo].nextSendAt, after(noon(3), DAY));
 }));
 
 test("adding a repo again keeps its id and start, and sets the kind", () => inScene(async (s) => {
@@ -453,7 +479,7 @@ test("the CLI switches sharing on and off, and status never prints an id", () =>
   assert.deepEqual(JSON.parse(status.stdout), {
     asked: true,
     share: false,
-    projects: [{ root: s.repo, kind: "game", lastSendDay: null }],
+    projects: [{ root: s.repo, kind: "game", nextSendAt: null }],
   });
 }));
 

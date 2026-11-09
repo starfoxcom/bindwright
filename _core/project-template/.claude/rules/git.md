@@ -14,6 +14,16 @@ One logical change per commit. Never mix a feature with a refactor, or a fix wit
 <!-- TOGGLE:attribution_guard START -->
 - No AI-attribution lines anywhere: no co-author trailers, "generated with" footers or session links in commits, PR titles, PR bodies or comments. `.claude/settings.json` turns off the harness's own trailers, and the `no-ai-attribution` hook catches the ones written by hand.
 <!-- TOGGLE:attribution_guard END -->
+<!-- TOGGLE:assistant_files_local START -->
+
+### The assistant's files stay on this computer
+
+`CLAUDE.md`, `.claude/`, `.bindwright/` and the other files setup wrote for the assistant are listed in this clone's `.git/info/exclude`, an ignore list git keeps out of every commit, so they never reach a commit, a push or a pull request.
+
+- Stage files by name. Never `git add -f` an excluded file, and never move its line into `.gitignore`, which the whole team shares.
+- Leave those files' names out of commit messages, PR bodies and comments.
+- A fresh clone has neither the files nor the list: run `/bindwright:setup` there, which writes the list before any file.
+<!-- TOGGLE:assistant_files_local END -->
 <!-- TOGGLE:code_host_local START -->
 
 ## Save points
@@ -98,6 +108,7 @@ Run `git branch --show-current` before editing. Switch or branch first, then edi
 - Release PRs (`{{DEV_BRANCH}}` into `{{MAIN_BRANCH}}`) and cascade PRs (`{{MAIN_BRANCH}}` into `{{DEV_BRANCH}}`) always use `--merge`. Squashing them makes the two branches diverge and turns the next release into a conflict.
 <!-- TOGGLE:branching_model_gitflow END -->
 - After merging: `--delete-branch` removes the remote branch, but the local one only when it is checked out. Run `git branch -D <name>` if it remains, then confirm with `git branch`.
+- Then, when Bindwright's helper is installed (`~/.bindwright/helper/node_modules/bindwright`, which setup installs), run `node "$HOME/.bindwright/helper/node_modules/bindwright/hooks/counts.mjs" send <repo root>` in the background. It sends nothing unless this computer turned on the anonymous review counts, and at most once in 24 hours, so a merge never waits on it.
 <!-- TOGGLE:ci_checks START -->
 - Re-run a failed CI workflow as a whole (or push again). Re-running only the failed job can leave a required check stuck.
 <!-- TOGGLE:ci_checks END -->

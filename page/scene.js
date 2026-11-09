@@ -71,7 +71,7 @@ async function actStart() {
 async function actWrite(first, second) {
   await caption(2, t("scene.caption.2"));
   await term.think(t("scene.verb.thinking"), 1700, 2.6);
-  term.add(`<span class="thought">∴ Thought for 2s</span>`);
+  term.thought(2);
   await term.tool("Write", "test/cart.test.js", 500);
   term.out(`<span class="mute">Wrote 14 lines</span>`);
   await checkOff(first);

@@ -2,7 +2,7 @@
 // and reports elements that overlap, text that overflows its box, or a page that
 // scrolls sideways. Run it after a visual change:
 //
-//   node plugin/hooks/layout-check.mjs <url> [--widths 390,1280] [--height 900]
+//   node helper/hooks/layout-check.mjs <url> [--widths 390,1280] [--height 900]
 //
 // Exit 0 when clean, 1 with one line per finding, 2 when the check cannot run (no
 // browser, the URL does not load, bad arguments). BROWSER_PATH picks the browser.
@@ -193,6 +193,17 @@ function openSocket(url) {
   });
 }
 
+// The port file's lines, or none while it is missing or still being written: on Windows the
+// browser holds it locked while it writes, so a read then fails with EBUSY or EPERM.
+function portFileLines(file) {
+  try {
+    return readFileSync(file, "utf8").split(/\r?\n/);
+  } catch (error) {
+    if (["ENOENT", "EBUSY", "EPERM"].includes(error.code)) return [];
+    throw error;
+  }
+}
+
 // Chrome writes its DevTools port and browser path to this file once it is listening.
 async function readDevToolsPort(userDataDir, browser) {
   const file = join(userDataDir, "DevToolsActivePort");
@@ -207,7 +218,7 @@ async function readDevToolsPort(userDataDir, browser) {
     if ((exitCode !== null && exitCode !== 0) || signalCode !== null) {
       throw new Error(`the browser exited at start (${exitCode ?? signalCode})`);
     }
-    const lines = existsSync(file) ? readFileSync(file, "utf8").split(/\r?\n/) : [];
+    const lines = portFileLines(file);
     if (lines[0] && lines[1]) return { port: lines[0], path: lines[1] };
     await sleep(100);
   }

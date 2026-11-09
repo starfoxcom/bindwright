@@ -164,6 +164,15 @@ export const PROJECT = [
     engine: [{ flags: {}, key: "advanced.localReview", value: false }],
   },
   {
+    id: "local-only",
+    title: "Assistant files on this computer only",
+    text: "Asked for a client's or employer's project. CLAUDE.md, .claude/ and setup's own files "
+      + "stay out of every commit, listed in the clone's own ignore list.",
+    value: "No",
+    keys: ["advanced.localOnly"],
+    engine: [{ flags: {}, key: "advanced.localOnly", value: false }],
+  },
+  {
     id: "work-state",
     title: "Where work is tracked",
     text: "A GitHub board, issues only, or a hand-off file in the repo.",
