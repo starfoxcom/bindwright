@@ -13,9 +13,11 @@ checks: one
 # The runner label (runs-on) for the review jobs; several labels, comma
 # separated, pick a self-hosted runner ("self-hosted, linux"). Run such a
 # runner under an account of its own with no Claude Code setup: the
-# reviewers load that account's user settings, hooks and instructions. Give
-# it Node 22 or newer: without npm the review runs on the action's own CLI,
-# with no credits run and no backup review.
+# reviewers load that account's user settings, hooks and instructions.
+# On a Linux runner (WSL counts) without a Linux Node 22 or newer and
+# npm, each review job downloads the
+# official Node build into its temp folder, checked against a pinned
+# checksum, to install the CLI.
 runner: ubuntu-latest
 
 # The review that runs on every PR with reviewable files. Its backup runs

@@ -394,6 +394,70 @@ jobs:
             fi
           fi
 
+      # npm needs a Linux Node, 22 or newer for the CLI, and a Linux npm.
+      # Hosted runners have both; a runner that is not Linux keeps its own
+      # Node. A self-hosted Linux runner may have none, or may
+      # reach a Windows npm through WSL's Windows path, which installs a
+      # package with no Linux binary. Then this step brings the official Node
+      # build (npm included) into the job's temp folder, checked against the
+      # SHA-256 pinned here (from the release's signed SHASUMS256.txt). Only
+      # the install steps put it on their PATH, and no setup action runs:
+      # setup-node runs a package manager in the PR's checkout, whose config
+      # files could start the PR's own code. npm counts as Linux when its
+      # global folder (`npm root -g`) is a Linux path; a Windows npm reached
+      # through WSL names a C:\ one, however npm was installed.
+      - name: Bring a Linux Node for the CLI install
+        id: linux-node
+        working-directory: ${{ runner.temp }}
+        timeout-minutes: 10
+        if: steps.pr-head.outputs.head_sha != ''
+        continue-on-error: true
+        shell: bash
+        env:
+          NODE_VERSION: "22.23.4"
+          NODE_SHA256_X64: b8492284c76a54baf58d61668dd0e41ee0fc98adabf9503d30f05d08f55b4406
+          NODE_SHA256_ARM64: f7a1e486dbc8b286847815b477d4fb5e9fb963ed4489c3e1588853d685f589f9
+        run: |
+          set -euo pipefail
+          if [ "$(uname -s)" != Linux ]; then
+            echo "Not a Linux runner: the CLI install uses the runner's own Node"
+            exit 0
+          fi
+          found="$(timeout 30 node -p 'process.platform + ":" + process.versions.node.split(".")[0]' 2>/dev/null || true)"
+          if [[ "$found" =~ ^linux:([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 22 ] && [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" == /* ]]; then
+            echo "The runner's Node ${BASH_REMATCH[1]} and npm install the CLI"
+            exit 0
+          fi
+          case "$(uname -m)" in
+            x86_64) arch=x64; sum="$NODE_SHA256_X64" ;;
+            aarch64 | arm64) arch=arm64; sum="$NODE_SHA256_ARM64" ;;
+            *)
+              echo "::warning::No usable Linux Node and npm here, and no Node build for $(uname -m): the CLI install tries the runner's own Node, if it has one"
+              exit 1
+              ;;
+          esac
+          name="node-v$NODE_VERSION-linux-$arch"
+          if ! curl --fail --silent --show-error --location --proto '=https' --retry 2 --max-time 120 -o "$RUNNER_TEMP/$name.tar.gz" "https://nodejs.org/dist/v$NODE_VERSION/$name.tar.gz"; then
+            echo "::warning::No usable Linux Node and npm here, and the Node $NODE_VERSION download failed: the CLI install tries the runner's own Node, if it has one"
+            rm -f "$RUNNER_TEMP/$name.tar.gz"
+            exit 1
+          fi
+          if ! printf '%s  %s\n' "$sum" "$RUNNER_TEMP/$name.tar.gz" | sha256sum --check --status; then
+            echo "::warning::The Node $NODE_VERSION download does not match its pinned checksum: the CLI install tries the runner's own Node, if it has one"
+            rm -f "$RUNNER_TEMP/$name.tar.gz"
+            exit 1
+          fi
+          rm -rf "$RUNNER_TEMP/linux-node"
+          mkdir -p "$RUNNER_TEMP/linux-node"
+          tar --no-same-owner -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP/linux-node" --strip-components=1
+          rm -f "$RUNNER_TEMP/$name.tar.gz"
+          if [ "$(timeout 30 "$RUNNER_TEMP/linux-node/bin/node" --version 2>/dev/null || true)" != "v$NODE_VERSION" ]; then
+            echo "::warning::The Node $NODE_VERSION build does not run on this runner: the CLI install tries the runner's own Node, if it has one"
+            exit 1
+          fi
+          echo "::notice::The CLI install runs on Node $NODE_VERSION, brought by this job"
+          echo "bin=$RUNNER_TEMP/linux-node/bin" >> "$GITHUB_OUTPUT"
+
       # One job-private copy of the newest CLI release, so the credits run, the
       # first attempt and the retry run the same version. The version is read
       # when the job runs, from the npm registry's release channel, and
@@ -401,9 +465,9 @@ jobs:
       # the install fails, the credits run is skipped and the action's attempts
       # fall back to the CLI it bundles. The fallback model runs on the stable
       # release (see below).
-      # The runner's own npm installs it; hosted runners have Node 22 or newer.
-      # Without npm there is no job copy: the review runs on the action's own
-      # CLI, with no credits run and no backup review. npm starts in the job's
+      # npm runs on the Node the step above brought, or else on the runner's
+      # own. With no usable Node and npm there is no job copy: the review
+      # runs on the action's own CLI, with no credits run and no backup review. npm starts in the job's
       # temp folder, never the PR's checkout, keeps its cache there, and runs
       # in global mode, so no file of the PR (an .npmrc, a package.json a
       # version manager reads) can pick the npm, the version or the registry
@@ -419,8 +483,16 @@ jobs:
         shell: bash
         env:
           DISABLE_AUTOUPDATER: "1"
+          NODE_BIN: ${{ steps.linux-node.outputs.bin }}
         run: |
           set -euo pipefail
+          if [ -n "$NODE_BIN" ]; then
+            PATH="$NODE_BIN:$PATH"
+          fi
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" = win32 ] || [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" != /* ]]; then
+            echo "::warning::No usable Node and npm on this runner: the deep review runs on the action's own CLI; the fallback model tries the stable release"
+            exit 1
+          fi
           CLI_VERSION=""
           for attempt in 1 2 3; do
             if CLI_VERSION=$(timeout 60 npm view --global --cache "$RUNNER_TEMP/npm-cache" "@anthropic-ai/claude-code@latest" version); then
@@ -847,6 +919,7 @@ jobs:
           DISABLE_AUTOUPDATER: "1"
           NEWEST: ${{ steps.claude-cli.outputs.version }}
           NEWEST_PATH: ${{ steps.claude-cli.outputs.path }}
+          NODE_BIN: ${{ steps.linux-node.outputs.bin }}
         run: |
           set -euo pipefail
           # No stable copy: the fallback uses the job's newest copy, and is
@@ -861,6 +934,12 @@ jobs:
             echo "::warning::$1, and the newest release did not install either: no fallback model"
             exit 1
           }
+          if [ -n "$NODE_BIN" ]; then
+            PATH="$NODE_BIN:$PATH"
+          fi
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" = win32 ] || [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" != /* ]]; then
+            no_stable "No usable Node and npm on this runner"
+          fi
           STABLE=""
           for attempt in 1 2 3; do
             if STABLE=$(timeout 60 npm view --global --cache "$RUNNER_TEMP/npm-cache" "@anthropic-ai/claude-code@stable" version); then

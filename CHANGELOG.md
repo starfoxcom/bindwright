@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The review jobs install their CLI on self-hosted runners with no Linux Node** (#714). On a WSL runner whose only `npm` was the Windows one, the install left no Linux binary, so the review ran without its credits run and its backup. Each review job now downloads the official Node build into its temp folder when the runner has no Linux Node 22 or newer, checks it against a pinned checksum, and uses it only for the install.
+
 ## [v3.1.0] — 2026-11-09
 
 v3.1.0 fits Bindwright to projects the team does not fully control: a local review before each merge where no CI can run the AI reviews, the assistant's files kept off a client's or employer's repo, and required reviewers who must approve each pull request.
