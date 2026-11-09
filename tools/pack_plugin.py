@@ -1,36 +1,44 @@
 """Assembles the Bindwright plugin and its helper package.
 
 The plugin holds only what the plugin directory accepts from an organization
-that is not Verified: `plugin/` (manifest, icon, README, skills) and VERSION.
-Everything that runs on the user's computer ships as the helper package,
-`bindwright` on npm and PyPI: both engines, the templates the engine reads,
-the extras for the user's config folder, the scripts in `helper/hooks/`, and
-the changelog. Setup installs the helper into `~/.bindwright/helper`.
+that is not Verified: `plugin/` (manifest, icon, README, skills), VERSION and
+helper.json. Everything that runs on the user's computer ships as the helper
+package, attached to each GitHub release as `bindwright-X.Y.Z.tgz` (npm
+installs it) and `bindwright-X.Y.Z-py3-none-any.whl` (pip installs it): both
+engines, the templates the engine reads, the extras for the user's config
+folder, the scripts in `helper/hooks/`, and the changelog. helper.json names
+both files with their SHA-256, so setup installs into `~/.bindwright/helper`
+only the exact helper the plugin was packed with.
 
     python tools/pack_plugin.py                   -> dist/bindwright/ (the plugin)
     python tools/pack_plugin.py --out DIR         -> DIR (replaced if it holds an earlier pack)
     python tools/pack_plugin.py --zip FILE        -> the plugin's release zip, built from git at HEAD
-    python tools/pack_plugin.py --helper-out DIR  -> the npm package folder of the helper
-    python tools/pack_plugin.py --wheel DIR       -> the helper's wheel for PyPI, built from git at HEAD
-    ... --zip, --helper-out or --wheel with --ref REF  -> the same, from REF
+    python tools/pack_plugin.py --helper-out DIR  -> the helper's npm package folder
+    python tools/pack_plugin.py --tgz DIR         -> the helper's npm tarball, built from git at HEAD
+    python tools/pack_plugin.py --wheel DIR       -> the helper's wheel, built from git at HEAD
+    ... --zip, --helper-out, --tgz or --wheel with --ref REF  -> the same, from REF
     python tools/pack_plugin.py --marketplace     -> .claude-plugin/marketplace.json for HEAD's zip
 
-The zip and the wheel are read from git, not from the working tree, so every
-machine builds the same bytes whatever its line endings; the release workflow
-rebuilds the zip and refuses to publish one whose SHA-256 differs from the
-marketplace file. Every plugin pack is checked against the directory's rules
-(tools/directory_check.py). Try a pack with `claude --plugin-dir dist/bindwright`.
-Standard library only.
+The zip, the tarball and the wheel are read from git, not from the working
+tree, so every machine builds the same bytes whatever its line endings; the
+release workflow rebuilds them and refuses to publish a zip whose SHA-256
+differs from the marketplace file. Every plugin pack is checked against the
+directory's rules (tools/directory_check.py). Try a pack with
+`claude --plugin-dir dist/bindwright`. Standard library only.
 """
 
 import base64
 import hashlib
+import io
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
+import tarfile
 import zipfile
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import directory_check  # noqa: E402
@@ -63,10 +71,12 @@ MARKETPLACE = ".claude-plugin/marketplace.json"
 DESCRIPTION = "The Bindwright plugin, from its GitHub releases."
 HELPER_DESCRIPTION = "The files the Bindwright plugin runs on your computer: its setup engine, templates and scripts."
 HOMEPAGE = "https://starfoxcom.github.io/bindwright/"
-# What npm publishes from the helper folder, beside package.json, README.md and LICENSE.
+# What npm installs from the helper folder, beside package.json, README.md and LICENSE.
 HELPER_FILES = ["engine", "_core", "hooks", "VERSION", "CHANGELOG.md"]
 # A fixed date for every zip entry, the earliest a zip can hold.
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
+# The largest stored deflate block.
+DEFLATE_BLOCK = 65535
 
 
 def _skipped(parent, name):
@@ -136,8 +146,9 @@ def _json_bytes(data):
 def contents(source):
     """Every file of the plugin as {path in the plugin: bytes}; refuses what the directory would."""
     out = {rel[len("plugin/"):]: source.read(rel) for rel in source.files_under("plugin")}
-    # VERSION is the version the skills ask the helper to match.
+    # VERSION is the version the skills ask the helper to match; helper.json says where to get it.
     out["VERSION"] = source.read("VERSION")
+    out["helper.json"] = helper_pins(source)
     manifest = json.loads(out[".claude-plugin/plugin.json"])
     manifest["version"] = version_of(source)
     out[".claude-plugin/plugin.json"] = _json_bytes(manifest)
@@ -202,31 +213,64 @@ def pack(out, source=None):
     return _write_folder(out, contents(source or WorkTree()))
 
 
-def pack_helper(out, source=None):
-    """Writes the helper's npm package folder to `out` and returns the number of files."""
-    source = source or WorkTree()
+def _helper_package(source):
     files = helper_contents(source)
     files["package.json"] = helper_package_json(version_of(source))
-    return _write_folder(out, files)
+    return files
 
 
-def _zip(path, files):
+def pack_helper(out, source=None):
+    """Writes the helper's npm package folder to `out` and returns the number of files."""
+    return _write_folder(out, _helper_package(source or WorkTree()))
+
+
+def _zip_bytes(files):
     # Stored, not deflated: zlib builds differ between machines, and the bytes must not.
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as zf:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
         for rel in files:
             info = zipfile.ZipInfo(rel, ZIP_DATE)
             info.create_system = 3
             info.external_attr = 0o644 << 16
             zf.writestr(info, files[rel])
-    with open(path, "rb") as fh:
-        return hashlib.sha256(fh.read()).hexdigest()
+    return buffer.getvalue()
+
+
+def _write_file(path, data):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(data)
+    return hashlib.sha256(data).hexdigest()
 
 
 def pack_zip(path, ref="HEAD"):
     """Writes the plugin's release zip for `ref` to `path` and returns (its manifest, SHA-256)."""
     files = contents(GitTree(ref))
-    sha = _zip(path, {rel: files[rel] for rel in sorted(files)})
+    sha = _write_file(path, _zip_bytes({rel: files[rel] for rel in sorted(files)}))
     return json.loads(files[".claude-plugin/plugin.json"]), sha
+
+
+def _gzip_stored(data):
+    # Stored deflate blocks, written by hand: no compressor runs, so every machine writes the same bytes.
+    out = bytearray(b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff")
+    for start in range(0, max(len(data), 1), DEFLATE_BLOCK):
+        block = data[start:start + DEFLATE_BLOCK]
+        is_last = start + DEFLATE_BLOCK >= len(data)
+        out += bytes([1 if is_last else 0]) + struct.pack("<HH", len(block), len(block) ^ 0xFFFF) + block
+    out += struct.pack("<II", zlib.crc32(data) & 0xFFFFFFFF, len(data) & 0xFFFFFFFF)
+    return bytes(out)
+
+
+def tgz_bytes(source):
+    """The helper's npm tarball: its package folder under `package/`, as `npm pack` lays it out."""
+    files = _helper_package(source)
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as tar:
+        for rel in sorted(files):
+            info = tarfile.TarInfo("package/" + rel)
+            info.size, info.mode, info.mtime = len(files[rel]), 0o644, 0
+            tar.addfile(info, io.BytesIO(files[rel]))
+    return _gzip_stored(buffer.getvalue())
 
 
 def _record_hash(data):
@@ -234,12 +278,27 @@ def _record_hash(data):
     return "sha256=%s,%d" % (digest, len(data))
 
 
-def pack_wheel(folder, ref="HEAD"):
-    """Writes the helper's wheel for `ref` into `folder` and returns its path.
+def tgz_name(version):
+    return "bindwright-%s.tgz" % version
 
-    pip installs it with `--target`, which puts the helper at `<target>/bindwright/`.
-    """
-    source = GitTree(ref)
+
+def wheel_name(version):
+    return "bindwright-%s-py3-none-any.whl" % version
+
+
+def helper_pins(source):
+    """helper.json: where the helper this plugin runs is attached, with each file's SHA-256."""
+    version = version_of(source)
+    base = "https://github.com/%s/releases/download/v%s/" % (REPO, version)
+    pins = {"version": version}
+    for kind, name, data in (("node", tgz_name(version), tgz_bytes(source)),
+                             ("python", wheel_name(version), wheel_bytes(source))):
+        pins[kind] = {"file": name, "url": base + name, "sha256": hashlib.sha256(data).hexdigest()}
+    return _json_bytes(pins)
+
+
+def wheel_bytes(source):
+    """The helper's wheel; pip installs it with `--target`, which puts the helper at `<target>/bindwright/`."""
     version = version_of(source)
     files = {"bindwright/" + rel: data for rel, data in helper_contents(source).items()}
     files["bindwright/__init__.py"] = ('"""The Bindwright helper: run its engine from engine/bind.py."""\n'
@@ -256,9 +315,19 @@ def pack_wheel(folder, ref="HEAD"):
     ordered = {rel: files[rel] for rel in sorted(files)}
     record = "".join("%s,%s\n" % (rel, _record_hash(data)) for rel, data in ordered.items())
     ordered[info + "RECORD"] = (record + info + "RECORD,,\n").encode("utf-8")
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, "bindwright-%s-py3-none-any.whl" % version)
-    _zip(path, ordered)
+    return _zip_bytes(ordered)
+
+
+def write_helper_file(kind, folder, ref="HEAD"):
+    """Writes the helper's tarball (`kind` "node") or wheel ("python") for `ref` into `folder`; returns its path."""
+    source = GitTree(ref)
+    version = version_of(source)
+    if kind == "node":
+        name, data = tgz_name(version), tgz_bytes(source)
+    else:
+        name, data = wheel_name(version), wheel_bytes(source)
+    path = os.path.join(folder, name)
+    _write_file(path, data)
     return path
 
 
@@ -312,10 +381,11 @@ def main(argv):
         manifest, sha = pack_zip(os.path.abspath(zip_path), ref or "HEAD")
         print("Zipped %s %s (sha256 %s)" % (zip_path, manifest["version"], sha))
         return
-    wheel_dir = _value(argv, "--wheel")
-    if wheel_dir is not None:
-        print("Built %s" % pack_wheel(os.path.abspath(wheel_dir), ref or "HEAD"))
-        return
+    for flag, kind in (("--tgz", "node"), ("--wheel", "python")):
+        folder = _value(argv, flag)
+        if folder is not None:
+            print("Built %s" % write_helper_file(kind, os.path.abspath(folder), ref or "HEAD"))
+            return
     helper_dir = _value(argv, "--helper-out")
     if helper_dir is not None:
         count = pack_helper(os.path.abspath(helper_dir), GitTree(ref) if ref else None)

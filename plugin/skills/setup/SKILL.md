@@ -28,15 +28,18 @@ When Git is missing, or neither Node 18 or later nor Python 3.8 or later is ther
 
 Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app or the editor it runs in, such as VS Code or JetBrains, or start `claude` again in a new terminal window), and to run `/bindwright:setup` again. Stop here.
 
-With Git and at least one of Node 18 or later or Python 3.8 or later in place, find the helper: the part of Bindwright that runs on this computer (the engine, the templates and its scripts), which ships apart from the plugin as the `bindwright` package on npm and PyPI. It lives in one folder, written `<helper>` in every Bindwright skill, and the engine runs from it. Take the first of these that runs:
+With Git and at least one of Node 18 or later or Python 3.8 or later in place, find the helper: the part of Bindwright that runs on this computer (the engine, the templates and its scripts), which ships apart from the plugin, as files attached to the plugin's release on GitHub. It lives in one folder, written `<helper>` in every Bindwright skill, and the engine runs from it. Take the first of these that runs:
 
 1. Node 18 or later: `<helper>` is `$HOME/.bindwright/helper/node_modules/bindwright`, and the engine is `node "<helper>/engine/cli.js"`.
 2. Python 3.8 or later: `<helper>` is `$HOME/.bindwright/helper/python/bindwright`, and the engine is that interpreter with `"<helper>/engine/bind.py"`.
 
-The helper is ready when `<helper>/VERSION` holds the same version as `${CLAUDE_PLUGIN_ROOT}/VERSION`. When it is missing or holds another version, ask: "Bindwright needs its helper, the part that writes your files, installed for your user only, with no admin rights. Install it now?", with "Yes" first (say "update it to <version>" when an older one is there). On a yes, install exactly the plugin's version, with no install scripts:
+The helper is ready when `<helper>/VERSION` holds the same version as `${CLAUDE_PLUGIN_ROOT}/VERSION`. When it is missing or holds another version, ask: "Bindwright needs its helper, the part that writes your files, installed for your user only, with no admin rights. Install it now?", with "Yes" first (say "update it to <version>" when an older one is there). On a yes, install exactly the file `${CLAUDE_PLUGIN_ROOT}/helper.json` names for the engine picked above (its `node` or `python` entry), which the plugin pins by its SHA-256:
 
-- Node: `npm install --prefix "$HOME/.bindwright/helper" --no-save --ignore-scripts --no-audit --no-fund bindwright@<version>`
-- Python: `<python> -m pip install --upgrade --no-deps --target "$HOME/.bindwright/helper/python" bindwright==<version>`. It works on a Python the system or Homebrew manages, since it installs into its own folder. When `pip` itself is missing, say how to add it (`sudo apt install python3-pip` on Debian and Ubuntu, for the user to run) and stop.
+1. Download its `url` into `$HOME/.bindwright/helper/` (create the folder first) under its `file` name: `curl -fsSL -o "$HOME/.bindwright/helper/<file>" "<url>"`, typed `curl.exe` in Windows PowerShell, where `curl` names another command.
+2. Check that the download's SHA-256 is the entry's `sha256`: `sha256sum` on Linux and in Git Bash, `shasum -a 256` on macOS, `Get-FileHash -Algorithm SHA256` in PowerShell. When it differs, delete the file, say the download does not match the plugin, and stop.
+3. Install from that file, with no install scripts, then delete the file:
+   - Node: `npm install --prefix "$HOME/.bindwright/helper" --no-save --ignore-scripts --no-audit --no-fund "$HOME/.bindwright/helper/<file>"`
+   - Python: `<python> -m pip install --upgrade --no-deps --no-index --target "$HOME/.bindwright/helper/python" "$HOME/.bindwright/helper/<file>"`. It works on a Python the system or Homebrew manages, since it installs into its own folder. When `pip` itself is missing, say how to add it (`sudo apt install python3-pip` on Debian and Ubuntu, for the user to run) and stop.
 
 Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: setup writes nothing without it. Show the install's last lines, and when it could not reach the network, say to run setup again once online.
 
