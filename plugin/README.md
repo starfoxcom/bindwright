@@ -4,13 +4,13 @@ Bindwright sets a repo up for agentic coding: the rules, session skills, guard h
 
 ## Install
 
-In a Claude Code session, once per computer:
+From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen. Or from Bindwright's own marketplace, in a Claude Code session:
 
 ```
 /plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
 ```
 
-In the Claude desktop app, where `/plugin` does not run, the page's Install section switches to the desktop app's steps.
+Then open a session in your project's folder and run `/bindwright:setup`. The first time, it asks to install Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the `bindwright` package from npm, or from PyPI on a computer with Python and no Node, at the plugin's exact version, into `~/.bindwright/helper` for your user only. Say yes and setup goes on; `/bindwright:update` keeps the helper at the plugin's version.
 
 ## Use
 
@@ -26,16 +26,17 @@ When a session starts with `/session-start`, a notice says at most once a day wh
 
 ## Privacy
 
-The plugin sends nothing about you or your code. It makes two kinds of network call of its own:
+The plugin sends nothing about you or your code. It makes three kinds of network call of its own:
 
-- **The version check** (`hooks/notice.mjs`) reads one version number a day from `https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION`.
-- **Review counts** (`hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, six numbers (review counts and red review rounds) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests with the GitHub CLI you are already signed in to; no token or code leaves your computer.
+- **The helper install**, after your yes, downloads the `bindwright` package at the plugin's version from `registry.npmjs.org` or `pypi.org`.
+- **The version check** (the helper's `hooks/notice.mjs`) reads one version number a day from `https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION`.
+- **Review counts** (the helper's `hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, six numbers (review counts and red review rounds) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests with the GitHub CLI you are already signed in to; no token or code leaves your computer.
 
 Setup itself may run the install commands you approve (Git, Node or Python) and `gh` commands on your repo when you pick GitHub features. The full list of network calls is in the [README](https://github.com/starfoxcom/bindwright#privacy).
 
 ## Needs
 
-Git, and Node 18 or Python 3.8 or later to run the setup engine; setup says what is missing and how to install it on your system. The optional extras (global instructions, a push guard for every project, the builder agent, a code-style profile, a plain reply style and mods for `~/.claude`) are each asked once with a yes or no, and the work language (English or Spanish) once too, all saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without a yes.
+Git, and Node 18 or Python 3.8 or later to run the helper; setup says what is missing and how to install it on your system. The optional extras (global instructions, a push guard for every project, the builder agent, a code-style profile, a plain reply style and mods for `~/.claude`) are each asked once with a yes or no, and the work language (English or Spanish) once too, all saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without a yes.
 
 ## License
 
