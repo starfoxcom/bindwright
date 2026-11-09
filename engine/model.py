@@ -335,7 +335,7 @@ def _check_code_host(adv):
 
 
 def _check_pr_reviewers(adv):
-    reviewers = adv["prReviewers"]
+    reviewers = adv.get("prReviewers", UNDEFINED)
     if reviewers is None:
         return
     _check(isinstance(reviewers, list) and 1 <= len(reviewers) <= 10
@@ -343,7 +343,7 @@ def _check_pr_reviewers(adv):
                    for name in reviewers)
            and len(set(reviewers)) == len(reviewers),
            'prReviewers must be null or 1-10 GitHub names ("user" or "org/team")')
-    _check(adv["codeHost"] == "github", 'prReviewers is for codeHost "github"')
+    _check(adv.get("codeHost") == "github", 'prReviewers is for codeHost "github"')
 
 
 def _given(d, key):
