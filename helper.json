@@ -1,13 +1,13 @@
 {
-  "version": "3.0.0",
+  "version": "3.0.1",
   "node": {
-    "file": "bindwright-3.0.0.tgz",
-    "url": "https://github.com/starfoxcom/bindwright/releases/download/v3.0.0/bindwright-3.0.0.tgz",
-    "sha256": "ab3f15b0e6db655b9ff8bd00e3a2a3a7924ea4899510f35229dbe6364567ed89"
+    "file": "bindwright-3.0.1.tgz",
+    "url": "https://github.com/starfoxcom/bindwright/releases/download/v3.0.1/bindwright-3.0.1.tgz",
+    "sha256": "4dac5c56339faf785c13ee57f3c79eda6921458f1ed55fbefd4839597f59675c"
   },
   "python": {
-    "file": "bindwright-3.0.0-py3-none-any.whl",
-    "url": "https://github.com/starfoxcom/bindwright/releases/download/v3.0.0/bindwright-3.0.0-py3-none-any.whl",
-    "sha256": "03983577504ef4138ad4b68b538e6afc0b1199d259d659e098d16e5b0f0e753e"
+    "file": "bindwright-3.0.1-py3-none-any.whl",
+    "url": "https://github.com/starfoxcom/bindwright/releases/download/v3.0.1/bindwright-3.0.1-py3-none-any.whl",
+    "sha256": "d9d5f8b8c1e9860031c60518facd1d8407f47734ef7248d8ad9e1419948f0589"
   }
 }
