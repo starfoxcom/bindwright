@@ -14,9 +14,11 @@ export const LOCAL_FOLDERS = [
   { path: "docs/lazy/" },
   { path: ".github/size-check/" },
 ];
+// Files the sessions write when the work state lives in the repo, listed on every run.
+export const ALWAYS_FILES = ["ROADMAP.md"];
 // Files, listed only when the plan writes them.
 export const LOCAL_FILES = [
-  "CLAUDE.md", "ROADMAP.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
+  "CLAUDE.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
   "docs/security-posture.md", ".github/scripts/size_check.py", ".github/workflows/size-check.yml",
 ];
 
@@ -42,7 +44,8 @@ export function excludeLines(paths) {
   const folders = LOCAL_FOLDERS
     .filter(({ path, always }) => always || paths.some((p) => p.startsWith(path)))
     .map(({ path }) => `/${path}`);
-  const files = LOCAL_FILES.filter((file) => paths.includes(file)).map((file) => `/${file}`);
+  const files = [...ALWAYS_FILES, ...LOCAL_FILES.filter((file) => paths.includes(file))]
+    .map((file) => `/${file}`);
   return [...folders, ...files];
 }
 
@@ -88,10 +91,13 @@ function withBlock(text, lines, file) {
   return before + (needsBreak ? `\n${blockText(lines, BEGIN_AFTER_BREAK)}` : blockText(lines)) + after;
 }
 
-// `text` without its block, or null when there is none.
+// `text` without its block, or null when there is none. The line break the block added stays
+// when a line follows the block, so that line does not join the user's last one.
 function withoutBlock(text, file) {
   const span = blockSpan(text, file);
-  return span === null ? null : text.slice(0, span.start) + text.slice(span.end);
+  if (span === null) return null;
+  const start = span.isAfterBreak && span.end < text.length ? span.start + 1 : span.start;
+  return text.slice(0, start) + text.slice(span.end);
 }
 
 // The clone's exclude file. Git prints it relative to the folder it ran in, or absolute.
@@ -121,6 +127,13 @@ function trackedUnder(folder, lines) {
   return out.split("\0").filter((path) => path !== "").sort();
 }
 
+// Refuses a clone with no work tree (a bare repo): there is nothing to keep out of it.
+function requireWorkTree(folder) {
+  const out = execFileSync("git", ["-C", folder, "rev-parse", "--is-inside-work-tree"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (out.trim() !== "true") throw new Error(`Not a work tree: ${folder}`);
+}
+
 const forwardSlashes = (path) => path.replace(/\\/g, "/");
 
 /**
@@ -133,6 +146,8 @@ export function localExclude(folder, dests) {
   const file = excludeFile(folder);
   const paths = plannedPaths(dests);
   const lines = excludeLines(paths);
+  requireWorkTree(folder);
+  const tracked = trackedUnder(folder, lines);
   const next = withBlock(readExcludeFile(file), lines, file);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, next, EXCLUDE_ENCODING);
@@ -140,7 +155,7 @@ export function localExclude(folder, dests) {
     exclude: forwardSlashes(file),
     lines,
     shared: paths.filter((path) => !lines.some((line) => covers(line, path))).sort(),
-    tracked: trackedUnder(folder, lines),
+    tracked,
   };
 }
 
