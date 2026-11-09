@@ -146,8 +146,8 @@ def _json_bytes(data):
 def contents(source):
     """Every file of the plugin as {path in the plugin: bytes}; refuses what the directory would."""
     out = {rel[len("plugin/"):]: source.read(rel) for rel in source.files_under("plugin")}
-    # VERSION is the version the skills ask the helper to match; helper.json says where to get it.
-    out["VERSION"] = source.read("VERSION")
+    # The manifest's version is the one the skills ask the helper to match; helper.json says
+    # where to get it. A VERSION file would be refused: it has no allowed extension.
     out["helper.json"] = helper_pins(source)
     manifest = json.loads(out[".claude-plugin/plugin.json"])
     manifest["version"] = version_of(source)

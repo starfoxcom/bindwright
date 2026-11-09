@@ -199,6 +199,7 @@ const DIRECTORY_CASES = [
   ["allowed-tools in a skill", "skills/x/SKILL.md", "---\nname: x\nallowed-tools: Bash\n---\n", /allowed-tools/],
   ["hooks in the manifest", ".claude-plugin/plugin.json", '{"name":"x","hooks":{}}\n', /declares hooks/],
   ["an image that is not one", "icon.png", "not a png", /not the image/],
+  ["a text file with no extension", "VERSION", "1.0.0\n", /not Markdown, text, JSON, YAML/],
 ];
 
 test("the directory check refuses each kind of file the directory refuses", needsPython, () => {
@@ -214,7 +215,7 @@ test("the directory check refuses each kind of file the directory refuses", need
     };
     const clean = {
       "skills/x/SKILL.md": "---\nname: x\ndescription: d\ndisable-model-invocation: true\n---\n# x\n",
-      ".claude-plugin/plugin.json": '{"name":"x"}\n', "VERSION": "1.0.0\n", ".claude-plugin/icon.png": PNG,
+      ".claude-plugin/plugin.json": '{"name":"x"}\n', ".claude-plugin/icon.png": PNG,
     };
     assert.equal(check("clean", clean).status, 0);
     for (const [name, rel, data, message] of DIRECTORY_CASES) {

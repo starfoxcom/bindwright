@@ -209,10 +209,11 @@ test("the notice, run from the helper as /session-start runs it, tells the user 
     const pack = [join(repoRoot, "tools", "pack_plugin.py"), "--helper-out", helper];
     const packed = spawnSync(python, pack, { encoding: "utf8" });
     assert.equal(packed.status, 0, packed.stderr);
-    // The plugin folder holds only its VERSION here, at the helper's version.
+    // The plugin folder holds only its manifest here, at the helper's version.
     const plugin = join(s.root, "plugin");
-    mkdirSync(plugin);
-    writeFileSync(join(plugin, "VERSION"), readFileSync(join(helper, "VERSION")));
+    mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+    const version = readFileSync(join(helper, "VERSION"), "utf8").trim().replace(/^v/, "");
+    writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "bindwright", version }));
     // The helper reached through a link too, as a linked home folder does.
     const linked = join(s.root, "linked");
     symlinkSync(helper, linked, "junction");

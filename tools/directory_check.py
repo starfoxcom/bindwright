@@ -18,7 +18,7 @@ import sys
 
 TEXT_EXTENSIONS = {".md", ".txt", ".json", ".yaml", ".yml"}
 # Extensionless files the directory reads as text.
-TEXT_NAMES = {"VERSION", "LICENSE", ".gitignore"}
+TEXT_NAMES = {"LICENSE", ".gitignore"}
 IMAGE_MAGIC = {
     ".png": [b"\x89PNG\r\n\x1a\n"],
     ".jpg": [b"\xff\xd8\xff"],
