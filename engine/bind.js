@@ -85,6 +85,7 @@ function included(path, a, flags) {
     ".github/review-guide.md.template": gate,
     ".claude/hooks/run-hook.sh": flags.guard_hooks_repo,
     ".claude/hooks/push-guard.py": flags.guard_hooks_repo,
+    ".claude/hooks/session-title.py": flags.guard_hooks_repo,
     ".claude/hooks/no-ai-attribution.py": flags.guard_hooks_repo && flags.attribution_guard,
     ".gitattributes": flags.guard_hooks_repo,
   };

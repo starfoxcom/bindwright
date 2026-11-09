@@ -1,7 +1,11 @@
-// The drawn terminal the page's scenes play on: a timed transcript, a spinner row and a
-// typed prompt, looped while its stage is on screen. Each stage gets its own terminal,
-// so two scenes on one page run and pause independently. With reduced motion it plays
-// as a slideshow: short beats happen at once and every longer pause holds as a slide.
+// The drawn window the page's scenes play on: a timed transcript, a spinner row and a
+// typed prompt, looped while its stage is on screen. Every line holds both looks, Claude
+// Code's desktop app and its terminal, and the page's view (view.js) picks which one shows,
+// so a change of view reskins the scene without stopping it.
+// Each stage gets its own window, so two scenes on one page run and pause independently.
+// With reduced motion it plays as a slideshow: short beats happen at once and every longer
+// pause holds as a slide.
+import { t } from "./i18n/index.js";
 
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const STOP = Symbol("stop");
@@ -10,6 +14,11 @@ const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "�
   .map((g) => `${g}︎`);
 // The clock ticks in steps and stops while paused, so every wait and loop pauses with it.
 const STEP = 40;
+// Text size per pixel of window width, and its bounds: every window keeps one layout at any
+// width, a 727 px window at 15 px text, and text never shrinks below 11 px on a phone.
+const FONT_PER_WIDTH = 15 / 727;
+const MIN_FONT_PX = 11;
+const MAX_FONT_PX = 15;
 // Under reduced motion, a wait this long or longer holds as a slide; shorter ones skip.
 const SLIDE_MS = 1000;
 // Every story pause runs this many times its scripted length: at 1, a line is gone before
@@ -24,6 +33,32 @@ const spinnerMeta = (ms, tokens, interrupt = true) =>
 // A terminal drawn inside `stage`. It finds its parts there by class.
 export function createTerminal(stage) {
   return new Terminal(stage);
+}
+
+// The desktop app's other sessions, listed under the scene's own in the sidebar.
+const RECENT_SESSIONS = ["desk.recent.1", "desk.recent.2", "desk.recent.3"];
+
+function part(tag, cls, text = "") {
+  return Object.assign(document.createElement(tag), { className: cls, textContent: text });
+}
+
+// The desktop app's parts, which the terminal view hides: the sessions sidebar, the session
+// title in the title bar, and the folder and mode under the message box. `win` names its session
+// with a dictionary key in data-desk.
+function addDesktopParts(win) {
+  const title = t(win.dataset.desk);
+  const side = part("div", "desk-side");
+  side.setAttribute("aria-hidden", "true");
+  side.append(part("div", "desk-new", t("desk.new")), part("div", "desk-label", t("desk.recents")));
+  for (const name of [title, ...RECENT_SESSIONS.map((key) => t(key))]) {
+    side.append(part("div", name === title ? "desk-session on" : "desk-session", name));
+  }
+  win.prepend(side);
+  win.querySelector(".bar").append(part("b", "desk-title", title));
+  win.querySelector(".input").append(part("span", "desk-placeholder", t("desk.placeholder")));
+  const modes = part("div", "desk-modes");
+  modes.append(part("span", "desk-folder", "shop"), part("span", "", t("desk.mode")));
+  win.querySelector(".hint").after(modes);
 }
 
 class Terminal {
@@ -41,6 +76,14 @@ class Terminal {
     this.verb = stage.querySelector(".verb");
     this.meta = stage.querySelector(".meta");
     this.typed = stage.querySelector(".typed");
+    const win = stage.matches(".term") ? stage : stage.querySelector(".term");
+    addDesktopParts(win);
+    new ResizeObserver(([entry]) => {
+      const size = entry.contentRect.width * FONT_PER_WIDTH;
+      win.style.fontSize = `${Math.min(MAX_FONT_PX, Math.max(MIN_FONT_PX, size))}px`;
+    }).observe(win);
+    // The two looks set lines at different heights, so the newest line moves back into view.
+    document.addEventListener("viewchange", () => requestAnimationFrame(() => this.follow()));
     new IntersectionObserver(([entry]) => {
       this.seen = entry.isIntersecting;
       this.sync();
@@ -131,7 +174,13 @@ class Terminal {
   }
 
   out(html, cls = "") {
-    return this.add(`<span class="elbow">⎿</span>${html}`, cls);
+    return this.add(`<span class="elbow">⎿</span>${html}`, `out ${cls}`);
+  }
+
+  // How long the model thought, as the folded line both views show above its answer.
+  thought(seconds) {
+    return this.add(`<span class="thought"><span class="term-only">∴ Thought for ${seconds}s</span>`
+      + `<span class="desk-only">${t("desk.thought", { seconds })}</span></span>`);
   }
 
   say(html) {
@@ -146,7 +195,7 @@ class Terminal {
     }
     await this.hold(350);
     this.typed.textContent = "";
-    this.add(`<span class="echo">&gt; ${text}</span>`);
+    this.add(`<span class="echo term-only">&gt; ${text}</span><span class="bubble desk-only">${text}</span>`, "user");
     this.gap();
   }
 
@@ -179,12 +228,17 @@ class Terminal {
     row.hidden = true;
   }
 
-  // A tool call: its dot runs, then turns to its result after ms.
+  // A tool call: its dot runs, then turns to its result after ms. The terminal shows the
+  // tool's name and argument; the desktop app names the action in words ("Ran", "Edited")
+  // and marks a failure beside it.
   async tool(name, arg, ms, result = "ok") {
-    const el = this.add(`<span class="dot run"></span><span class="name">${name}</span>`
-      + `<span class="arg">(${arg})</span>`);
+    const el = this.add(`<span class="dot run"></span>`
+      + `<span class="name term-only">${name}</span><span class="arg term-only">(${arg})</span>`
+      + `<span class="act desk-only">${t(`desk.tool.${name}`)}</span><span class="target desk-only">${arg}</span>`
+      + `<span class="fail desk-only">${t("desk.failed")}</span>`, "tool");
     await this.wait(ms);
     el.firstChild.className = `dot ${result}`;
+    el.classList.toggle("failed", result === "bad");
     return el;
   }
 

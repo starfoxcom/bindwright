@@ -1,4 +1,4 @@
-// The runner helper (plugin/hooks/runners-assess.mjs): what the hardware leaves room for,
+// The runner helper (helper/hooks/runners-assess.mjs): what the hardware leaves room for,
 // how a workflow's jobs and runs-on values count, what the waits of recent jobs show, and what
 // to recommend. The CLI test runs the script with gh hidden, so nothing touches the network.
 
@@ -15,9 +15,9 @@ import {
   hardwareLimit,
   recommend,
   runStats,
-} from "../../plugin/hooks/runners-assess.mjs";
+} from "../../helper/hooks/runners-assess.mjs";
 
-const script = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "plugin", "hooks", "runners-assess.mjs");
+const script = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "helper", "hooks", "runners-assess.mjs");
 
 // A machine with room to spare on every resource, so the row's own resource sets the limit.
 const machine = (overrides) => ({ cores: 100, ramGB: 100, freeDiskGB: 1000, sharedPc: false, ...overrides });

@@ -1,8 +1,8 @@
 name: Tests
 
 # Runs the bind engine tests (JS engine, and the golden test against its Python
-# twin) and the Python tests for the guard hooks, receipts and the review
-# gate's script. Its check,
+# twin) on Linux and Windows, and the Python tests for the guard hooks, receipts
+# and the review gate's script. Its check,
 # "Engine and hook tests", is required on develop, so pull requests run it
 # whatever they change: a path filter would leave the required check
 # waiting forever on a PR that touches none of the listed files. Pushes to
@@ -42,8 +42,8 @@ defaults:
     shell: bash
 
 jobs:
-  test:
-    name: Engine and hook tests
+  linux:
+    name: Engine and hook tests (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -103,3 +103,59 @@ jobs:
           python3 -m unittest -v tools/test_review_gate.py tools/test_pin_check.py 2>&1 | tee gate-tests.txt
           if grep -q "skipped=" gate-tests.txt; then echo "::error::Review gate tests were skipped"; exit 1; fi
           grep -qE "^Ran [1-9][0-9]* tests? in" gate-tests.txt || { echo "::error::No review gate tests ran"; exit 1; }
+
+  # The engine suite again on Windows, where the Python twins take their junction,
+  # drive-letter and line-ending paths, which never run on Linux.
+  windows:
+    name: Engine tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check for the engine
+        id: engine
+        run: |
+          if [ -f engine/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No engine on this branch, so there is nothing to test."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The Python twins' tests skip without Python, so its absence fails here instead.
+      - name: Show tool versions
+        if: steps.engine.outputs.present == 'true'
+        run: |
+          node --version
+          python -c "import sys; assert sys.version_info >= (3, 8), sys.version; print(sys.version)"
+
+      # Some tests skip on Windows by design (stop signals do not exist there), so
+      # only failures and an empty run fail this step.
+      - name: Engine tests
+        if: steps.engine.outputs.present == 'true'
+        run: |
+          shopt -s failglob
+          node --test --test-reporter=tap engine/test/*.test.js | tee node-tests.txt
+          grep -qx "# fail 0" node-tests.txt || { echo "::error::Engine tests failed"; exit 1; }
+          grep -qE "^# pass [1-9]" node-tests.txt || { echo "::error::No engine tests ran"; exit 1; }
+          grep -E "^# skipped" node-tests.txt
+
+  # The required check: it passes only when both jobs above pass. A job that
+  # needs a failed one would be skipped, and a skipped check counts as passed.
+  test:
+    name: Engine and hook tests
+    needs: [linux, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Both test jobs passed
+        env:
+          LINUX: ${{ needs.linux.result }}
+          WINDOWS: ${{ needs.windows.result }}
+        run: |
+          echo "Linux: $LINUX, Windows: $WINDOWS"
+          [ "$LINUX" = "success" ] && [ "$WINDOWS" = "success" ]
