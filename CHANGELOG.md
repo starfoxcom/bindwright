@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.1.0] — 2026-11-09
+
+v3.1.0 fits Bindwright to projects the team does not fully control: a local review before each merge where no CI can run the AI reviews, the assistant's files kept off a client's or employer's repo, and required reviewers who must approve each pull request.
+
 ### Added
 
 - A local review gate for projects where no CI can run the AI reviews (GitHub with apps and Actions blocked, or another site): setup offers it, off unless picked (`"localReview": true`), and `.claude/rules/local-review.md` has the session run two fresh reviewers on each change before it merges, with the CI reviews' bar and verdict rule. Nothing about the review is posted to the host.
