@@ -155,7 +155,8 @@ const HELPER_KINDS = [
 ];
 
 test("each helper file has the same bytes on every build, matches the plugin's pin, installs and binds", {
-  skip: (!python && "needs Python 3.8+") || (!npmCli && "needs npm") || (dirty && "packed files have uncommitted edits"),
+  skip: (!python && "needs Python 3.8+") || (!npmCli && "needs npm")
+    || (dirty && "packed files have uncommitted edits"),
 }, () => {
   const root = mkdtempSync(join(tmpdir(), "bw-helper-"));
   try {

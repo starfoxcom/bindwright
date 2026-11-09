@@ -322,7 +322,10 @@ def write_helper_file(kind, folder, ref="HEAD"):
     """Writes the helper's tarball (`kind` "node") or wheel ("python") for `ref` into `folder`; returns its path."""
     source = GitTree(ref)
     version = version_of(source)
-    name, data = (tgz_name(version), tgz_bytes(source)) if kind == "node" else (wheel_name(version), wheel_bytes(source))
+    if kind == "node":
+        name, data = tgz_name(version), tgz_bytes(source)
+    else:
+        name, data = wheel_name(version), wheel_bytes(source)
     path = os.path.join(folder, name)
     _write_file(path, data)
     return path
