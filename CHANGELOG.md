@@ -10,6 +10,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - For someone else's project, setup asks whether to keep the assistant's files on this computer only. On a yes (`"localOnly": true`), `CLAUDE.md`, `.claude/`, `.bindwright/` and its other files for the assistant go into the clone's `.git/info/exclude`, never `.gitignore`, before any file is written, and the files meant for the whole team are offered one by one to keep or drop. A new engine command, `--local-exclude`, writes that list, and `/bindwright:update` refreshes it.
 
+## [v3.0.1] — 2026-11-09
+
+v3.0.1 lets the plugin directory accept Bindwright: the plugin no longer ships a file the directory refuses.
+
+### Fixed
+
+- The plugin no longer carries a `VERSION` file, which the plugin directory refuses from an organization that is not Verified because it has no allowed extension. The skills and the session-start notice read the plugin's version from its manifest, `.claude-plugin/plugin.json`, and the directory check refuses an extensionless file other than a license or `.gitignore`.
+
 ## [v3.0.0] — 2026-11-09
 
 v3.0.0 gets Bindwright into the plugin directory: the plugin is now skills only, and everything that runs on your computer installs as a helper pinned by the plugin, after your yes. It also titles sessions after the project, sums up what changed when you update, and takes Bindwright back out cleanly with `/bindwright:remove`.

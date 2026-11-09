@@ -17,7 +17,7 @@ A read-only health check. It runs the engine's checks and the review gate's own 
 
 ## 2. Report
 
-- No problems: say so in one line, with the plugin version from `${CLAUDE_PLUGIN_ROOT}/VERSION`.
+- No problems: say so in one line, with the plugin version, the `version` in `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`.
 - Otherwise, one short line per problem: what is wrong (`say`) and what to do (`fix`), most serious first: a public board, then the setup files, then the guards, then the rest. Leave out the checks that passed.
 - Offer to run each fix that is a command or a skill, one at a time, and only on a yes.
 
