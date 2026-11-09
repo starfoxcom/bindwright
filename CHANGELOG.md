@@ -6,8 +6,24 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.0.0] — 2026-11-09
+
+v3.0.0 gets Bindwright into the plugin directory: the plugin is now skills only, and everything that runs on your computer installs as a helper pinned by the plugin, after your yes. It also titles sessions after the project, sums up what changed when you update, and takes Bindwright back out cleanly with `/bindwright:remove`.
+
+### Added
+
+- Sessions in a set-up repo are titled after the project, then `<Project> - <purpose>` once `/session-start`'s plan is approved, instead of the CLI's title from the first message, so several sessions and their peer lists tell projects and tasks apart. A new project hook, `session-title.py`, sets each title once, so one picked with `/rename` stays until the purpose changes.
+- `/bindwright:update` opens with a plain summary of every release since the version the repo was set up with, newest first: what is new, changed and fixed, and what the user may want to act on. A new engine command, `--releases-since`, reads the plugin's own changelog, which ships in the helper.
+- `/bindwright:remove` takes Bindwright back out: the files setup wrote into a repo, except those the user changed or marked as the project's own, only setup's parts of shared files such as `CLAUDE.md`, the extras it added to the config folder (hooks, mods, the builder agent, the reply style), and finally the plugin itself. Two engine commands back it, `--remove-plan` and `--remove-files`, and `home.py` gains `remove-mod`, `remove-agent` and `remove-style`.
+
+### Changed
+
+- **Breaking:** the plugin now holds only skills, its manifest, icon, README and version, which is what the plugin directory accepts from an organization that is not Verified, so Bindwright can be installed from the directory. Everything that runs on the user's computer (both engines, the templates, the config-folder extras and mods, and the counts, layout check, notice and runner scripts) ships as the helper: two files attached to each GitHub release, one npm installs and one pip installs for computers with Python and no Node, built by the release workflow from the tag. Setup installs it on a yes, only when the download matches the SHA-256 the plugin pins in its `helper.json`, into `~/.bindwright/helper` for the user only, with no admin rights and no install scripts; `/bindwright:update` keeps it at the plugin's version, the session-start notice says when it falls behind, the doctor checks it, and `/bindwright:remove` deletes it. The rules a set-up repo gets run the counts send and the layout check from the helper; run `/bindwright:update` in each set-up repo after updating the plugin.
+- The anonymous review counts, for a computer that turned them on, also send after each pull request the session merges, not only at session start, so a session open for days keeps the page current. Every trigger checks one saved time, the last send plus 24 hours, in place of the once-per-calendar-day check, so sends stay a steady day apart in any time zone.
+
 ### Fixed
 
+- Setup installs lizard, which the size check needs, on a Python that refuses `pip install --user` because the system or Homebrew manages it (macOS with Homebrew, Debian, Ubuntu): it installs it into its own environment at `~/.bindwright/size-check-venv`, and the size check looks there too.
 - The layout check no longer stops at random on Windows with `EBUSY` while the browser starts: it waits while the browser still holds its DevTools port file locked.
 
 ## [v2.4.0] — 2026-11-08

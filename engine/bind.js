@@ -18,7 +18,7 @@ const ACTIONS_ONLY = [
 
 // Files a repo often already has. They land in STAGING and the tailoring
 // step merges them instead of the zip overwriting the user's copy.
-const MERGE_TARGETS = new Set([
+export const MERGE_TARGETS = new Set([
   "CLAUDE.md", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", ".gitattributes", ".claude/settings.json",
 ]);
 export const STAGING = ".bindwright/incoming/";
@@ -85,6 +85,7 @@ function included(path, a, flags) {
     ".github/review-guide.md.template": gate,
     ".claude/hooks/run-hook.sh": flags.guard_hooks_repo,
     ".claude/hooks/push-guard.py": flags.guard_hooks_repo,
+    ".claude/hooks/session-title.py": flags.guard_hooks_repo,
     ".claude/hooks/no-ai-attribution.py": flags.guard_hooks_repo && flags.attribution_guard,
     ".gitattributes": flags.guard_hooks_repo,
   };

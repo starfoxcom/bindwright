@@ -17,11 +17,14 @@ Usage:
   python3 .github/scripts/size_check.py --write-baseline # record today's hard breaches
   python3 .github/scripts/size_check.py --report         # also list tolerated and soft ones
 
-Function rows need lizard (pip install lizard). Without it they are skipped
+Function rows need lizard (pip install lizard), from this Python or from the
+environment setup installs it in, LIZARD_VENV. Without it they are skipped
 and the check fails, so a missing row never reads as a pass.
 """
 
 import argparse
+import functools
+import glob
 import os
 import re
 import subprocess
@@ -31,6 +34,9 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 RULE = os.path.join(ROOT, ".claude", "rules", "code-size.md")
 BASELINE = os.path.join(ROOT, ".github", "size-check", "baseline.txt")
 EXCEPTIONS = os.path.join(ROOT, ".github", "size-check", "exceptions.txt")
+# Where setup installs lizard when this Python refuses `pip install --user`
+# because the system or Homebrew manages it (PEP 668).
+LIZARD_VENV = os.path.join(os.path.expanduser("~"), ".bindwright", "size-check-venv")
 
 # The extensions each row of the rule's language table covers. "Other" takes
 # every extension in the rule's `paths:` list that no named row claims.
@@ -120,12 +126,32 @@ def tracked_files(by_ext):
             if os.path.splitext(f)[1] in by_ext and not SKIP_DIRS.intersection(f.split("/")[:-1])]
 
 
-def functions(path):
-    """(name, length, ccn, params) per function; False for a language lizard
-    does not read, None when lizard is missing."""
+def venv_site_packages():
+    """The site-packages folders of LIZARD_VENV, in its Windows and POSIX layouts."""
+    return (glob.glob(os.path.join(LIZARD_VENV, "Lib", "site-packages"))
+            + sorted(glob.glob(os.path.join(LIZARD_VENV, "lib", "python3*", "site-packages"))))
+
+
+@functools.lru_cache(maxsize=None)
+def import_lizard():
+    """The lizard module, from this Python or from LIZARD_VENV; None when neither has it."""
     try:
         import lizard
     except ImportError:
+        # lizard is pure Python, so a copy installed for another Python 3 version still imports.
+        sys.path.extend(venv_site_packages())
+        try:
+            import lizard
+        except ImportError:
+            return None
+    return lizard
+
+
+def functions(path):
+    """(name, length, ccn, params) per function; False for a language lizard
+    does not read, None when lizard is missing."""
+    lizard = import_lizard()
+    if lizard is None:
         return None
     if lizard.get_reader_for(path) is None:
         return False

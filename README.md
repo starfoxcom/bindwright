@@ -14,13 +14,15 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 
 ## Install
 
-In Claude Code, once per computer:
+From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen.
+
+Or from Bindwright's own marketplace, in Claude Code, once per computer:
 
 ```
 /plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
 ```
 
-In the Claude desktop app, where `/plugin` does not run:
+In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 
 1. Open the Code tab and start a new session in your project's folder.
 2. Paste this and send it. Wait until Claude says it is done.
@@ -31,7 +33,7 @@ In the Claude desktop app, where `/plugin` does not run:
 
 3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
 
-Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. Then, in each project, open Claude Code in the project's folder and run:
+Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. The first time, it also asks to install Bindwright's helper, the part that runs on your computer (the setup engine, the templates and the scripts), from the files attached to the plugin's GitHub release, checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Then, in each project, open Claude Code in the project's folder and run:
 
 ```
 /bindwright:setup
@@ -39,14 +41,19 @@ Installing needs nothing else. Setup needs Git, and Node 18 or Python 3.8 or lat
 
 The page's Install section says what each command changes on your computer and in the project; [plugin/README.md](plugin/README.md) lists the plugin's other commands.
 
+## Remove
+
+In each set-up project, run `/bindwright:remove`. It takes out the files setup wrote there and the extras it added to your config folder, keeps every file you changed unless you say otherwise, and ends with how to uninstall the plugin. `/bindwright:remove computer` does only the config folder part. Nothing is committed until you say so.
+
 ## Repo layout
 
 ```
 bindwright/
 ├── index.html              ← redirects the GitHub Pages root to page/
 ├── page/                   ← the live page (plain HTML, CSS and JS, no build step)
-├── engine/                 ← the bind engine the plugin and the page's file preview run
-├── plugin/                 ← the Claude Code plugin (/bindwright:setup)
+├── engine/                 ← the bind engine the helper and the page's file preview run
+├── plugin/                 ← the Claude Code plugin (/bindwright:setup): skills only
+├── helper/                 ← the helper package's own files (its scripts and npm page)
 ├── _core/                  ← canonical templates (source of truth)
 │   ├── project-template/   ← lands in your project root
 │   ├── global-template/    ← lands in ~/.claude
@@ -76,8 +83,9 @@ The plugin writes only into the project you run it in and, for the extras you sa
 
 | Call | What it sends | When | How to stop it |
 |---|---|---|---|
+| Helper install | A download of the helper file the plugin pins, from the plugin's release on `github.com`; nothing about you or the repo | When setup or `/bindwright:update` installs it, after your yes | Answer no; setup then stops |
 | Plugin version check | A plain request for the released version number from `raw.githubusercontent.com`; nothing about you or the repo | At most once a day, when `/session-start` runs | Disable the plugin (`/plugin`) |
-| Review counts, opt-in | A random project id, the project kind you picked, and six numbers: your merged pull requests that the AI review checked, caught a problem in, sent to a deeper review, held back 6 or more rounds, and merged, plus the red review rounds summed over them, with the start and end time of the span they cover. The first send covers the project's past pull requests; a history past 500 goes out in daily batches only if you say yes. Cloudflare sees your IP address for its rate limiter; the counter never stores it, only the country Cloudflare reads from it, and publishes just how many projects each country has ([`counter/`](counter/README.md)) | At most once a day per set-up repo, only after a yes at setup | `/bindwright:setup global`, or `node <plugin folder>/hooks/counts.mjs share off` |
+| Review counts, opt-in | A random project id, the project kind you picked, and six numbers: your merged pull requests that the AI review checked, caught a problem in, sent to a deeper review, held back 6 or more rounds, and merged, plus the red review rounds summed over them, with the start and end time of the span they cover. The first send covers the project's past pull requests; a history past 500 goes out in daily batches only if you say yes. Cloudflare sees your IP address for its rate limiter; the counter never stores it, only the country Cloudflare reads from it, and publishes just how many projects each country has ([`counter/`](counter/README.md)) | At most once a day per set-up repo, only after a yes at setup | `/bindwright:setup global`, or `node ~/.bindwright/helper/node_modules/bindwright/hooks/counts.mjs share off` |
 | GitHub, through your own `gh` login | The counts read your merged pull requests; setup and `/bindwright:code-style` read and create what you ask for (repos, boards, issues) | When that step runs | Answer no to the step |
 | Code-search tool, when you install it | tokensave has an anonymous usage counter of its own, on by default; see its [privacy guide](https://github.com/aovestdipaperino/tokensave/blob/main/docs/guide/PRIVACY.md) | tokensave's own schedule | tokensave's own setting |
 | The page | Reads the community totals from the counter, and its fonts from Google Fonts | On page load | Nothing to stop: it sends nothing about you |

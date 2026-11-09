@@ -15,7 +15,10 @@
 #   python engine/bind.py --export DIR < choices.json    -> the project's setup object written (share.py)
 #   python engine/bind.py --remember DIR --layer L < choices.json -> one person's choices written to layer L
 #   python engine/bind.py --doctor DIR                   -> a health check of that repo and this machine (doctor.py)
+#   python engine/bind.py --remove-plan DIR              -> what setup wrote, sorted for removal
+#   python engine/bind.py --remove-files DIR < {"paths": [...], "state": true} -> files removed
 #   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
+#   python engine/bind.py --releases-since DIR -> the plugin's releases since DIR's bound version (releases.py)
 # A failed bind gives {"error": message} and, alone, exit status 1.
 
 import json
@@ -41,6 +44,7 @@ from share import export_setup, remember_choices
 from doctor import cli_version_from, run_doctor
 from report import draft_report
 from staging import clean_staging
+from releases import releases_for_repo
 
 CORE = "_core/project-template/"
 
@@ -126,6 +130,7 @@ def _included(path, a, flags):
         ".github/review-guide.md.template": gate,
         ".claude/hooks/run-hook.sh": flags["guard_hooks_repo"],
         ".claude/hooks/push-guard.py": flags["guard_hooks_repo"],
+        ".claude/hooks/session-title.py": flags["guard_hooks_repo"],
         ".claude/hooks/no-ai-attribution.py": flags["guard_hooks_repo"] and flags["attribution_guard"],
         ".gitattributes": flags["guard_hooks_repo"],
     }
@@ -378,10 +383,46 @@ def _report(argv, read_file):
         return {"error": str(e)}
 
 
+def _removal_request():
+    """The {"paths", "state"} --remove-files reads from stdin, checked as cli.js checks it."""
+    request = _choices_from_stdin()
+    if not isinstance(request, dict):
+        request = {}
+    paths, state = request.get("paths"), request.get("state")
+    shaped = isinstance(paths, list) and all(isinstance(p, str) for p in paths)
+    if not (shaped and isinstance(state, bool)):
+        raise ValueError(
+            '--remove-files takes {"paths": [file, ...], "state": true or false} '
+            "on standard input")
+    return paths, state
+
+
+def _remove(argv):
+    """--remove-plan DIR sorts what setup wrote; --remove-files DIR takes the agreed files out."""
+    try:
+        # Imported here: remove.py imports MERGE_TARGETS from this module, so this import waits.
+        from remove import plan_removal, remove_files
+        if "--remove-plan" in argv:
+            return plan_removal(_option(argv, "--remove-plan"))
+        folder = _option(argv, "--remove-files")
+        paths, state = _removal_request()
+        return remove_files(folder, paths, state)
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
 def _clean_staging(argv):
     """--clean-staging DIR: removes setup's staging folders from that repo."""
     try:
         return clean_staging(_option(argv, "--clean-staging"), "--discard-incoming" in argv)
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
+def _releases(argv, root):
+    """--releases-since DIR: the plugin's releases newer than the version DIR was bound with."""
+    try:
+        return releases_for_repo(_option(argv, "--releases-since"), root)
     except Exception as e:  # every failure is reported, as the JS engine throws it
         return {"error": str(e)}
 
@@ -410,6 +451,10 @@ def _main(argv):
 
     if "--clean-staging" in argv:
         result = _clean_staging(argv)
+    elif "--releases-since" in argv:
+        result = _releases(argv, root)
+    elif "--remove-plan" in argv or "--remove-files" in argv:
+        result = _remove(argv)
     elif "--batch" in argv:
         result = [run(j["answers"], j.get("year"), j.get("version")) for j in _stdin_json()]
     elif "--update" in argv:
