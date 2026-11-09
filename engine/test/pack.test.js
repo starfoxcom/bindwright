@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -40,6 +40,16 @@ test("the helper binds what the repo's engine binds, and the plugin ships no cod
     assert.equal(pkg.dependencies, undefined);
     assert.equal(pkg.scripts, undefined);
     assert.ok(existsSync(join(helper, "hooks", "counts.mjs")));
+
+    // Every path a skill names, in the plugin or the helper, is in that pack.
+    for (const name of readdirSync(join(out, "skills"))) {
+      const text = readFileSync(join(out, "skills", name, "SKILL.md"), "utf8");
+      for (const [, base, rel] of text.matchAll(/(\$\{CLAUDE_PLUGIN_ROOT\}|<helper>)\/([\w./-]*\w)/g)) {
+        if (rel.includes("<")) continue;
+        const folder = base === "<helper>" ? helper : out;
+        assert.ok(existsSync(join(folder, rel)), `${name} names ${base}/${rel}, which the pack lacks`);
+      }
+    }
 
     const team = defaults({ team: true, client: true });
     // Every template family: pre-commit, architecture, the research hook and the home guards.
