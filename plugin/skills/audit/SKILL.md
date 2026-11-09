@@ -13,7 +13,7 @@ It covers only what the logs can show. The built-in `/doctor prompt-audit` alrea
 ## 1. Measure
 
 - Find the repo root with `git rev-parse --show-toplevel`. Outside a git repo, say the audit works inside one, and stop.
-- Pick the engine as setup does: `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.js"` when `node --version` reports 18 or later, otherwise Python 3.8 or later with `"${CLAUDE_PLUGIN_ROOT}/engine/bind.py"`.
+- Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin.
 - Run it with `--audit <repo root>`. It prints `{"logs": {"folder", "sessions", "from", "to"}, "checks": [...], "skipped": [...]}`. Each check is `{"id", "rule", "seen", "broken", "examples": [{"session", "when", "text"}]}`: `rule` is the file holding the rule, `seen` how often it applied, `broken` how often it was broken, and up to three examples from the newest sessions. On `{"error": "..."}`, show the message and offer `/bindwright:report`.
 - `logs.sessions` is 0 when this machine has no logs for the repo (Claude Code deletes logs after its cleanup period, 30 days by default). Say so and stop.
 
