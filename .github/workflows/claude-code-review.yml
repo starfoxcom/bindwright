@@ -1062,10 +1062,12 @@ jobs:
           name="node-v$NODE_VERSION-linux-$arch"
           if ! curl --fail --silent --show-error --location --proto '=https' --retry 2 --max-time 120 -o "$RUNNER_TEMP/$name.tar.gz" "https://nodejs.org/dist/v$NODE_VERSION/$name.tar.gz"; then
             echo "::warning::No usable Linux Node and npm here, and the Node $NODE_VERSION download failed: the CLI install tries the runner's own Node, if it has one"
+            rm -f "$RUNNER_TEMP/$name.tar.gz"
             exit 1
           fi
           if ! printf '%s  %s\n' "$sum" "$RUNNER_TEMP/$name.tar.gz" | sha256sum --check --status; then
             echo "::warning::The Node $NODE_VERSION download does not match its pinned checksum: the CLI install tries the runner's own Node, if it has one"
+            rm -f "$RUNNER_TEMP/$name.tar.gz"
             exit 1
           fi
           rm -rf "$RUNNER_TEMP/linux-node"
