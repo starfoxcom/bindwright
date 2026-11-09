@@ -1,7 +1,11 @@
-// The drawn terminal the page's scenes play on: a timed transcript, a spinner row and a
-// typed prompt, looped while its stage is on screen. Each stage gets its own terminal,
-// so two scenes on one page run and pause independently. With reduced motion it plays
-// as a slideshow: short beats happen at once and every longer pause holds as a slide.
+// The drawn window the page's scenes play on: a timed transcript, a spinner row and a
+// typed prompt, looped while its stage is on screen. It draws Claude Code as the desktop
+// app or as the terminal (view.js), and a change of view replays the scene from its start.
+// Each stage gets its own window, so two scenes on one page run and pause independently.
+// With reduced motion it plays as a slideshow: short beats happen at once and every longer
+// pause holds as a slide.
+import { t } from "./i18n/index.js";
+import { currentView } from "./view.js";
 
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const STOP = Symbol("stop");
@@ -26,6 +30,33 @@ export function createTerminal(stage) {
   return new Terminal(stage);
 }
 
+const isDesktop = () => currentView() === "desktop";
+// The desktop app's other sessions, listed under the scene's own in the sidebar.
+const RECENT_SESSIONS = ["desk.recent.1", "desk.recent.2", "desk.recent.3"];
+
+function part(tag, cls, text = "") {
+  return Object.assign(document.createElement(tag), { className: cls, textContent: text });
+}
+
+// The desktop app's parts, which the terminal view hides: the sessions sidebar, the session
+// title in the title bar, and the folder and mode under the message box. `win` names its session
+// with a dictionary key in data-desk.
+function addDesktopParts(win) {
+  const title = t(win.dataset.desk);
+  const side = part("div", "desk-side");
+  side.setAttribute("aria-hidden", "true");
+  side.append(part("div", "desk-new", t("desk.new")), part("div", "desk-label", t("desk.recents")));
+  for (const name of [title, ...RECENT_SESSIONS.map((key) => t(key))]) {
+    side.append(part("div", name === title ? "desk-session on" : "desk-session", name));
+  }
+  win.prepend(side);
+  win.querySelector(".bar").append(part("b", "desk-title", title));
+  win.querySelector(".input").append(part("span", "desk-placeholder", t("desk.placeholder")));
+  const modes = part("div", "desk-modes");
+  modes.append(part("span", "desk-folder", "shop"), part("span", "", t("desk.mode")));
+  win.querySelector(".hint").after(modes);
+}
+
 class Terminal {
   constructor(stage) {
     this.run = 0;
@@ -41,6 +72,8 @@ class Terminal {
     this.verb = stage.querySelector(".verb");
     this.meta = stage.querySelector(".meta");
     this.typed = stage.querySelector(".typed");
+    addDesktopParts(stage.matches(".term") ? stage : stage.querySelector(".term"));
+    document.addEventListener("viewchange", () => this.restart());
     new IntersectionObserver(([entry]) => {
       this.seen = entry.isIntersecting;
       this.sync();
@@ -131,7 +164,13 @@ class Terminal {
   }
 
   out(html, cls = "") {
-    return this.add(`<span class="elbow">⎿</span>${html}`, cls);
+    return this.add(`<span class="elbow">⎿</span>${html}`, `out ${cls}`);
+  }
+
+  // How long the model thought, as the folded line both views show above its answer.
+  thought(seconds) {
+    const text = isDesktop() ? t("desk.thought", { seconds }) : `∴ Thought for ${seconds}s`;
+    return this.add(`<span class="thought">${text}</span>`);
   }
 
   say(html) {
@@ -146,7 +185,8 @@ class Terminal {
     }
     await this.hold(350);
     this.typed.textContent = "";
-    this.add(`<span class="echo">&gt; ${text}</span>`);
+    if (isDesktop()) this.add(`<span class="bubble">${text}</span>`, "user");
+    else this.add(`<span class="echo">&gt; ${text}</span>`);
     this.gap();
   }
 
@@ -179,12 +219,17 @@ class Terminal {
     row.hidden = true;
   }
 
-  // A tool call: its dot runs, then turns to its result after ms.
+  // A tool call: its dot runs, then turns to its result after ms. The desktop app names
+  // the action in words ("Ran", "Edited") and marks a failure beside it.
   async tool(name, arg, ms, result = "ok") {
-    const el = this.add(`<span class="dot run"></span><span class="name">${name}</span>`
-      + `<span class="arg">(${arg})</span>`);
+    const el = isDesktop()
+      ? this.add(`<span class="dot run"></span><span class="act">${t(`desk.tool.${name}`)}</span>`
+        + `<span class="target">${arg}</span><span class="fail">${t("desk.failed")}</span>`, "tool")
+      : this.add(`<span class="dot run"></span><span class="name">${name}</span>`
+        + `<span class="arg">(${arg})</span>`, "tool");
     await this.wait(ms);
     el.firstChild.className = `dot ${result}`;
+    el.classList.toggle("failed", result === "bad");
     return el;
   }
 
@@ -202,12 +247,23 @@ class Terminal {
     this.pane.classList.remove("spot");
   }
 
-  // Plays story again and again, each time from its first line.
+  // Starts the scene over in the view now picked.
+  restart() {
+    this.replay = true;
+    this.reset();
+  }
+
+  // Plays story again and again, each time from its first line. A reset stops it, unless
+  // the reset came from restart, which plays it again from the start.
   async play(story) {
-    try {
-      for (;;) await story();
-    } catch (err) {
-      if (err !== STOP) throw err;
+    for (;;) {
+      try {
+        for (;;) await story();
+      } catch (err) {
+        if (err !== STOP) throw err;
+        if (!this.replay) return;
+        this.replay = false;
+      }
     }
   }
 }
