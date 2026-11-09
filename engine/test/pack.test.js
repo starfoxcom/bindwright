@@ -215,7 +215,7 @@ test("the directory check refuses each kind of file the directory refuses", need
     };
     const clean = {
       "skills/x/SKILL.md": "---\nname: x\ndescription: d\ndisable-model-invocation: true\n---\n# x\n",
-      ".claude-plugin/plugin.json": '{"name":"x"}\n', ".claude-plugin/icon.png": PNG,
+      ".claude-plugin/plugin.json": '{"name":"x"}\n', ".claude-plugin/icon.png": PNG, LICENSE: "MIT\n",
     };
     assert.equal(check("clean", clean).status, 0);
     for (const [name, rel, data, message] of DIRECTORY_CASES) {

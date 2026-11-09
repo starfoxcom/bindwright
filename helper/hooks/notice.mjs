@@ -156,13 +156,16 @@ async function main() {
     const file = join(folder, rel);
     return existsSync(file) ? readFileSync(file, "utf8") : null;
   };
-  // The plugin names its version in its manifest; the helper in its VERSION file.
+  // The plugin names its version in its manifest, or in a VERSION file in a checkout whose
+  // manifest has none; the helper names its own in its VERSION file.
   const manifestVersion = (folder) => {
     try {
-      return JSON.parse(readIn(folder, ".claude-plugin/plugin.json")).version ?? null;
+      const version = JSON.parse(readIn(folder, ".claude-plugin/plugin.json")).version;
+      if (version) return version;
     } catch {
-      return null;
+      // No manifest, or not JSON: the VERSION file below decides.
     }
+    return readIn(folder, "VERSION")?.trim() ?? null;
   };
   const flag = process.argv.indexOf("--plugin");
   const helperVersion = readIn(root, "VERSION")?.trim() ?? null;
