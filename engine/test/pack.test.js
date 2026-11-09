@@ -16,9 +16,13 @@ import { python } from "./python.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = join(engine, "..");
-const run = (cmd, args) => spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 1 << 28 });
+function run(cmd, args) {
+  return spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+}
 
-test("the helper binds what the repo's engine binds, and the plugin ships no code", { skip: !python && "needs Python 3.8+" }, () => {
+const needsPython = { skip: !python && "needs Python 3.8+" };
+
+test("the helper binds what the repo's engine binds, and the plugin ships no code", needsPython, () => {
   const root = mkdtempSync(join(tmpdir(), "bw-pack-"));
   try {
     const out = join(root, "bindwright");
@@ -114,8 +118,6 @@ test("the release zip has the same bytes on every build and the folder pack's fi
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-const needsPython = { skip: !python && "needs Python 3.8+" };
 
 test("the marketplace file lists the release zip by version and SHA-256", needsPython, () => {
   const script = "import sys; sys.path.insert(0, sys.argv[1]); import pack_plugin as p; "

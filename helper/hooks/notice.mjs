@@ -152,7 +152,10 @@ async function main() {
   } catch {
     // The counts never stand in the way of the notice.
   }
-  const versionIn = (folder) => (existsSync(join(folder, "VERSION")) ? readFileSync(join(folder, "VERSION"), "utf8").trim() : null);
+  const versionIn = (folder) => {
+    const file = join(folder, "VERSION");
+    return existsSync(file) ? readFileSync(file, "utf8").trim() : null;
+  };
   const flag = process.argv.indexOf("--plugin");
   const helperVersion = versionIn(root);
   // Without --plugin, the helper's version stands in for the plugin's.

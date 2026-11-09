@@ -225,7 +225,8 @@ test("the notice, run from the helper as /session-start runs it, tells the user 
       const project = { team: true, client: false, project: {}, advanced: { tracker: "github" }, setup };
       writeFileSync(join(s.repo, ".bindwright", "project.json"), JSON.stringify(project));
       const script = join(root, "hooks", "notice.mjs");
-      const run = () => spawnSync(process.execPath, [script, "--plugin", plugin], { cwd: s.repo, env, encoding: "utf8" });
+      const options = { cwd: s.repo, env, encoding: "utf8" };
+      const run = () => spawnSync(process.execPath, [script, "--plugin", plugin], options);
       const first = run();
       assert.equal(first.status, 0, first.stderr);
       assert.match(first.stdout, /from 0\.1\.0 .*\/bindwright:update/, root);
