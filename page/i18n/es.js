@@ -10,10 +10,10 @@ export default {
   "nav.home": "Inicio",
   "nav.github": "GitHub",
   "nav.language": "Idioma",
-  "hero.title": "Deja de explicarle tu proyecto a Claude cada vez.",
-  "hero.lede": "Bindwright escribe las reglas que Claude Code lee al inicio de cada sesión y agrega una "
-    + "revisión con IA a cada pull request, así cada sesión ya sabe cómo trabajas, y toda la "
-    + "configuración es un solo comando.",
+  "hero.title": "Claude recuerda cómo te gusta trabajar.",
+  "hero.lede": "Responde unas preguntas una vez, y cada sesión de Claude en tu proyecto empieza sabiendo "
+    + "tus reglas, recibe una segunda revisión en cada cambio y frena todo lo riesgoso antes de que pase. "
+    + "Un solo comando, sin saber programar.",
   "hero.go": "Instalar Bindwright",
   "hero.source": "Ver en GitHub",
   "changes.title": "Qué cambia",
