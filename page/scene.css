@@ -294,6 +294,10 @@
 :root[data-view="desktop"] .stage .line.out {
   margin-left: .25em; padding-left: 1em; border-left: 2px solid var(--desk-line); color: var(--dim);
 }
+/* Focused lines stay one tinted block: no gaps between them, and a result line drops its
+   guide line while keeping its text where it was. */
+:root[data-view="desktop"] .stage .line.focus:has(+ .focus) { margin-bottom: 0; }
+:root[data-view="desktop"] .stage .line.out.focus { margin-left: -.5em; padding-left: 1.75em; border-left: 0; }
 :root[data-view="desktop"] .stage .diff {
   margin-left: .25em; font: .88em/1.7 "Fragment Mono", ui-monospace, monospace;
 }
