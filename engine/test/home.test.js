@@ -512,6 +512,30 @@ test("a registered hook whose file is gone exits 0 through its launcher", { skip
   });
 });
 
+// A blocking guard runs through sh, as the CLI runs a hook without args: what is gone lets the
+// call through (0), and only a guard that started and failed exits 1 for onFailure to block.
+const blockingRows = [
+  ["its hook file is gone", { removeFile: true }, 0],
+  ["its interpreter is gone", { interpreter: "/no/such/folder/python3" }, 0],
+  ["it crashes", { body: "raise RuntimeError('crash')\n" }, 1],
+];
+
+for (const [name, { removeFile, interpreter, body }, status] of blockingRows) {
+  test(`a blocking guard exits ${status} when ${name}`, { skip }, () => {
+    withHome((dir) => {
+      const file = hookFile(dir, "push-guard.py", body);
+      const install = home(dir, "install-hook", file, "--python", interpreter ?? python,
+        "--matcher", "Bash", "--block-on-failure");
+      assert.equal(install.status, 0, install.stderr);
+      const hook = settings(dir).hooks.PreToolUse[0].hooks[0];
+      assert.equal(hook.onFailure, "block");
+      if (removeFile) rmSync(join(dir, ".claude", "hooks", "push-guard.py"));
+      const r = spawnSync("sh", ["-c", hook.command], { input: "{}", encoding: "utf8" });
+      assert.equal(r.status, status, r.stderr);
+    });
+  });
+}
+
 test("reinstalling with --events replaces its own entries under every event it names", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "session-title.py");

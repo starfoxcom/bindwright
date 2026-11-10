@@ -20,7 +20,8 @@ Standard library, Python 3.8+.
 install-hook takes exactly one of --matcher (an entry under PreToolUse) or
 --events (one entry per named event, with no matcher). --block-on-failure sets
 "onFailure": "block" on the hook, so a hook that crashes or times out blocks
-the tool call; use it for a guard, never for a hook that only adds context.
+the tool call, while a removed hook file or interpreter still lets it through;
+use it for a guard, never for a hook that only adds context.
 remove-hook and list-hooks cover every event under hooks.
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
@@ -32,6 +33,7 @@ failed write never leaves half a settings file.
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -41,10 +43,10 @@ from apply import _is_link
 # Runs the hook file by path, and exits 0 when the file is gone, so a
 # registration whose file was removed lets calls through. A hook that fails
 # to run exits 1, which its entry's onFailure blocks. -I keeps the project
-# folder off the import path.
+# folder off the import path. No single quotes, so a shell can quote it whole.
 LAUNCHER = (
     "import os, runpy, sys; "
-    "os.path.isfile(sys.argv[1]) and runpy.run_path(sys.argv[1], run_name='__main__')"
+    'os.path.isfile(sys.argv[1]) and runpy.run_path(sys.argv[1], run_name="__main__")'
 )
 
 # Prints the interpreter only when it is 3.8+ and not inside a virtual or a
@@ -229,16 +231,24 @@ def _hook_command(python):
 
 def _launcher_hook(python, target, block_on_failure=False):
     """The hook that runs `target` through the launcher."""
+    # A bare name follows PATH, so the hook survives the install it came from moving.
+    interpreter = _hook_command(python)
+    target = target.replace("\\", "/")
+    if block_on_failure:
+        # onFailure blocks a command that cannot start, so a shell checks first that
+        # the interpreter is still there and lets the call through when it is gone,
+        # as for a removed hook file. The hook file's path stays the last word.
+        words = (interpreter.replace("\\", "/"), "-I", "-c", LAUNCHER, target)
+        quoted = [shlex.quote(word) for word in words]
+        command = "command -v {} >/dev/null 2>&1 || exit 0; exec {}".format(
+            quoted[0], " ".join(quoted))
+        return {"type": "command", "command": command, "timeout": 10, "onFailure": "block"}
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
-    # A bare name follows PATH, so the hook survives the install it came from moving.
-    hook = {
-        "type": "command", "command": _hook_command(python),
-        "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
+    return {
+        "type": "command", "command": interpreter,
+        "args": ["-I", "-c", LAUNCHER, target], "timeout": 10,
     }
-    if block_on_failure:
-        hook["onFailure"] = "block"
-    return hook
 
 
 def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
