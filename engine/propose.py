@@ -9,7 +9,7 @@ import stat
 from apply import _code_units, _is_link
 from model import JS_WHITESPACE
 from setupcode import MAX_DEPTH, _depth
-from staging import STAGING_FOLDERS
+from staging import STAGING_FOLDERS, _entry_at
 
 INCOMING = STAGING_FOLDERS[0]
 MAX_SAFE_INTEGER = 2 ** 53 - 1
@@ -24,14 +24,6 @@ FENCE = re.compile(r"(`{3,}|~{3,})")
 def _canonical(value):
     """The JSON of a value with its keys sorted: equal when the JSON is."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def _lstat_or_none(path):
-    """The lstat of `path`, or None when nothing is there."""
-    try:
-        return os.lstat(path)
-    except FileNotFoundError:
-        return None
 
 
 def _read_text(path):
@@ -70,7 +62,7 @@ def _repo_copy(repo_dir, path):
 
 def _is_real_folder(folder):
     """Whether `folder` is a real folder: a link or junction to one is never followed."""
-    entry = _lstat_or_none(folder)
+    entry = _entry_at(folder)
     return entry is not None and not _is_link(entry) and stat.S_ISDIR(entry.st_mode)
 
 

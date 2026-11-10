@@ -3,7 +3,7 @@
 
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
-import { STAGING_FOLDERS } from "./staging.js";
+import { STAGING_FOLDERS, entryAt } from "./staging.js";
 import { MAX_DEPTH, depthOf } from "./setupcode.js";
 
 const INCOMING = STAGING_FOLDERS[0];
@@ -25,16 +25,6 @@ function canonical(value) {
     return `{${keys.map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
-}
-
-// The lstat of `path`, or null when nothing is there.
-function lstatOrNull(path) {
-  try {
-    return lstatSync(path);
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
 }
 
 // The text of the file at `path`, or null when there is no file there.
@@ -66,7 +56,7 @@ function repoCopy(repoDir, path) {
 
 // Whether `folder` is a real folder: a link or junction to one is never followed.
 function isRealFolder(folder) {
-  const entry = lstatOrNull(folder);
+  const entry = entryAt(folder);
   return entry !== null && entry.isDirectory();
 }
 
