@@ -46,6 +46,13 @@ export const COMPUTER = [
     keys: ["extra:push-guard"],
   },
   {
+    id: "session-title",
+    title: "Session titles",
+    text: "Names every session after its project and what it is working on.",
+    value: "Yes",
+    keys: ["extra:session-title"],
+  },
+  {
     id: "builder",
     title: "Builder agent",
     text: "A cheap Haiku helper writes the code, and the main model checks it.",

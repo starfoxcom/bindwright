@@ -60,7 +60,7 @@ ENGINE_FILES = [
 # The ~/.claude templates bind.js and bind.py read (globalFiles).
 GLOBAL_FILES = [
     "CLAUDE.md.additions", "memory-template/MEMORY.md",
-    "hooks/push-guard.py", "hooks/no-ai-attribution.py",
+    "hooks/push-guard.py", "hooks/no-ai-attribution.py", "hooks/session-title.py",
     "hooks/code-research-profiles.json", "hooks/code-research-first.py.template",
     "agents/builder.md", "output-styles/straight-talk.md",
 ]

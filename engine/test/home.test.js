@@ -293,6 +293,16 @@ test("a settings file that is not valid JSON is never written", { skip }, () => 
   });
 });
 
+test("a null hook event is skipped, so a guard beside it still lists and removes", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py");
+    assert.equal(home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--matcher", "Bash").status, 0);
+    writeSettings(dir, { ...settings(dir), hooks: { ...settings(dir).hooks, Stop: null } });
+    assert.ok(home(dir, "list-hooks").out.hooks.some((h) => JSON.stringify(h).includes("push-guard.py")));
+    assert.equal(home(dir, "remove-hook", "push-guard.py").out.removed_hooks, 1);
+  });
+});
+
 test("a missing settings file starts empty, and bad usage is refused", { skip }, () => {
   withHome((dir) => {
     assert.deepEqual(home(dir, "list-hooks").out, { hooks: [] });
@@ -452,5 +462,72 @@ test("a removed output style is turned off only when it is the one in use", { sk
     writeSettings(dir, { outputStyle: "Explanatory" });
     assert.equal(home(dir, "remove-style", "straight-talk.md").out.turned_off, false);
     assert.deepEqual(settings(dir), { outputStyle: "Explanatory" });
+  });
+});
+const PYTHON = "/usr/bin/python3";
+const EVENTS = "SessionStart,UserPromptSubmit";
+
+test("--events installs one entry per event, with no matcher, beside the user's own entries", { skip }, () => {
+  withHome((dir) => {
+    const mine = { matcher: "Bash", hooks: [{ type: "command", command: "my-check" }] };
+    writeSettings(dir, { hooks: { SessionStart: [mine] } });
+    const file = hookFile(dir, "session-title.py");
+    const r = home(dir, "install-hook", file, "--python", PYTHON, "--events", EVENTS);
+    assert.equal(r.status, 0, r.stderr);
+    const { hooks } = settings(dir);
+    assert.deepEqual(hooks.SessionStart[0], mine);
+    assert.equal(hooks.SessionStart.length, 2);
+    assert.ok(!("matcher" in hooks.SessionStart[1]));
+    assert.equal(hooks.UserPromptSubmit.length, 1);
+    assert.ok(!("matcher" in hooks.UserPromptSubmit[0]));
+    assert.deepEqual(hooks.UserPromptSubmit[0].hooks, hooks.SessionStart[1].hooks);
+    const hook = hooks.UserPromptSubmit[0].hooks[0];
+    assert.ok([PYTHON, "python3"].includes(hook.command), hook.command);
+    assert.deepEqual(hook.args.slice(0, 2), ["-I", "-c"]);
+    assert.ok(hook.args[3].endsWith("/.claude/hooks/session-title.py"));
+    assert.equal(hooks.PreToolUse, undefined);
+  });
+});
+
+test("reinstalling with --events replaces its own entries under every event it names", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "session-title.py");
+    const install = () => home(dir, "install-hook", file, "--python", PYTHON, "--events", EVENTS);
+    assert.equal(install().status, 0);
+    assert.equal(install().status, 0);
+    const { hooks } = settings(dir);
+    assert.equal(hooks.SessionStart.length, 1);
+    assert.equal(hooks.UserPromptSubmit.length, 1);
+  });
+});
+
+test("remove-hook and list-hooks cover every event under hooks, not only PreToolUse", { skip }, () => {
+  withHome((dir) => {
+    const guard = hookFile(dir, "push-guard.py");
+    const title = hookFile(dir, "session-title.py");
+    assert.equal(home(dir, "install-hook", guard, "--python", "/usr/bin/python3", "--matcher", "Bash").status, 0);
+    assert.equal(home(dir, "install-hook", title, "--python", PYTHON, "--events", EVENTS).status, 0);
+    assert.deepEqual(home(dir, "list-hooks").out.hooks.sort(), ["push-guard.py", "session-title.py"]);
+    assert.deepEqual(home(dir, "remove-hook", "session-title.py").out, { removed_hooks: 2, deleted_file: true });
+    assert.deepEqual(home(dir, "list-hooks").out, { hooks: ["push-guard.py"] });
+    assert.deepEqual(settings(dir).hooks.SessionStart, []);
+    assert.equal(settings(dir).hooks.PreToolUse.length, 1);
+  });
+});
+
+test("install-hook refuses both or neither of --matcher and --events, and writes nothing", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "session-title.py");
+    const both = home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash", "--events", "SessionStart");
+    assert.equal(both.status, 1);
+    assert.match(both.out.error, /exactly one of --matcher or --events/);
+    const neither = home(dir, "install-hook", file, "--python", "/usr/bin/python3");
+    assert.equal(neither.status, 1);
+    assert.match(neither.out.error, /exactly one of --matcher or --events/);
+    const empty = home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--events", "SessionStart,,");
+    assert.equal(empty.status, 1);
+    assert.match(empty.out.error, /Not a list of event names/);
+    assert.equal(existsSync(join(dir, ".claude", "hooks", "session-title.py")), false);
+    assert.equal(existsSync(settingsPath(dir)), false);
   });
 });

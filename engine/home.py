@@ -5,6 +5,7 @@ Standard library, Python 3.8+.
 
     python engine/home.py find-python
     python engine/home.py install-hook FILE --python PATH --matcher "Bash|PowerShell"
+    python engine/home.py install-hook FILE --python PATH --events SessionStart,UserPromptSubmit
     python engine/home.py remove-hook NAME.py
     python engine/home.py list-hooks
     python engine/home.py allow RULE          /  disallow RULE
@@ -14,6 +15,10 @@ Standard library, Python 3.8+.
     python engine/home.py add-style FILE      (copies the output style, turns it on)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
+
+install-hook takes exactly one of --matcher (an entry under PreToolUse) or
+--events (one entry per named event, with no matcher). remove-hook and
+list-hooks cover every event under hooks.
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -166,8 +171,27 @@ def _drop(entries, name):
     return removed
 
 
-def _pre_tool_use(data, path):
-    return _section(_section(data, "hooks", dict, path), "PreToolUse", list, path)
+def _event_entries(data, event, path):
+    """The hook entries under hooks[event], created when missing."""
+    return _section(_section(data, "hooks", dict, path), event, list, path)
+
+
+def _event_lists(data, path):
+    """The hook entries of every event under hooks, skipping a null event as _section
+    does; an event that is neither null nor a list is refused."""
+    hooks = _section(data, "hooks", dict, path)
+    for event, entries in hooks.items():
+        if entries is not None and not isinstance(entries, list):
+            raise HomeError("%s: hooks.%s is not a list; fix it by hand first" % (path, event))
+    return [entries for entries in hooks.values() if entries is not None]
+
+
+def _event_names(events):
+    """The event names in a comma-separated list, each once and in order."""
+    names = [name.strip() for name in events.split(",")]
+    if not all(names) or not all(name.isalpha() for name in names):
+        raise HomeError("Not a list of event names: " + events)
+    return list(dict.fromkeys(names))
 
 
 def _same_file(a, b):
@@ -188,31 +212,44 @@ def _hook_command(python):
     return python
 
 
-def install_hook(home, file, python, matcher):
-    name = os.path.basename(file)
-    if not name.endswith(".py"):
-        raise HomeError("A hook is a .py file: " + file)
-    path, data = _load(home)
-    entries = _pre_tool_use(data, path)
-    target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
-    with open(file, encoding="utf-8") as fh:
-        _atomic_write(target, fh.read())
-    _drop(entries, name)
+def _launcher_hook(python, target):
+    """The hook that runs `target` through the launcher."""
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
     # A bare name follows PATH, so the hook survives the install it came from moving.
-    entries.append({"matcher": matcher, "hooks": [{
+    return {
         "type": "command", "command": _hook_command(python),
         "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
-    }]})
+    }
+
+
+def install_hook(home, file, python, matcher=None, events=None):
+    name = os.path.basename(file)
+    if not name.endswith(".py"):
+        raise HomeError("A hook is a .py file: " + file)
+    if (matcher is None) == (events is None):
+        raise HomeError("install-hook takes exactly one of --matcher or --events")
+    if matcher is not None:
+        placements = [("PreToolUse", matcher)]
+    else:
+        placements = [(event, None) for event in _event_names(events)]
+    path, data = _load(home)
+    sections = [(_event_entries(data, event, path), where) for event, where in placements]
+    target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
+    with open(file, encoding="utf-8") as fh:
+        _atomic_write(target, fh.read())
+    for entries, where in sections:
+        _drop(entries, name)
+        entry = {} if where is None else {"matcher": where}
+        entry["hooks"] = [_launcher_hook(python, target)]
+        entries.append(entry)
     _save(path, data)
     return {"installed": target, "settings": path}
 
 
 def remove_hook(home, name):
     path, data = _load(home)
-    entries = _pre_tool_use(data, path)
-    removed = _drop(entries, name)
+    removed = sum(_drop(entries, name) for entries in _event_lists(data, path))
     if removed:
         _save(path, data)
     target = os.path.join(_claude(home), "hooks", name)
@@ -222,15 +259,23 @@ def remove_hook(home, name):
     return {"removed_hooks": removed, "deleted_file": deleted}
 
 
+def _hook_files(hook):
+    """The .py file names that a hook's command or args run."""
+    if not isinstance(hook, dict):
+        return []
+    words = [hook.get("command") or ""] + list(hook.get("args") or [])
+    return [os.path.basename(w.replace("\\", "/").strip("\"'")) for w in words
+            if isinstance(w, str) and w.strip("\"'").endswith(".py")]
+
+
 def list_hooks(home):
     path, data = _load(home)
     names = []
-    for entry in _pre_tool_use(data, path):
-        for hook in entry.get("hooks") or [] if isinstance(entry, dict) else []:
-            words = [hook.get("command") or ""] + list(hook.get("args") or []) if isinstance(hook, dict) else []
-            names += [os.path.basename(w.replace("\\", "/").strip("\"'")) for w in words
-                      if isinstance(w, str) and w.strip("\"'").endswith(".py")]
-    return {"hooks": names}
+    for entries in _event_lists(data, path):
+        for entry in entries:
+            for hook in (entry.get("hooks") or []) if isinstance(entry, dict) else []:
+                names += _hook_files(hook)
+    return {"hooks": list(dict.fromkeys(names))}
 
 
 def set_allow(home, rule, on):
@@ -445,12 +490,13 @@ def run(argv):
     argv = list(argv)
     home = _option(argv, "--home") or os.path.expanduser("~")
     python, matcher = _option(argv, "--python"), _option(argv, "--matcher")
+    events = _option(argv, "--events")
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     one = args[0] if len(args) == 1 else None
     if cmd == "find-python" and not args:
         return find_python()
-    if cmd == "install-hook" and one and python and matcher:
-        return install_hook(home, one, python, matcher)
+    if cmd == "install-hook" and one and python:
+        return install_hook(home, one, python, matcher or None, events or None)
     if cmd == "list-hooks" and not args:
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
