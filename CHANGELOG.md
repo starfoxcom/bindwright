@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - **Setup suggests the merge for files a repo already has** (#661). A new engine command, `--propose-merge`, compares each staged file with the repo's copy and prints a suggestion without changing anything: for JSON settings the permission lists unioned, missing hooks appended and every clashing key listed with both values; for Markdown the sections to add, the ones that differ and the ones only the repo has. Setup's merge step, and `/bindwright:update` for files it has no earlier version of, read that suggestion against the repo, recommend a choice for each clash and save only after a yes.
+- **`/bindwright:review-trial` compares models for the repo's AI review on its own history** (#732). It builds the cases from merged pull requests the review gate commented on, offers only the models the user's plan includes (a Fable candidate on Pro only after a yes, since it bills credits), shows how many reviews and judge runs it will start before anything runs, and recommends whether to change `.github/review-gate.yml`. A light run (4 pull requests, one round, one judge) is the default; the full best-of-three with two judges is an option.
 
 ## [v3.2.0] — 2026-11-10
 
