@@ -236,19 +236,18 @@ test('shownGrowth keeps a closed week growth for under two weeks after its close
   for (const [name, record, shown] of cases) expect([name, shownGrowth(record, NOW)]).toEqual([name, shown])
 })
 
-test('startPaths lists every word naming a file on this host, and none when there is none', () => {
+test('startPaths lists every drive path naming a file on a Windows host, and none elsewhere', () => {
   const cases: [name: string, argv: unknown, isWindows: boolean, paths: string[]][] = [
     ['a drive path', ['wscript.exe', 'C:/Users/me/start.vbs'], true, ['C:/Users/me/start.vbs']],
     ['a backslash drive path', ['wscript.exe', 'C:\\Users\\me\\start.vbs'], true, ['C:\\Users\\me\\start.vbs']],
-    ['a slash path', ['/home/me/start.sh'], false, ['/home/me/start.sh']],
+    ['any path off Windows, which may live in a container or VM', ['docker', 'exec', 'ci', '/opt/run.sh'], false, []],
     ['two drive paths, in order', ['wscript.exe', 'D:/a.vbs', 'C:/b.vbs'], true, ['D:/a.vbs', 'C:/b.vbs']],
-    ['a relative path', ['bash', 'scripts/start.sh'], false, []],
+    ['a relative path', ['cmd', '/c', 'scripts/start.bat'], true, []],
     ['a Windows switch before the script', ['cmd', '/c', 'C:/start.bat'], true, ['C:/start.bat']],
     ['a folder ending in a slash', ['cmd', '/c', 'start', '/d', 'C:/actions-runner/', 'run.cmd'], true, []],
-    ['a root folder ending in a slash', ['tmux', 'new', '-d', '-c', '/opt/runner/', './run.sh'], false, []],
     ['a WSL path on Windows', ['wsl.exe', '-d', 'Ubuntu', '/home/me/start.sh'], true, []],
     ['a drive path off Windows', ['C:/start.bat'], false, []],
-    ['a word carrying arguments', ['bash', '-c', '/opt/runner/run.sh &'], false, []],
+    ['a word carrying arguments', ['cmd', '/c', 'C:/r/run.cmd --once'], true, []],
     ['a start that is one string, not a list', 'wscript.exe C:/x.vbs', true, []],
     ['no start command', undefined, true, []],
   ]

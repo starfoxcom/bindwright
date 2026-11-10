@@ -1,15 +1,13 @@
-// A file path a start command names, in this host's form: a drive path in either slash style on Windows, a path
-// from the root through at least one folder elsewhere, never ending in a slash (that names a folder). A word with
-// a space carries arguments (`bash -c '...'`), a lone `/c` is a Windows switch, and a Linux path on Windows lives
-// inside WSL, where the host cannot list it.
+// A drive path in either slash style, never ending in a slash (that names a folder): on Windows the only words of
+// a start command sure to name a file on this host. A word with a space carries arguments, a lone `/c` is a
+// switch, and a Linux path lives inside WSL, where the host cannot list it. Elsewhere a path can as well live in
+// a container, a VM or a remote host, so nothing is checked there.
 const WINDOWS_PATH = /^[A-Za-z]:[\\/][^\s]*[^\s\\/]$/
-const ROOT_PATH = /^\/[^/\s]+\/[^\s]*[^\s/]$/
 
-/** Every word of a start command that names a file on this host, in order; none when it is not a list. */
+/** Every word of a start command that names a file on this Windows host, in order; none off Windows. */
 export function startPaths(argv: unknown, isWindows: boolean): string[] {
-  if (!Array.isArray(argv)) return []
-  const pattern = isWindows ? WINDOWS_PATH : ROOT_PATH
-  return argv.filter((word): word is string => typeof word === 'string' && pattern.test(word))
+  if (!isWindows || !Array.isArray(argv)) return []
+  return argv.filter((word): word is string => typeof word === 'string' && WINDOWS_PATH.test(word))
 }
 
 /** A path split into the folder that holds it and the file's name; backslashes read as slashes. */
@@ -21,10 +19,7 @@ export function splitPath(path: string): { folder: string; name: string } {
   return { folder: isRoot ? normal.slice(0, slash + 1) : normal.slice(0, slash), name: normal.slice(slash + 1) }
 }
 
-/**
- * Whether a folder's entry is the file. Names match without regard to case: Windows and macOS folders ignore it,
- * and on Linux the cost is a missed flag, never a false one.
- */
+/** Whether a folder's entry is the file: Windows names match without regard to case. */
 export function isSameName(entry: string, name: string): boolean {
   return entry.toLowerCase() === name.toLowerCase()
 }
