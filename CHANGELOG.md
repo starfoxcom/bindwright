@@ -13,7 +13,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
-- **The guard hooks block a command when they crash or time out** (#679). The attribution and push guards set Claude Code's `onFailure: block` (CLI 2.1.295+): a guard that crashes, times out or exits with a code other than 0 or 2 blocks the command instead of letting it through. A repo whose setup was removed or half-installed (no launcher, hook file or Python) still lets commands through, with an explicit exit 0. A guard in `~/.claude` whose Python was removed cannot start, so it blocks shell commands until `/bindwright:setup` runs again; `/bindwright:doctor` names the missing interpreter. `/bindwright:update` brings the change to existing projects; the guards in `~/.claude` get it on their next install.
+- **The guard hooks block a command when they crash or time out** (#679). The attribution and push guards set Claude Code's `onFailure: block` (CLI 2.1.295+): a guard that crashes, times out or exits with a code other than 0 or 2 blocks the command instead of letting it through. A repo whose setup was removed or half-installed (no launcher, hook file or Python) still lets commands through, with an explicit exit 0. A guard in `~/.claude` whose Python was removed cannot start, so it blocks every shell command, setup's included, until that Python is back or its entry is deleted from `~/.claude/settings.json` in a text editor. `/bindwright:update` brings the change to existing projects; the guards in `~/.claude` get it on their next install.
 
 ## [v3.2.0] — 2026-11-10
 
