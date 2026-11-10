@@ -20,7 +20,7 @@ import {
   WEEK_MS,
 } from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
-import { isSameName, splitPath, startPath } from '../hooks/start'
+import { isSameName, splitPath, startPaths } from '../hooks/start'
 import type { RunnerView } from '../types'
 
 // The shipped rules.ts is empty, so the drawn row is tested through the machine's list file, which
@@ -223,29 +223,30 @@ test('rollWeek starts a week, keeps it for 7 days, and closes it into the growth
   for (const [name, record, week] of cases) expect([name, rollWeek(record, used, NOW)]).toEqual([name, week])
 })
 
-test('startPath picks the first word naming a file on this host, and undefined when there is none', () => {
-  const cases: [name: string, argv: unknown, isWindows: boolean, path: string | undefined][] = [
-    ['a drive path', ['wscript.exe', 'C:/Users/me/start.vbs'], true, 'C:/Users/me/start.vbs'],
-    ['a backslash drive path', ['wscript.exe', 'C:\\Users\\me\\start.vbs'], true, 'C:\\Users\\me\\start.vbs'],
-    ['a slash path', ['/home/me/start.sh'], false, '/home/me/start.sh'],
-    ['the first of two drive paths', ['wscript.exe', 'D:/a.vbs', 'C:/b.vbs'], true, 'D:/a.vbs'],
-    ['a relative path', ['bash', 'scripts/start.sh'], false, undefined],
-    ['a Windows switch before the script', ['cmd', '/c', 'C:/start.bat'], true, 'C:/start.bat'],
-    ['a WSL path on Windows', ['wsl.exe', '-d', 'Ubuntu', '/home/me/start.sh'], true, undefined],
-    ['a drive path off Windows', ['C:/start.bat'], false, undefined],
-    ['a word carrying arguments', ['bash', '-c', '/opt/runner/run.sh &'], false, undefined],
-    ['a start that is one string, not a list', 'wscript.exe C:/x.vbs', true, undefined],
-    ['no start command', undefined, true, undefined],
+test('startPaths lists every word naming a file on this host, and none when there is none', () => {
+  const cases: [name: string, argv: unknown, isWindows: boolean, paths: string[]][] = [
+    ['a drive path', ['wscript.exe', 'C:/Users/me/start.vbs'], true, ['C:/Users/me/start.vbs']],
+    ['a backslash drive path', ['wscript.exe', 'C:\\Users\\me\\start.vbs'], true, ['C:\\Users\\me\\start.vbs']],
+    ['a slash path', ['/home/me/start.sh'], false, ['/home/me/start.sh']],
+    ['two drive paths, in order', ['wscript.exe', 'D:/a.vbs', 'C:/b.vbs'], true, ['D:/a.vbs', 'C:/b.vbs']],
+    ['a relative path', ['bash', 'scripts/start.sh'], false, []],
+    ['a Windows switch before the script', ['cmd', '/c', 'C:/start.bat'], true, ['C:/start.bat']],
+    ['a folder ending in a slash', ['cmd', '/c', 'start', '/d', 'C:/actions-runner/', 'run.cmd'], true, []],
+    ['a root folder ending in a slash', ['tmux', 'new', '-d', '-c', '/opt/runner/', './run.sh'], false, []],
+    ['a WSL path on Windows', ['wsl.exe', '-d', 'Ubuntu', '/home/me/start.sh'], true, []],
+    ['a drive path off Windows', ['C:/start.bat'], false, []],
+    ['a word carrying arguments', ['bash', '-c', '/opt/runner/run.sh &'], false, []],
+    ['a start that is one string, not a list', 'wscript.exe C:/x.vbs', true, []],
+    ['no start command', undefined, true, []],
   ]
-  for (const [name, argv, isWindows, path] of cases) {
-    expect([name, startPath(argv, isWindows)]).toEqual([name, path])
+  for (const [name, argv, isWindows, paths] of cases) {
+    expect([name, startPaths(argv, isWindows)]).toEqual([name, paths])
   }
 })
 
-test('isSameName ignores case on Windows only', () => {
-  expect(isSameName('start-runners.vbs', 'Start-Runners.vbs', true)).toBe(true)
-  expect(isSameName('start.sh', 'Start.sh', false)).toBe(false)
-  expect(isSameName('start.sh', 'start.sh', false)).toBe(true)
+test('isSameName ignores case', () => {
+  expect(isSameName('start-runners.vbs', 'Start-Runners.vbs')).toBe(true)
+  expect(isSameName('start.sh', 'run.sh')).toBe(false)
 })
 
 test('splitPath gives the folder and the name, keeping the slash of a root', () => {

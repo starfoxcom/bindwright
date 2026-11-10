@@ -19,7 +19,7 @@ import {
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
-import { isSameName, splitPath, startPath } from './start'
+import { isSameName, splitPath, startPaths } from './start'
 
 // The machine's local CI runners in one row above the prompt: on or off, how many are online and
 // busy, queued runs and the next scheduled run, with Start and Stop. Every value is read in a timer,
@@ -196,14 +196,17 @@ async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<v
   await $.store.set(key, record).catch(() => undefined)
 }
 
-// A Start whose script is gone does nothing, silently. A listing that fails counts as present, so a
-// transient error never raises the flag.
+// A Start whose script is gone does nothing, silently. The flag needs every file path the command names to be
+// gone, so an output file the script has yet to write never raises it, and a listing that fails counts as
+// present, so a transient error never does either.
 async function isStartMissing($: Engine, argv: unknown): Promise<boolean> {
-  const file = startPath(argv, live.isWindows)
-  if (file === undefined) return false
-  const { folder, name } = splitPath(file)
-  const entries = await $.fs.list(folder).catch(() => undefined)
-  return entries !== undefined && !entries.some(entry => isSameName(entry.name, name, live.isWindows))
+  const files = startPaths(argv, live.isWindows)
+  for (const file of files) {
+    const { folder, name } = splitPath(file)
+    const entries = await $.fs.list(folder).catch(() => undefined)
+    if (entries === undefined || entries.some(entry => isSameName(entry.name, name))) return false
+  }
+  return files.length > 0
 }
 
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {
