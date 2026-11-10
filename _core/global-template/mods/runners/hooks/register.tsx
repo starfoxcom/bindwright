@@ -14,6 +14,8 @@ import {
   parseStat,
   parseUsedBytes,
   readRecord,
+  rollWeek,
+  shownGrowth,
 } from './disk'
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
@@ -30,7 +32,7 @@ const START_GRACE_MS = 2 * 60_000
 // offset is read through node at start and every hour, as shared-pc and usage-guard do.
 const READ_ZONE = ['node', '-e', 'console.log(new Date().getTimezoneOffset())']
 const STAT_SCRIPT = 'const s = require("fs").statSync(process.argv[1]); console.log(s.size, s.blocks * 512)'
-type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes' | 'isSparse'>
+type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes' | 'isSparse' | 'grewBytes'>
 const view = atom({ plugin: 'runners', key: 'view' } as const, null)
 const live = {
   checkMs: 60_000,
@@ -168,12 +170,18 @@ async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): 
   if (due.used) {
     const df = ['wsl.exe', '-d', runner.wsl.distro, '--exec', 'df', '-B1', '--output=used', '/']
     const used = parseUsedBytes((await run($, df)) ?? '')
-    if (used !== null) Object.assign(next, { usedAt: now, usedBytes: used })
-    else isSettled = false
+    if (used !== null) {
+      Object.assign(next, { usedAt: now, usedBytes: used }, rollWeek(next, used, now))
+    } else isSettled = false
   }
   if (isSettled) next.isOn = isOn
   if (due.size || due.used || last.isOn !== next.isOn) await saveRecord($, key, next)
-  return { diskBytes: next.diskBytes, usedBytes: next.usedBytes, isSparse: next.isSparse }
+  return {
+    diskBytes: next.diskBytes,
+    usedBytes: next.usedBytes,
+    isSparse: next.isSparse,
+    grewBytes: shownGrowth(next, now),
+  }
 }
 
 // The newer of the store's record and this session's own, so a store that cannot be read, holds none, or

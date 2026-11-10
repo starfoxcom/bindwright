@@ -2,19 +2,23 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import type { DiskRecord, DueReads } from '../hooks/disk'
+import type { DiskRecord, DueReads, WeekFields } from '../hooks/disk'
 import {
   COMPACT_GAP_BYTES,
   diskText,
   dueReads,
+  GROWTH_FLAG_BYTES,
   isSparseFile,
   newerRecord,
   parseStat,
   parseUsedBytes,
   readRecord,
+  rollWeek,
+  shownGrowth,
   SIZE_READ_MS,
   TICK_SLACK_MS,
   USED_READ_MS,
+  WEEK_MS,
 } from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
 import type { RunnerView } from '../types'
@@ -88,6 +92,28 @@ test('diskText flags compacting or trimming from exactly 10 GB of gap, and waits
   for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
 })
 
+test('diskText names the data growth over a week from 5 GB up, and says nothing below it', () => {
+  // The disk sits 1 GB above the data, so the gap alone never flags a compact.
+  const grown = (grewBytes: number, diskBytes = 13 * GIB): RunnerView => ({
+    ...ON,
+    diskBytes,
+    usedBytes: 12 * GIB,
+    grewBytes,
+  })
+  const cases: [name: string, row: RunnerView, text: string][] = [
+    ['growth exactly 5 GB', grown(GROWTH_FLAG_BYTES), 'disk 13.0 GB (12.0 used, +5.0 GB in a week)'],
+    ['growth one byte under 5 GB', grown(GROWTH_FLAG_BYTES - 1), 'disk 13.0 GB (12.0 used)'],
+    ['growth over 5 GB', grown(6 * GIB), 'disk 13.0 GB (12.0 used, +6.0 GB in a week)'],
+    [
+      'growth with the gap to compact',
+      grown(6 * GIB, 30 * GIB),
+      'disk 30.0 GB (12.0 used, +6.0 GB in a week, compact)',
+    ],
+    ['shrinking data', grown(-6 * GIB), 'disk 13.0 GB (12.0 used)'],
+  ]
+  for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
+})
+
 test('parseStat reads the length and the allocated bytes, and null for anything else', () => {
   const cases: [name: string, text: string, stat: { size: number; allocated: number } | null][] = [
     ['normal output', '1073741824 69632', { size: 1073741824, allocated: 69632 }],
@@ -132,15 +158,81 @@ test('dueReads: the size every 15 min and the data every 60 s while on, the size
 })
 
 test('readRecord keeps the stored fields of the right type, and reads anything else as unset', () => {
-  const stored: DiskRecord = { sizeAt: 1, usedAt: 2, isOn: true, diskBytes: 3, usedBytes: 4, isSparse: true }
+  const stored: DiskRecord = {
+    sizeAt: 1,
+    usedAt: 2,
+    isOn: true,
+    diskBytes: 3,
+    usedBytes: 4,
+    isSparse: true,
+    weekUsedBytes: 5,
+    weekAt: 6,
+    grewBytes: -7,
+  }
   const cases: [name: string, value: unknown, record: DiskRecord][] = [
     ['a stored record', stored, stored],
     ['fields of the wrong type', { sizeAt: '1', isOn: 1, diskBytes: 'big', isSparse: 'yes' }, {}],
     ['negative and fractional numbers', { sizeAt: -1, usedAt: 1.5, diskBytes: -5, usedBytes: 2.5 }, {}],
+    ['negative growth beside bad week fields', { grewBytes: -7, weekUsedBytes: 2.5, weekAt: -6 }, { grewBytes: -7 }],
+    ['growth that is not a whole number', { grewBytes: 1.5 }, {}],
     ['a text value', 'text', {}],
     ['no record', undefined, {}],
   ]
   for (const [name, value, record] of cases) expect([name, readRecord(value)]).toEqual([name, record])
+})
+
+test('rollWeek starts a week, keeps it for 7 days, and closes it into the growth at 7 days', () => {
+  const used = 12 * GIB
+  const cases: [name: string, record: DiskRecord, week: WeekFields][] = [
+    [
+      'no week yet',
+      { grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 1 },
+    ],
+    [
+      'a week that starts after now (the clock was set back)',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW + 1, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 1 },
+    ],
+    [
+      'a week with no start reading to measure from',
+      { weekAt: NOW - WEEK_MS, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 1 },
+    ],
+    [
+      'a week one millisecond short of 7 days',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - WEEK_MS + 1, grewBytes: 1 },
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - WEEK_MS + 1, grewBytes: 1 },
+    ],
+    [
+      'a week of exactly 7 days',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - WEEK_MS, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 2 * GIB },
+    ],
+    [
+      'a span just under two weeks still closes into the growth',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - 2 * WEEK_MS + 1, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 2 * GIB },
+    ],
+    [
+      'a span of two weeks or more, the runners off between, shows no growth',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - 2 * WEEK_MS, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: undefined },
+    ],
+  ]
+  for (const [name, record, week] of cases) expect([name, rollWeek(record, used, NOW)]).toEqual([name, week])
+})
+
+test('shownGrowth keeps a closed week growth for under two weeks after its close, and hides it after', () => {
+  const growth = 6 * GIB
+  const cases: [name: string, record: DiskRecord, shown: number | undefined][] = [
+    ['no week yet', { grewBytes: growth }, undefined],
+    ['a week closed just now', { weekAt: NOW, grewBytes: growth }, growth],
+    ['one millisecond short of two weeks', { weekAt: NOW - 2 * WEEK_MS + 1, grewBytes: growth }, growth],
+    ['two weeks after its close, the runners off', { weekAt: NOW - 2 * WEEK_MS, grewBytes: growth }, undefined],
+    ['a close that lies ahead of now', { weekAt: NOW + 1, grewBytes: growth }, undefined],
+  ]
+  for (const [name, record, shown] of cases) expect([name, shownGrowth(record, NOW)]).toEqual([name, shown])
 })
 
 test("the newer of the stored record and the session's own is used, the own one on a tie", () => {
