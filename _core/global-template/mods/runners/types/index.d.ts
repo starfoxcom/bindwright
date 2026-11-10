@@ -20,6 +20,10 @@ export type RunnerView = {
   usedBytes?: number
   /** The disk file is sparse, so fstrim inside the distro can hand its free space back. */
   isSparse?: boolean
+  /** The data inside grew this many bytes over the last full week; negative when it shrank. */
+  grewBytes?: number
+  /** The start command's script file is gone, so Start does nothing. */
+  isStartMissing?: boolean
 }
 
 /** The settings pane's own state: the last refusal per field, shown under that field. */

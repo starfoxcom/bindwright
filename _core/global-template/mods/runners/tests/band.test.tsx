@@ -2,21 +2,25 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import type { DiskRecord, DueReads } from '../hooks/disk'
+import type { DiskRecord, DueReads, WeekFields } from '../hooks/disk'
 import {
   COMPACT_GAP_BYTES,
   diskText,
   dueReads,
+  GROWTH_FLAG_BYTES,
   isSparseFile,
   newerRecord,
   parseStat,
   parseUsedBytes,
   readRecord,
+  rollWeek,
   SIZE_READ_MS,
   TICK_SLACK_MS,
   USED_READ_MS,
+  WEEK_MS,
 } from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
+import { splitPath, startPath } from '../hooks/start'
 import type { RunnerView } from '../types'
 
 // The shipped rules.ts is empty, so the drawn row is tested through the machine's list file, which
@@ -88,6 +92,28 @@ test('diskText flags compacting or trimming from exactly 10 GB of gap, and waits
   for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
 })
 
+test('diskText names the data growth over a week from 5 GB up, and says nothing below it', () => {
+  // The disk sits 1 GB above the data, so the gap alone never flags a compact.
+  const grown = (grewBytes: number, diskBytes = 13 * GIB): RunnerView => ({
+    ...ON,
+    diskBytes,
+    usedBytes: 12 * GIB,
+    grewBytes,
+  })
+  const cases: [name: string, row: RunnerView, text: string][] = [
+    ['growth exactly 5 GB', grown(GROWTH_FLAG_BYTES), 'disk 13.0 GB (12.0 used, +5.0 GB in a week)'],
+    ['growth one byte under 5 GB', grown(GROWTH_FLAG_BYTES - 1), 'disk 13.0 GB (12.0 used)'],
+    ['growth over 5 GB', grown(6 * GIB), 'disk 13.0 GB (12.0 used, +6.0 GB in a week)'],
+    [
+      'growth with the gap to compact',
+      grown(6 * GIB, 30 * GIB),
+      'disk 30.0 GB (12.0 used, +6.0 GB in a week, compact)',
+    ],
+    ['shrinking data', grown(-6 * GIB), 'disk 13.0 GB (12.0 used)'],
+  ]
+  for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
+})
+
 test('parseStat reads the length and the allocated bytes, and null for anything else', () => {
   const cases: [name: string, text: string, stat: { size: number; allocated: number } | null][] = [
     ['normal output', '1073741824 69632', { size: 1073741824, allocated: 69632 }],
@@ -132,15 +158,82 @@ test('dueReads: the size every 15 min and the data every 60 s while on, the size
 })
 
 test('readRecord keeps the stored fields of the right type, and reads anything else as unset', () => {
-  const stored: DiskRecord = { sizeAt: 1, usedAt: 2, isOn: true, diskBytes: 3, usedBytes: 4, isSparse: true }
+  const stored: DiskRecord = {
+    sizeAt: 1,
+    usedAt: 2,
+    isOn: true,
+    diskBytes: 3,
+    usedBytes: 4,
+    isSparse: true,
+    weekUsedBytes: 5,
+    weekAt: 6,
+    grewBytes: -7,
+  }
   const cases: [name: string, value: unknown, record: DiskRecord][] = [
     ['a stored record', stored, stored],
     ['fields of the wrong type', { sizeAt: '1', isOn: 1, diskBytes: 'big', isSparse: 'yes' }, {}],
     ['negative and fractional numbers', { sizeAt: -1, usedAt: 1.5, diskBytes: -5, usedBytes: 2.5 }, {}],
+    ['negative growth beside bad week fields', { grewBytes: -7, weekUsedBytes: 2.5, weekAt: -6 }, { grewBytes: -7 }],
+    ['growth that is not a whole number', { grewBytes: 1.5 }, {}],
     ['a text value', 'text', {}],
     ['no record', undefined, {}],
   ]
   for (const [name, value, record] of cases) expect([name, readRecord(value)]).toEqual([name, record])
+})
+
+test('rollWeek starts a week, keeps it for 7 days, and closes it into the growth at 7 days', () => {
+  const used = 12 * GIB
+  const cases: [name: string, record: DiskRecord, week: WeekFields][] = [
+    [
+      'no week yet',
+      { grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 1 },
+    ],
+    [
+      'a week that starts after now (the clock was set back)',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW + 1, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 1 },
+    ],
+    [
+      'a week with no start reading to measure from',
+      { weekAt: NOW - WEEK_MS, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 1 },
+    ],
+    [
+      'a week one millisecond short of 7 days',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - WEEK_MS + 1, grewBytes: 1 },
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - WEEK_MS + 1, grewBytes: 1 },
+    ],
+    [
+      'a week of exactly 7 days',
+      { weekUsedBytes: 10 * GIB, weekAt: NOW - WEEK_MS, grewBytes: 1 },
+      { weekUsedBytes: used, weekAt: NOW, grewBytes: 2 * GIB },
+    ],
+  ]
+  for (const [name, record, week] of cases) expect([name, rollWeek(record, used, NOW)]).toEqual([name, week])
+})
+
+test('startPath picks the first absolute path of a start command, and undefined when there is none', () => {
+  const cases: [name: string, argv: string[] | undefined, path: string | undefined][] = [
+    ['a drive path', ['wscript.exe', 'C:/Users/me/start.vbs'], 'C:/Users/me/start.vbs'],
+    ['a backslash drive path', ['wscript.exe', 'C:\\Users\\me\\start.vbs'], 'C:\\Users\\me\\start.vbs'],
+    ['a slash path', ['/home/me/start.sh'], '/home/me/start.sh'],
+    ['the first of two absolute paths', ['wscript.exe', 'D:/a.vbs', 'C:/b.vbs'], 'D:/a.vbs'],
+    ['a relative path', ['bash', 'scripts/start.sh'], undefined],
+    ['a Windows switch before the script', ['cmd', '/c', 'C:/start.bat'], 'C:/start.bat'],
+    ['no start command', undefined, undefined],
+  ]
+  for (const [name, argv, path] of cases) expect([name, startPath(argv)]).toEqual([name, path])
+})
+
+test('splitPath gives the folder and the name, keeping the slash of a root', () => {
+  const cases: [name: string, path: string, split: { folder: string; name: string }][] = [
+    ['a file in a folder', 'C:/Users/me/start.vbs', { folder: 'C:/Users/me', name: 'start.vbs' }],
+    ['a backslash path', 'C:\\Users\\me\\start.vbs', { folder: 'C:/Users/me', name: 'start.vbs' }],
+    ['a file in a drive root', 'C:/start.vbs', { folder: 'C:/', name: 'start.vbs' }],
+    ['a file in the Unix root', '/start.sh', { folder: '/', name: 'start.sh' }],
+  ]
+  for (const [name, path, split] of cases) expect([name, splitPath(path)]).toEqual([name, split])
 })
 
 test("the newer of the stored record and the session's own is used, the own one on a tie", () => {
@@ -346,6 +439,19 @@ test('a fresh reading another session stored is shown without reading anything',
   await clock.advance(1_000)
   expect(counts()).toEqual([0, 0])
   expect(await rowNow($)).toContain('disk 25.0 GB (5.0 used, compact)')
+})
+
+test('a start script that is gone shows start file missing, until the file is back', async ($, on) => {
+  const script = 'C:/Users/me/start-runners.vbs'
+  const listed = [{ label: 'local', processes: ['Runner.Listener'], start: ['wscript.exe', script] }]
+  const files = new Map([[LIST_FILE, JSON.stringify(listed)]])
+  const { clock } = bare(on, files)
+  await startSession($)
+  await clock.advance(1_000)
+  expect(await rowNow($)).toBe('⚙ local on · start file missing')
+  files.set(script, "WScript.Shell")
+  await clock.advance(60_000)
+  expect(await rowNow($)).toBe('⚙ local on')
 })
 
 test('a stop reads the file size, retries it after a failure, and never runs df while off', async ($, on) => {

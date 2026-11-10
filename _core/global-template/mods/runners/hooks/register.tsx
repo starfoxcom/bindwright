@@ -14,10 +14,12 @@ import {
   parseStat,
   parseUsedBytes,
   readRecord,
+  rollWeek,
 } from './disk'
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { splitPath, startPath } from './start'
 
 // The machine's local CI runners in one row above the prompt: on or off, how many are online and
 // busy, queued runs and the next scheduled run, with Start and Stop. Every value is read in a timer,
@@ -30,7 +32,7 @@ const START_GRACE_MS = 2 * 60_000
 // offset is read through node at start and every hour, as shared-pc and usage-guard do.
 const READ_ZONE = ['node', '-e', 'console.log(new Date().getTimezoneOffset())']
 const STAT_SCRIPT = 'const s = require("fs").statSync(process.argv[1]); console.log(s.size, s.blocks * 512)'
-type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes' | 'isSparse'>
+type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes' | 'isSparse' | 'grewBytes'>
 const view = atom({ plugin: 'runners', key: 'view' } as const, null)
 const live = {
   checkMs: 60_000,
@@ -168,12 +170,18 @@ async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): 
   if (due.used) {
     const df = ['wsl.exe', '-d', runner.wsl.distro, '--exec', 'df', '-B1', '--output=used', '/']
     const used = parseUsedBytes((await run($, df)) ?? '')
-    if (used !== null) Object.assign(next, { usedAt: now, usedBytes: used })
-    else isSettled = false
+    if (used !== null) {
+      Object.assign(next, { usedAt: now, usedBytes: used }, rollWeek(next, used, now))
+    } else isSettled = false
   }
   if (isSettled) next.isOn = isOn
   if (due.size || due.used || last.isOn !== next.isOn) await saveRecord($, key, next)
-  return { diskBytes: next.diskBytes, usedBytes: next.usedBytes, isSparse: next.isSparse }
+  return {
+    diskBytes: next.diskBytes,
+    usedBytes: next.usedBytes,
+    isSparse: next.isSparse,
+    grewBytes: next.grewBytes,
+  }
 }
 
 // The newer of the store's record and this session's own, so a store that cannot be read, holds none, or
@@ -188,8 +196,19 @@ async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<v
   await $.store.set(key, record).catch(() => undefined)
 }
 
+// A Start whose script is gone does nothing, silently. A listing that fails counts as present, so a
+// transient error never raises the flag.
+async function isStartMissing($: Engine, argv: string[] | undefined): Promise<boolean> {
+  const file = startPath(argv)
+  if (file === undefined) return false
+  const { folder, name } = splitPath(file)
+  const entries = await $.fs.list(folder).catch(() => undefined)
+  return entries !== undefined && !entries.some(entry => entry.name === name)
+}
+
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {
   const row: RunnerView = { label: runner.label, isOn: await isUp($, runner) }
+  row.isStartMissing = await isStartMissing($, runner.start)
   Object.assign(row, await readDisk($, runner, row.isOn, now))
   if (!runner.repo) return row
   const counts = await online($, runner.repo)
@@ -347,6 +366,7 @@ export function rowText(row: RunnerView, now: number, zoneTime: (ms: number) => 
   if (row.nextRun !== undefined) parts.push(`next ${zoneTime(row.nextRun)} (scheduled)`)
   const disk = diskText(row)
   if (disk !== undefined) parts.push(disk)
+  if (row.isStartMissing) parts.push('start file missing')
   return parts.join(' · ')
 }
 
