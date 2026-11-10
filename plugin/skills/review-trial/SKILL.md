@@ -47,6 +47,7 @@ Read the result's `leaderboard` (best first) and `per_state`, and tell the user 
 
 - Which candidate won, by how many pull requests and rounds, and against today's setting.
 - For each candidate: missed real problems (the worst outcome), findings caught, false blocks and findings the judges ruled wrong, and its usage (`output_tokens`).
+- Any candidate whose `reviews_scored` is below `reviews_expected`: say how many reviews are missing (a usage limit or a crash). A round with a missing review or judge has no winner, so a run with many missing says little.
 - How firm the result is: with light, one round and one judge per pull request, a narrow win can be chance. Recommend a full run before changing anything when the winner is not today's setting and won by one pull request or less.
 
 When a candidate other than today's setting wins clearly, offer to change that tier's `model` and `effort` in `.github/review-gate.yml`, on its own branch and pull request, as any change to the gate's settings is. Change nothing without a yes. Results stay in this chat; nothing is posted to GitHub.

@@ -64,7 +64,11 @@ const verdictRows = [
   ["the red glyph is Blocking", BLOCKING, "Blocking"],
   ["the green glyph is LGTM", LGTM, "LGTM"],
   ["the last glyph line decides", "a 🟢 heading\n- a finding\n🔴 Blocking", "Blocking"],
-  ["a red finding before a green verdict line is LGTM", "- 🔴 quoted\n🟢 LGTM", "LGTM"],
+  ["a line opening with a red glyph blocks, as the gate reads it", "- 🔴 a finding\n🟢 LGTM",
+    "Blocking"],
+  ["a numbered Blocking line blocks before a green last line", "1. Blocking: x\n🟢 LGTM",
+    "Blocking"],
+  ["a red glyph inside prose does not block", "the old 🔴 is fixed\n🟢 LGTM", "LGTM"],
   ["a comment with no glyph has no verdict", "a comment with no verdict", null],
 ];
 
@@ -90,6 +94,8 @@ const candidateRows = [
     "routine", [deep(1, BLOCKING, T1), deep(2, LGTM, T2)], []],
   ["a human's copy of a review is ignored",
     "routine", [human(routine(1, LGTM, T1))], []],
+  ["another app's copy of a review is ignored", "routine",
+    [{ ...routine(1, LGTM, T1), user: { login: "other-app[bot]", type: "Bot" } }], []],
 ];
 
 for (const [name, tier, comments, expected] of candidateRows) {

@@ -178,6 +178,31 @@ test("with one judge, that judge's pick is the round winner", async () => {
   assert.equal(result.per_state[0].rounds[0].winner, good.label);
 });
 
+// A missing review or judge (a usage limit, a crash) leaves the round undecided: no arm wins
+// unopposed. Each row's agent returns null for the calls `dies` picks.
+const missingRows = [
+  ["the other arm's review is missing", "light",
+    (prompt, options) => options.model === WEAK && !options.label.startsWith("judge-")],
+  ["a judge omits the other arm's review", "light", null],
+  ["one judge of two returns nothing", "full",
+    (prompt, options) => options.label.startsWith("judge-2")],
+];
+
+for (const [name, preset, dies] of missingRows) {
+  test(`no winner when ${name}`, async () => {
+    const stub = stubAgent();
+    const agent = async (prompt, options) => {
+      if (dies && dies(prompt, options)) return null;
+      const out = await stub.agent(prompt, options);
+      if (dies || !options.label.startsWith("judge-")) return out;
+      return { ...out, per_review: out.per_review.slice(0, 1) };
+    };
+    const result = await run({ plan: "max", arms: ARMS, tasks: TASKS, preset }, agent);
+    assert.deepEqual(result.per_state.map((state) => state.winner), ["tie", "tie"]);
+    assert.ok(result.leaderboard.every((row) => row.state_wins === 0 && row.round_wins === 0));
+  });
+}
+
 test("a full run makes exactly the agent calls its dry run counts", async () => {
   const dry = await run({ ...base, preset: "full" });
   const stub = stubAgent();

@@ -28,6 +28,12 @@ const MARKERS = {
 };
 const REQUEST_MARKER = /<!-- review-run: (\d+)-(\d+) request -->/;
 const VERDICT_LINE = /🔴|🟢/;
+const GATE_BOT = "claude[bot]";
+// The gate's early block: a line that opens, after list, quote, heading or emphasis markup, with
+// a 🔴 or the word Blocking blocks wherever it sits, whatever the last line says.
+const RED_OPENER = /^(?:\[[ xX]\]|(?!\[[ xX]\]|[`🔴🟢])\P{L})*🔴/u;
+const BLOCKING_OPENER =
+  /^(?:\[[ xX]\]|(?!\[[ xX]\]|[`🟢])\P{L})*(?:Blocking|BLOCKING)(?![\p{L}\p{N}])/u;
 const MARKER_LINE = /<!--.*-->/;
 const GH_TIMEOUT_IN_MILLISECONDS = 120 * 1000;
 const COMMAND_BUFFER_IN_BYTES = 64 * 1024 * 1024;
@@ -52,6 +58,7 @@ export function verdictOf(body) {
   const lines = body.split(/\r?\n/);
   const at = verdictIndexOf(lines);
   if (at === -1) return null;
+  if (lines.some((line) => RED_OPENER.test(line) || BLOCKING_OPENER.test(line))) return "Blocking";
   return lines[at].includes("🔴") ? "Blocking" : "LGTM";
 }
 
@@ -66,8 +73,9 @@ export function truthOf(body) {
     .slice(0, TRUTH_LIMIT);
 }
 
+// Only the review gate's own app writes the reviews and requests the gate reads.
 function isBot(comment) {
-  return comment.user?.type === "Bot" || /\[bot\]$/.test(comment.user?.login ?? "");
+  return comment.user?.login === GATE_BOT;
 }
 
 /** The bots' review comments for `tier` that carry a verdict, oldest first. */
