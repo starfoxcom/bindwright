@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Changed
 
 - **The review tiers move to Fable 5.2.** The routine review runs `claude-fable-5-2` at low effort and the deep review `claude-fable-5-2` at medium, both with the same `claude-opus-5-5` high backup. In a best-of-three, head-to-head trial against Fable 5.1 low on saved pull requests with known findings, scored by a two-judge panel, both settings missed fewer known defects for less money; the deep setting lists more findings the judges ruled out. Existing binds keep their pins until `/bindwright:update` or an edit to `.github/review-gate.yml`.
+- **The `runners` mod's WSL disk figure stays current and shows real use.** While the runners run, the data inside the distro is read at most once a minute and the disk file every 15 minutes (both right after a start, the file after a stop), instead of hourly. The file's size is its allocated bytes, so a sparse disk shows what it takes on the host, and its hint reads `trim` (an `fstrim` inside the distro, no shutdown) instead of `compact`. The reading is shared by every session on the computer through the mod's store.
 
 ### Fixed
 

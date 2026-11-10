@@ -2,7 +2,20 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { COMPACT_GAP_BYTES, diskText, parseUsedBytes } from '../hooks/disk'
+import type { DiskRecord, DueReads } from '../hooks/disk'
+import {
+  COMPACT_GAP_BYTES,
+  diskText,
+  dueReads,
+  isSparseFile,
+  newerRecord,
+  parseStat,
+  parseUsedBytes,
+  readRecord,
+  SIZE_READ_MS,
+  TICK_SLACK_MS,
+  USED_READ_MS,
+} from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
 import type { RunnerView } from '../types'
 
@@ -10,6 +23,7 @@ import type { RunnerView } from '../types'
 // the tests fake.
 const NOW = Date.UTC(2026, 9, 2, 17, 0, 0)
 const GIB = 1024 ** 3
+const MIB = 1024 ** 2
 const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16)
 const ON: RunnerView = { label: 'runners', isOn: true, online: 4, busy: 1, queued: 2, nextRun: NOW + 3_600_000 }
 
@@ -53,16 +67,94 @@ test('parseUsedBytes reads the number under the df header, and null for anything
   for (const [name, text, bytes] of cases) expect([name, parseUsedBytes(text)]).toEqual([name, bytes])
 })
 
-test('diskText flags compacting from exactly 10 GB of gap, and waits until both fields are read', () => {
-  const diskRow = (diskBytes: number, usedBytes: number): RunnerView => ({ ...ON, diskBytes, usedBytes })
+test('diskText flags compacting or trimming from exactly 10 GB of gap, and waits until both fields are read', () => {
+  const diskRow = (diskBytes: number, usedBytes: number, isSparse?: boolean): RunnerView => ({
+    ...ON,
+    diskBytes,
+    usedBytes,
+    isSparse,
+  })
+  const gap = 12 * GIB + COMPACT_GAP_BYTES
   const cases: [name: string, row: RunnerView, text: string | undefined][] = [
     ['the gap under 10 GB', diskRow(20 * GIB, 12 * GIB), 'disk 20.0 GB (12.0 used)'],
-    ['the gap exactly 10 GB', diskRow(12 * GIB + COMPACT_GAP_BYTES, 12 * GIB), 'disk 22.0 GB (12.0 used, compact)'],
-    ['the gap one byte under 10 GB', diskRow(12 * GIB + COMPACT_GAP_BYTES - 1, 12 * GIB), 'disk 22.0 GB (12.0 used)'],
+    ['the gap exactly 10 GB', diskRow(gap, 12 * GIB), 'disk 22.0 GB (12.0 used, compact)'],
+    ['the gap one byte under 10 GB', diskRow(gap - 1, 12 * GIB), 'disk 22.0 GB (12.0 used)'],
+    ['the gap exactly 10 GB, not sparse', diskRow(gap, 12 * GIB, false), 'disk 22.0 GB (12.0 used, compact)'],
+    ['the gap exactly 10 GB, sparse', diskRow(gap, 12 * GIB, true), 'disk 22.0 GB (12.0 used, trim)'],
+    ['the gap one byte under 10 GB, sparse', diskRow(gap - 1, 12 * GIB, true), 'disk 22.0 GB (12.0 used)'],
     ['no data reading', { ...ON, diskBytes: 20 * GIB }, undefined],
     ['no disk reading', { ...ON, usedBytes: 12 * GIB }, undefined],
   ]
   for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
+})
+
+test('parseStat reads the length and the allocated bytes, and null for anything else', () => {
+  const cases: [name: string, text: string, stat: { size: number; allocated: number } | null][] = [
+    ['normal output', '1073741824 69632', { size: 1073741824, allocated: 69632 }],
+    ['trailing newline', '1073741824 69632\n', { size: 1073741824, allocated: 69632 }],
+    ['garbage', 'big small\n', null],
+    ['one number only', '69632\n', null],
+    ['three numbers', '1 2 3\n', null],
+    ['empty', '', null],
+  ]
+  for (const [name, text, stat] of cases) expect([name, parseStat(text)]).toEqual([name, stat])
+})
+
+test('a file is sparse only when its allocated bytes fall more than 1 MiB short of its length', () => {
+  const cases: [name: string, stat: { size: number; allocated: number }, isSparse: boolean][] = [
+    ['fully allocated', { size: GIB, allocated: GIB }, false],
+    ['short by exactly 1 MiB', { size: GIB, allocated: GIB - MIB }, false],
+    ['short by one byte over 1 MiB', { size: GIB, allocated: GIB - MIB - 1 }, true],
+    ['64 KiB written into 1 GiB', { size: GIB, allocated: 69632 }, true],
+  ]
+  for (const [name, stat, isSparse] of cases) expect([name, isSparseFile(stat)]).toEqual([name, isSparse])
+})
+
+test('dueReads: the size every 15 min and the data every 60 s while on, the size on a stop, else nothing', () => {
+  const fresh: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW }
+  const usedDue = NOW - USED_READ_MS + TICK_SLACK_MS
+  const sizeDue = NOW - SIZE_READ_MS + TICK_SLACK_MS
+  const NONE: DueReads = { size: false, used: false }
+  const cases: [name: string, last: DiskRecord | undefined, isOn: boolean, due: DueReads][] = [
+    ['no last reading, on', undefined, true, { size: true, used: true }],
+    ['no last reading, off', undefined, false, NONE],
+    ['stopped since the last reading', fresh, false, { size: true, used: false }],
+    ['still off, though both are due', { isOn: false, sizeAt: sizeDue, usedAt: usedDue }, false, NONE],
+    ['switched on since the last reading', { ...fresh, isOn: false }, true, { size: true, used: true }],
+    ['data read one early tick under 60 s ago', { ...fresh, usedAt: usedDue }, true, { size: false, used: true }],
+    ['data read 1 ms more recently than that', { ...fresh, usedAt: usedDue + 1 }, true, { size: false, used: false }],
+    ['size read one early tick under 15 min ago', { ...fresh, sizeAt: sizeDue }, true, { size: true, used: false }],
+    ['size read 1 ms more recently than that', { ...fresh, sizeAt: sizeDue + 1 }, true, { size: false, used: false }],
+    ['data never read, size fresh', { isOn: true, sizeAt: NOW }, true, { size: false, used: true }],
+    ['a reading stamped after now', { ...fresh, sizeAt: NOW + 1 }, true, { size: true, used: false }],
+  ]
+  for (const [name, last, isOn, due] of cases) expect([name, dueReads(last, isOn, NOW)]).toEqual([name, due])
+})
+
+test('readRecord keeps the stored fields of the right type, and reads anything else as unset', () => {
+  const stored: DiskRecord = { sizeAt: 1, usedAt: 2, isOn: true, diskBytes: 3, usedBytes: 4, isSparse: true }
+  const cases: [name: string, value: unknown, record: DiskRecord][] = [
+    ['a stored record', stored, stored],
+    ['fields of the wrong type', { sizeAt: '1', isOn: 1, diskBytes: 'big', isSparse: 'yes' }, {}],
+    ['negative and fractional numbers', { sizeAt: -1, usedAt: 1.5, diskBytes: -5, usedBytes: 2.5 }, {}],
+    ['a text value', 'text', {}],
+    ['no record', undefined, {}],
+  ]
+  for (const [name, value, record] of cases) expect([name, readRecord(value)]).toEqual([name, record])
+})
+
+test("the newer of the stored record and the session's own is used, the own one on a tie", () => {
+  const stored: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW }
+  const cases: [name: string, own: DiskRecord | undefined, picked: 'stored' | 'own'][] = [
+    ['no record of its own', undefined, 'stored'],
+    ['its own is older', { isOn: false, sizeAt: NOW - 1, usedAt: NOW - 1 }, 'stored'],
+    ['the same reading time', { isOn: false, sizeAt: NOW, usedAt: NOW }, 'own'],
+    ['its own is newer', { isOn: true, sizeAt: NOW, usedAt: NOW + 1 }, 'own'],
+  ]
+  for (const [name, own, picked] of cases) {
+    expect([name, newerRecord(stored, own)]).toEqual([name, picked === 'stored' ? stored : own])
+  }
+  expect(newerRecord({}, stored)).toBe(stored)
 })
 
 test('a reading keeps a Start or Stop pressed while it was being taken', () => {
@@ -169,6 +261,107 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ key: 'runner-stop-0' })).toBeDefined()
   })
 }
+
+// A WSL runner whose disk figures go through the mod store, faked as working, failing every call, or
+// readable but refusing every write. `seed` is a record already in the store.
+const WSL = { distro: 'Ubuntu', disk: 'C:/wsl/ext4.vhdx' }
+const WSL_LISTED = [{ label: 'local', processes: ['Runner.Listener'], wsl: WSL }]
+type StoreMode = 'working' | 'failing' | 'read-only'
+type Host = { isUp: boolean; isStatFailing: boolean }
+function wslMachine(on: On, mode: StoreMode, seed?: DiskRecord) {
+  const runs: string[][] = []
+  const store = new Map<string, unknown>(seed ? [['disk:local', seed]] : [])
+  const host: Host = { isUp: true, isStatFailing: false }
+  const clock = mock.clock(on, { now: NOW })
+  mock.env(on, { USERPROFILE: 'C:/Users/me', OS: 'Windows_NT' })
+  on('fs.read', ($, e) => {
+    if (e.path.replaceAll('\\', '/') !== LIST_FILE) throw new Error('ENOENT')
+    return { value: JSON.stringify(WSL_LISTED) }
+  })
+  on('store.get', ($, e) => {
+    if (mode === 'failing') throw new Error('store unreadable')
+    return { value: store.get(e.key) }
+  })
+  on('store.set', ($, e) => {
+    if (mode !== 'working') throw new Error('store unwritable')
+    store.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    const isStat = e.argv.includes(WSL.disk)
+    if (isStat && host.isStatFailing) return { value: { exitCode: 1, stdout: '', stderr: 'EBUSY' } } as never
+    const stdout =
+      e.argv[0] === 'tasklist'
+        ? host.isUp ? '"Runner.Listener.exe","1"\r\n' : ''
+        : e.argv[0] === 'wsl.exe'
+          ? `Used\n${12 * GIB}\n`
+          : isStat
+            ? `${40 * GIB} ${30 * GIB}\n`
+            : '360\n'
+    return { value: { exitCode: 0, stdout, stderr: '' } } as never
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } as never }))
+  const dfRuns = () => runs.filter(argv => argv[0] === 'wsl.exe').length
+  const statRuns = () => runs.filter(argv => argv.includes(WSL.disk)).length
+  return { store, host, clock, counts: () => [dfRuns(), statRuns()] }
+}
+
+const startSession = ($: Engine) => $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
+const rowNow = async ($: Engine) => {
+  const answer = await $.command.run({ command: 'runners', args: '' } as never)
+  return (answer as never as { text: string }).text
+}
+// A record another session wrote 20 minutes ago, so both figures are due.
+const OLD_AT = NOW - 20 * 60_000
+const OLD: DiskRecord = { isOn: true, sizeAt: OLD_AT, usedAt: OLD_AT, diskBytes: GIB, usedBytes: GIB }
+
+const STORE_CASES: [mode: StoreMode, seed: DiskRecord | undefined][] = [
+  ['working', undefined],
+  ['failing', undefined],
+  ['read-only', OLD],
+]
+for (const [mode, seed] of STORE_CASES) {
+  test(`with a ${mode} store, the next check reads df again but not the file`, async ($, on) => {
+    const { store, clock, counts } = wslMachine(on, mode, seed)
+    await startSession($)
+    await clock.advance(1_000)
+    expect(counts()).toEqual([1, 1])
+    if (mode === 'working') {
+      const saved = { diskBytes: 30 * GIB, usedBytes: 12 * GIB, isSparse: true }
+      expect(store.get('disk:local')).toEqual(expect.objectContaining(saved))
+    }
+    // One full check period later: df is due again, the file size only after 15 min.
+    await clock.advance(60_000)
+    expect(counts()).toEqual([2, 1])
+    expect(await rowNow($)).toContain('disk 30.0 GB (12.0 used, trim)')
+  })
+}
+
+test('a fresh reading another session stored is shown without reading anything', async ($, on) => {
+  const fresh: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW, diskBytes: 25 * GIB, usedBytes: 5 * GIB }
+  const { clock, counts } = wslMachine(on, 'working', fresh)
+  await startSession($)
+  await clock.advance(1_000)
+  expect(counts()).toEqual([0, 0])
+  expect(await rowNow($)).toContain('disk 25.0 GB (5.0 used, compact)')
+})
+
+test('a stop reads the file size, retries it after a failure, and never runs df while off', async ($, on) => {
+  const { host, clock, counts } = wslMachine(on, 'working')
+  await startSession($)
+  await clock.advance(1_000)
+  host.isUp = false
+  host.isStatFailing = true
+  await clock.advance(60_000)
+  expect(counts()).toEqual([1, 2])
+  host.isStatFailing = false
+  await clock.advance(60_000)
+  expect(counts()).toEqual([1, 3])
+  await clock.advance(60_000)
+  expect(counts()).toEqual([1, 3])
+})
 
 test('/runners shows its arguments in the menu, lists them on help and names each runner', async ($, on) => {
   const { clock } = machine(on, () => true)
