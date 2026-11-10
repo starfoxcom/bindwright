@@ -15,6 +15,7 @@ import {
   parseUsedBytes,
   readRecord,
   rollWeek,
+  shownGrowth,
 } from './disk'
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
@@ -180,7 +181,7 @@ async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): 
     diskBytes: next.diskBytes,
     usedBytes: next.usedBytes,
     isSparse: next.isSparse,
-    grewBytes: next.grewBytes,
+    grewBytes: shownGrowth(next, now),
   }
 }
 

@@ -14,6 +14,7 @@ import {
   parseUsedBytes,
   readRecord,
   rollWeek,
+  shownGrowth,
   SIZE_READ_MS,
   TICK_SLACK_MS,
   USED_READ_MS,
@@ -221,6 +222,18 @@ test('rollWeek starts a week, keeps it for 7 days, and closes it into the growth
     ],
   ]
   for (const [name, record, week] of cases) expect([name, rollWeek(record, used, NOW)]).toEqual([name, week])
+})
+
+test('shownGrowth keeps a closed week growth for under two weeks after its close, and hides it after', () => {
+  const growth = 6 * GIB
+  const cases: [name: string, record: DiskRecord, shown: number | undefined][] = [
+    ['no week yet', { grewBytes: growth }, undefined],
+    ['a week closed just now', { weekAt: NOW, grewBytes: growth }, growth],
+    ['one millisecond short of two weeks', { weekAt: NOW - 2 * WEEK_MS + 1, grewBytes: growth }, growth],
+    ['two weeks after its close, the runners off', { weekAt: NOW - 2 * WEEK_MS, grewBytes: growth }, undefined],
+    ['a close that lies ahead of now', { weekAt: NOW + 1, grewBytes: growth }, undefined],
+  ]
+  for (const [name, record, shown] of cases) expect([name, shownGrowth(record, NOW)]).toEqual([name, shown])
 })
 
 test('startPaths lists every word naming a file on this host, and none when there is none', () => {

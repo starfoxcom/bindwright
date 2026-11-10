@@ -115,6 +115,16 @@ export function rollWeek(record: DiskRecord, usedBytes: number, now: number): We
   return { ...newWeek, grewBytes: usedBytes - weekUsedBytes }
 }
 
+/**
+ * The growth the row shows: a week's growth stands until the next week closes, and no longer than two weeks
+ * after its own close, since no reading closes a week while the runners are off.
+ */
+export function shownGrowth(record: DiskRecord, now: number): number | undefined {
+  const { weekAt, grewBytes } = record
+  if (weekAt === undefined || now < weekAt || now - weekAt >= 2 * WEEK_MS) return undefined
+  return grewBytes
+}
+
 /** The stored fields that have the right type; anything else, or a store with no record, reads as unset. */
 export function readRecord(value: unknown): DiskRecord {
   const stored = (value ?? {}) as Record<string, unknown>
