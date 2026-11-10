@@ -225,18 +225,6 @@ def _command_hooks(settings):
     return hooks
 
 
-# A blocking guard home.py installs starts its interpreter once, then runs it: the text before this
-# is the interpreter, a bare name included, quoted as shlex.quote quotes one word.
-_GUARD_PRESTART = " -I -c '' >/dev/null 2>&1 || exit 0; exec "
-
-
-def _unquote_word(word):
-    """One word as shlex.quote wrote it: bare, or in single quotes with each quote inside as '"'"'."""
-    if not (len(word) >= 2 and word.startswith("'") and word.endswith("'")):
-        return word
-    return word[1:-1].replace("'\"'\"'", "'")
-
-
 def _first_word(command):
     text = command.strip(JS_WHITESPACE)
     if text[:1] in ('"', "'"):
@@ -249,11 +237,8 @@ def _program(hook):
     command = hook.get("command")
     if not isinstance(command, str):
         return None
-    guard_at = command.find(_GUARD_PRESTART)
     if "args" in hook:
         program = command
-    elif guard_at > 0:
-        program = _unquote_word(command[:guard_at])
     else:
         # A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
         program = _first_word(command)
@@ -290,7 +275,7 @@ def _hooks_check(config):
     if missing:
         return _check("hooks", False,
                       "Some hooks start a program this computer does not have: %s. "
-                      "Those hooks do not run, and a guard among them blocks nothing." % ", ".join(missing),
+                      "Those hooks fail on every call." % ", ".join(missing),
                       FIX["hooks"])
     return _check("hooks", True, "Every hook's program is on this computer.")
 

@@ -226,24 +226,11 @@ function firstWord(command) {
   return text.split(" ", 1)[0];
 }
 
-// A blocking guard home.py installs starts its interpreter once, then runs it: the text before this
-// is the interpreter, a bare name included, quoted as Python's shlex.quote quotes one word.
-const GUARD_PRESTART = " -I -c '' >/dev/null 2>&1 || exit 0; exec ";
-
-// One word as shlex.quote wrote it: bare, or in single quotes with each quote inside as '"'"'.
-function unquoteWord(word) {
-  if (!(word.length >= 2 && word.startsWith("'") && word.endsWith("'"))) return word;
-  return word.slice(1, -1).split(`'"'"'`).join("'");
-}
-
 // The program a command hook starts, or null when it is not judged.
 function programOf(hook) {
   if (typeof hook.command !== "string") return null;
   let program = hook.command;
-  const guardAt = program.indexOf(GUARD_PRESTART);
-  if (!("args" in hook) && guardAt > 0) {
-    program = unquoteWord(program.slice(0, guardAt));
-  } else if (!("args" in hook)) {
+  if (!("args" in hook)) {
     // A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
     program = firstWord(program);
     if (!isAbsolute(program)) return null;
@@ -297,7 +284,7 @@ function hooksCheck(config) {
   }
   return missing.length
     ? check("hooks", false, "Some hooks start a program this computer does not have: "
-      + `${missing.join(", ")}. Those hooks do not run, and a guard among them blocks nothing.`, FIX.hooks)
+      + `${missing.join(", ")}. Those hooks fail on every call.`, FIX.hooks)
     : check("hooks", true, "Every hook's program is on this computer.");
 }
 

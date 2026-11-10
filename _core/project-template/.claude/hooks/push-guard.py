@@ -89,9 +89,9 @@ command let the call through.
 
 It runs from one of two places. Installed in `~/.claude/hooks/`, setup
 registers it in `~/.claude/settings.json` only after finding a Python 3.8+
-interpreter outside any virtual environment. The entry is one `sh` line
-(Git Bash on Windows) that starts that interpreter once, lets the call
-through when it does not run, and then runs this file. Shipped in a repo's
+interpreter outside any virtual environment, naming both the interpreter and
+this file by absolute path, in exec form (`command` plus `args`), so no shell
+and no `python3`/`python`/`py` guess is involved. Shipped in a repo's
 `.claude/hooks/`, the committed settings start it through `run-hook.sh`,
 which cannot know an absolute interpreter path: it takes the first of
 `python3`, `python` and `py` that is Python 3.8+ outside a virtual
