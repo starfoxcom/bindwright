@@ -423,7 +423,7 @@ for (const [name, propose] of Object.entries(ENGINES)) {
     }
   });
 
-  test(`${name}: a folder at a staged file's path is text, and the others still come back`,
+  test(`${name}: a folder at a staged file's path is unread, and the others still come back`,
     { skip }, () => {
       const root = fixture({ repo: { "a.md": "# A\n" }, incoming: { "a.md": "# A\nnew\n" } });
       try {
