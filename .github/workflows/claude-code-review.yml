@@ -996,8 +996,9 @@ jobs:
               out.write('## Architecture-critical files (READ THESE)\n\n')
               if arch_critical:
                   for f in arch_critical:
-                      gone = '' if f in kept else ' (deleted: nothing to read)'
-                      out.write(f'- `{shown(f)}`{gone}\n')
+                      # Before the name, where no file name can reach.
+                      gone = '' if f in kept else 'deleted, nothing to read: '
+                      out.write(f'- {gone}`{shown(f)}`\n')
               else:
                   out.write('_(none)_\n')
               out.write('\n')
