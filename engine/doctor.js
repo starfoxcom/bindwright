@@ -226,6 +226,10 @@ function firstWord(command) {
   return text.split(" ", 1)[0];
 }
 
+// A blocking guard home.py installs starts its interpreter once, then runs it: that first word is
+// the program, a bare name included.
+const GUARD_PRESTART = " -I -c '' >/dev/null 2>&1 || exit 0; exec ";
+
 // The program a command hook starts, or null when it is not judged.
 function programOf(hook) {
   if (typeof hook.command !== "string") return null;
@@ -233,7 +237,7 @@ function programOf(hook) {
   if (!("args" in hook)) {
     // A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
     program = firstWord(program);
-    if (!isAbsolute(program)) return null;
+    if (!isAbsolute(program) && !hook.command.includes(GUARD_PRESTART)) return null;
   }
   return program && !program.includes("$") && !program.includes("%") ? program : null;
 }

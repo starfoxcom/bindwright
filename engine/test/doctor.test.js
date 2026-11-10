@@ -199,6 +199,9 @@ const hookRows = [
     hooksJson({ command: 'cd "$CLAUDE_PROJECT_DIR" && npm test' }), true],
   ["a shell-form hook that opens with an assignment is not judged", hooksJson({ command: "FOO=1 tool" }), true],
   ["a shell-form hook run through sh -c is not judged", hooksJson({ command: 'sh -c "exit 0"' }), true],
+  ["a blocking guard whose bare interpreter is not on PATH", hooksJson({
+    command: "no-such-python -I -c '' >/dev/null 2>&1 || exit 0; exec no-such-python -I -c x /h/g.py",
+  }), false, "no-such-python"],
   ["a shell-form hook with a variable in its program is not judged", hooksJson({ command: "$HOME/tool" }), true],
   ["settings without hooks", '{"model": "x"}', true],
   ["settings that are not JSON", "{", true],

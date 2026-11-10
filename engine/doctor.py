@@ -225,6 +225,11 @@ def _command_hooks(settings):
     return hooks
 
 
+# A blocking guard home.py installs starts its interpreter once, then runs it: that first word is
+# the program, a bare name included.
+_GUARD_PRESTART = " -I -c '' >/dev/null 2>&1 || exit 0; exec "
+
+
 def _first_word(command):
     text = command.strip(JS_WHITESPACE)
     if text[:1] in ('"', "'"):
@@ -242,7 +247,7 @@ def _program(hook):
     else:
         # A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
         program = _first_word(command)
-        if not _is_absolute(program):
+        if not _is_absolute(program) and _GUARD_PRESTART not in command:
             return None
     if not program or "$" in program or "%" in program:
         return None

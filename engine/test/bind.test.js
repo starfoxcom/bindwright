@@ -440,8 +440,9 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
   // A stack command the setup allows must never be `git push`: it would approve force pushes.
   assert.match(lf("plugin/skills/setup/SKILL.md"), /Never add a rule for `git push` or a bare `git`/);
 
-  // Register it the way the plugin's setup does, with this machine's interpreter and a
-  // temporary home. Exec form, so no shell is involved.
+  // Register it through home.py, with this machine's interpreter and a temporary home.
+  // Without --block-on-failure the entry is exec form, so this table runs
+  // with no shell; home.test.js runs the shell form setup installs.
   const exe = python;
   const home = mkdtempSync(join(tmpdir(), "push-guard-")).split("\\").join("/");
   const installed = spawnSync(exe, [join(repo, "engine/home.py"), "--home", home, "install-hook",
@@ -864,7 +865,7 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
   assert.equal(atCap.length, 100000, "the cap probe is exactly MAX_COMMAND characters");
   assert.equal(verdict("Bash", atCap), "deny", "a force push at the length cap blocks");
   assert.equal(verdict("Bash", "git log x " + atCap.slice(8)), "allow", "a force push over the length cap passes unread");
-  // A timed-out hook lets the call through, so long commands must answer well inside the timeout.
+  // A timed-out guard blocks the call, so long commands must answer well inside the timeout.
   for (const repeat of [4900, 50000]) {
     const long = "git log " + "git ".repeat(repeat) + "; echo -qf | xargs git push origin main";
     const started = Date.now();
