@@ -200,7 +200,9 @@ def main():
     cmd = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(cmd, str):
         sys.exit(0)  # not a shell call this guard can read: let it through
-    cwd = data.get("cwd") or os.getcwd()
+    cwd = data.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        cwd = os.getcwd()
     esc = "`" if data.get("tool_name") == "PowerShell" else "\\"
     if not cmd or not (GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
                        or HTTP_GH.search(cmd)):
