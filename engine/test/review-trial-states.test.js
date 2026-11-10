@@ -16,6 +16,7 @@ import {
   pickStates,
   promptOf,
   readRunIdOf,
+  resolveCandidate,
   reviewMarkerOf,
   reviewsOf,
   truthOf,
@@ -152,7 +153,34 @@ const runIdRows = [
     [request(8, T1), deep(1, BLOCKING, T2)], "8"],
   ["a deep review with no request before it reads none", "deep",
     [deep(1, BLOCKING, T1), request(8, T2)], null],
+  ["a deep review a person started by hand reads none", "deep",
+    [request(8, T1), human(bot("@claude review this PR", T2)), deep(1, BLOCKING, T3)], null],
 ];
+
+// resolveCandidate with its gh and git readers stubbed: one row per answer it can give.
+const candidate = { pr: 7, runId: "5", mergeOid: "merge-7" };
+const readers = (event, { inClone = true, base = "base-7" } = {}) => ({
+  gh: async () => `${event} sha-7`,
+  git: async (root, args) => (args[0] === "cat-file" ? (inClone ? "" : null) : base),
+});
+const resolveRows = [
+  ["a pull-request run gives its head and merge base", candidate, readers("pull_request"),
+    { sha: "sha-7", base: "base-7" }],
+  ["no run named", { ...candidate, runId: null }, readers("pull_request"), /no request names/],
+  ["a run that did not run on the PR head", candidate, readers("issue_comment"),
+    /did not run on its head/],
+  ["a commit missing from the clone", candidate, readers("pull_request", { inClone: false }),
+    /is not in this clone/],
+  ["no merge base", candidate, readers("pull_request", { base: null }), /has no merge base/],
+];
+
+for (const [name, cand, stub, expected] of resolveRows) {
+  test(`resolveCandidate: ${name}`, async () => {
+    const result = await resolveCandidate("root", "o/r", cand, stub);
+    if (expected instanceof RegExp) assert.match(result.reason, expected);
+    else assert.deepEqual(result, expected);
+  });
+}
 
 for (const [name, tier, comments, expected] of runIdRows) {
   test(`readRunIdOf: ${name}`, () => {

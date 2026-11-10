@@ -29,6 +29,8 @@ const MARKERS = {
 const REQUEST_MARKER = /<!-- review-run: (\d+)-(\d+) request -->/;
 const VERDICT_LINE = /🔴|🟢/;
 const GATE_BOT = "claude[bot]";
+// What the deep workflow starts on: a comment that begins with this phrase.
+const DEEP_TRIGGER = /^\s*@claude review this PR/;
 // The gate's early block: a line that opens, after list, quote, heading or emphasis markup, with
 // a 🔴 or the word Blocking blocks wherever it sits, whatever the last line says.
 const RED_OPENER = /^(?:\[[ xX]\]|(?!\[[ xX]\]|[`🔴🟢])\P{L})*🔴/u;
@@ -92,14 +94,16 @@ export function reviewsOf(comments, tier) {
   return reviews.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-// The request the deep tier received for `review`: the routine tier posts it under its own run's
-// marker just before the deep run starts, so it is the newest request older than the review.
+// The request the deep tier received for `review`: the newest comment before it that starts a
+// deep run, from anyone. Only the gate's own marked request names the run on the reviewed head;
+// a bare trigger typed by a person names none, so the review then has no known commit.
 function requestFor(comments, review) {
-  const requests = comments
-    .filter((comment) => isBot(comment) && REQUEST_MARKER.test(comment.body ?? ""))
+  const triggers = comments
+    .filter((comment) => DEEP_TRIGGER.test(comment.body ?? ""))
     .filter((comment) => (comment.created_at ?? "") < review.createdAt)
     .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
-  return requests.length ? requests[requests.length - 1] : null;
+  const last = triggers[triggers.length - 1];
+  return last && isBot(last) && REQUEST_MARKER.test(last.body) ? last : null;
 }
 
 /** The input a tier received: the deep tier's request comment when present, else the PR text. */
@@ -227,7 +231,11 @@ async function commentsOf(root, repo, number) {
 
 // The commit a run reviewed and its merge base with the PR's merge commit, or the reason
 // neither can be used.
-async function resolveCandidate(root, repo, candidate) {
+// The gh and git readers resolveCandidate uses; a test passes its own.
+const READERS = { gh: ghText, git: gitText };
+
+/** The commit a candidate's run reviewed and its merge base, or the reason neither can be used. */
+export async function resolveCandidate(root, repo, candidate, readers = READERS) {
   if (candidate.mergeOid === null) return { reason: `PR #${candidate.pr} has no merge commit` };
   if (candidate.runId === null) {
     return { reason: `no request names the commit the deep review of PR #${candidate.pr} read` };
@@ -236,7 +244,7 @@ async function resolveCandidate(root, repo, candidate) {
   let event;
   let sha;
   try {
-    [event, sha] = (await ghText(root, ["api", endpoint, "--jq", '.event + " " + .head_sha']))
+    [event, sha] = (await readers.gh(root, ["api", endpoint, "--jq", '.event + " " + .head_sha']))
       .split(" ");
   } catch {
     return { reason: `run ${candidate.runId} of PR #${candidate.pr} could not be read` };
@@ -245,10 +253,10 @@ async function resolveCandidate(root, repo, candidate) {
   if (!event.startsWith("pull_request")) {
     return { reason: `run ${candidate.runId} of PR #${candidate.pr} did not run on its head` };
   }
-  if ((await gitText(root, ["cat-file", "-e", `${sha}^{commit}`])) === null) {
+  if ((await readers.git(root, ["cat-file", "-e", `${sha}^{commit}`])) === null) {
     return { reason: `commit ${sha.slice(0, 12)} of PR #${candidate.pr} is not in this clone` };
   }
-  const base = await gitText(root, ["merge-base", sha, `${candidate.mergeOid}^1`]);
+  const base = await readers.git(root, ["merge-base", sha, `${candidate.mergeOid}^1`]);
   if (base === null || base === "") {
     return { reason: `commit ${sha.slice(0, 12)} of PR #${candidate.pr} has no merge base` };
   }
