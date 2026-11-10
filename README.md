@@ -10,7 +10,7 @@
 
 `/bindwright:setup` asks a few questions in the session and writes the setup that fits the project: rules Claude Code reads at the start of every session, session skills that start with a plan and end with a hand-off, guard hooks that block force pushes and AI attribution, and CI workflows that put an AI review on every pull request. Questions about your computer come once; questions about the project come in every project. Files the repo already has are staged for you to merge, never overwritten.
 
-Each rule here came from a real cost in a real project: the page's "What it caught in real projects" section shows the numbers and the mistakes that became rules.
+Each rule here came from a real cost in a real project: the page's "What it caught in real projects" section shows the numbers and the mistakes that became rules. The models the CI review runs were picked the same way, by head-to-head trials on saved pull requests: [docs/review-model-trials.md](docs/review-model-trials.md) has the method and every result.
 
 ## Install
 
