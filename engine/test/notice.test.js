@@ -210,7 +210,9 @@ test("only a repo that still shares its counts reports a failed send", () => {
       mkdirSync(join(root, "bindwright"), { recursive: true });
       writeFileSync(join(root, "bindwright", "counts.json"), JSON.stringify(state));
     };
-    const entry = (kind) => ({ [repo]: { id: "0123456789abcdef0123456789abcdef", kind, since: "2026-11-01T00:00:00.000Z", failedAt: 5 } });
+    const entry = (kind) => ({
+      [repo]: { id: "0123456789abcdef0123456789abcdef", kind, since: "2026-11-01T00:00:00.000Z", failedAt: 5 },
+    });
     const cases = [
       ["sharing, with a kind", { share: true, projects: entry("game") }, 5],
       ["left out of the counts", { share: true, projects: entry(null) }, null],
