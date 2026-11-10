@@ -1312,7 +1312,7 @@ jobs:
           # first line when it has none), so a retried post finds its own.
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
           review = answer['review'].lstrip()
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
@@ -1449,7 +1449,7 @@ jobs:
           # first line when it has none), so a retried post finds its own.
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
           review = answer['review'].lstrip()
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
@@ -1638,7 +1638,7 @@ jobs:
           # first line when it has none), so a retried post finds its own.
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
           review = answer['review'].lstrip()
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
@@ -1754,7 +1754,7 @@ jobs:
           with open(raw_path, encoding='utf-8', newline='') as f:
               review = f.read().lstrip()
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
