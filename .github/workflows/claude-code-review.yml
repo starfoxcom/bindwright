@@ -466,9 +466,8 @@ jobs:
     runs-on: ${{ fromJSON(needs.init-gate.outputs.runner_labels || '["ubuntu-latest"]') }}
     # The review attempts run here, with a job token that can only read: the
     # reviewer processes never share a job whose token can write checks,
-    # statuses or comments. (They still read the PR with the review app's own
-    # token, as the official action's reviewer does; the tool lists below are
-    # what keeps them from writing with it.) The first review the gate can
+    # statuses or comments. They read the PR with that read-only token; the
+    # review app's token is minted only in Post review. The first review the gate can
     # read goes to the Post review job below, which checks it again and posts it.
     # `reviewer` is the model whose attempt wrote the verdict, for the gate's
     # summary. The job name and a green primary step cannot tell (the primary
