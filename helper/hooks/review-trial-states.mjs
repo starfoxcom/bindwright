@@ -1,0 +1,321 @@
+// Builds the states of a review trial from a repo's merged pull requests. A state is one review
+// tier's run on a pull-request commit with its confirmed outcome, the tasks that
+// helper/workflows/review-trial.js compares models on. `node review-trial-states.mjs <repo root>
+// [--tier routine|deep] [--count N]` prints one line of JSON:
+// { "states": [...], "skipped": [...] }, plus "error" when gh cannot list the pull requests or
+// the repo has no review comments of the tier. Node 18+, no dependencies. gh and git run from
+// the repo root.
+
+import { execFile } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+
+/** The truth of a clean state: the review found nothing and nothing later contradicted it. */
+export const CLEAN_TRUTH = "Clean: the confirmed outcome is LGTM with no findings.";
+
+const DEFAULT_COUNT = 4;
+const PULL_REQUEST_LIMIT = 50;
+const TRUTH_LIMIT = 4000;
+const BODY_LIMIT = 2000;
+const TIERS = ["routine", "deep"];
+const FLAGS = new Set(["--tier", "--count"]);
+const USAGE = "usage: review-trial-states.mjs <repo root> [--tier routine|deep] [--count N]";
+const MARKERS = {
+  routine: /<!-- review-run: (\d+)-(\d+) review -->/,
+  deep: /<!-- deep-run: (\d+)-(\d+) review -->/,
+};
+const REQUEST_MARKER = /<!-- review-run: (\d+)-(\d+) request -->/;
+const VERDICT_LINE = /🔴|🟢/;
+const MARKER_LINE = /<!--.*-->/;
+const GH_TIMEOUT_IN_MILLISECONDS = 120 * 1000;
+const COMMAND_BUFFER_IN_BYTES = 64 * 1024 * 1024;
+
+const execFileAsync = promisify(execFile);
+
+/** The run id and attempt in a review comment's marker for `tier`, or null. */
+export function reviewMarkerOf(body, tier) {
+  const found = MARKERS[tier].exec(body);
+  return found ? { runId: found[1], attempt: found[2] } : null;
+}
+
+// The index of the verdict line: the review gate reads the last line holding a glyph, since a
+// review lists its findings first and ends on its verdict. -1 when no line holds one.
+function verdictIndexOf(lines) {
+  for (let i = lines.length - 1; i >= 0; --i) if (VERDICT_LINE.test(lines[i])) return i;
+  return -1;
+}
+
+/** The verdict on the last line with a glyph: "Blocking" for red, "LGTM" for green, else null. */
+export function verdictOf(body) {
+  const lines = body.split(/\r?\n/);
+  const at = verdictIndexOf(lines);
+  if (at === -1) return null;
+  return lines[at].includes("🔴") ? "Blocking" : "LGTM";
+}
+
+/** The review's findings: its text without marker lines and the verdict line, trimmed and cut. */
+export function truthOf(body) {
+  const lines = body.split(/\r?\n/);
+  const at = verdictIndexOf(lines);
+  return lines
+    .filter((text, i) => i !== at && !MARKER_LINE.test(text))
+    .join("\n")
+    .trim()
+    .slice(0, TRUTH_LIMIT);
+}
+
+function isBot(comment) {
+  return comment.user?.type === "Bot" || /\[bot\]$/.test(comment.user?.login ?? "");
+}
+
+/** The bots' review comments for `tier` that carry a verdict, oldest first. */
+export function reviewsOf(comments, tier) {
+  const reviews = [];
+  for (const comment of comments.filter(isBot)) {
+    const body = comment.body ?? "";
+    const marker = reviewMarkerOf(body, tier);
+    const verdict = verdictOf(body);
+    if (marker && verdict) {
+      reviews.push({ ...marker, verdict, body, createdAt: comment.created_at ?? "" });
+    }
+  }
+  return reviews.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+// The request the deep tier received for `review`: the routine tier posts it under its own run's
+// marker just before the deep run starts, so it is the newest request older than the review.
+function requestFor(comments, review) {
+  const requests = comments
+    .filter((comment) => isBot(comment) && REQUEST_MARKER.test(comment.body ?? ""))
+    .filter((comment) => (comment.created_at ?? "") < review.createdAt)
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+  return requests.length ? requests[requests.length - 1].body.trim() : null;
+}
+
+/** The input a tier received: the deep tier's request comment when present, else the PR text. */
+export function promptOf(tier, pr, comments, review) {
+  const request = tier === "deep" ? requestFor(comments, review) : null;
+  const body = (pr.body ?? "").slice(0, BODY_LIMIT);
+  const text = `Pull request #${pr.number}: ${pr.title}\n\n${body}`;
+  return request ?? text;
+}
+
+function candidateOf(pr, comments, tier, kind, review, truth) {
+  return {
+    kind,
+    pr: pr.number,
+    runId: review.runId,
+    mergeOid: pr.mergeCommit?.oid ?? null,
+    truth,
+    prompt: promptOf(tier, pr, comments, review),
+  };
+}
+
+/**
+ * The states one PR offers for a tier, newest first. Dirty: a Blocking review that a later
+ * review of the tier turned LGTM, with the Blocking text as truth. Clean: the PR's only review
+ * of the tier, when it is LGTM.
+ */
+export function candidatesOf(pr, comments, tier) {
+  const reviews = reviewsOf(comments, tier);
+  const dirty = reviews
+    .flatMap((review, i) => {
+      const cleared = reviews.slice(i + 1).some((later) => later.verdict === "LGTM");
+      if (review.verdict !== "Blocking" || !cleared) return [];
+      return [candidateOf(pr, comments, tier, "dirty", review, truthOf(review.body))];
+    })
+    .reverse();
+  const clean = reviews.length === 1 && reviews[0].verdict === "LGTM"
+    ? [candidateOf(pr, comments, tier, "clean", reviews[0], CLEAN_TRUTH)]
+    : [];
+  return [...dirty, ...clean];
+}
+
+function addState(context, candidate, commit) {
+  const number = (context.perPr.get(candidate.pr) ?? 0) + 1;
+  context.perPr.set(candidate.pr, number);
+  const id = number === 1 ? `pr-${candidate.pr}` : `pr-${candidate.pr}-${number}`;
+  context.states.push({
+    id, pr: candidate.pr, kind: candidate.kind, sha: commit.sha, base: commit.base,
+    prompt: candidate.prompt, truth: candidate.truth,
+  });
+}
+
+// Walks `list` in order, resolving each candidate until `enough()` holds. A candidate whose
+// commit cannot be used is recorded in `skipped` with its reason.
+async function takeUntil(context, list, enough) {
+  for (const candidate of list) {
+    if (enough()) return;
+    const taken = context.perPr.get(candidate.pr) ?? 0;
+    if (context.tried.has(candidate) || taken >= context.perPullRequest) continue;
+    context.tried.add(candidate);
+    const found = await context.resolve(candidate);
+    if (found.reason) context.skipped.push({ pr: candidate.pr, reason: found.reason });
+    else addState(context, candidate, found);
+  }
+}
+
+/**
+ * Picks up to `count` states from newest-first candidates: up to count - 1 dirty and one clean,
+ * then fills from whichever kind has room. `resolve(candidate)` gives { sha, base } or { reason }.
+ * Each PR contributes at most `perPullRequest` states.
+ */
+export async function pickStates(candidates, count, resolve, perPullRequest = 1) {
+  const context = {
+    states: [], skipped: [], perPr: new Map(), tried: new Set(), resolve, perPullRequest,
+  };
+  const dirty = candidates.filter((candidate) => candidate.kind === "dirty");
+  const clean = candidates.filter((candidate) => candidate.kind === "clean");
+  const kindCount = (kind) => context.states.filter((state) => state.kind === kind).length;
+  await takeUntil(context, dirty, () => kindCount("dirty") >= count - 1);
+  await takeUntil(context, clean, () => kindCount("clean") >= 1);
+  await takeUntil(context, [...dirty, ...clean], () => context.states.length >= count);
+  return { states: context.states, skipped: context.skipped };
+}
+
+async function ghText(root, args) {
+  const { stdout } = await execFileAsync("gh", args, {
+    cwd: root, timeout: GH_TIMEOUT_IN_MILLISECONDS, windowsHide: true,
+    encoding: "utf8", maxBuffer: COMMAND_BUFFER_IN_BYTES,
+  });
+  return stdout.trim();
+}
+
+async function ghJson(root, args) {
+  return JSON.parse(await ghText(root, args));
+}
+
+// The output of a git command, or null when it fails.
+async function gitText(root, args) {
+  try {
+    const { stdout } = await execFileAsync("git", args, {
+      cwd: root, windowsHide: true, encoding: "utf8", maxBuffer: COMMAND_BUFFER_IN_BYTES,
+    });
+    return stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+async function commentsOf(root, repo, number) {
+  // --slurp gives one array of the pages' arrays, which flat() joins.
+  const endpoint = `repos/${repo}/issues/${number}/comments`;
+  const pages = await ghJson(root, ["api", endpoint, "--paginate", "--slurp"]);
+  return pages.flat();
+}
+
+// The commit a run reviewed and its merge base with the PR's merge commit, or the reason
+// neither can be used.
+async function resolveCandidate(root, repo, candidate) {
+  if (candidate.mergeOid === null) return { reason: `PR #${candidate.pr} has no merge commit` };
+  const endpoint = `repos/${repo}/actions/runs/${candidate.runId}`;
+  let sha;
+  try {
+    sha = await ghText(root, ["api", endpoint, "--jq", ".head_sha"]);
+  } catch {
+    return { reason: `run ${candidate.runId} of PR #${candidate.pr} could not be read` };
+  }
+  if ((await gitText(root, ["cat-file", "-e", `${sha}^{commit}`])) === null) {
+    return { reason: `commit ${sha.slice(0, 12)} of PR #${candidate.pr} is not in this clone` };
+  }
+  const base = await gitText(root, ["merge-base", sha, `${candidate.mergeOid}^1`]);
+  if (base === null || base === "") {
+    return { reason: `commit ${sha.slice(0, 12)} of PR #${candidate.pr} has no merge base` };
+  }
+  return { sha, base };
+}
+
+// The candidates of every PR, newest PR first, and how many of the tier's reviews were seen.
+async function collect(root, repo, pulls, tier) {
+  const out = { candidates: [], skipped: [], reviewCount: 0 };
+  for (const pr of pulls) {
+    let comments;
+    try {
+      comments = await commentsOf(root, repo, pr.number);
+    } catch {
+      out.skipped.push({ pr: pr.number, reason: "its comments could not be listed" });
+      continue;
+    }
+    out.reviewCount += reviewsOf(comments, tier).length;
+    out.candidates.push(...candidatesOf(pr, comments, tier));
+  }
+  return out;
+}
+
+/** The trial states of the repo at `root` for `tier`, `count` of them when the repo has enough. */
+export async function trialStates(root, { tier, count }) {
+  let repo;
+  let pulls;
+  try {
+    repo = await ghText(root, [
+      "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner",
+    ]);
+    pulls = await ghJson(root, [
+      "pr", "list", "--state", "merged", "--limit", String(PULL_REQUEST_LIMIT),
+      "--json", "number,title,body,mergeCommit",
+    ]);
+  } catch {
+    return {
+      states: [], skipped: [],
+      error: "gh could not list this repo's merged pull requests; "
+        + "check that gh is installed and signed in",
+    };
+  }
+  const { candidates, skipped, reviewCount } = await collect(root, repo, pulls, tier);
+  if (reviewCount === 0) {
+    const error = `no ${tier} review comments on the merged pull requests`;
+    return { states: [], skipped, error };
+  }
+  const resolve = (candidate) => resolveCandidate(root, repo, candidate);
+  const picked = await pickStates(candidates, count, resolve);
+  return { states: picked.states, skipped: [...skipped, ...picked.skipped] };
+}
+
+/** The CLI arguments as { root, tier, count }, or { error } when they are not usable. */
+export function parseArgs(argv) {
+  const positional = [];
+  const flags = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    if (FLAGS.has(argv[i])) {
+      flags[argv[i].slice(2)] = argv[i + 1];
+      i += 1;
+    } else {
+      positional.push(argv[i]);
+    }
+  }
+  const tier = "tier" in flags ? flags.tier : "routine";
+  const count = "count" in flags ? Number(flags.count) : DEFAULT_COUNT;
+  if (positional.length !== 1 || !TIERS.includes(tier) || !Number.isInteger(count) || count < 1) {
+    return { error: USAGE };
+  }
+  return { root: positional[0], tier, count };
+}
+
+async function main(argv) {
+  const options = parseArgs(argv);
+  if (options.error) {
+    process.stdout.write(`${JSON.stringify({ error: USAGE })}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  const result = await trialStates(resolve(options.root), options);
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+// Run as the CLI, not when a test imports it. The path is compared after following links.
+function isEntry() {
+  try {
+    return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && isEntry()) {
+  main(process.argv.slice(2)).catch((error) => {
+    process.stdout.write(`${JSON.stringify({ states: [], skipped: [], error: error.message })}\n`);
+    process.exitCode = 1;
+  });
+}
