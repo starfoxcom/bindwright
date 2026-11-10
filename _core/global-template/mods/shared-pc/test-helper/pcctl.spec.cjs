@@ -241,6 +241,64 @@ test('a hold blocks other sessions until it ends', () => {
   assert.strictEqual(sb.state().seat.session, 'b')
 })
 
+test('a hold lasts at most 15 minutes, whatever it asks for', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.run('hold', 'a', '60', 'batch')
+  const { seat } = sb.state()
+  assert.ok(seat.until - seat.since <= 15 * 60_000, `held for ${(seat.until - seat.since) / 60_000} min`)
+})
+
+test('holding again while another session waits gives it the seat first', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.register('b')
+  sb.run('hold', 'a', '5', 'flight 1')
+  sb.run('claim', 'b', 'build')
+  sb.run('hold', 'a', '5', 'flight 2')
+  const s = sb.state()
+  assert.strictEqual(s.seat.session, 'b')
+  assert.deepStrictEqual(s.line.map(e => e.session), ['a'])
+})
+
+test('a hold while this session still runs heavy work keeps the seat, even with others waiting', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.register('b')
+  sb.run('claim', 'a', 'build')
+  sb.run('claim', 'b', 'build')
+  sb.run('hold', 'a', '5', 'timing')
+  assert.strictEqual(sb.state().seat.kind, 'hold')
+  sb.run('hold', 'a', '5', 'timing again')
+  assert.strictEqual(sb.state().seat.session, 'a')
+})
+
+test('a hold, and a second one, while a background task runs keep the seat with others waiting', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.register('b')
+  sb.run('claim', 'a', 'build')
+  sb.run('done', 'a', 'bg1')
+  sb.run('claim', 'b', 'build')
+  sb.run('hold', 'a', '5', 'timing 1')
+  assert.strictEqual(sb.state().seat.session, 'a')
+  sb.run('hold', 'a', '5', 'timing 2')
+  const s = sb.state()
+  assert.strictEqual(s.seat.session, 'a')
+  assert.deepStrictEqual(s.line.map(e => e.session), ['b'])
+})
+
+test('holding again with nobody waiting extends the hold', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.run('hold', 'a', '1', 'flight 1')
+  const before = sb.state().seat.until
+  sb.run('hold', 'a', '5', 'flight 2')
+  const { seat } = sb.state()
+  assert.strictEqual(seat.session, 'a')
+  assert.ok(seat.until > before)
+})
+
 test('wait returns once the seat is ours, and exits 3 after leaving the line', async () => {
   const sb = sandbox()
   ;['a', 'b', 'c'].forEach(id => sb.register(id))

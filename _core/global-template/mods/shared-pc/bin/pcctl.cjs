@@ -25,6 +25,8 @@ const REQUEST_TTL_MS = 15 * 60_000
 const MUTEX_STALE_MS = 5_000
 const WAIT_POLL_MS = Number(process.env.SHARED_PC_POLL_MS || 2_000)
 const SESSION_FILE_TTL_MS = 24 * 60 * 60_000
+// The longest a hold lasts: one test or command, so a waiting session is not kept past a turn.
+const MAX_HOLD_MINUTES = 15
 
 const now = () => Date.now()
 const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
@@ -336,6 +338,17 @@ function resolveTarget(all, target) {
   return hits.length === 1 ? hits[0].id : null
 }
 
+// Whether another session waits for the seat: in line, or holding the reservation.
+function othersWait(s, id) {
+  return s.line.some(e => e.session !== id) || Boolean(s.nextUp && s.nextUp.session !== id)
+}
+
+// Whether the seat runs nothing of its holder's: no command or background task left, whatever its kind
+// (a work seat turned into a hold keeps its counts).
+function isSeatIdle(seat) {
+  return !(seat.running > 0) && !(seat.tasks && seat.tasks.length > 0)
+}
+
 // Whether `id` may take a free seat now: it holds the reservation, or nobody else does and it is first.
 function mayTakeFreeSeat(s, id) {
   if (s.seat) return false
@@ -452,16 +465,24 @@ const OPS = {
     delete all[id]
     return view(normalize(s, all), all, id)
   },
-  // args: id minutes reason
+  // args: id minutes reason. A hold covers one test or command, so it is capped, and a holder that holds
+  // again while others wait gives them their turn first: its new hold joins the back of the line.
   hold(s, all, id, args, t) {
-    const minutes = Math.min(60, Math.max(1, Number(args[1]) || 0))
+    const minutes = Math.min(MAX_HOLD_MINUTES, Math.max(1, Number(args[1]) || 0))
     const reason = args.slice(2).join(' ') || 'hold'
+    const entry = { session: id, kind: 'hold', minutes, reason, label: reason, since: t }
     if (mayTakeFreeSeat(s, id)) {
       s.line = s.line.filter(e => e.session !== id)
-      grant(s, { session: id, kind: 'hold', minutes, reason, label: reason })
-    } else if (s.seat && s.seat.session === id) {
+      grant(s, entry)
+    } else if (s.seat && s.seat.session === id && !(othersWait(s, id) && isSeatIdle(s.seat))) {
+      // Nobody waits, or this session still runs work: the seat becomes the hold.
       s.seat = { ...s.seat, kind: 'hold', until: t + minutes * 60_000, reason, label: reason }
-    } else enqueue(s, { session: id, kind: 'hold', minutes, reason, label: reason, since: t })
+    } else if (s.seat && s.seat.session === id) {
+      log({ op: 'seat-freed', session: id, reason: 'hold-renewed-while-others-wait', heldMs: t - s.seat.since })
+      s.seat = null
+      s.line.push(entry)
+      return view(normalize(s, all), all, id)
+    } else enqueue(s, entry)
     return view(s, all, id)
   },
   // args: target (id, name or id prefix): front of the line, behind the seat holder.
