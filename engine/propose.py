@@ -15,8 +15,8 @@ INCOMING = STAGING_FOLDERS[0]
 MAX_SAFE_INTEGER = 2 ** 53 - 1
 # An all-digit key, which JavaScript objects move to the front.
 INDEX_KEY = re.compile(r"[0-9]+")
-# Arrays merged as unions, by dotted key path. Hook lists (hooks.<Event>) merge the same way.
-UNION_PATHS = {"permissions.allow", "permissions.deny", "permissions.ask"}
+# The permissions.<list> arrays merged as unions; hook lists (hooks.<Event>) merge the same way.
+UNION_PERMISSIONS = {"allow", "deny", "ask"}
 HEADING = re.compile(r"#{1,6} ")
 FENCE = re.compile(r"(`{3,}|~{3,})")
 
@@ -145,32 +145,41 @@ def _parse_object(text):
     if _depth(text) > MAX_DEPTH:
         return None
     try:
-        value = json.loads(text, parse_constant=_refuse_constant, parse_float=_whole_float)
-    except (ValueError, _NotPlain):
+        value = json.loads(text, parse_constant=_refuse_constant,
+                           parse_float=_whole_float, parse_int=_whole_int)
+    except ValueError:
         return None
     return value if isinstance(value, dict) and _is_plain(value) else None
 
 
-class _NotPlain(Exception):
-    pass
+# A number JSON.parse would read or print differently. It is a value, never an error, so a later
+# copy of a repeated key replaces it, as in JSON.parse, and only the values that remain are judged.
+_NOT_PLAIN = object()
 
 
 def _whole_float(text):
     """A number written with a fraction or an exponent, as the whole number JSON.parse reads it
-    as (1.0 is 1); any other is not plain."""
+    as (1.0 is 1), or _NOT_PLAIN."""
     value = float(text)
-    if value.is_integer() and abs(value) <= MAX_SAFE_INTEGER:
-        return int(value)
-    raise _NotPlain(text)
+    return int(value) if value.is_integer() and abs(value) <= MAX_SAFE_INTEGER else _NOT_PLAIN
+
+
+def _whole_int(text):
+    """An integer in the safe range, or _NOT_PLAIN (past it, or too long for int())."""
+    try:
+        value = int(text)
+    except ValueError:
+        return _NOT_PLAIN
+    return value if abs(value) <= MAX_SAFE_INTEGER else _NOT_PLAIN
 
 
 def _is_plain(value):
     """Whole numbers in the safe range, no all-digit keys and no lone surrogates: past these the
     JS engine would read or print the value differently, so the file is merged by hand instead."""
-    if isinstance(value, bool) or value is None:
+    if value is _NOT_PLAIN:
+        return False
+    if isinstance(value, (bool, int)) or value is None:
         return True
-    if isinstance(value, int):
-        return abs(value) <= MAX_SAFE_INTEGER
     if isinstance(value, str):
         return not _has_lone_surrogate(value)
     if isinstance(value, list):
@@ -209,7 +218,9 @@ def _merge_value(repo, incoming, path, clashes):
 
 
 def _is_list_path(path):
-    return ".".join(path) in UNION_PATHS or (len(path) == 2 and path[0] == "hooks")
+    if len(path) != 2:
+        return False
+    return path[0] == "hooks" or (path[0] == "permissions" and path[1] in UNION_PERMISSIONS)
 
 
 def _append_missing(items, extra):

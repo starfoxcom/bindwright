@@ -176,6 +176,24 @@ const KINDS = {
       expect: [jsonProposal("s.json", { b: 1, "²": 2, a: 1 })],
     },
     ...[
+      ["a fraction", '{"a": 1.5, "a": 1}'],
+      ["a number too large for a double", '{"a": 1e999, "a": 1}'],
+      ["a whole number past the safe range", '{"a": 12345678901234567890123, "a": 1}'],
+      ["an integer too long to convert", `{"a": ${"9".repeat(5000)}, "a": 1}`],
+    ].map(([what, text]) => ({
+      name: `${what} under a key repeated later is replaced, as JSON.parse keeps the last`,
+      repo: { "s.json": text },
+      incoming: { "s.json": '{"z": 0}' },
+      expect: [jsonProposal("s.json", { a: 1, z: 0 })],
+    })),
+    {
+      name: "a top-level key named permissions.allow is not a permission list",
+      repo: { "s.json": '{"permissions.allow": ["a"]}' },
+      incoming: { "s.json": '{"permissions.allow": ["b"]}' },
+      expect: [jsonProposal("s.json", { "permissions.allow": ["a"] },
+        [{ key: "permissions.allow", repo: ["a"], incoming: ["b"] }])],
+    },
+    ...[
       ["a fraction", '{"a": 1.5}'],
       ["a whole number past the safe range", '{"a": 12345678901234567890123}'],
       ["an exponent past the safe range", '{"a": 1e16}'],

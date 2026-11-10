@@ -10,8 +10,8 @@ const INCOMING = STAGING_FOLDERS[0];
 // An all-digit key, which JavaScript objects move to the front.
 const INDEX_KEY = /^\d+$/;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
-// Arrays merged as unions, by dotted key path. Hook lists (hooks.<Event>) merge the same way.
-const UNION_PATHS = new Set(["permissions.allow", "permissions.deny", "permissions.ask"]);
+// The permissions.<list> arrays merged as unions; hook lists (hooks.<Event>) merge the same way.
+const UNION_PERMISSIONS = new Set(["allow", "deny", "ask"]);
 const HEADING = /^#{1,6} /;
 const FENCE = /^(`{3,}|~{3,})/;
 
@@ -171,7 +171,8 @@ function mergeValue(repo, incoming, path, clashes) {
 }
 
 function isListPath(path) {
-  return UNION_PATHS.has(path.join(".")) || (path.length === 2 && path[0] === "hooks");
+  if (path.length !== 2) return false;
+  return path[0] === "hooks" || (path[0] === "permissions" && UNION_PERMISSIONS.has(path[1]));
 }
 
 // `list` plus each item of `extra` not already in it, in order.
