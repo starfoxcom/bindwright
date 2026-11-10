@@ -287,16 +287,18 @@ function wslMachine(on: On, isStoreBroken: boolean) {
 
 for (const isStoreBroken of [false, true]) {
   const how = isStoreBroken ? 'a failing store, from memory' : 'the store'
-  test(`the disk figures go through ${how}, and the next check inside a minute runs no df`, async ($, on) => {
+  test(`the disk figures go through ${how}: the next check reads df again but not the file`, async ($, on) => {
     const { runs, store, clock } = wslMachine(on, isStoreBroken)
     const dfRuns = () => runs.filter(argv => argv[0] === 'wsl.exe').length
+    const statRuns = () => runs.filter(argv => argv.includes(WSL.disk)).length
     await $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
     await clock.advance(1_000)
-    expect(dfRuns()).toBe(1)
+    expect([dfRuns(), statRuns()]).toEqual([1, 1])
     const saved = isStoreBroken ? undefined : { diskBytes: 30 * GIB, usedBytes: 12 * GIB, isSparse: true }
     expect(store.get('disk:local')).toEqual(saved && expect.objectContaining(saved))
-    await clock.advance(30_000)
-    expect(dfRuns()).toBe(1)
+    // One full check period later: df is due again, the file size only after 15 min.
+    await clock.advance(60_000)
+    expect([dfRuns(), statRuns()]).toEqual([2, 1])
     expect(await $.command.run({ command: 'runners', args: '' } as never)).toEqual(
       expect.objectContaining({ text: expect.stringContaining('disk 30.0 GB (12.0 used, trim)') }),
     )
