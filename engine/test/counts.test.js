@@ -359,6 +359,15 @@ for (const [name, reply] of refusals) {
     }));
 }
 
+test("a gh that fails records a failed send and posts nothing", () => inScene(async (s) => {
+  seedState(s);
+  const when = noon(3);
+  const counter = fakeCounter({ status: 200 });
+  await sendAt(s, when, fakeGh(new Error("gh: command not found")), counter);
+  assert.deepEqual(projectOf(s), projectEntry({ failedAt: when.getTime() }));
+  assert.equal(counter.posts.length, 0);
+}));
+
 test("a failed send is not retried for a minute, and is retried after it", () => inScene(async (s) => {
   seedState(s);
   const gh = fakeGh([GREEN_PR]);
@@ -403,15 +412,6 @@ test("a send whose answer was lost is not counted twice", () => inScene(async (s
   counter.reply = OK;
   await sendAt(s, noon(4, 13), gh, counter);
   assert.equal(counter.posts[2].body.from, lost.getTime() + SECOND, "the next send starts after the count stops");
-}));
-
-test("a gh that fails stops the send and changes nothing", () => inScene(async (s) => {
-  seedState(s);
-  const before = readFileSync(s.stateFile, "utf8");
-  const counter = fakeCounter(OK);
-  await sendAt(s, noon(3), fakeGh(new Error("gh: command not found")), counter);
-  assert.deepEqual(counter.posts, []);
-  assert.equal(readFileSync(s.stateFile, "utf8"), before);
 }));
 
 test("a project call made while the send waits is kept", () => inScene(async (s) => {

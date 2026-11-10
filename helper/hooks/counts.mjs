@@ -454,16 +454,17 @@ export async function send({
   const entry = state.share ? state.projects[key] : undefined;
   const current = now();
   if (!entry?.kind || !isDue(entry, current)) return;
-  const batch = await planWindow({
-    since: entry.since,
-    current,
-    backfill: entry.backfill === true,
-    ghJson,
-    cwd: key,
-  }).catch(() => null);
+  // A gh that fails (signed out, missing, offline) is a failed send too, so session start can name it.
+  const failed = () => changeProject(stateFile, key, { failedAt: current.getTime() });
+  let batch;
+  try {
+    batch = await planWindow({ since: entry.since, current, backfill: entry.backfill === true, ghJson, cwd: key });
+  } catch {
+    return failed();
+  }
   if (!batch) return;
   const prs = await listPrs(batch.search, "number,labels,comments", key, ghJson).catch(() => null);
-  if (!prs) return;
+  if (!prs) return failed();
   const counts = countPrs(prs);
   if (Object.values(counts).every((count) => count === 0)) {
     return changeProject(stateFile, key, { since: batch.nextSince, ...cooldownFrom(current) });
