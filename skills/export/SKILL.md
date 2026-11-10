@@ -23,7 +23,7 @@ If `ignored` is not empty, list it in plain words: those values in someone's set
 
 ## 3. Ask what to share
 
-Ask in one message, with a short line on what each extra does (from `<helper>/_core/global-template/mods/README.md` for the mods; `push-guard` blocks force pushes and direct pushes to the main branches; `attribution-guard` blocks AI credit lines in commits and PRs; `global-instructions` adds Bindwright's working rules to every project on the machine):
+Ask in one message, with a short line on what each extra does (from `<helper>/_core/global-template/mods/README.md` for the mods; `push-guard` blocks force pushes and direct pushes to the main branches; `attribution-guard` blocks AI credit lines in commits and PRs; `session-title` names each session after its project and purpose; `global-instructions` adds Bindwright's working rules to every project on the machine):
 
 - **Extras:** for each extra this machine has installed, and each one the project already rates, whether teammates should be told it is `required`, `recommended`, or nothing. Suggest `recommended` by default; `required` only for something the team's workflow depends on, since `/bindwright:join` then installs it without the choice to skip.
 - **Settings to lock:** whether the code-research tool (now `<value>`) and the tracker (now `<value>`) should be `required`, so no one's personal settings can change them for this project.
