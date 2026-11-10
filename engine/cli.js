@@ -14,6 +14,7 @@
 //   node engine/cli.js --remove-plan DIR             -> what setup wrote there, sorted for removal (remove.js)
 //   node engine/cli.js --remove-files DIR < {"paths": [...], "state": true} -> those files removed
 //   node engine/cli.js --clean-staging DIR [--discard-incoming] -> setup's staging folders removed (staging.js)
+//   node engine/cli.js --propose-merge DIR -> the merge each staged file suggests, read only (propose.js)
 //   node engine/cli.js --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.js)
 //   node engine/cli.js --releases-since DIR -> the plugin's releases since DIR's bound version (releases.js)
 // A failure gives {"error": message} and exit status 1.
@@ -34,6 +35,7 @@ import { cliVersionFrom, runDoctor } from "./doctor.js";
 import { draftReport } from "./report.js";
 import { planRemoval, removeFiles } from "./remove.js";
 import { cleanStaging } from "./staging.js";
+import { proposeMerges } from "./propose.js";
 import { localExclude, undoLocalExclude } from "./exclude.js";
 import { releasesForRepo } from "./releases.js";
 
@@ -73,6 +75,8 @@ async function run(argv) {
   const staging = option(argv, "--clean-staging");
   const discardIncoming = argv.includes("--discard-incoming");
   if (staging !== undefined) return cleanStaging(staging, { discardIncoming });
+  const proposal = option(argv, "--propose-merge");
+  if (proposal !== undefined) return proposeMerges(proposal);
   const exclude = option(argv, "--local-exclude");
   if (exclude !== undefined) return localExcludeRepo(exclude, argv.includes("--undo"));
   const releases = option(argv, "--releases-since");
