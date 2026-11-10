@@ -210,6 +210,17 @@ class GuardHookTest(unittest.TestCase):
     def attr(self, command, **kw):
         return self.run_hook("no-ai-attribution", command, **kw)
 
+    def test_malformed_payload_lets_the_call_through(self):
+        # onFailure blocks a crash, so input the guard cannot read must exit 0, not 1.
+        env = dict(os.environ, HOME=self.home, CLAUDE_PROJECT_DIR=REPO)
+        env.pop("USERPROFILE", None)
+        for payload in ("[]", '{"tool_input": "x"}', '{"tool_input": {"command": 5}}'):
+            with self.subTest(payload=payload):
+                result = subprocess.run(
+                    [SH, "-c", settings_command("no-ai-attribution")], input=payload.encode(),
+                    capture_output=True, env=env, timeout=60)
+                self.assert_passes(result)
+
     def test_ai_co_author_is_denied(self):
         self.assert_denied(self.attr(f"git commit -m 'docs: x' -m '{AI_TRAILER}'"))
 

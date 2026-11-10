@@ -196,7 +196,10 @@ def main():
         data = json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
     except Exception:
         sys.exit(0)
-    cmd = (data.get("tool_input") or {}).get("command") or ""
+    tool_input = data.get("tool_input") if isinstance(data, dict) else None
+    cmd = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(cmd, str):
+        sys.exit(0)  # not a shell call this guard can read: let it through
     cwd = data.get("cwd") or os.getcwd()
     esc = "`" if data.get("tool_name") == "PowerShell" else "\\"
     if not cmd or not (GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
