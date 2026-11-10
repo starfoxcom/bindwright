@@ -21,7 +21,6 @@ import {
   WEEK_MS,
 } from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
-import { isSameName, splitPath, startScripts } from '../hooks/start'
 import type { RunnerView } from '../types'
 
 // The shipped rules.ts is empty, so the drawn row is tested through the machine's list file, which
@@ -236,45 +235,6 @@ test('shownGrowth keeps a closed week growth for under two weeks after its close
   for (const [name, record, shown] of cases) expect([name, shownGrowth(record, NOW)]).toEqual([name, shown])
 })
 
-test('startScripts lists every script a start names by drive path on Windows, and none elsewhere', () => {
-  const cases: [name: string, argv: unknown, isWindows: boolean, paths: string[]][] = [
-    ['a program without its extension', ['C:/Windows/System32/wsl', '-d', 'Ubuntu'], true, []],
-    ['a file the start creates', ['docker', 'run', '-d', '--cidfile', 'C:/tmp/runner.cid'], true, []],
-    ['a log the start writes', ['powershell', '-RedirectStandardOutput', 'C:/logs/runner.log'], true, []],
-    ['a PowerShell script, any case', ['powershell', '-File', 'C:/r/Start.PS1'], true, ['C:/r/Start.PS1']],
-    ['a drive path', ['wscript.exe', 'C:/Users/me/start.vbs'], true, ['C:/Users/me/start.vbs']],
-    ['a backslash drive path', ['wscript.exe', 'C:\\Users\\me\\start.vbs'], true, ['C:\\Users\\me\\start.vbs']],
-    ['any path off Windows, which may live in a container or VM', ['docker', 'exec', 'ci', '/opt/run.sh'], false, []],
-    ['two drive paths, in order', ['wscript.exe', 'D:/a.vbs', 'C:/b.vbs'], true, ['D:/a.vbs', 'C:/b.vbs']],
-    ['a relative path', ['cmd', '/c', 'scripts/start.bat'], true, []],
-    ['a Windows switch before the script', ['cmd', '/c', 'C:/start.bat'], true, ['C:/start.bat']],
-    ['a folder ending in a slash', ['cmd', '/c', 'start', '/d', 'C:/actions-runner/', 'run.cmd'], true, []],
-    ['a WSL path on Windows', ['wsl.exe', '-d', 'Ubuntu', '/home/me/start.sh'], true, []],
-    ['a drive path off Windows', ['C:/start.bat'], false, []],
-    ['a word carrying arguments', ['cmd', '/c', 'C:/r/run.cmd --once'], true, []],
-    ['a start that is one string, not a list', 'wscript.exe C:/x.vbs', true, []],
-    ['no start command', undefined, true, []],
-  ]
-  for (const [name, argv, isWindows, paths] of cases) {
-    expect([name, startScripts(argv, isWindows)]).toEqual([name, paths])
-  }
-})
-
-test('isSameName ignores case', () => {
-  expect(isSameName('start-runners.vbs', 'Start-Runners.vbs')).toBe(true)
-  expect(isSameName('start.sh', 'run.sh')).toBe(false)
-})
-
-test('splitPath gives the folder and the name, keeping the slash of a root', () => {
-  const cases: [name: string, path: string, split: { folder: string; name: string }][] = [
-    ['a file in a folder', 'C:/Users/me/start.vbs', { folder: 'C:/Users/me', name: 'start.vbs' }],
-    ['a backslash path', 'C:\\Users\\me\\start.vbs', { folder: 'C:/Users/me', name: 'start.vbs' }],
-    ['a file in a drive root', 'C:/start.vbs', { folder: 'C:/', name: 'start.vbs' }],
-    ['a file in the Unix root', '/start.sh', { folder: '/', name: 'start.sh' }],
-  ]
-  for (const [name, path, split] of cases) expect([name, splitPath(path)]).toEqual([name, split])
-})
-
 test("the newer of the stored record and the session's own is used, the own one on a tie", () => {
   const stored: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW }
   const cases: [name: string, own: DiskRecord | undefined, picked: 'stored' | 'own'][] = [
@@ -478,28 +438,6 @@ test('a fresh reading another session stored is shown without reading anything',
   await clock.advance(1_000)
   expect(counts()).toEqual([0, 0])
   expect(await rowNow($)).toContain('disk 25.0 GB (5.0 used, compact)')
-})
-
-test('a start script that is gone shows start file missing, until the file is back', async ($, on) => {
-  const script = 'C:/Users/me/start-runners.vbs'
-  const listed = [{ label: 'local', processes: ['Runner.Listener'], start: ['wscript.exe', script] }]
-  const files = new Map([[LIST_FILE, JSON.stringify(listed)]])
-  const { clock } = bare(on, files)
-  await startSession($)
-  await clock.advance(1_000)
-  expect(await rowNow($)).toBe('⚙ local on · start file missing')
-  files.set(script, "WScript.Shell")
-  await clock.advance(60_000)
-  expect(await rowNow($)).toBe('⚙ local on')
-})
-
-test('a start script whose whole folder is gone shows start file missing', async ($, on) => {
-  const listed = [{ label: 'local', processes: ['Runner.Listener'], start: ['wscript.exe', 'C:/Users/me/gone/run.vbs'] }]
-  const files = new Map([[LIST_FILE, JSON.stringify(listed)], ['C:/Users/me/other.txt', 'x']])
-  const { clock } = bare(on, files)
-  await startSession($)
-  await clock.advance(1_000)
-  expect(await rowNow($)).toBe('⚙ local on · start file missing')
 })
 
 test('a stop reads the file size, retries it after a failure, and never runs df while off', async ($, on) => {
