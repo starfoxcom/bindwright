@@ -721,7 +721,8 @@ jobs:
             "origin/$BASE...HEAD" > "$RUNNER_TEMP/changed_files.txt"
           # Without --text, as the reviewer's own `git diff` runs: "-" counts
           # mark the files it will show as binary.
-          git diff -z --no-renames --diff-filter=d --numstat "origin/$BASE...HEAD" > "$RUNNER_TEMP/numstat.txt"
+          git diff -z --no-renames --diff-filter=d --numstat --ignore-submodules=none \
+            "origin/$BASE...HEAD" > "$RUNNER_TEMP/numstat.txt"
           # The project's review guide, from the gate's commit (the base, or
           # the default branch when the base predates the gate) so the PR
           # cannot rewrite the guide its own review follows. No guide, no
