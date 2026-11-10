@@ -6,8 +6,8 @@ import { CLAIM } from '../hooks/plan'
 
 // The faked engine every usage-guard hook test runs in, and the helpers that read it.
 
-// The shipped stop list is empty, and the mod under test loads its own copy of rules.ts, so the
-// lookup is tested on its own below and the hook tests check that only the zone probe ran.
+// The stop list is the user's own, and the mod under test loads that copy of rules.ts, so the lookup is
+// tested with a table of its own and the hook tests expect exactly what the list names for the test project.
 export const stopsRun = (seen: World) => seen.runs.filter(argv => argv[0] !== 'node')
 
 // 2026-10-02 17:00 UTC; the 5-hour window resets at 19:00 UTC.

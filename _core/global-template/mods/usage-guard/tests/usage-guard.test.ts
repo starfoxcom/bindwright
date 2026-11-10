@@ -48,7 +48,7 @@ test('crossing the line wraps up, stops background work and resumes after the re
   expect(seen.claims).toEqual(
     new Set([`pause-${KEY}`, `${KEY}-sess-a`, `stop-${KEY}-c__repos_my-game`, `work-${KEY}-sess-a`]),
   )
-  expect(stopsRun(seen)).toEqual([])
+  expect(stopsRun(seen)).toEqual(stopCommandsFor('C:/Repos/my-game').map(argv => [...argv]))
   expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
   expect(cardOf(seen)?.text).toContain('Fri 2026-10-02 12:02 (America/Phoenix)')
 
