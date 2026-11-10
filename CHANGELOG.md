@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **The guard hooks block a command when they crash or time out** (#679). The attribution and push guards set Claude Code's `onFailure: block` (CLI 2.1.295+): a guard that cannot start, times out or exits with a code other than 0 or 2 blocks the command instead of letting it through. A removed or half-installed setup still lets commands through, with an explicit exit 0. `/bindwright:update` brings the change to existing projects; the guards in `~/.claude` get it on their next install.
+
 ## [v3.2.0] — 2026-11-10
 
 v3.2.0 moves the review tiers to Fable 5.2, names every session after its project from one computer-wide setting, and lets self-hosted runners without a Linux Node run the reviews in full.
