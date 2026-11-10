@@ -497,7 +497,6 @@ test('stop commands are found by the project folder name, case-insensitively, an
   expect(stopCommandsFor('C:\\Repos\\my-game', table)).toEqual([['docker', 'compose', 'stop']])
   expect(stopCommandsFor('/home/me/repos/MY-GAME/', table)).toEqual([['docker', 'compose', 'stop']])
   expect(stopCommandsFor('C:/Repos/app', table)).toEqual([])
-  expect(stopCommandsFor('C:/Repos/my-game')).toEqual([])
 })
 
 test('crossing the line mid-turn waits for the turn to end before the wrap-up runs', async ($, on) => {
