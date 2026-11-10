@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.2.0] — 2026-11-10
+
+v3.2.0 moves the review tiers to Fable 5.2, names every session after its project from one computer-wide setting, and lets self-hosted runners without a Linux Node run the reviews in full.
+
 ### Changed
 
 - **The review tiers move to Fable 5.2.** The routine review runs `claude-fable-5-2` at low effort and the deep review `claude-fable-5-2` at medium, both with the same `claude-opus-5-5` high backup. In a best-of-three, head-to-head trial against Fable 5.1 low on saved pull requests with known findings, scored by a two-judge panel, both settings missed fewer known defects for less money; the deep setting lists more findings the judges ruled out. Existing binds keep their pins until `/bindwright:update` or an edit to `.github/review-gate.yml`.
@@ -15,6 +19,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The review jobs install their CLI on self-hosted runners with no Linux Node** (#714). On a WSL runner whose only `npm` was the Windows one, the install left no Linux binary, so the review ran without its credits run and its backup. Each review job now downloads the official Node build into its temp folder when the runner has no Linux Node 22 or newer, checks it against a pinned checksum, and uses it only for the install.
+- **The session-close count of code searches no longer reads a shell redirect as a path** (#733). A search of a folder outside the repo that ended in `2>/dev/null` counted as a plain search of the repo's code.
 
 ## [v3.1.0] — 2026-11-09
 
