@@ -52,6 +52,7 @@ Run the engine with `--settings <repo root or any folder>`: `installed` lists th
 
 - **Push guard, session titles, attribution guard and the code-search hook:** `python "<helper>/engine/home.py" remove-hook <name>.py` for each, after `home.py list-hooks` shows which are installed (`push-guard.py`, `session-title.py`, `no-ai-attribution.py`, the `*-first.py` search hook). It removes the hook's entry from `~/.claude/settings.json` and its file, and keeps the user's other hooks.
 - **The `git push` allow rule** setup offered with the push guard: `home.py disallow "Bash(git push:*)"`.
+- **The session titles' allow rule**, with the session-title hook: `home.py disallow "Edit(~/.bindwright/session-titles/**)"`.
 - **Mods:** `home.py remove-mod <name>` for each installed one. It takes the mod out of the plugin folders list and deletes its folder.
 - **Builder agent:** `home.py remove-agent builder.md`.
 - **Reply style:** `home.py remove-style straight-talk.md`, which also turns it off when it is the style in use.

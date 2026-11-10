@@ -1,5 +1,5 @@
 // session-title.py (the global hook) runs on a throwaway folder in the OS temp dir,
-// with CLAUDE_CONFIG_DIR pointing at a temp config folder. Every case is checked by
+// with the home folder pointing at a temp folder. Every case is checked by
 // what the hook prints, the status it exits with and the files it leaves on disk.
 
 import { test } from "node:test";
@@ -20,14 +20,14 @@ const SESSION = "abc-123";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // The project sits at base/repo/app, so a .git added at base/repo is one folder above it.
-// The config folder is base/claude.
+// The home folder is base/home.
 function withLayout(fn) {
   const base = mkdtempSync(join(tmpdir(), "bw-title-"));
   const root = join(base, "repo", "app");
   mkdirSync(root, { recursive: true });
-  const config = join(base, "claude");
+  const home = join(base, "home");
   try {
-    return fn({ root, config, titles: join(config, "session-titles") });
+    return fn({ root, home, titles: join(home, ".bindwright", "session-titles") });
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
@@ -62,7 +62,7 @@ function runHook(layout, input) {
   const r = spawnSync(python, ["-I", hook], {
     input: typeof input === "string" ? input : JSON.stringify(input),
     encoding: "utf8",
-    env: { ...process.env, CLAUDE_PROJECT_DIR: layout.root, CLAUDE_CONFIG_DIR: layout.config },
+    env: { ...process.env, CLAUDE_PROJECT_DIR: layout.root, HOME: layout.home, USERPROFILE: layout.home },
   });
   return { status: r.status, out: r.stdout };
 }
@@ -128,10 +128,10 @@ const cases = [
     },
   },
   {
-    name: "a newer purpose in the repo beats an older one in the config folder",
+    name: "a newer purpose in the repo beats an older one in the titles folder",
     setup(layout) {
       writeProject(layout, "Demo");
-      ageFile(purposeInTitles(layout, "old config focus"), 2);
+      ageFile(purposeInTitles(layout, "old titles focus"), 2);
       purposeInRepo(layout, "new repo focus");
     },
     input: event(),
@@ -140,15 +140,15 @@ const cases = [
     },
   },
   {
-    name: "a newer purpose in the config folder beats an older one in the repo",
+    name: "a newer purpose in the titles folder beats an older one in the repo",
     setup(layout) {
       writeProject(layout, "Demo");
       ageFile(purposeInRepo(layout, "old repo focus"), 2);
-      purposeInTitles(layout, "new config focus");
+      purposeInTitles(layout, "new titles focus");
     },
     input: event(),
     check(layout, run) {
-      assert.equal(hookOutput(run.out).sessionTitle, "Demo - new config focus");
+      assert.equal(hookOutput(run.out).sessionTitle, "Demo - new titles focus");
     },
   },
   {
@@ -245,4 +245,17 @@ test("a new purpose after a title was set prints the new title, once", { skip },
   purposeInTitles(layout, "fix the login bug");
   assert.equal(hookOutput(runHook(layout, event("UserPromptSubmit")).out).sessionTitle, "Demo - fix the login bug");
   assert.equal(runHook(layout, event("UserPromptSubmit")).out, "");
+}));
+
+const sweepKeepsUsed = "another session's sweep keeps the 31-day-old files of a session used since";
+test(sweepKeepsUsed, { skip }, () => withLayout((layout) => {
+  writeProject(layout, "Demo");
+  const purpose = purposeInTitles(layout, "fix the login bug", "busy-session");
+  const title = writeFile(join(layout.titles, "busy-session.title"), "Demo - fix the login bug");
+  ageFile(purpose, 31);
+  ageFile(title, 31);
+  runHook(layout, event("UserPromptSubmit", "busy-session"));
+  runHook(layout, event());
+  assert.equal(existsSync(purpose), true);
+  assert.equal(existsSync(title), true);
 }));

@@ -472,7 +472,7 @@ test("--events installs one entry per event, with no matcher, beside the user's 
     assert.ok(!("matcher" in hooks.UserPromptSubmit[0]));
     assert.deepEqual(hooks.UserPromptSubmit[0].hooks, hooks.SessionStart[1].hooks);
     const hook = hooks.UserPromptSubmit[0].hooks[0];
-    assert.equal(hook.command, "/usr/bin/python3");
+    assert.ok([PYTHON, "python3"].includes(hook.command), hook.command);
     assert.deepEqual(hook.args.slice(0, 2), ["-I", "-c"]);
     assert.ok(hook.args[3].endsWith("/.claude/hooks/session-title.py"));
     assert.equal(hooks.PreToolUse, undefined);

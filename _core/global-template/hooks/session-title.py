@@ -8,15 +8,18 @@ session has a purpose, the title is `<name> - <purpose>`. The purpose is the tex
 of the session's purpose file with whitespace collapsed to single spaces and cut
 to its first 10 words.
 
-The hook keeps its files in the Claude config folder, never in the project. Each
-session's `.title` file keeps the last title the hook set, and its `.purpose`
+The hook keeps its files in `~/.bindwright/session-titles/`, never in the
+project, and outside any `.claude` folder, whose writes always ask for permission.
+Each session's `.title` file keeps the last title the hook set, and its `.purpose`
 file is written by the assistant. A repo set up earlier also has purpose files
 in `.bindwright/sessions/`; the newer of the two purposes wins.
 
 A title is set once: the hook prints nothing while the title is unchanged, so a
 name the user picks with /rename stays until the purpose changes. On SessionStart
 the hook also asks the assistant to write the session's focus to its purpose file,
-and deletes the files of the titles folder that are 30 days old.
+and deletes the files of the titles folder that are 30 days old. Every run
+refreshes the session's own files, so their age is the time since the session
+was last used.
 
 The project root is CLAUDE_PROJECT_DIR, else the input's `cwd`, else the current
 folder. Every failure prints nothing and exits 0: a title never blocks a session
@@ -30,7 +33,7 @@ import time
 
 PROJECT_FILE = os.path.join(".bindwright", "project.json")
 REPO_SESSIONS = os.path.join(".bindwright", "sessions")
-TITLES_FOLDER = "session-titles"
+TITLES_FOLDER = os.path.join(".bindwright", "session-titles")
 # A file-name stem only, so a session id can never leave the titles folder.
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 PURPOSE_WORDS = 10
@@ -41,9 +44,9 @@ PURPOSE_REQUEST = (
 )
 
 
-def config_folder():
-    """The Claude config folder: CLAUDE_CONFIG_DIR when set, else ~/.claude."""
-    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+def titles_folder():
+    """The folder that holds every session's title and purpose files."""
+    return os.path.join(os.path.expanduser("~"), TITLES_FOLDER)
 
 
 def project_root(event):
@@ -125,8 +128,17 @@ def purpose_path(titles, session_id):
     return os.path.abspath(os.path.join(titles, session_id + ".purpose")).replace(os.sep, "/")
 
 
+def refresh_own_files(titles, session_id):
+    """Marks the session's own files as used now, so the sweep keeps them."""
+    for suffix in (".title", ".purpose"):
+        try:
+            os.utime(os.path.join(titles, session_id + suffix))
+        except OSError:
+            pass
+
+
 def sweep_old_files(titles, session_id):
-    """Deletes the titles folder's files untouched for 30 days, except this session's own,
+    """Deletes the titles folder's files unused for 30 days, except this session's own,
     so a resumed old session keeps its purpose. Best effort: nothing raises."""
     try:
         names = os.listdir(titles)
@@ -154,7 +166,7 @@ def hook_output(event_name, title, request):
     return {"hookSpecificOutput": output} if len(output) > 1 else None
 
 
-def title_session(event, config):
+def title_session(event, titles):
     """Records the title, prints it when it changed, and on SessionStart asks for the purpose."""
     event_name = event.get("hook_event_name")
     session_id = event.get("session_id")
@@ -163,12 +175,12 @@ def title_session(event, config):
     if not SESSION_ID.fullmatch(session_id):
         return
     root = project_root(event)
-    titles = os.path.join(config, TITLES_FOLDER)
     purpose = purpose_of(purpose_file(root, session_id, titles))
     name = project_name(root)
     title = f"{name} - {purpose}" if purpose else name
     os.makedirs(titles, exist_ok=True)
     changed = set_title(titles, session_id, title)
+    refresh_own_files(titles, session_id)
     request = None
     if event_name == "SessionStart":
         sweep_old_files(titles, session_id)
@@ -182,7 +194,7 @@ def main():
     try:
         event = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
         if isinstance(event, dict):
-            title_session(event, config_folder())
+            title_session(event, titles_folder())
     except Exception:
         # A title must never block a session or a prompt, so any failure is skipped.
         pass
