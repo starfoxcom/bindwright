@@ -309,7 +309,10 @@ async function setUp($: Engine) {
     name: 'pc',
     description:
       'Shared PC seat (one session at a time runs heavy work; heavy commands queue automatically). ' +
-      'hold: claim the PC for a measurement window (minutes 1-60). release: free it early, or leave the line. ' +
+      'hold: claim the PC for ONE test or command whose timing needs it alone (minutes 1-15), then release ' +
+      'it; never hold for a whole batch. Holding again while another session waits sends this session to the ' +
+      'back of the line, so run one test, release, and hold again for the next. ' +
+      'release: free it early, or leave the line. ' +
       'status: the line. ' +
       'request_next: ask the person to let this session go next; give a concrete reason (a window closing, ' +
       'the person waiting on this result, a short job stuck behind a long one).',
@@ -657,7 +660,7 @@ const HELP = [
   '  /pc next [name]           let this session (or the named one) go next; approves your own request',
   '  /pc leave                 leave the line',
   '  /pc release               give the seat back',
-  '  /pc hold <min> [reason]   keep the seat for a measurement or a multi-command run (default 15 min)',
+  '  /pc hold <min> [reason]   keep the seat for one test or command (1-15 min, default 15); release after it',
   '  /pc done                  same as release',
   '  /pc phone                 the same as text, for phone chats',
   '  /pc help                  this list',
