@@ -623,12 +623,15 @@ jobs:
         **CRITICAL — write the request even when a prior `@claude` comment exists on this PR.** The `claude.yml` deep-review workflow only fires on the `issue_comment` event for the CURRENT comment — it does not re-evaluate older comments when a new push lands. Every escalation posts a fresh comment, and it starts with the literal `@claude` token so both the workflow's `if: startsWith(body, '@claude review this PR')` condition AND the action's internal trigger detector evaluate true.
     # Read-only, with no id-token: every attempt reads the PR with this job's
     # token, so nothing a reviewer starts can mint the review app's token.
-    # Only the post job, which runs no model, mints it to post.
+    # Only the post job, which runs no model, mints it to post. checks and
+    # statuses let the reviewer's `gh pr checks` read a private repo's checks.
     permissions:
       contents: read
       pull-requests: read
       issues: read
       actions: read
+      checks: read
+      statuses: read
     steps:
       # As in Project triggers: a full checkout starts from a fresh clone.
       - name: Drop a partial clone left by an earlier job
