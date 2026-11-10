@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:review-trial` compares models for the repo's AI review on its own history** (#732). It builds the cases from merged pull requests the review gate commented on, offers only the models the user's plan includes (a Fable candidate on Pro only after a yes, since it bills credits), shows how many reviews and judge runs it will start before anything runs, and recommends whether to change `.github/review-gate.yml`. A light run (4 pull requests, one round, one judge) is the default; the full best-of-three with two judges is an option.
+
 ## [v3.2.0] — 2026-11-10
 
 v3.2.0 moves the review tiers to Fable 5.2, names every session after its project from one computer-wide setting, and lets self-hosted runners without a Linux Node run the reviews in full.
