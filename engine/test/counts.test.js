@@ -368,6 +368,14 @@ test("a gh that fails records a failed send and posts nothing", () => inScene(as
   assert.equal(counter.posts.length, 0);
 }));
 
+test("a send with nothing to count clears an earlier failure", () => inScene(async (s) => {
+  seedState(s);
+  const when = noon(3);
+  await sendAt(s, when, fakeGh(new Error("gh: command not found")), fakeCounter({ status: 200 }));
+  await sendAt(s, new Date(when.getTime() + 61 * 1000), fakeGh([]), fakeCounter({ status: 200 }));
+  assert.equal(projectOf(s).failedAt, null);
+}));
+
 test("a failed send is not retried for a minute, and is retried after it", () => inScene(async (s) => {
   seedState(s);
   const gh = fakeGh([GREEN_PR]);

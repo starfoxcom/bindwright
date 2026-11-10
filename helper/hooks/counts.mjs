@@ -412,11 +412,11 @@ function isDue(entry, current) {
   return current.getTime() - entry.failedAt >= RETRY_GAP_IN_MILLISECONDS;
 }
 
-// What a send the counter took, or found already counted, leaves in the entry: the next
-// send waits a cooldown, and the old day field is cleared.
+// What a send that ended well (taken, already counted, or nothing to count) leaves in the
+// entry: the next send waits a cooldown, and the old day field and any failure are cleared.
 function cooldownFrom(current) {
   const nextSendAt = new Date(current.getTime() + SEND_COOLDOWN_IN_MILLISECONDS).toISOString();
-  return { nextSendAt, lastSendDay: null };
+  return { nextSendAt, lastSendDay: null, failedAt: null };
 }
 
 // What the counter's answer changes in the repo's entry. A 409 means an earlier
