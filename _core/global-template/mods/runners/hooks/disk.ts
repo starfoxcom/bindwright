@@ -110,6 +110,8 @@ export function rollWeek(record: DiskRecord, usedBytes: number, now: number): We
   const isWeekMissing = weekAt === undefined || weekUsedBytes === undefined
   if (isWeekMissing || weekAt > now) return { ...newWeek, grewBytes }
   if (now - weekAt < WEEK_MS) return { weekUsedBytes, weekAt, grewBytes }
+  // Readings stop while the runners are off: a span of two weeks or more is no week's growth, so none is shown.
+  if (now - weekAt >= 2 * WEEK_MS) return { ...newWeek, grewBytes: undefined }
   return { ...newWeek, grewBytes: usedBytes - weekUsedBytes }
 }
 

@@ -19,7 +19,7 @@ import {
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
-import { splitPath, startPath } from './start'
+import { isSameName, splitPath, startPath } from './start'
 
 // The machine's local CI runners in one row above the prompt: on or off, how many are online and
 // busy, queued runs and the next scheduled run, with Start and Stop. Every value is read in a timer,
@@ -198,12 +198,12 @@ async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<v
 
 // A Start whose script is gone does nothing, silently. A listing that fails counts as present, so a
 // transient error never raises the flag.
-async function isStartMissing($: Engine, argv: string[] | undefined): Promise<boolean> {
-  const file = startPath(argv)
+async function isStartMissing($: Engine, argv: unknown): Promise<boolean> {
+  const file = startPath(argv, live.isWindows)
   if (file === undefined) return false
   const { folder, name } = splitPath(file)
   const entries = await $.fs.list(folder).catch(() => undefined)
-  return entries !== undefined && !entries.some(entry => entry.name === name)
+  return entries !== undefined && !entries.some(entry => isSameName(entry.name, name, live.isWindows))
 }
 
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {
