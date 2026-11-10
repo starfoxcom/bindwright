@@ -207,6 +207,26 @@ const hookRows = [
   ["settings that are not JSON", "{", true],
 ];
 
+// A blocking guard exactly as home.py writes it, its interpreter path holding a space and a quote.
+function blockingGuardJson(interpreter) {
+  const home = mkdtempSync(join(tmpdir(), "bw-doctor-home-"));
+  try {
+    const file = join(home, "push-guard.py");
+    writeFileSync(file, "print('hi')\n");
+    const r = spawnSync(python, [join(engine, "home.py"), "--home", home, "install-hook", file,
+      "--python", interpreter, "--matcher", "Bash", "--block-on-failure"], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    return readFileSync(join(home, ".claude", "settings.json"), "utf8");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+const quotedInterpreter = join(tmpdir(), "no such folder", "it's", "python3");
+if (python) {
+  hookRows.push(["a blocking guard whose quoted interpreter is missing is named exactly",
+    blockingGuardJson(quotedInterpreter), false, quotedInterpreter.split("\\").join("/")]);
+}
+
 for (const [name, text, ok, program] of hookRows) {
   test(`the hooks check: ${name}`, needsPython, async () => {
     const withSettings = ({ config }) => {
@@ -218,7 +238,7 @@ for (const [name, text, ok, program] of hookRows) {
     assert.equal(hooks.ok, ok, hooks.say);
     if (!ok) {
       assert.equal(hooks.say, `Some hooks start a program this computer does not have: ${program}. `
-        + "Those hooks fail on every call.");
+        + "Those hooks do not run, and a guard among them blocks nothing.");
       assert.equal(hooks.fix,
         "Run /bindwright:setup again to reinstall them, or fix the paths in the settings file named.");
     }
