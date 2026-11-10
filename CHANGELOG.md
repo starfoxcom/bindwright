@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:review-trial` compares models for the repo's AI review on its own history** (#732). It builds the cases from merged pull requests the review gate commented on, offers only the models the user's plan includes (a Fable candidate on Pro only after a yes, since it bills credits), shows how many reviews and judge runs it will start before anything runs, and recommends whether to change `.github/review-gate.yml`. A light run (4 pull requests, one round, one judge) is the default; the full best-of-three with two judges is an option.
+
 ### Changed
 
 - **The guard hooks block a command when they crash or time out** (#679). The attribution and push guards set Claude Code's `onFailure: block` (CLI 2.1.295+): a guard that starts and then crashes, times out or exits with a code other than 0 or 2 blocks the command instead of letting it through. A removed or half-installed setup (no launcher, hook file or working Python) still lets commands through, with an explicit exit 0. On Windows the guards run through Git Bash, which setup requires; without it Claude Code blocks any shell-form guard. `/bindwright:update` brings the change to existing projects; the guards in `~/.claude` get it on their next install.

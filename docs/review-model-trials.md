@@ -80,4 +80,17 @@ The deep tier moved from Opus 4.8 to Fable 5.1 low, the arm that found the most 
 
 ## Running it yourself
 
-The harness is a Claude Code workflow script that builds the saved states, runs the arms and the judges, and prints the ranking. It lives in the private project for now, since its saved states are that project's code. If you want the comparison on your own PRs, open an issue and say so.
+Run `/bindwright:review-trial` in your repo. It builds the cases from your own merged pull requests (a 🔴 review that a later commit fixed gives known findings; a pull request whose only review was 🟢 is the clean one), so it needs the CI reviews' history: a repo with a local review only has none to replay.
+
+It asks your plan first and offers only the models that plan includes. Every review and judge runs as a session of your Claude Code, so the trial counts against your plan's usage limits; on Pro, Fable models bill paid usage credits, so a Fable candidate goes in only after you agree to that. Today's setting is always one of the candidates.
+
+Two sizes:
+
+| Size | Pull requests | Rounds | Judges | Use it for |
+|---|---|---|---|---|
+| Light (default) | 4 | 1 | 1 | A first look, within a plan's normal week |
+| Full | 5 or more | best of three | 2 | The method behind these pins, before changing a setting on a narrow win |
+
+Before anything runs, a dry run shows how many reviews and judge runs the trial will start. Each review costs about as much usage as one CI review of that pull request on that model. Nothing starts without your yes, nothing is posted to GitHub, and the review settings change only on a yes at the end, in a pull request of their own.
+
+The trial is a Claude Code workflow script that ships with Bindwright's helper (`workflows/review-trial.js`), next to the script that builds the cases (`hooks/review-trial-states.mjs`).
