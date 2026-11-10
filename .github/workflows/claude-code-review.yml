@@ -26,12 +26,13 @@
 # PERMANENT LIMITATION — claude-code-review.yml edits get no AI review:
 #   The Anthropic Claude Code GitHub App validates that the workflow file on a PR's
 #   head ref is byte-identical to the version on the default branch before granting
-#   an OIDC-exchanged token, so the review action cannot run on a PR that edits this
-#   file. Triage therefore never reviews this one file (.github/workflows/claude-code-review.yml;
-#   a .yaml twin would run as a separate workflow, so it is reviewed): a PR of only it and skippable
-#   docs passes as non-reviewable. Edit it alone: mixed with reviewable files (claude.yml, the gate
-#   script, .claude/), the review fails `Workflow validation failed` and the gate blocks, so those go
-#   in their own PR first. Our own such PRs merge on two local reviews of the head commit; any other
+#   an OIDC-exchanged token. The review attempts read the PR with the job's own
+#   read-only token, so they still run on a PR that edits this file, but the post
+#   job's exchange is refused and the review is never posted. Triage therefore never
+#   reviews this one file (.github/workflows/claude-code-review.yml; a .yaml twin would run as
+#   a separate workflow, so it is reviewed): a PR of only it and skippable docs passes as
+#   non-reviewable. Edit it alone: mixed with reviewable files (claude.yml, the gate script,
+#   .claude/), the review cannot be posted and the gate blocks, so those go in their own PR first. Our own such PRs merge on two local reviews of the head commit; any other
 #   PR waits for the maintainer's read.
 
 name: Claude Code Review
@@ -639,9 +640,9 @@ jobs:
           fi
 
       # No token left in .git/config, which the credits reviewer's worktree
-      # shares: that reviewer reads PR content with a Read tool, so even this
-      # job's read-only token stays out of its reach. The fetches here are
-      # anonymous on a public repo; the review action sets up its own auth.
+      # shares: that reviewer gets this job's read-only token only as GH_TOKEN
+      # for its gh reads. The fetches here are anonymous on a public repo; the
+      # review action sets up its own auth.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -1371,9 +1372,8 @@ jobs:
           # maintainer's own allow list (commits, pushes, merges). The reviewer
           # keeps the project's rules, hooks and deny list but not those allows.
           # Every action review step in both workflows passes the same sources.
-          # The tool lists let a reviewer read the PR, nothing more: its bot
-          # token can write repo contents, and `main`/`develop` are the only
-          # protected refs. So no `gh api`, no comments or labels (it returns
+          # The tool lists let a reviewer read the PR, nothing more, whatever
+          # its token allows. So no `gh api`, no comments or labels (it returns
           # its review as structured output, `--json-schema`, and "Post the
           # review" posts it), and no file edits or git writes. Git reads have
           # no allow rule on purpose: the CLI's built-in read-only check passes
@@ -1870,7 +1870,7 @@ jobs:
           }
           bot_token=""
           if ! retry token_once; then
-            echo "::error::The bot token exchange failed three times, so the review cannot be posted; re-run this job"
+            echo "::error::The bot token exchange failed three times, so the review cannot be posted. A PR whose copy of this workflow differs from the default branch's is refused every time: ship that edit in a PR of its own, or merge the pending cascade first. Otherwise re-run this job"
             exit 1
           fi
           echo "::add-mask::$bot_token"
@@ -2174,8 +2174,9 @@ jobs:
     #       1. Triage classified the diff as non-reviewable → pass (and, with
     #          `checks: two`, Claude On-Demand → skipped).
     #       2. Routine review job didn't reach success → fail (action errored,
-    #          OIDC tripped, workflow-validation skip, runner crash).
-    #       3. Routine verdict comment missing or 🔴 → fail.
+    #          runner crash).
+    #       3. Routine verdict comment missing (the post job's token exchange
+    #          refused a PR whose copy of this workflow differs) or 🔴 → fail.
     #       4. Routine 🟢 → pass.
     if: always()
     runs-on: ${{ fromJSON(needs.init-gate.outputs.runner_labels || '["ubuntu-latest"]') }}
