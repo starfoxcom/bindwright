@@ -621,13 +621,13 @@ jobs:
         ```
 
         **CRITICAL — write the request even when a prior `@claude` comment exists on this PR.** The `claude.yml` deep-review workflow only fires on the `issue_comment` event for the CURRENT comment — it does not re-evaluate older comments when a new push lands. Every escalation posts a fresh comment, and it starts with the literal `@claude` token so both the workflow's `if: startsWith(body, '@claude review this PR')` condition AND the action's internal trigger detector evaluate true.
-    # Read-only, apart from id-token: the review action and the credits run
-    # exchange it for the review app's token, as the official action does.
+    # Read-only, with no id-token: every attempt reads the PR with this job's
+    # token, so nothing a reviewer starts can mint the review app's token.
+    # Only the post job, which runs no model, mints it to post.
     permissions:
       contents: read
       pull-requests: read
       issues: read
-      id-token: write
       actions: read
     steps:
       # As in Project triggers: a full checkout starts from a fresh clone.
@@ -1188,6 +1188,7 @@ jobs:
           EFFORT: ${{ needs.init-gate.outputs.routine_effort }}
           MAX_TURNS: ${{ needs.init-gate.outputs.routine_max_turns }}
           EXTRA_TOOLS: ${{ needs.init-gate.outputs.allowed_tools }}
+          READ_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ -z "$ANTHROPIC_API_KEY" ]; then
@@ -1206,37 +1207,12 @@ jobs:
           # fallback steps. `--setting-sources user --strict-mcp-config` below
           # also keeps the restored project settings from loading.
           wt="$RUNNER_TEMP/credits-review"
-          bot_token=""
-          cleanup() {
-            if [ -n "$bot_token" ]; then
-              GH_TOKEN="$bot_token" timeout -k 10 120 gh api -X DELETE /installation/token >/dev/null 2>&1 || true
-            fi
-            git worktree remove --force "$wt" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
+          trap 'git worktree remove --force "$wt" >/dev/null 2>&1 || true' EXIT
           git worktree add --quiet --detach "$wt" HEAD
           for p in .claude .mcp.json .claude.json .gitmodules .ripgreprc CLAUDE.md CLAUDE.local.md .husky; do
             rm -rf "${wt:?}/$p"
             git -C "$wt" checkout "origin/$BASE_REF" -- "$p" 2>/dev/null || true
           done
-
-          # The reviewer reads the PR with the review app's token, as the
-          # action's reviewer does, never with the job's token. It is handed
-          # back when the step ends.
-          oidc=$(curl -fsS --connect-timeout 20 --max-time 60 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=claude-code-github-action" \
-            | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["value"])') || oidc=""
-          echo "::add-mask::$oidc"
-          if [ -n "$oidc" ]; then
-            bot_token=$(curl -fsS --connect-timeout 20 --max-time 60 -X POST -H "Authorization: Bearer $oidc" \
-              https://api.anthropic.com/api/github/github-app-token-exchange \
-              | python3 -I -c 'import json, sys; d = json.load(sys.stdin); print(d.get("token") or d.get("app_token") or "")') || bot_token=""
-          fi
-          if [ -z "$bot_token" ]; then
-            echo "::warning::The bot token exchange returned no token: the review runs on the subscription"
-            exit 1
-          fi
-          echo "::add-mask::$bot_token"
 
           # The answer the check below reads: the CLI's result, with the review
           # as structured output. The reviewer can post nothing itself.
@@ -1244,10 +1220,8 @@ jobs:
           status=0
           # A time limit, so a release that hangs ends as a broken run, and the
           # action steps take over.
-          # Without the job's OIDC request values, as the action's reviewer
-          # runs: with them, anything the reviewer starts could mint its own
-          # bot token and post.
-          (cd "$wt" && GH_TOKEN="$bot_token" env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+          # The reviewer reads the PR with the job's read-only token.
+          (cd "$wt" && GH_TOKEN="$READ_TOKEN" \
             timeout --kill-after=1m 30m "$CLI" -p "Review context file: $RUNNER_TEMP/review_context.md"$'\n\n'"$ROUTINE_REVIEW_PROMPT" \
             --setting-sources user --strict-mcp-config --permission-mode default \
             --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read$EXTRA_TOOLS" \
@@ -1381,6 +1355,9 @@ jobs:
         continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's read-only token: with it the action skips its exchange
+          # for the review app's token, which the job cannot mint anyway.
+          github_token: ${{ github.token }}
           show_full_output: false
           # The job's CLI from "Install Claude Code". Empty when that
           # install failed, and then the action installs the CLI it bundles.
@@ -1592,6 +1569,9 @@ jobs:
         uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d  # v1 (v1.0.266)
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's read-only token: with it the action skips its exchange
+          # for the review app's token, which the job cannot mint anyway.
+          github_token: ${{ github.token }}
           show_full_output: false
           path_to_claude_code_executable: ${{ steps.claude-cli-stable.outputs.path }}
           claude_args: '--setting-sources user,project --permission-mode default --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read${{ needs.init-gate.outputs.allowed_tools }}" --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" --max-turns ${{ needs.init-gate.outputs.routine_max_turns }} --model ${{ needs.init-gate.outputs.routine_fallback_model }} --effort ${{ needs.init-gate.outputs.routine_fallback_effort }} --json-schema ''${{ env.REVIEW_SCHEMA }}'''
@@ -1781,8 +1761,18 @@ jobs:
           with open(comment_path, 'w', encoding='utf-8') as f:
               json.dump(comment, f)
           PYEOF
-          timeout -k 10 120 gh api "repos/$REPO/contents/.github/scripts/review_gate.py?ref=$GATE_SHA" \
-            -H "Accept: application/vnd.github.raw" > "$gate"
+          # Three tries, so a passing GitHub error does not fail the post.
+          for try in 1 2 3; do
+            if timeout -k 10 120 gh api "repos/$REPO/contents/.github/scripts/review_gate.py?ref=$GATE_SHA" \
+                -H "Accept: application/vnd.github.raw" > "$gate"; then
+              break
+            fi
+            if [ "$try" = 3 ]; then
+              echo "::error::The gate's script could not be downloaded, so the review is not posted"
+              exit 1
+            fi
+            sleep 15
+          done
           found=$(python3 -I "$gate" verdict --since 1970-01-01T00:00:00Z --tier routine --marker "$marker" < "$as_comment")
           verdict=$(printf '%s' "$found" | jq -r .verdict)
           case "$verdict" in
