@@ -721,7 +721,8 @@ jobs:
             "origin/$BASE...HEAD" > "$RUNNER_TEMP/changed_files.txt"
           # Without --text, as the reviewer's own `git diff` runs: "-" counts
           # mark the files it will show as binary.
-          git diff -z --no-renames --diff-filter=d --numstat "origin/$BASE...HEAD" > "$RUNNER_TEMP/numstat.txt"
+          git diff -z --no-renames --diff-filter=d --numstat --ignore-submodules=none \
+            "origin/$BASE...HEAD" > "$RUNNER_TEMP/numstat.txt"
           # The project's review guide, from the gate's commit (the base, or
           # the default branch when the base predates the gate) so the PR
           # cannot rewrite the guide its own review follows. No guide, no
@@ -865,7 +866,7 @@ jobs:
           ai_pats = [
               re.compile(r'Co-Authored-By:\s*Claude', re.IGNORECASE),
               re.compile(r'Generated\s+with\s+\[?Claude\s+Code', re.IGNORECASE),
-              re.compile(r'claude\.(?:com|ai)\b', re.IGNORECASE),
+              re.compile(r'claude\.(?:com|ai)/(?:code|claude-code)\b', re.IGNORECASE),
               re.compile(r'🤖\s*Generated', re.IGNORECASE),
           ] if attribution else []
           for fname, lines in per_file_added.items():
@@ -887,6 +888,8 @@ jobs:
               stats = [p.decode('utf-8', 'surrogateescape') for p in f.read().split(b'\0') if p]
           MEDIA = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.ttf', '.otf', '.woff', '.woff2')
           binary = [s[4:] for s in stats if s.startswith('-\t-\t') and not s[4:].lower().endswith(MEDIA)]
+          # The numstat skips deleted files (--diff-filter=d): it names every file left to read.
+          kept = {s.split('\t', 2)[2] for s in stats if s.count('\t') >= 2}
           if binary:
               warnings.append(f'BINARY_IN_DIFF: {", ".join(binary)} — git diff shows these as binary; Read each one in full (git show HEAD:<path> for the base-config paths)')
 
@@ -993,7 +996,9 @@ jobs:
               out.write('## Architecture-critical files (READ THESE)\n\n')
               if arch_critical:
                   for f in arch_critical:
-                      out.write(f'- `{shown(f)}`\n')
+                      # Before the name, where no file name can reach.
+                      gone = '' if f in kept else 'deleted, nothing to read: '
+                      out.write(f'- {gone}`{shown(f)}`\n')
               else:
                   out.write('_(none)_\n')
               out.write('\n')
@@ -1121,7 +1126,7 @@ jobs:
             PATH="$NODE_BIN:$PATH"
           fi
           if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" = win32 ] || [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" != /* ]]; then
-            echo "::warning::No usable Node and npm on this runner: the review runs on the action's own CLI; the backup tries the stable release"
+            echo "::warning::No usable Node and npm on this runner: the review runs on the action's own CLI, with no credits run and no backup review"
             exit 1
           fi
           CLI_VERSION=""
@@ -1312,7 +1317,7 @@ jobs:
           # first line when it has none), so a retried post finds its own.
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
           review = answer['review'].lstrip()
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
@@ -1449,7 +1454,7 @@ jobs:
           # first line when it has none), so a retried post finds its own.
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
           review = answer['review'].lstrip()
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
@@ -1638,7 +1643,7 @@ jobs:
           # first line when it has none), so a retried post finds its own.
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
           review = answer['review'].lstrip()
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
@@ -1754,7 +1759,7 @@ jobs:
           with open(raw_path, encoding='utf-8', newline='') as f:
               review = f.read().lstrip()
           mark = f"<!-- review-run: {os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']} review -->"
-          heading = re.match(marker, review)
+          heading = re.match(marker, review, re.I)
           cut = review.find('\n', heading.end() if heading else 0)
           body = review + '\n' + mark if cut < 0 else review[:cut] + '\n' + mark + review[cut:]
           with open(review_path, 'w', encoding='utf-8', newline='') as f:
