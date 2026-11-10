@@ -23,6 +23,8 @@ They live in `.github/review-gate.yml` in a set-up project, so you can change th
 6. **Full cost.** Every token kind (input, cache writes, cache reads, output) is priced at the list rates and summed per arm. Cache reads and writes are most of a review's bill, so output tokens alone mislead.
 7. **The win rule comes before the results.** A candidate replaces the current pin when it ranks above it and costs the same or less. The maintainer can still choose otherwise, and the reason is written down with the result.
 
+This is the same way Anthropic's [model guide](https://claude.dev/blog/which-claude-model-should-you-build-with/) says to pick a model: real tasks with a known outcome, each candidate at two or three effort levels, and cost per task from the usage numbers. A general guide can't stand in for the trial, though. That guide puts repeated review work on Sonnet 5.5 at medium effort, and on this rubric Sonnet 5.5 at low and medium let every routine state with a defect through (2026-10-04 below).
+
 Two scoring lessons from the trials:
 
 - **Compare in pairs.** With three or more arms in one leaderboard, a round goes only to a single best arm, so two similar candidates that both beat the current pin take rounds from each other. Each candidate is scored against the current pin on its own, from the same judge scores.
@@ -51,7 +53,7 @@ The pick: Fable 5.2 low for the routine tier, the cheapest arm that won it. Fabl
 
 ### 2026-10-04: Sonnet 5.5 and Opus 5.5 at three efforts each
 
-Seven arms against Fable 5.1 low. No Sonnet 5.5 setting earned a seat: at low and medium effort it passed every routine state that had a defect. Opus 5.5 at medium and high missed fewer defects than Fable 5.1 low but raised more than twice the false positives. Pins unchanged.
+Seven arms against Fable 5.1 low. No Sonnet 5.5 setting earned a seat: at low and medium effort it passed every routine state that had a defect (9 of 9 missed). Opus 5.5 at medium and high missed fewer defects than Fable 5.1 low but raised more than twice the false positives. Pins unchanged.
 
 ### 2026-09-22 and 09-23: Opus 5.5, then best of three
 
