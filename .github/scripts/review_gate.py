@@ -296,7 +296,7 @@ def verdict(text, since, tier, marker=None):
     """The verdict in the bot's newest comment of `tier` posted at or after
     `since`. A block read from a "Blocking" line rather than a 🔴 adds
     `recovered`."""
-    body = _pick(_bot_bodies(text, since), tier, re.compile(marker) if marker else None)
+    body = _pick(_bot_bodies(text, since), tier, re.compile(marker, re.I) if marker else None)
     if body is None:
         return {"verdict": "missing", "line": ""}
     result, line, how = _line(body)

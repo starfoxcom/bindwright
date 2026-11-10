@@ -60,6 +60,10 @@ The review app refuses its token to a run whose copy of `claude-code-review.yml`
 
 For any other failure, fix the cause.
 
+## If the gate itself breaks
+
+The gate runs the base branch's copy of `.github/scripts/review_gate.py` and `.github/review-gate.yml`, so a broken copy there fails the gate on every PR, the one that would fix it included. Only the maintainer recovers from that, and only for a PR that fixes those two files and changes nothing else but their tests and any copy the project keeps of them: it gets the two local 🟢 reviews of the section above, the maintainer takes `Review gate` off the branch's required checks and merges it with `--match-head-commit <sha>`, then at once runs `.github/scripts/setup-review-gate.sh` to require the check again and `--check` to confirm. Never for any other PR.
+
 ## Local session's job
 
 Push, open the PR, watch the checks (see `token-efficiency.md`), and merge on 🟢. If `needs-deep-review` appears but no deep review starts within a few minutes, report it instead of starting one yourself.
