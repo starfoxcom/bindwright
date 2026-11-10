@@ -261,6 +261,18 @@ test('holding again while another session waits gives it the seat first', () => 
   assert.deepStrictEqual(s.line.map(e => e.session), ['a'])
 })
 
+test('a hold while this session still runs heavy work keeps the seat, even with others waiting', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.register('b')
+  sb.run('claim', 'a', 'build')
+  sb.run('claim', 'b', 'build')
+  sb.run('hold', 'a', '5', 'timing')
+  const s = sb.state()
+  assert.strictEqual(s.seat.session, 'a')
+  assert.strictEqual(s.seat.kind, 'hold')
+})
+
 test('holding again with nobody waiting extends the hold', () => {
   const sb = sandbox()
   sb.register('a')
