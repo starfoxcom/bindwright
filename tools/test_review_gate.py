@@ -702,7 +702,7 @@ class Command(unittest.TestCase):
         self.assertEqual((code, json.loads(out)["state"]), (0, "triage=reviewable;routine=pass;escalated=yes;deep=none;routine_by=0.0.0;deep_by=0.0.0"))
         code, out = self.run_cli("settings", "--file", os.path.join(ROOT, "no-such-file.yml"))
         self.assertEqual(code, 0)
-        self.assertIn("routine_model=claude-fable-5-1", out.splitlines())
+        self.assertIn("routine_model=claude-fable-5-2", out.splitlines())
 
     def test_bad_arguments_are_refused(self):
         for args in [("gate", "--triage", "skip"), ("gate", "--state", "", "--triage", "maybe"),

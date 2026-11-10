@@ -79,7 +79,7 @@ This project ships templates that downstream users install verbatim. A malicious
 
 Per `.claude/rules/review-tiers.md` (resolved from canonical `_core/project-template/.claude/rules/review-tiers.md`), applied with extra strictness here:
 
-- **Two tiers.** Routine review (every PR) + on-demand deep review (fired by a comment starting with `@claude review this PR`). Both run Fable 5.1 at low effort with an Opus 5.5 high-effort backup; the deep tier retries Fable once before falling back. The `Review gate` check's summary names the model whose attempt wrote each tier's verdict, and whether it ran on the API credits.
+- **Two tiers.** Routine review (every PR) + on-demand deep review (fired by a comment starting with `@claude review this PR`). Routine runs Fable 5.2 at low effort and deep at medium, both with an Opus 5.5 high-effort backup; the deep tier retries Fable once before falling back. The `Review gate` check's summary names the model whose attempt wrote each tier's verdict, and whether it ran on the API credits.
 - **Binary verdict rule.** `🟢 LGTM` only when fully clean. `🔴 Blocking` when *any* real finding exists. No "minor non-blocking" rot. This applies to both tiers.
 - **Auto-fire deep review** on the trigger surface (parsing/codec/serialization, threading, scheduling, save/load formats, mod-loader DAG changes — full list in `.claude/rules/review-tiers.md` § Deep review triggers). The routine reviewer applies the `needs-deep-review` label automatically.
 - **Strict OSS review posture on `main` AND `develop`:**
