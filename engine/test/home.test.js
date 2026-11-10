@@ -489,6 +489,29 @@ test("--events installs one entry per event, with no matcher, beside the user's 
   });
 });
 
+test("--block-on-failure sets onFailure on the hook, and leaving it out sets none", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py");
+    const install = (...flags) => home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash", ...flags);
+    assert.equal(install("--block-on-failure").status, 0);
+    assert.equal(settings(dir).hooks.PreToolUse[0].hooks[0].onFailure, "block");
+    assert.equal(install().status, 0);
+    const hook = settings(dir).hooks.PreToolUse[0].hooks[0];
+    assert.ok(!("onFailure" in hook));
+  });
+});
+
+test("a registered hook whose file is gone exits 0 through its launcher", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const { command, args } = settings(dir).hooks.PreToolUse[0].hooks[0];
+    rmSync(join(dir, ".claude", "hooks", "push-guard.py"));
+    const r = spawnSync(command, args, { input: "{}", encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
 test("reinstalling with --events replaces its own entries under every event it names", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "session-title.py");

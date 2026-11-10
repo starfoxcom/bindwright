@@ -6,6 +6,7 @@ Standard library, Python 3.8+.
     python engine/home.py find-python
     python engine/home.py install-hook FILE --python PATH --matcher "Bash|PowerShell"
     python engine/home.py install-hook FILE --python PATH --events SessionStart,UserPromptSubmit
+    python engine/home.py install-hook FILE --python PATH --matcher Bash --block-on-failure
     python engine/home.py remove-hook NAME.py
     python engine/home.py list-hooks
     python engine/home.py allow RULE          /  disallow RULE
@@ -17,8 +18,11 @@ Standard library, Python 3.8+.
     python engine/home.py set-language NAME   (the work language: english or spanish)
 
 install-hook takes exactly one of --matcher (an entry under PreToolUse) or
---events (one entry per named event, with no matcher). remove-hook and
-list-hooks cover every event under hooks.
+--events (one entry per named event, with no matcher). --block-on-failure sets
+"onFailure": "block" on the hook, so a hook that crashes, times out or cannot
+start (its interpreter removed) blocks the tool call; a removed hook file still
+lets it through. Use it for a guard, never for a hook that only adds context.
+remove-hook and list-hooks cover every event under hooks.
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -35,10 +39,14 @@ import sys
 
 from apply import _is_link
 
-# Runs the hook file by path. A missing file then fails with exit 1, which the
-# CLI reports and moves past; a plain `python FILE` exits 2, which blocks
-# every command. -I keeps the project folder off the import path.
-LAUNCHER = "import runpy, sys; runpy.run_path(sys.argv[1], run_name='__main__')"
+# Runs the hook file by path, and exits 0 when the file is gone, so a
+# registration whose file was removed lets calls through. A hook that fails
+# to run exits 1, which its entry's onFailure blocks. -I keeps the project
+# folder off the import path.
+LAUNCHER = (
+    "import os, runpy, sys; "
+    "os.path.isfile(sys.argv[1]) and runpy.run_path(sys.argv[1], run_name='__main__')"
+)
 
 # Prints the interpreter only when it is 3.8+ and not inside a virtual or a
 # conda environment: the hooks serve every project, so they must not depend
@@ -186,6 +194,14 @@ def _event_lists(data, path):
     return [entries for entries in hooks.values() if entries is not None]
 
 
+def _flag(argv, name):
+    """True when the bare flag `name` is in argv; it is removed from argv."""
+    if name not in argv:
+        return False
+    argv.remove(name)
+    return True
+
+
 def _event_names(events):
     """The event names in a comma-separated list, each once and in order."""
     names = [name.strip() for name in events.split(",")]
@@ -212,18 +228,21 @@ def _hook_command(python):
     return python
 
 
-def _launcher_hook(python, target):
+def _launcher_hook(python, target, block_on_failure=False):
     """The hook that runs `target` through the launcher."""
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
     # A bare name follows PATH, so the hook survives the install it came from moving.
-    return {
+    hook = {
         "type": "command", "command": _hook_command(python),
         "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
     }
+    if block_on_failure:
+        hook["onFailure"] = "block"
+    return hook
 
 
-def install_hook(home, file, python, matcher=None, events=None):
+def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
     name = os.path.basename(file)
     if not name.endswith(".py"):
         raise HomeError("A hook is a .py file: " + file)
@@ -241,7 +260,7 @@ def install_hook(home, file, python, matcher=None, events=None):
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
-        entry["hooks"] = [_launcher_hook(python, target)]
+        entry["hooks"] = [_launcher_hook(python, target, block_on_failure)]
         entries.append(entry)
     _save(path, data)
     return {"installed": target, "settings": path}
@@ -491,12 +510,13 @@ def run(argv):
     home = _option(argv, "--home") or os.path.expanduser("~")
     python, matcher = _option(argv, "--python"), _option(argv, "--matcher")
     events = _option(argv, "--events")
+    block_on_failure = _flag(argv, "--block-on-failure")
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     one = args[0] if len(args) == 1 else None
     if cmd == "find-python" and not args:
         return find_python()
     if cmd == "install-hook" and one and python:
-        return install_hook(home, one, python, matcher or None, events or None)
+        return install_hook(home, one, python, matcher or None, events or None, block_on_failure)
     if cmd == "list-hooks" and not args:
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
