@@ -4,8 +4,8 @@ Every PR gets an AI review with a pass or block verdict, run by `.github/workflo
 
 | Tier | Starts when | Model |
 |---|---|---|
-| Routine | Every PR with reviewable files (`claude-code-review.yml`) | `claude-fable-5-1` at low effort; backup `claude-opus-5-5` at high |
-| Deep | A comment starting with `@claude review this PR` (`claude.yml`) | `claude-fable-5-1` at low effort; backup `claude-opus-5-5` at high |
+| Routine | Every PR with reviewable files (`claude-code-review.yml`) | `claude-fable-5-2` at low effort; backup `claude-opus-5-5` at high |
+| Deep | A comment starting with `@claude review this PR` (`claude.yml`) | `claude-fable-5-2` at medium effort; backup `claude-opus-5-5` at high |
 
 Both tiers report into one check, `Review gate`: it passes when the routine verdict is 🟢 and, once a deep review is asked for, the deep verdict is 🟢 too. That check is required on protected branches, and branch protection has no bypass actors; `.github/scripts/setup-review-gate.sh` sets this up (`--check` only reports what is missing). With a single maintainer, require zero approvals so the gate alone decides, since authors cannot approve their own PRs. With more people, also require one approval from someone other than the author. Docs-only and other non-reviewable diffs pass automatically in about 30 seconds.
 

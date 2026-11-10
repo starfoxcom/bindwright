@@ -5,8 +5,8 @@
 // models must be ones the pinned claude-code-action accepts; the backup runs
 // on the CLI_VERSION the workflow templates install, so it must be one that
 // version accepts. Change them together with those pins, never on their own.
-export const REVIEW_MODELS = { routine: "claude-fable-5-1", deep: "claude-fable-5-1", backup: "claude-opus-5-5" };
-export const REVIEW_EFFORTS = { routine: "low", deep: "low", backup: "high" };
+export const REVIEW_MODELS = { routine: "claude-fable-5-2", deep: "claude-fable-5-2", backup: "claude-opus-5-5" };
+export const REVIEW_EFFORTS = { routine: "low", deep: "medium", backup: "high" };
 
 export const CODE_RESEARCH_TOOLS = {
   // match: regex over tool-call names, used by the session-close adherence count.
