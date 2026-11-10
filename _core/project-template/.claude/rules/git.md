@@ -131,7 +131,7 @@ The hotfix or release is done only when the cascade PR is merged and its branch 
 
 ### Workflow file changes
 
-Review workflows triggered by comments or schedules run the copy on the GitHub default branch, and the review action refuses to run when a PR's workflow file differs from that copy.
+Review workflows triggered by comments or schedules run the copy on the GitHub default branch, and the review app refuses its token to a run whose copy of the review workflow differs from that copy, so its review is never posted.
 <!-- TOGGLE:default_branch_is_dev START -->
 Because `{{DEV_BRANCH}}` is the default branch, workflow changes are ordinary work PRs into `{{DEV_BRANCH}}`. They reach `{{MAIN_BRANCH}}` with the next release. A hotfix cut while `{{DEV_BRANCH}}` holds unreleased workflow changes will fail that check; release first, then cut the hotfix.
 <!-- TOGGLE:default_branch_is_dev END -->

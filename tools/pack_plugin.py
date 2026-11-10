@@ -51,10 +51,10 @@ ENGINE_FILES = [
     "package.json", "core-files.json", "cli.js",
     "bind.js", "model.js", "render.js", "setupcode.js", "apply.js", "keep.js", "update.js",
     "layers.js", "share.js", "doctor.js", "report.js", "audit.js", "remove.js", "staging.js", "releases.js",
-    "exclude.js",
+    "exclude.js", "propose.js",
     "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py",
     "layers.py", "share.py", "doctor.py", "report.py", "audit.py", "remove.py", "staging.py", "releases.py",
-    "exclude.py",
+    "exclude.py", "propose.py",
     "home.py", "authored.py",
 ]
 # The ~/.claude templates bind.js and bind.py read (globalFiles).

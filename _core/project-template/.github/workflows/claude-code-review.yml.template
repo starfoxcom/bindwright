@@ -26,12 +26,13 @@
 # PERMANENT LIMITATION — claude-code-review.yml edits get no AI review:
 #   The Anthropic Claude Code GitHub App validates that the workflow file on a PR's
 #   head ref is byte-identical to the version on the default branch before granting
-#   an OIDC-exchanged token, so the review action cannot run on a PR that edits this
-#   file. Triage therefore never reviews this one file (.github/workflows/claude-code-review.yml;
-#   a .yaml twin would run as a separate workflow, so it is reviewed): a PR of only it and skippable
-#   docs passes as non-reviewable. Edit it alone: mixed with reviewable files (claude.yml, the gate
-#   script, .claude/), the review fails `Workflow validation failed` and the gate blocks, so those go
-#   in their own PR first. Our own such PRs merge on two local reviews of the head commit; any other
+#   an OIDC-exchanged token. The review attempts read the PR with the job's own
+#   read-only token, so they still run on a PR that edits this file, but the post
+#   job's exchange is refused and the review is never posted. Triage therefore never
+#   reviews this one file (.github/workflows/claude-code-review.yml; a .yaml twin would run as
+#   a separate workflow, so it is reviewed): a PR of only it and skippable docs passes as
+#   non-reviewable. Edit it alone: mixed with reviewable files (claude.yml, the gate script,
+#   .claude/), the review cannot be posted and the gate blocks, so those go in their own PR first. Our own such PRs merge on two local reviews of the head commit; any other
 #   PR waits for the maintainer's read.
 
 name: Claude Code Review
@@ -465,9 +466,8 @@ jobs:
     runs-on: ${{ fromJSON(needs.init-gate.outputs.runner_labels || '["ubuntu-latest"]') }}
     # The review attempts run here, with a job token that can only read: the
     # reviewer processes never share a job whose token can write checks,
-    # statuses or comments. (They still read the PR with the review app's own
-    # token, as the official action's reviewer does; the tool lists below are
-    # what keeps them from writing with it.) The first review the gate can
+    # statuses or comments. They read the PR with that read-only token; the
+    # review app's token is minted only in Post review. The first review the gate can
     # read goes to the Post review job below, which checks it again and posts it.
     # `reviewer` is the model whose attempt wrote the verdict, for the gate's
     # summary. The job name and a green primary step cannot tell (the primary
@@ -621,14 +621,17 @@ jobs:
         ```
 
         **CRITICAL — write the request even when a prior `@claude` comment exists on this PR.** The `claude.yml` deep-review workflow only fires on the `issue_comment` event for the CURRENT comment — it does not re-evaluate older comments when a new push lands. Every escalation posts a fresh comment, and it starts with the literal `@claude` token so both the workflow's `if: startsWith(body, '@claude review this PR')` condition AND the action's internal trigger detector evaluate true.
-    # Read-only, apart from id-token: the review action and the credits run
-    # exchange it for the review app's token, as the official action does.
+    # Read-only, with no id-token: every attempt reads the PR with this job's
+    # token, so nothing a reviewer starts can mint the review app's token.
+    # Only the post job, which runs no model, mints it to post. checks and
+    # statuses let the reviewer's `gh pr checks` read a private repo's checks.
     permissions:
       contents: read
       pull-requests: read
       issues: read
-      id-token: write
       actions: read
+      checks: read
+      statuses: read
     steps:
       # As in Project triggers: a full checkout starts from a fresh clone.
       - name: Drop a partial clone left by an earlier job
@@ -639,9 +642,9 @@ jobs:
           fi
 
       # No token left in .git/config, which the credits reviewer's worktree
-      # shares: that reviewer reads PR content with a Read tool, so even this
-      # job's read-only token stays out of its reach. The fetches here are
-      # anonymous on a public repo; the review action sets up its own auth.
+      # shares: that reviewer gets this job's read-only token only through its
+      # environment, for its gh reads. The fetches here are anonymous on a public repo; the
+      # review action sets up its own auth.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -1188,6 +1191,7 @@ jobs:
           EFFORT: ${{ needs.init-gate.outputs.routine_effort }}
           MAX_TURNS: ${{ needs.init-gate.outputs.routine_max_turns }}
           EXTRA_TOOLS: ${{ needs.init-gate.outputs.allowed_tools }}
+          READ_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ -z "$ANTHROPIC_API_KEY" ]; then
@@ -1206,37 +1210,12 @@ jobs:
           # fallback steps. `--setting-sources user --strict-mcp-config` below
           # also keeps the restored project settings from loading.
           wt="$RUNNER_TEMP/credits-review"
-          bot_token=""
-          cleanup() {
-            if [ -n "$bot_token" ]; then
-              GH_TOKEN="$bot_token" timeout -k 10 120 gh api -X DELETE /installation/token >/dev/null 2>&1 || true
-            fi
-            git worktree remove --force "$wt" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
+          trap 'git worktree remove --force "$wt" >/dev/null 2>&1 || true' EXIT
           git worktree add --quiet --detach "$wt" HEAD
           for p in .claude .mcp.json .claude.json .gitmodules .ripgreprc CLAUDE.md CLAUDE.local.md .husky; do
             rm -rf "${wt:?}/$p"
             git -C "$wt" checkout "origin/$BASE_REF" -- "$p" 2>/dev/null || true
           done
-
-          # The reviewer reads the PR with the review app's token, as the
-          # action's reviewer does, never with the job's token. It is handed
-          # back when the step ends.
-          oidc=$(curl -fsS --connect-timeout 20 --max-time 60 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=claude-code-github-action" \
-            | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["value"])') || oidc=""
-          echo "::add-mask::$oidc"
-          if [ -n "$oidc" ]; then
-            bot_token=$(curl -fsS --connect-timeout 20 --max-time 60 -X POST -H "Authorization: Bearer $oidc" \
-              https://api.anthropic.com/api/github/github-app-token-exchange \
-              | python3 -I -c 'import json, sys; d = json.load(sys.stdin); print(d.get("token") or d.get("app_token") or "")') || bot_token=""
-          fi
-          if [ -z "$bot_token" ]; then
-            echo "::warning::The bot token exchange returned no token: the review runs on the subscription"
-            exit 1
-          fi
-          echo "::add-mask::$bot_token"
 
           # The answer the check below reads: the CLI's result, with the review
           # as structured output. The reviewer can post nothing itself.
@@ -1244,10 +1223,8 @@ jobs:
           status=0
           # A time limit, so a release that hangs ends as a broken run, and the
           # action steps take over.
-          # Without the job's OIDC request values, as the action's reviewer
-          # runs: with them, anything the reviewer starts could mint its own
-          # bot token and post.
-          (cd "$wt" && GH_TOKEN="$bot_token" env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+          # The reviewer reads the PR with the job's read-only token.
+          (cd "$wt" && GH_TOKEN="$READ_TOKEN" \
             timeout --kill-after=1m 30m "$CLI" -p "Review context file: $RUNNER_TEMP/review_context.md"$'\n\n'"$ROUTINE_REVIEW_PROMPT" \
             --setting-sources user --strict-mcp-config --permission-mode default \
             --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read$EXTRA_TOOLS" \
@@ -1381,6 +1358,9 @@ jobs:
         continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's read-only token: with it the action skips its exchange
+          # for the review app's token, which the job cannot mint anyway.
+          github_token: ${{ github.token }}
           show_full_output: false
           # The job's CLI from "Install Claude Code". Empty when that
           # install failed, and then the action installs the CLI it bundles.
@@ -1394,9 +1374,8 @@ jobs:
           # maintainer's own allow list (commits, pushes, merges). The reviewer
           # keeps the project's rules, hooks and deny list but not those allows.
           # Every action review step in both workflows passes the same sources.
-          # The tool lists let a reviewer read the PR, nothing more: its bot
-          # token can write repo contents, and `main`/`develop` are the only
-          # protected refs. So no `gh api`, no comments or labels (it returns
+          # The tool lists let a reviewer read the PR, nothing more, whatever
+          # its token allows. So no `gh api`, no comments or labels (it returns
           # its review as structured output, `--json-schema`, and "Post the
           # review" posts it), and no file edits or git writes. Git reads have
           # no allow rule on purpose: the CLI's built-in read-only check passes
@@ -1592,6 +1571,9 @@ jobs:
         uses: anthropics/claude-code-action@d535f5172dec02b204866b393d6b20b9b2aaf98d  # v1 (v1.0.266)
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's read-only token: with it the action skips its exchange
+          # for the review app's token, which the job cannot mint anyway.
+          github_token: ${{ github.token }}
           show_full_output: false
           path_to_claude_code_executable: ${{ steps.claude-cli-stable.outputs.path }}
           claude_args: '--setting-sources user,project --permission-mode default --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read${{ needs.init-gate.outputs.allowed_tools }}" --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" --max-turns ${{ needs.init-gate.outputs.routine_max_turns }} --model ${{ needs.init-gate.outputs.routine_fallback_model }} --effort ${{ needs.init-gate.outputs.routine_fallback_effort }} --json-schema ''${{ env.REVIEW_SCHEMA }}'''
@@ -1781,8 +1763,18 @@ jobs:
           with open(comment_path, 'w', encoding='utf-8') as f:
               json.dump(comment, f)
           PYEOF
-          timeout -k 10 120 gh api "repos/$REPO/contents/.github/scripts/review_gate.py?ref=$GATE_SHA" \
-            -H "Accept: application/vnd.github.raw" > "$gate"
+          # Three tries, so a passing GitHub error does not fail the post.
+          for try in 1 2 3; do
+            if timeout -k 10 120 gh api "repos/$REPO/contents/.github/scripts/review_gate.py?ref=$GATE_SHA" \
+                -H "Accept: application/vnd.github.raw" > "$gate"; then
+              break
+            fi
+            if [ "$try" = 3 ]; then
+              echo "::error::The gate's script could not be downloaded, so the review is not posted"
+              exit 1
+            fi
+            sleep 15
+          done
           found=$(python3 -I "$gate" verdict --since 1970-01-01T00:00:00Z --tier routine --marker "$marker" < "$as_comment")
           verdict=$(printf '%s' "$found" | jq -r .verdict)
           case "$verdict" in
@@ -1880,7 +1872,7 @@ jobs:
           }
           bot_token=""
           if ! retry token_once; then
-            echo "::error::The bot token exchange failed three times, so the review cannot be posted; re-run this job"
+            echo "::error::The bot token exchange failed three times, so the review cannot be posted. A PR whose copy of this workflow differs from the default branch's is refused every time: ship that edit in a PR of its own, or merge the pending cascade, then merge the base branch into this PR and push (a re-run reuses the old copy). Otherwise re-run this job"
             exit 1
           fi
           echo "::add-mask::$bot_token"
@@ -2183,8 +2175,9 @@ jobs:
     #     check, routine tier only:
     #       1. Triage classified the diff as non-reviewable → pass (and, with
     #          `checks: two`, Claude On-Demand → skipped).
-    #       2. Routine review job didn't reach success → fail (action errored,
-    #          OIDC tripped, workflow-validation skip, runner crash).
+    #       2. Routine review or Post review job didn't reach success → fail
+    #          (action errored, runner crash, or the post job's token exchange
+    #          refused a PR whose copy of this workflow differs).
     #       3. Routine verdict comment missing or 🔴 → fail.
     #       4. Routine 🟢 → pass.
     if: always()
