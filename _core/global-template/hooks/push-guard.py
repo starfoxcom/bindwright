@@ -102,9 +102,9 @@ tokensave copies the launcher of a project's existing hooks into its own
 project entries, and `sh run-hook.sh` is no launcher for it.
 Either way it runs through a `runpy` one-liner instead of
 `python <path>` because Python exits 2 when it cannot open a script, which
-would block every call; through `runpy` a missing file is an ordinary error
-and the call proceeds. The interpreter runs with `-I`, so the project
-directory (the hook's working directory) is not on the import path and a
+would block every call. Both launchers test that the file exists first, so a
+missing file lets the call proceed. The interpreter runs with `-I`, so the
+project directory (the hook's working directory) is not on the import path and a
 repo's own `json.py` cannot replace the modules this file imports.
 """
 import json

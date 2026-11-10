@@ -48,11 +48,16 @@ def find_sh():
 SH = find_sh()
 
 
-def settings_command(name):
-    """The committed PreToolUse command string that starts hook <name>."""
+def pre_tool_hooks():
+    """Every PreToolUse command hook in the committed .claude/settings.json."""
     with open(SETTINGS, encoding="utf-8") as f:
         groups = json.load(f)["hooks"]["PreToolUse"]
-    return next(h["command"] for g in groups for h in g["hooks"] if f" {name}" in h["command"])
+    return [h for g in groups for h in g["hooks"]]
+
+
+def settings_command(name):
+    """The committed PreToolUse command string that starts hook <name>."""
+    return next(h["command"] for h in pre_tool_hooks() if f" {name}" in h["command"])
 
 
 @unittest.skipIf(SH is None, "needs a POSIX sh on PATH (Git Bash on Windows)")
@@ -61,9 +66,11 @@ class GuardHookTest(unittest.TestCase):
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
 
-    def run_hook(self, name, command, project=REPO, tool="Bash"):
+    def run_hook(self, name, command, project=REPO, tool="Bash", path=None):
         env = dict(os.environ, HOME=self.home, CLAUDE_PROJECT_DIR=project)
         env.pop("USERPROFILE", None)
+        if path is not None:
+            env["PATH"] = path
         payload = {"tool_name": tool, "tool_input": {"command": command}, "cwd": project}
         return subprocess.run(
             [SH, "-c", settings_command(name)], input=json.dumps(payload).encode("utf-8"),
@@ -149,12 +156,36 @@ class GuardHookTest(unittest.TestCase):
     def test_missing_hook_file_lets_the_call_through(self):
         project = self.temp_project(files=["run-hook.sh"])
         result = self.run_hook("push-guard", FORCE_PUSH, project=project)
-        self.assertNotEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_missing_launcher_lets_the_call_through(self):
         # dash exits 2 when it cannot open a script; the entry must test first.
         result = self.run_hook("push-guard", FORCE_PUSH, project=self.temp_project())
-        self.assertNotEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_no_python_on_path_lets_the_call_through(self):
+        sh_folder = os.path.dirname(SH)
+        if any(shutil.which(name, path=sh_folder) for name in ("python3", "python", "py")):
+            self.skipTest("the folder of sh holds a Python, so PATH cannot hide it")
+        result = self.run_hook("push-guard", FORCE_PUSH, path=sh_folder)
+        self.assert_passes(result)
+
+    def test_crashing_guard_exits_one_so_on_failure_blocks_it(self):
+        # Claude Code blocks a command hook that exits with a code other than 0 or 2
+        # when its entry sets onFailure; a Python crash exits 1.
+        project = self.temp_project(files=["run-hook.sh"])
+        with open(os.path.join(project, ".claude", "hooks", "push-guard.py"), "w", encoding="utf-8") as f:
+            f.write("raise RuntimeError('crash')\n")
+        result = self.run_hook("push-guard", FORCE_PUSH, project=project)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"RuntimeError", result.stderr)
+
+    def test_every_guard_entry_blocks_on_failure(self):
+        guards = [h for h in pre_tool_hooks() if "run-hook.sh" in h["command"]]
+        self.assertGreaterEqual(len(guards), 2)
+        for hook in guards:
+            with self.subTest(command=hook["command"]):
+                self.assertEqual(hook.get("onFailure"), "block")
 
     def test_launcher_is_the_one_the_settings_start(self):
         self.assertIn("/.claude/hooks/run-hook.sh", settings_command("push-guard"))
