@@ -41,6 +41,8 @@ const live = {
   /** Minutes behind UTC, as getTimezoneOffset gives it; null until read. */
   zoneOffset: null as number | null,
   schedules: new Map<string, { at: number; texts: string[] }>(),
+  /** This session's last disk record per store key, for when the shared store fails. */
+  disks: new Map<string, DiskRecord>(),
   /** rules.ts, then the machine's own list file: read once at start. */
   runners: [...RUNNERS] as Runner[],
   isChecking: false,
@@ -168,22 +170,16 @@ async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): 
   return { diskBytes: next.diskBytes, usedBytes: next.usedBytes, isSparse: next.isSparse }
 }
 
-// A store that cannot be read counts as empty, and a write that fails is skipped: the row keeps the figures it
-// has, and the next check reads them again.
+// This session's last record stands in for a store that cannot be read or holds none, so a broken store
+// slows nothing down: the reads keep their cadence within the session.
 async function loadRecord($: Engine, key: string): Promise<DiskRecord> {
-  try {
-    return readRecord(await $.store.get(key))
-  } catch {
-    return readRecord(undefined)
-  }
+  const stored = await $.store.get(key).catch(() => undefined)
+  return readRecord(stored ?? live.disks.get(key))
 }
 
 async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<void> {
-  try {
-    await $.store.set(key, record)
-  } catch {
-    return
-  }
+  live.disks.set(key, record)
+  await $.store.set(key, record).catch(() => undefined)
 }
 
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {

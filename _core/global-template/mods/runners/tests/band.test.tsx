@@ -12,6 +12,7 @@ import {
   parseUsedBytes,
   readRecord,
   SIZE_READ_MS,
+  TICK_SLACK_MS,
   USED_READ_MS,
 } from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
@@ -108,27 +109,21 @@ test('a file is sparse only when its allocated bytes fall more than 1 MiB short 
   for (const [name, stat, isSparse] of cases) expect([name, isSparseFile(stat)]).toEqual([name, isSparse])
 })
 
-test('dueReads reads the size every 15 min and the data every 60 s while the row is on, and nothing while off', () => {
+test('dueReads: the size every 15 min and the data every 60 s while on, the size on a stop, else nothing', () => {
   const fresh: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW }
+  const usedDue = NOW - USED_READ_MS + TICK_SLACK_MS
+  const sizeDue = NOW - SIZE_READ_MS + TICK_SLACK_MS
+  const NONE: DueReads = { size: false, used: false }
   const cases: [name: string, last: DiskRecord | undefined, isOn: boolean, due: DueReads][] = [
     ['no last reading, on', undefined, true, { size: true, used: true }],
-    ['no last reading, off', undefined, false, { size: false, used: false }],
-    [
-      'off, though both are due',
-      { ...fresh, sizeAt: NOW - SIZE_READ_MS, usedAt: NOW - USED_READ_MS },
-      false,
-      { size: false, used: false },
-    ],
+    ['no last reading, off', undefined, false, NONE],
+    ['stopped since the last reading', fresh, false, { size: true, used: false }],
+    ['still off, though both are due', { isOn: false, sizeAt: sizeDue, usedAt: usedDue }, false, NONE],
     ['switched on since the last reading', { ...fresh, isOn: false }, true, { size: true, used: true }],
-    ['data read exactly 60 s ago', { ...fresh, usedAt: NOW - USED_READ_MS }, true, { size: false, used: true }],
-    ['data read 1 ms under 60 s ago', { ...fresh, usedAt: NOW - USED_READ_MS + 1 }, true, { size: false, used: false }],
-    ['size read exactly 15 min ago', { ...fresh, sizeAt: NOW - SIZE_READ_MS }, true, { size: true, used: false }],
-    [
-      'size read 1 ms under 15 min ago',
-      { ...fresh, sizeAt: NOW - SIZE_READ_MS + 1 },
-      true,
-      { size: false, used: false },
-    ],
+    ['data read one early tick under 60 s ago', { ...fresh, usedAt: usedDue }, true, { size: false, used: true }],
+    ['data read 1 ms more recently than that', { ...fresh, usedAt: usedDue + 1 }, true, { size: false, used: false }],
+    ['size read one early tick under 15 min ago', { ...fresh, sizeAt: sizeDue }, true, { size: true, used: false }],
+    ['size read 1 ms more recently than that', { ...fresh, sizeAt: sizeDue + 1 }, true, { size: false, used: false }],
     ['data never read, size fresh', { isOn: true, sizeAt: NOW }, true, { size: false, used: true }],
     ['a reading stamped after now', { ...fresh, sizeAt: NOW + 1 }, true, { size: true, used: false }],
   ]
@@ -140,6 +135,7 @@ test('readRecord keeps the stored fields of the right type, and reads anything e
   const cases: [name: string, value: unknown, record: DiskRecord][] = [
     ['a stored record', stored, stored],
     ['fields of the wrong type', { sizeAt: '1', isOn: 1, diskBytes: 'big', isSparse: 'yes' }, {}],
+    ['negative and fractional numbers', { sizeAt: -1, usedAt: 1.5, diskBytes: -5, usedBytes: 2.5 }, {}],
     ['a text value', 'text', {}],
     ['no record', undefined, {}],
   ]
@@ -248,6 +244,62 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await ui.redraw()
     expect(await ui.find({ key: 'runner-start-0' })).toBeUndefined()
     expect(await ui.find({ key: 'runner-stop-0' })).toBeDefined()
+  })
+}
+
+// A WSL runner whose disk figures go through the mod store; `isStoreBroken` makes every store call fail.
+const WSL = { distro: 'Ubuntu', disk: 'C:/wsl/ext4.vhdx' }
+const WSL_LISTED = [{ label: 'local', processes: ['Runner.Listener'], wsl: WSL }]
+function wslMachine(on: On, isStoreBroken: boolean) {
+  const runs: string[][] = []
+  const store = new Map<string, unknown>()
+  const clock = mock.clock(on, { now: NOW })
+  mock.env(on, { USERPROFILE: 'C:/Users/me', OS: 'Windows_NT' })
+  on('fs.read', ($, e) => {
+    if (e.path.replaceAll('\\', '/') !== LIST_FILE) throw new Error('ENOENT')
+    return { value: JSON.stringify(WSL_LISTED) }
+  })
+  on('store.get', ($, e) => {
+    if (isStoreBroken) throw new Error('store unreadable')
+    return { value: store.get(e.key) }
+  })
+  on('store.set', ($, e) => {
+    if (isStoreBroken) throw new Error('store unwritable')
+    store.set(e.key, e.value)
+    return { value: undefined }
+  })
+  on('process.run', ($, e) => {
+    runs.push([...e.argv])
+    const stdout =
+      e.argv[0] === 'tasklist'
+        ? '"Runner.Listener.exe","1"\r\n'
+        : e.argv[0] === 'wsl.exe'
+          ? `Used\n${12 * GIB}\n`
+          : e.argv.includes('C:/wsl/ext4.vhdx')
+            ? `${40 * GIB} ${30 * GIB}\n`
+            : '360\n'
+    return { value: { exitCode: 0, stdout, stderr: '' } } as never
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } as never }))
+  return { runs, store, clock }
+}
+
+for (const isStoreBroken of [false, true]) {
+  const how = isStoreBroken ? 'a failing store, from memory' : 'the store'
+  test(`the disk figures go through ${how}, and the next check inside a minute runs no df`, async ($, on) => {
+    const { runs, store, clock } = wslMachine(on, isStoreBroken)
+    const dfRuns = () => runs.filter(argv => argv[0] === 'wsl.exe').length
+    await $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
+    await clock.advance(1_000)
+    expect(dfRuns()).toBe(1)
+    const saved = isStoreBroken ? undefined : { diskBytes: 30 * GIB, usedBytes: 12 * GIB, isSparse: true }
+    expect(store.get('disk:local')).toEqual(saved && expect.objectContaining(saved))
+    await clock.advance(30_000)
+    expect(dfRuns()).toBe(1)
+    expect(await $.command.run({ command: 'runners', args: '' } as never)).toEqual(
+      expect.objectContaining({ text: expect.stringContaining('disk 30.0 GB (12.0 used, trim)') }),
+    )
   })
 }
 
