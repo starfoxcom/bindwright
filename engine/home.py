@@ -177,12 +177,13 @@ def _event_entries(data, event, path):
 
 
 def _event_lists(data, path):
-    """The hook entries of every event under hooks; an event that is not a list is refused."""
+    """The hook entries of every event under hooks, skipping a null event as _section
+    does; an event that is neither null nor a list is refused."""
     hooks = _section(data, "hooks", dict, path)
     for event, entries in hooks.items():
-        if not isinstance(entries, list):
+        if entries is not None and not isinstance(entries, list):
             raise HomeError("%s: hooks.%s is not a list; fix it by hand first" % (path, event))
-    return list(hooks.values())
+    return [entries for entries in hooks.values() if entries is not None]
 
 
 def _event_names(events):

@@ -293,6 +293,16 @@ test("a settings file that is not valid JSON is never written", { skip }, () => 
   });
 });
 
+test("a null hook event is skipped, so a guard beside it still lists and removes", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py");
+    assert.equal(home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--matcher", "Bash").status, 0);
+    writeSettings(dir, { ...settings(dir), hooks: { ...settings(dir).hooks, Stop: null } });
+    assert.ok(home(dir, "list-hooks").out.hooks.some((h) => JSON.stringify(h).includes("push-guard.py")));
+    assert.equal(home(dir, "remove-hook", "push-guard.py").out.removed_hooks, 1);
+  });
+});
+
 test("a missing settings file starts empty, and bad usage is refused", { skip }, () => {
   withHome((dir) => {
     assert.deepEqual(home(dir, "list-hooks").out, { hooks: [] });

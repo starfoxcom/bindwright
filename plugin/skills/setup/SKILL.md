@@ -13,7 +13,7 @@ This skill asks the user how they want to work, writes the files that fit into t
 
 Two kinds of choices, and the user always hears which is which:
 
-- **Computer choices** apply to every project on this computer and are asked only once: the code-search tool, the work language, global instructions, the push guard for every project, the builder agent, the code-style profile, the reply style, and the mods. They are saved in `<config>/bindwright/settings.json`, where `<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`.
+- **Computer choices** apply to every project on this computer and are asked only once: the code-search tool, the work language, global instructions, the push guard for every project, session titles, the builder agent, the code-style profile, the reply style, and the mods. They are saved in `<config>/bindwright/settings.json`, where `<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`.
 - **Project choices** apply to this repo only and are asked on every run, never copied from an earlier project, since a lot can change between two projects.
 
 ## 0. Pick the engine and read the saved choices
@@ -53,7 +53,7 @@ Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: se
 
 ## 1. Check the argument and the repo
 
-- **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on and a work language that changed, and for each one that turned off, say what stays installed and how to remove it (`python "<helper>/engine/home.py" remove-hook <name>` for a guard; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent; delete `~/.claude/rules/code-style.md` for the code-style profile; `/output-style default` for the reply style, whose file in `~/.claude/output-styles/` can stay; `counts.mjs share off` for the counts, which stops every send). When sharing just turned on and the repo root holds `.bindwright/pristine.json` with no entry in `counts.mjs status`, ask this repo's kind as step 3 says; other set-up repos are asked at their next `/bindwright:update`. Then stop.
+- **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on and a work language that changed, and for each one that turned off, say what stays installed and how to remove it (`python "<helper>/engine/home.py" remove-hook <name>` for a guard; `home.py remove-hook session-title.py` and `home.py disallow "Edit(~/.bindwright/session-titles/**)"` for session titles, whose files in `~/.bindwright/session-titles/` can be deleted too; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent; delete `~/.claude/rules/code-style.md` for the code-style profile; `/output-style default` for the reply style, whose file in `~/.claude/output-styles/` can stay; `counts.mjs share off` for the counts, which stops every send). When sharing just turned on and the repo root holds `.bindwright/pristine.json` with no entry in `counts.mjs status`, ask this repo's kind as step 3 says; other set-up repos are asked at their next `/bindwright:update`. Then stop.
 - **A code starting with `bw1-`:** a setup code from an older Bindwright page. It holds every project answer, so skip step 3 and run the engine with `--code <the code>` in step 4. Step 2 still asks the computer questions that have no saved answer.
 - **Anything else that is not empty:** say this skill takes no argument, `global`, or a `bw1-` code, and stop.
 - Find the repo root with `git rev-parse --show-toplevel`. If this is not a git repo, ask whether to run `git init` here or stop.
@@ -295,7 +295,7 @@ Tell the user, in plain words, in two parts.
 
 **This computer:**
 
-- Each computer choice and its answer, one line each (code-search tool, work language, global instructions, push guard, builder agent, code-style profile, reply style, mods, anonymous review counts), and what was installed this run.
+- Each computer choice and its answer, one line each (code-search tool, work language, global instructions, push guard, session titles, builder agent, code-style profile, reply style, mods, anonymous review counts), and what was installed this run.
 - Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The counts answer and each project's kind live in `<config>/bindwright/counts.json`; `node "<helper>/hooks/counts.mjs" share off` stops every send at once. The next project on this computer will not ask them.
 - That `~/.claude/settings.json.bak` holds the settings from before the last change, when one was made.
 
