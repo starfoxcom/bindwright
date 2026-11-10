@@ -2,10 +2,14 @@
 // repo's own copy at the same path. Read only; nothing is written. The Python twin is propose.py.
 
 import { lstatSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { STAGING_FOLDERS } from "./staging.js";
+import { MAX_DEPTH, depthOf } from "./setupcode.js";
 
 const INCOMING = STAGING_FOLDERS[0];
+// An all-digit key, which JavaScript objects move to the front.
+const INDEX_KEY = /^\d+$/;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 // Arrays merged as unions, by dotted key path. Hook lists (hooks.<Event>) merge the same way.
 const UNION_PATHS = new Set(["permissions.allow", "permissions.deny", "permissions.ask"]);
 const HEADING = /^#{1,6} /;
@@ -43,21 +47,27 @@ function readText(path) {
   }
 }
 
-const OUTSIDE = Symbol("outside the repo");
+const UNREADABLE = Symbol("not one file inside the repo");
 
-// The text of the repo's copy of `path`, null when it has none, or OUTSIDE when a link in its
-// path leads out of the repo: a repo must not get a file elsewhere printed into the session.
+// The text of the repo's copy of `path`, null when it has none, or UNREADABLE when it is not one
+// file inside the repo: a folder, a link loop, or a link out of the repo, whose target must not
+// get printed into the session.
 function repoCopy(repoDir, path) {
   let real;
   try {
     real = realpathSync(join(repoDir, path));
   } catch (err) {
-    if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
-    throw err;
+    return err.code === "ENOENT" || err.code === "ENOTDIR" ? null : UNREADABLE;
   }
   const inRepo = relative(realpathSync(repoDir), real);
-  if (inRepo === ".." || inRepo.startsWith(`..${sep}`) || isAbsolute(inRepo)) return OUTSIDE;
-  return readText(real);
+  if (inRepo === ".." || inRepo.startsWith(`..${sep}`) || isAbsolute(inRepo)) return UNREADABLE;
+  return lstatSync(real).isFile() ? readText(real) : UNREADABLE;
+}
+
+// Whether `folder` is a real folder: a link or junction to one is never followed.
+function isRealFolder(folder) {
+  const entry = lstatOrNull(folder);
+  return entry !== null && entry.isDirectory();
 }
 
 // The files under `folder`, relative to it with "/" between parts. A symbolic link or a Windows
@@ -75,11 +85,10 @@ function stagedFiles(folder, prefix = "") {
 /** The merge proposal for each file staged in `<repoDir>/.bindwright/incoming/`, sorted by path. */
 export function proposeMerges(repoDir) {
   const incoming = join(repoDir, INCOMING);
-  const entry = lstatOrNull(incoming);
-  if (entry === null || !entry.isDirectory()) return { proposals: [] };
+  if (!isRealFolder(dirname(incoming)) || !isRealFolder(incoming)) return { proposals: [] };
   const proposals = stagedFiles(incoming).sort().map((path) => {
     const repoText = repoCopy(repoDir, path);
-    if (repoText === OUTSIDE) return { path, kind: "text" };
+    if (repoText === UNREADABLE) return { path, kind: "text" };
     return proposeMerge(path, repoText, readText(join(incoming, path)));
   });
   return { proposals };
@@ -111,15 +120,29 @@ function jsonProposal(path, repo, incoming) {
   return { path, kind: "json", merged, text: `${JSON.stringify(merged, null, 2)}\n`, clashes };
 }
 
-// The parsed object, or null when the text is not JSON or not an object.
+// The parsed object, or null when the text is not plain JSON: an object both engines read and
+// print alike (see isPlain), nested at most MAX_DEPTH deep.
 function parseObject(text) {
+  if (depthOf(text) > MAX_DEPTH) return null;
   let value;
   try {
     value = JSON.parse(text);
   } catch {
     return null;
   }
-  return isObject(value) ? value : null;
+  return isObject(value) && isPlain(value) ? value : null;
+}
+
+// Whole numbers in the safe range, no all-digit keys and no lone surrogates: past these the
+// Python twin would read or print the value differently, so the file is merged by hand instead.
+function isPlain(value) {
+  if (typeof value === "number") return Number.isSafeInteger(value);
+  if (typeof value === "string") return !LONE_SURROGATE.test(value);
+  if (Array.isArray(value)) return value.every(isPlain);
+  if (!isObject(value)) return true;
+  return Object.entries(value).every(([key, item]) => (
+    !INDEX_KEY.test(key) && !LONE_SURROGATE.test(key) && isPlain(item)
+  ));
 }
 
 // The repo's keys in its order, each merged with the staged copy's, then the keys only the

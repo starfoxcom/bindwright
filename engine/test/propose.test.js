@@ -163,6 +163,33 @@ const KINDS = {
       incoming: { "s.json": "{}" },
       expect: [{ path: "s.json", kind: "text" }],
     },
+    {
+      name: "a whole number written 1.0 equals 1 and prints as 1",
+      repo: { "s.json": '{"a": 1.0, "b": 1e2}' },
+      incoming: { "s.json": '{"a": 1, "c": -0.0}' },
+      expect: [jsonProposal("s.json", { a: 1, b: 100, c: 0 })],
+    },
+    {
+      name: "a non-ASCII digit key is an ordinary key",
+      repo: { "s.json": '{"b": 1, "²": 2}' },
+      incoming: { "s.json": '{"a": 1}' },
+      expect: [jsonProposal("s.json", { b: 1, "²": 2, a: 1 })],
+    },
+    ...[
+      ["a fraction", '{"a": 1.5}'],
+      ["a whole number past the safe range", '{"a": 12345678901234567890123}'],
+      ["an exponent past the safe range", '{"a": 1e16}'],
+      ["a number too large for a double", '{"a": 1e999}'],
+      ["an all-digit key", '{"2": 2, "b": 1}'],
+      ["a lone surrogate in a value", '{"a": "\\ud800"}'],
+      ["a lone surrogate in a key", '{"\\udc00": 1}'],
+      ["nesting past 64 levels", `${"[".repeat(65)}${"]".repeat(65)}`.replace(/^/, '{"a": ') + "}"],
+    ].map(([what, text]) => ({
+      name: `${what} in the repo's copy is not plain JSON, so text`,
+      repo: { "s.json": text },
+      incoming: { "s.json": '{"z": 0}' },
+      expect: [{ path: "s.json", kind: "text" }],
+    })),
   ],
   markdown: [
     {
@@ -348,6 +375,34 @@ for (const [name, propose] of Object.entries(ENGINES)) {
       const [inside, linkedOut] = JSON.parse(printedIn(root, propose)).proposals;
       assert.equal(inside.kind, "markdown");
       assert.deepEqual(linkedOut, { path: "outside/settings.json", kind: "text" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test(`${name}: a folder at a staged file's path is text, and the others still come back`,
+    { skip }, () => {
+      const root = fixture({ repo: { "a.md": "# A\n" }, incoming: { "a.md": "# A\nnew\n" } });
+      try {
+        mkdirSync(join(root, "dir.json"));
+        writeFileSync(join(root, ...INCOMING, "dir.json"), "{}");
+        assert.deepEqual(JSON.parse(printedIn(root, propose)).proposals.map((p) => p.kind),
+          ["markdown", "text"]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+  test(`${name}: a linked .bindwright folder is not followed`, { skip }, () => {
+    const root = fixture({ repo: { "a.json": "{}" }, incoming: null });
+    const outside = mkdtempSync(join(tmpdir(), "propose-outside-"));
+    try {
+      mkdirSync(join(outside, "incoming"));
+      writeFileSync(join(outside, "incoming", "a.json"), "{\"secret\": 1}");
+      rmSync(join(root, ".bindwright"), { recursive: true, force: true });
+      linkFolder(outside, join(root, ".bindwright"));
+      assert.deepEqual(JSON.parse(printedIn(root, propose)), { proposals: [] });
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });

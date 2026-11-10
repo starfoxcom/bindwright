@@ -8,9 +8,13 @@ import stat
 
 from apply import _code_units, _is_link
 from model import JS_WHITESPACE
+from setupcode import MAX_DEPTH, _depth
 from staging import STAGING_FOLDERS
 
 INCOMING = STAGING_FOLDERS[0]
+MAX_SAFE_INTEGER = 2 ** 53 - 1
+# An all-digit key, which JavaScript objects move to the front.
+INDEX_KEY = re.compile(r"[0-9]+")
 # Arrays merged as unions, by dotted key path. Hook lists (hooks.<Event>) merge the same way.
 UNION_PATHS = {"permissions.allow", "permissions.deny", "permissions.ask"}
 HEADING = re.compile(r"#{1,6} ")
@@ -39,22 +43,33 @@ def _read_text(path):
         return None
 
 
-_OUTSIDE = object()
+_UNREADABLE = object()
 
 
 def _repo_copy(repo_dir, path):
-    """The text of the repo's copy of `path`, None when it has none, or _OUTSIDE when a link in
-    its path leads out of the repo: a repo must not get a file elsewhere printed into the session."""
+    """The text of the repo's copy of `path`, None when it has none, or _UNREADABLE when it is
+    not one file inside the repo: a folder, a link loop, or a link out of the repo, whose target
+    must not get printed into the session."""
     file = os.path.join(repo_dir, path)
-    if not os.path.exists(file):
+    try:
+        entry = os.stat(file)
+    except (FileNotFoundError, NotADirectoryError):
         return None
+    except OSError:  # a link loop, or a path the system cannot follow
+        return _UNREADABLE
     real = os.path.normcase(os.path.realpath(file))
     root = os.path.normcase(os.path.realpath(repo_dir))
     try:
         inside = os.path.commonpath([real, root]) == root
     except ValueError:  # another drive
         inside = False
-    return _read_text(real) if inside else _OUTSIDE
+    return _read_text(real) if inside and stat.S_ISREG(entry.st_mode) else _UNREADABLE
+
+
+def _is_real_folder(folder):
+    """Whether `folder` is a real folder: a link or junction to one is never followed."""
+    entry = _lstat_or_none(folder)
+    return entry is not None and not _is_link(entry) and stat.S_ISDIR(entry.st_mode)
 
 
 def _staged_files(folder, prefix=""):
@@ -75,13 +90,12 @@ def _staged_files(folder, prefix=""):
 def propose_merges(repo_dir):
     """The proposal for each file staged in <repo_dir>/.bindwright/incoming/, by path."""
     incoming = os.path.join(repo_dir, INCOMING)
-    entry = _lstat_or_none(incoming)
-    if entry is None or _is_link(entry) or not stat.S_ISDIR(entry.st_mode):
+    if not _is_real_folder(os.path.dirname(incoming)) or not _is_real_folder(incoming):
         return {"proposals": []}
     proposals = []
     for path in sorted(_staged_files(incoming), key=_code_units):
         repo_text = _repo_copy(repo_dir, path)
-        if repo_text is _OUTSIDE:
+        if repo_text is _UNREADABLE:
             proposals.append({"path": path, "kind": "text"})
             continue
         proposals.append(propose_merge(path, repo_text, _read_text(os.path.join(incoming, path))))
@@ -126,12 +140,47 @@ def _refuse_constant(name):
 
 
 def _parse_object(text):
-    """The parsed object, or None when the text is not JSON or not an object."""
-    try:
-        value = json.loads(text, parse_constant=_refuse_constant)
-    except ValueError:
+    """The parsed object, or None when the text is not plain JSON: an object both engines read
+    and print alike (see _is_plain), nested at most MAX_DEPTH deep."""
+    if _depth(text) > MAX_DEPTH:
         return None
-    return value if isinstance(value, dict) else None
+    try:
+        value = json.loads(text, parse_constant=_refuse_constant, parse_float=_whole_float)
+    except (ValueError, _NotPlain):
+        return None
+    return value if isinstance(value, dict) and _is_plain(value) else None
+
+
+class _NotPlain(Exception):
+    pass
+
+
+def _whole_float(text):
+    """A number written with a fraction or an exponent, as the whole number JSON.parse reads it
+    as (1.0 is 1); any other is not plain."""
+    value = float(text)
+    if value.is_integer() and abs(value) <= MAX_SAFE_INTEGER:
+        return int(value)
+    raise _NotPlain(text)
+
+
+def _is_plain(value):
+    """Whole numbers in the safe range, no all-digit keys and no lone surrogates: past these the
+    JS engine would read or print the value differently, so the file is merged by hand instead."""
+    if isinstance(value, bool) or value is None:
+        return True
+    if isinstance(value, int):
+        return abs(value) <= MAX_SAFE_INTEGER
+    if isinstance(value, str):
+        return not _has_lone_surrogate(value)
+    if isinstance(value, list):
+        return all(_is_plain(item) for item in value)
+    return all(not INDEX_KEY.fullmatch(key) and not _has_lone_surrogate(key) and _is_plain(item)
+               for key, item in value.items())
+
+
+def _has_lone_surrogate(text):
+    return any(0xD800 <= ord(ch) <= 0xDFFF for ch in text)
 
 
 def _merge_objects(repo, incoming, path, clashes):
