@@ -150,6 +150,12 @@ const KINDS = {
       })],
     },
     {
+      name: "a DEL character in a value prints the same in both engines",
+      repo: { "s.json": json({ a: "x\u007fy" }) },
+      incoming: { "s.json": json({ z: 0 }) },
+      expect: [jsonProposal("s.json", { a: "x\u007fy", z: 0 })],
+    },
+    {
       name: "nested objects merge key by key",
       repo: { "s.json": json({ env: { A: "1" }, model: "x" }) },
       incoming: { "s.json": json({ env: { B: "2" } }) },

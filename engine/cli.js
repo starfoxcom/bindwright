@@ -159,7 +159,8 @@ try {
 } catch (err) {
   result = { error: err.message };
 }
-// ASCII output, as bind.py writes it, so no console code page can mangle it.
+// ASCII output, as bind.py writes it, so no console code page can mangle it. Python's ensure_ascii
+// also escapes DEL (U+007F), which JSON.stringify leaves raw.
 const escape = (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`;
-process.stdout.write(JSON.stringify(result).replace(/[^\x00-\x7f]/g, escape));
+process.stdout.write(JSON.stringify(result).replace(/[^\x00-\x7e]/g, escape));
 process.exitCode = "error" in result ? 1 : 0;
