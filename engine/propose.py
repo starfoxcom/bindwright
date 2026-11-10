@@ -57,10 +57,12 @@ def _repo_copy(repo_dir, path):
         return None
     except OSError:  # a link loop, or a path the system cannot follow
         return _UNREADABLE
-    real = os.path.normcase(os.path.realpath(file))
+    real = os.path.realpath(file)
+    # normcase only for the comparison: on Windows it lowercases, which names another file in a
+    # case-sensitive folder.
     root = os.path.normcase(os.path.realpath(repo_dir))
     try:
-        inside = os.path.commonpath([real, root]) == root
+        inside = os.path.commonpath([os.path.normcase(real), root]) == root
     except ValueError:  # another drive
         inside = False
     return _read_text(real) if inside and stat.S_ISREG(entry.st_mode) else _UNREADABLE
@@ -242,17 +244,18 @@ def _has_hooks(entry):
 
 
 def _merge_hook_entries(items, extra):
-    """One event's hook entries: a staged entry whose matcher a repo entry already has adds its
-    missing hooks to that entry, so no matcher is listed twice; any other new entry is appended."""
+    """One event's hook entries: a staged entry whose matcher a repo entry already has adds the
+    hooks no entry with that matcher holds to the first of them, so no matcher gains a second
+    entry and no hook is listed twice; any other new entry is appended."""
     merged = [dict(entry) if isinstance(entry, dict) else entry for entry in items]
     for item in extra:
-        same = None
+        same = []
         if _has_hooks(item):
-            same = next((entry for entry in merged if _has_hooks(entry)
-                         and _canonical(entry.get("matcher")) == _canonical(item.get("matcher"))),
-                        None)
-        if same is not None:
-            same["hooks"] = _append_missing(same["hooks"], item["hooks"])
+            same = [entry for entry in merged if _has_hooks(entry)
+                    and _canonical(entry.get("matcher")) == _canonical(item.get("matcher"))]
+        if same:
+            present = [hook for entry in same for hook in entry["hooks"]]
+            same[0]["hooks"] = same[0]["hooks"] + _append_missing(present, item["hooks"])[len(present):]
         elif all(_canonical(entry) != _canonical(item) for entry in merged):
             merged.append(item)
     return merged

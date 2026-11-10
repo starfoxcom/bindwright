@@ -188,17 +188,21 @@ function appendMissing(list, extra) {
   return merged;
 }
 
-// One event's hook entries: a staged entry whose matcher a repo entry already has adds its
-// missing hooks to that entry, so no matcher is listed twice; any other new entry is appended.
+// One event's hook entries: a staged entry whose matcher a repo entry already has adds the
+// hooks no entry with that matcher holds to the first of them, so no matcher gains a second
+// entry and no hook is listed twice; any other new entry is appended.
 function mergeHookEntries(list, extra) {
   const merged = list.map((entry) => (isObject(entry) ? { ...entry } : entry));
   const hasHooks = (entry) => isObject(entry) && Array.isArray(entry.hooks);
   const matcherOf = (entry) => canonical(entry.matcher ?? null);
   for (const item of extra) {
-    const same = hasHooks(item) && merged.find((entry) => (
-      hasHooks(entry) && matcherOf(entry) === matcherOf(item)));
-    if (same) same.hooks = appendMissing(same.hooks, item.hooks);
-    else if (!merged.some((entry) => canonical(entry) === canonical(item))) merged.push(item);
+    const same = hasHooks(item)
+      ? merged.filter((entry) => hasHooks(entry) && matcherOf(entry) === matcherOf(item))
+      : [];
+    if (same.length > 0) {
+      const present = same.flatMap((entry) => entry.hooks);
+      same[0].hooks = [...same[0].hooks, ...appendMissing(present, item.hooks).slice(present.length)];
+    } else if (!merged.some((entry) => canonical(entry) === canonical(item))) merged.push(item);
   }
   return merged;
 }

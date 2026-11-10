@@ -142,6 +142,14 @@ const KINDS = {
       }] } })],
     },
     {
+      name: "a hook in a later entry with the same matcher is not added again",
+      repo: { "s.json": json({ hooks: { PreToolUse: [hookEntry("user.py"), hookEntry("guard.py")] } }) },
+      incoming: { "s.json": json({ hooks: { PreToolUse: [hookEntry("guard.py")] } }) },
+      expect: [jsonProposal("s.json", {
+        hooks: { PreToolUse: [hookEntry("user.py"), hookEntry("guard.py")] },
+      })],
+    },
+    {
       name: "nested objects merge key by key",
       repo: { "s.json": json({ env: { A: "1" }, model: "x" }) },
       incoming: { "s.json": json({ env: { B: "2" } }) },
