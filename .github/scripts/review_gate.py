@@ -54,7 +54,7 @@ import subprocess
 import sys
 import time
 
-# Never reviewed: the review action refuses to run on a PR whose copy of the
+# Never reviewed: the review app refuses its token to a run whose copy of the
 # review workflow differs from the default branch's, so a workflow-only PR has
 # to pass as non-reviewable. Only that one workflow: claude.yml (the deep tier
 # runs the default branch's copy), any other workflow, and a script or action
