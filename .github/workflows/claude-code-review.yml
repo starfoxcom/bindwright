@@ -1121,7 +1121,7 @@ jobs:
             PATH="$NODE_BIN:$PATH"
           fi
           if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" = win32 ] || [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" != /* ]]; then
-            echo "::warning::No usable Node and npm on this runner: the review runs on the action's own CLI; the backup tries the stable release"
+            echo "::warning::No usable Node and npm on this runner: the review runs on the action's own CLI, with no credits run and no backup review"
             exit 1
           fi
           CLI_VERSION=""
