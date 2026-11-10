@@ -216,9 +216,10 @@ First run the engine with `--propose-merge <repo root>`. It changes nothing and 
 
 - `missing`: the repo has no file at that path. Move the staged copy into place.
 - `identical`: delete the staged copy.
-- `json`: `merged` and `text` are the suggested file: the permission lists unioned, the hooks the repo lacks appended, the repo's value kept for every other key both set. `clashes` lists each of those keys with both values (`key`, `repo`, `incoming`).
+- `json`: `merged` and `text` are the suggested file: the permission lists unioned, the hooks the repo lacks added (into the repo's entry for the same matcher, or as a new entry), the repo's value kept for every other key both set. `clashes` lists each of those keys with both values (`key`, `repo`, `incoming`).
 - `markdown`: `add` holds the staged sections the repo lacks, `differ` the sections both have with different text (`heading`, `repo`, `incoming`), and `repoOnly` the headings only the repo has, which stay.
 - `text`: any other file that differs, such as `LICENSE`, and JSON the engine leaves to you (fractions, very large numbers, all-digit keys). There is no suggestion; compare the two by hand.
+- `unread`: the repo's path is a folder, a link loop or a link that leaves the repo, so the engine did not read it. Say what is there and ask the user what to do; never read through a link that leaves the repo.
 
 The proposal is a starting point, not the answer. Before showing it, read it against the repo: what the repo's own rules and settings are for, and whether a clash looks deliberate (a stricter permission, a project-specific section, a hook that already does the same job under another name). Adjust the proposal where the repo's intent calls for it. Then show the user, per file, a short summary of the merge, each clash with both versions, and your recommendation for each clash with its reason. Save a file only after a yes.
 

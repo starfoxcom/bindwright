@@ -96,7 +96,7 @@ def propose_merges(repo_dir):
     for path in sorted(_staged_files(incoming), key=_code_units):
         repo_text = _repo_copy(repo_dir, path)
         if repo_text is _UNREADABLE:
-            proposals.append({"path": path, "kind": "text"})
+            proposals.append({"path": path, "kind": "unread"})
             continue
         proposals.append(propose_merge(path, repo_text, _read_text(os.path.join(incoming, path))))
     return {"proposals": proposals}
@@ -211,6 +211,8 @@ def _merge_value(repo, incoming, path, clashes):
     if isinstance(repo, dict) and isinstance(incoming, dict):
         return _merge_objects(repo, incoming, path, clashes)
     if isinstance(repo, list) and isinstance(incoming, list) and _is_list_path(path):
+        if path[0] == "hooks":
+            return _merge_hook_entries(repo, incoming)
         return _append_missing(repo, incoming)
     if _canonical(repo) != _canonical(incoming):
         clashes.append({"key": ".".join(path), "repo": repo, "incoming": incoming})
@@ -231,6 +233,27 @@ def _append_missing(items, extra):
         key = _canonical(item)
         if key not in seen:
             seen.add(key)
+            merged.append(item)
+    return merged
+
+
+def _has_hooks(entry):
+    return isinstance(entry, dict) and isinstance(entry.get("hooks"), list)
+
+
+def _merge_hook_entries(items, extra):
+    """One event's hook entries: a staged entry whose matcher a repo entry already has adds its
+    missing hooks to that entry, so no matcher is listed twice; any other new entry is appended."""
+    merged = [dict(entry) if isinstance(entry, dict) else entry for entry in items]
+    for item in extra:
+        same = None
+        if _has_hooks(item):
+            same = next((entry for entry in merged if _has_hooks(entry)
+                         and _canonical(entry.get("matcher")) == _canonical(item.get("matcher"))),
+                        None)
+        if same is not None:
+            same["hooks"] = _append_missing(same["hooks"], item["hooks"])
+        elif all(_canonical(entry) != _canonical(item) for entry in merged):
             merged.append(item)
     return merged
 

@@ -88,7 +88,7 @@ export function proposeMerges(repoDir) {
   if (!isRealFolder(dirname(incoming)) || !isRealFolder(incoming)) return { proposals: [] };
   const proposals = stagedFiles(incoming).sort().map((path) => {
     const repoText = repoCopy(repoDir, path);
-    if (repoText === UNREADABLE) return { path, kind: "text" };
+    if (repoText === UNREADABLE) return { path, kind: "unread" };
     return proposeMerge(path, repoText, readText(join(incoming, path)));
   });
   return { proposals };
@@ -162,7 +162,7 @@ function mergeObjects(repo, incoming, path, clashes) {
 function mergeValue(repo, incoming, path, clashes) {
   if (isObject(repo) && isObject(incoming)) return mergeObjects(repo, incoming, path, clashes);
   if (Array.isArray(repo) && Array.isArray(incoming) && isListPath(path)) {
-    return appendMissing(repo, incoming);
+    return path[0] === "hooks" ? mergeHookEntries(repo, incoming) : appendMissing(repo, incoming);
   }
   if (canonical(repo) !== canonical(incoming)) {
     clashes.push({ key: path.join("."), repo, incoming });
@@ -184,6 +184,21 @@ function appendMissing(list, extra) {
     if (seen.has(key)) continue;
     seen.add(key);
     merged.push(item);
+  }
+  return merged;
+}
+
+// One event's hook entries: a staged entry whose matcher a repo entry already has adds its
+// missing hooks to that entry, so no matcher is listed twice; any other new entry is appended.
+function mergeHookEntries(list, extra) {
+  const merged = list.map((entry) => (isObject(entry) ? { ...entry } : entry));
+  const hasHooks = (entry) => isObject(entry) && Array.isArray(entry.hooks);
+  const matcherOf = (entry) => canonical(entry.matcher ?? null);
+  for (const item of extra) {
+    const same = hasHooks(item) && merged.find((entry) => (
+      hasHooks(entry) && matcherOf(entry) === matcherOf(item)));
+    if (same) same.hooks = appendMissing(same.hooks, item.hooks);
+    else if (!merged.some((entry) => canonical(entry) === canonical(item))) merged.push(item);
   }
   return merged;
 }

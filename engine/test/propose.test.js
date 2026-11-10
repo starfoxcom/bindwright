@@ -126,6 +126,22 @@ const KINDS = {
       })],
     },
     {
+      name: "a staged entry with the repo's matcher adds its missing hooks to that entry",
+      repo: { "s.json": json({ hooks: { PreToolUse: [hookEntry("push-guard.py")] } }) },
+      incoming: {
+        "s.json": json({ hooks: { PreToolUse: [{
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "attribution.py" },
+            { type: "command", command: "push-guard.py" }],
+        }] } }),
+      },
+      expect: [jsonProposal("s.json", { hooks: { PreToolUse: [{
+        matcher: "Bash",
+        hooks: [{ type: "command", command: "push-guard.py" },
+          { type: "command", command: "attribution.py" }],
+      }] } })],
+    },
+    {
       name: "nested objects merge key by key",
       repo: { "s.json": json({ env: { A: "1" }, model: "x" }) },
       incoming: { "s.json": json({ env: { B: "2" } }) },
@@ -392,7 +408,7 @@ for (const [name, propose] of Object.entries(ENGINES)) {
       linkFolder(outside, join(root, "outside"));
       const [inside, linkedOut] = JSON.parse(printedIn(root, propose)).proposals;
       assert.equal(inside.kind, "markdown");
-      assert.deepEqual(linkedOut, { path: "outside/settings.json", kind: "text" });
+      assert.deepEqual(linkedOut, { path: "outside/settings.json", kind: "unread" });
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
@@ -406,7 +422,7 @@ for (const [name, propose] of Object.entries(ENGINES)) {
         mkdirSync(join(root, "dir.json"));
         writeFileSync(join(root, ...INCOMING, "dir.json"), "{}");
         assert.deepEqual(JSON.parse(printedIn(root, propose)).proposals.map((p) => p.kind),
-          ["markdown", "text"]);
+          ["markdown", "unread"]);
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
