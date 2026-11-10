@@ -81,6 +81,13 @@ export function dueReads(last: DiskRecord | undefined, isOn: boolean, now: numbe
   return { size: isDue(last.sizeAt, SIZE_READ_MS, now), used: isDue(last.usedAt, USED_READ_MS, now) }
 }
 
+const newestStamp = (record: DiskRecord): number => Math.max(record.sizeAt ?? -1, record.usedAt ?? -1)
+
+/** The store's record when it holds a newer reading than this session's own, else the session's own. */
+export function newerRecord(stored: DiskRecord, own: DiskRecord | undefined): DiskRecord {
+  return own === undefined || newestStamp(stored) > newestStamp(own) ? stored : own
+}
+
 /** The stored fields that have the right type; anything else, or a store with no record, reads as unset. */
 export function readRecord(value: unknown): DiskRecord {
   const stored = (value ?? {}) as Record<string, unknown>

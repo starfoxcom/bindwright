@@ -10,6 +10,7 @@ import {
   dueReads,
   isOptionalWsl,
   isSparseFile,
+  newerRecord,
   parseStat,
   parseUsedBytes,
   readRecord,
@@ -150,31 +151,36 @@ async function workflowTexts($: Engine, repo: string, now: number): Promise<stri
 
 // The figures are read when dueReads says so and kept in the mod store, which every session shares. The file
 // size comes from node, which leaves the distro stopped; df boots it, so the data inside is read only while
-// the row is on. A failed read keeps that figure's older value and time, so the next check retries it.
+// the row is on. A failed read keeps that figure's older value and time, so the next check retries it; a start
+// or stop is recorded only once its reads succeed, so its reads are retried too.
 async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): Promise<DiskFields> {
   if (!runner.wsl) return {}
   const key = `disk:${runner.label}`
   const last = await loadRecord($, key)
   const due = dueReads(last, isOn, now)
-  const next: DiskRecord = { ...last, isOn }
+  const next: DiskRecord = { ...last }
+  let isSettled = true
   if (due.size) {
     const stat = parseStat((await run($, ['node', '-e', STAT_SCRIPT, runner.wsl.disk])) ?? '')
     if (stat) Object.assign(next, { sizeAt: now, diskBytes: stat.allocated, isSparse: isSparseFile(stat) })
+    else isSettled = false
   }
   if (due.used) {
     const df = ['wsl.exe', '-d', runner.wsl.distro, '--exec', 'df', '-B1', '--output=used', '/']
     const used = parseUsedBytes((await run($, df)) ?? '')
     if (used !== null) Object.assign(next, { usedAt: now, usedBytes: used })
+    else isSettled = false
   }
-  if (due.size || due.used || last.isOn !== isOn) await saveRecord($, key, next)
+  if (isSettled) next.isOn = isOn
+  if (due.size || due.used || last.isOn !== next.isOn) await saveRecord($, key, next)
   return { diskBytes: next.diskBytes, usedBytes: next.usedBytes, isSparse: next.isSparse }
 }
 
-// This session's last record stands in for a store that cannot be read or holds none, so a broken store
-// slows nothing down: the reads keep their cadence within the session.
+// The newer of the store's record and this session's own, so a store that cannot be read, holds none, or
+// cannot be written slows nothing down: the reads keep their cadence within the session.
 async function loadRecord($: Engine, key: string): Promise<DiskRecord> {
   const stored = await $.store.get(key).catch(() => undefined)
-  return readRecord(stored ?? live.disks.get(key))
+  return newerRecord(readRecord(stored), live.disks.get(key))
 }
 
 async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<void> {

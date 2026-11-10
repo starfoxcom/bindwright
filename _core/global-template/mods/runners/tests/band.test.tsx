@@ -8,6 +8,7 @@ import {
   diskText,
   dueReads,
   isSparseFile,
+  newerRecord,
   parseStat,
   parseUsedBytes,
   readRecord,
@@ -142,6 +143,20 @@ test('readRecord keeps the stored fields of the right type, and reads anything e
   for (const [name, value, record] of cases) expect([name, readRecord(value)]).toEqual([name, record])
 })
 
+test("the newer of the stored record and the session's own is used, the own one on a tie", () => {
+  const stored: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW }
+  const cases: [name: string, own: DiskRecord | undefined, picked: 'stored' | 'own'][] = [
+    ['no record of its own', undefined, 'stored'],
+    ['its own is older', { isOn: false, sizeAt: NOW - 1, usedAt: NOW - 1 }, 'stored'],
+    ['the same reading time', { isOn: false, sizeAt: NOW, usedAt: NOW }, 'own'],
+    ['its own is newer', { isOn: true, sizeAt: NOW, usedAt: NOW + 1 }, 'own'],
+  ]
+  for (const [name, own, picked] of cases) {
+    expect([name, newerRecord(stored, own)]).toEqual([name, picked === 'stored' ? stored : own])
+  }
+  expect(newerRecord({}, stored)).toBe(stored)
+})
+
 test('a reading keeps a Start or Stop pressed while it was being taken', () => {
   const reading: RunnerView[] = [{ label: 'runners', isOn: true, online: 0 }]
   const pressed: RunnerView[] = [{ label: 'runners', isOn: true, startedAt: NOW, isConfirming: true }]
@@ -247,12 +262,16 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
-// A WSL runner whose disk figures go through the mod store; `isStoreBroken` makes every store call fail.
+// A WSL runner whose disk figures go through the mod store, faked as working, failing every call, or
+// readable but refusing every write. `seed` is a record already in the store.
 const WSL = { distro: 'Ubuntu', disk: 'C:/wsl/ext4.vhdx' }
 const WSL_LISTED = [{ label: 'local', processes: ['Runner.Listener'], wsl: WSL }]
-function wslMachine(on: On, isStoreBroken: boolean) {
+type StoreMode = 'working' | 'failing' | 'read-only'
+type Host = { isUp: boolean; isStatFailing: boolean }
+function wslMachine(on: On, mode: StoreMode, seed?: DiskRecord) {
   const runs: string[][] = []
-  const store = new Map<string, unknown>()
+  const store = new Map<string, unknown>(seed ? [['disk:local', seed]] : [])
+  const host: Host = { isUp: true, isStatFailing: false }
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:/Users/me', OS: 'Windows_NT' })
   on('fs.read', ($, e) => {
@@ -260,50 +279,89 @@ function wslMachine(on: On, isStoreBroken: boolean) {
     return { value: JSON.stringify(WSL_LISTED) }
   })
   on('store.get', ($, e) => {
-    if (isStoreBroken) throw new Error('store unreadable')
+    if (mode === 'failing') throw new Error('store unreadable')
     return { value: store.get(e.key) }
   })
   on('store.set', ($, e) => {
-    if (isStoreBroken) throw new Error('store unwritable')
+    if (mode !== 'working') throw new Error('store unwritable')
     store.set(e.key, e.value)
     return { value: undefined }
   })
   on('process.run', ($, e) => {
     runs.push([...e.argv])
+    const isStat = e.argv.includes(WSL.disk)
+    if (isStat && host.isStatFailing) return { value: { exitCode: 1, stdout: '', stderr: 'EBUSY' } } as never
     const stdout =
       e.argv[0] === 'tasklist'
-        ? '"Runner.Listener.exe","1"\r\n'
+        ? host.isUp ? '"Runner.Listener.exe","1"\r\n' : ''
         : e.argv[0] === 'wsl.exe'
           ? `Used\n${12 * GIB}\n`
-          : e.argv.includes('C:/wsl/ext4.vhdx')
+          : isStat
             ? `${40 * GIB} ${30 * GIB}\n`
             : '360\n'
     return { value: { exitCode: 0, stdout, stderr: '' } } as never
   })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } as never }))
-  return { runs, store, clock }
+  const dfRuns = () => runs.filter(argv => argv[0] === 'wsl.exe').length
+  const statRuns = () => runs.filter(argv => argv.includes(WSL.disk)).length
+  return { store, host, clock, counts: () => [dfRuns(), statRuns()] }
 }
 
-for (const isStoreBroken of [false, true]) {
-  const how = isStoreBroken ? 'a failing store, from memory' : 'the store'
-  test(`the disk figures go through ${how}: the next check reads df again but not the file`, async ($, on) => {
-    const { runs, store, clock } = wslMachine(on, isStoreBroken)
-    const dfRuns = () => runs.filter(argv => argv[0] === 'wsl.exe').length
-    const statRuns = () => runs.filter(argv => argv.includes(WSL.disk)).length
-    await $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
+const startSession = ($: Engine) => $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
+const rowNow = async ($: Engine) => {
+  const answer = await $.command.run({ command: 'runners', args: '' } as never)
+  return (answer as never as { text: string }).text
+}
+// A record another session wrote 20 minutes ago, so both figures are due.
+const OLD_AT = NOW - 20 * 60_000
+const OLD: DiskRecord = { isOn: true, sizeAt: OLD_AT, usedAt: OLD_AT, diskBytes: GIB, usedBytes: GIB }
+
+const STORE_CASES: [mode: StoreMode, seed: DiskRecord | undefined][] = [
+  ['working', undefined],
+  ['failing', undefined],
+  ['read-only', OLD],
+]
+for (const [mode, seed] of STORE_CASES) {
+  test(`with a ${mode} store, the next check reads df again but not the file`, async ($, on) => {
+    const { store, clock, counts } = wslMachine(on, mode, seed)
+    await startSession($)
     await clock.advance(1_000)
-    expect([dfRuns(), statRuns()]).toEqual([1, 1])
-    const saved = isStoreBroken ? undefined : { diskBytes: 30 * GIB, usedBytes: 12 * GIB, isSparse: true }
-    expect(store.get('disk:local')).toEqual(saved && expect.objectContaining(saved))
+    expect(counts()).toEqual([1, 1])
+    if (mode === 'working') {
+      const saved = { diskBytes: 30 * GIB, usedBytes: 12 * GIB, isSparse: true }
+      expect(store.get('disk:local')).toEqual(expect.objectContaining(saved))
+    }
     // One full check period later: df is due again, the file size only after 15 min.
     await clock.advance(60_000)
-    expect([dfRuns(), statRuns()]).toEqual([2, 1])
-    expect(await $.command.run({ command: 'runners', args: '' } as never)).toEqual(
-      expect.objectContaining({ text: expect.stringContaining('disk 30.0 GB (12.0 used, trim)') }),
-    )
+    expect(counts()).toEqual([2, 1])
+    expect(await rowNow($)).toContain('disk 30.0 GB (12.0 used, trim)')
   })
 }
+
+test('a fresh reading another session stored is shown without reading anything', async ($, on) => {
+  const fresh: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW, diskBytes: 25 * GIB, usedBytes: 5 * GIB }
+  const { clock, counts } = wslMachine(on, 'working', fresh)
+  await startSession($)
+  await clock.advance(1_000)
+  expect(counts()).toEqual([0, 0])
+  expect(await rowNow($)).toContain('disk 25.0 GB (5.0 used, compact)')
+})
+
+test('a stop reads the file size, retries it after a failure, and never runs df while off', async ($, on) => {
+  const { host, clock, counts } = wslMachine(on, 'working')
+  await startSession($)
+  await clock.advance(1_000)
+  host.isUp = false
+  host.isStatFailing = true
+  await clock.advance(60_000)
+  expect(counts()).toEqual([1, 2])
+  host.isStatFailing = false
+  await clock.advance(60_000)
+  expect(counts()).toEqual([1, 3])
+  await clock.advance(60_000)
+  expect(counts()).toEqual([1, 3])
+})
 
 test('/runners shows its arguments in the menu, lists them on help and names each runner', async ($, on) => {
   const { clock } = machine(on, () => true)
