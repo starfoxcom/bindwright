@@ -186,6 +186,22 @@ test("drift names the extras the repo's setup expects, and nothing else", async 
   }
 });
 
+test("a failed review counts send is named in a repo, and nowhere else", async () => {
+  const s = scene("1.4.0");
+  try {
+    const ask = (countsFailedAt, cwd = s.repo) =>
+      notice({ cwd, today: "2026-11-10", cacheFile: s.cacheFile, pluginVersion: "1.4.0", fetchLatest: latest(null),
+        countsFailedAt });
+    const failedAt = new Date(2026, 10, 9, 12).getTime();
+    assert.match(await ask(failedAt), /this repo's last send failed \(2026-11-09\)/);
+    rmSync(s.cacheFile);
+    assert.equal(await ask(null), null, "no failure");
+    assert.equal(await ask(failedAt, s.root), null, "outside a repo");
+  } finally {
+    rmSync(s.root, { recursive: true, force: true });
+  }
+});
+
 test("a helper at another version than the plugin points at /bindwright:update", async () => {
   const s = scene("1.4.0");
   try {
