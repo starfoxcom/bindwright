@@ -50,7 +50,7 @@ Nothing is committed. Say that `git status` shows the removal, and offer to comm
 
 Run the engine with `--settings <repo root or any folder>`: `installed` lists the extras setup added to the user's config folder. Ask about each one that is there, one yes or no each, and say what it does today so the user can choose:
 
-- **Push guard, attribution guard and the code-search hook:** `python "<helper>/engine/home.py" remove-hook <name>.py` for each, after `home.py list-hooks` shows which are installed (`push-guard.py`, `no-ai-attribution.py`, the `*-first.py` search hook). It removes the hook's entry from `~/.claude/settings.json` and its file, and keeps the user's other hooks.
+- **Push guard, session titles, attribution guard and the code-search hook:** `python "<helper>/engine/home.py" remove-hook <name>.py` for each, after `home.py list-hooks` shows which are installed (`push-guard.py`, `session-title.py`, `no-ai-attribution.py`, the `*-first.py` search hook). It removes the hook's entry from `~/.claude/settings.json` and its file, and keeps the user's other hooks.
 - **The `git push` allow rule** setup offered with the push guard: `home.py disallow "Bash(git push:*)"`.
 - **Mods:** `home.py remove-mod <name>` for each installed one. It takes the mod out of the plugin folders list and deletes its folder.
 - **Builder agent:** `home.py remove-agent builder.md`.

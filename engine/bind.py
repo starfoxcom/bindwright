@@ -133,7 +133,6 @@ def _included(path, a, flags):
         ".github/review-guide.md.template": gate,
         ".claude/hooks/run-hook.sh": flags["guard_hooks_repo"],
         ".claude/hooks/push-guard.py": flags["guard_hooks_repo"],
-        ".claude/hooks/session-title.py": flags["guard_hooks_repo"],
         ".claude/hooks/no-ai-attribution.py": flags["guard_hooks_repo"] and flags["attribution_guard"],
         ".gitattributes": flags["guard_hooks_repo"],
     }
@@ -198,6 +197,7 @@ def _global_files(a, ctx, read_file):
         ["CLAUDE.md.additions", render("CLAUDE.md.additions")],
         ["memory/MEMORY.md", render("memory-template/MEMORY.md")],
         ["hooks/push-guard.py", verbatim("hooks/push-guard.py")],
+        ["hooks/session-title.py", verbatim("hooks/session-title.py")],
         ["agents/builder.md", verbatim("agents/builder.md")],
         ["output-styles/straight-talk.md", verbatim("output-styles/straight-talk.md")],
     ]
