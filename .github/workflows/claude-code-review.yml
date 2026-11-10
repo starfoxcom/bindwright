@@ -639,8 +639,8 @@ jobs:
           fi
 
       # No token left in .git/config, which the credits reviewer's worktree
-      # shares: that reviewer gets this job's read-only token only as GH_TOKEN
-      # for its gh reads. The fetches here are anonymous on a public repo; the
+      # shares: that reviewer gets this job's read-only token only through its
+      # environment, for its gh reads. The fetches here are anonymous on a public repo; the
       # review action sets up its own auth.
       - uses: actions/checkout@v6
         with:
@@ -1869,7 +1869,7 @@ jobs:
           }
           bot_token=""
           if ! retry token_once; then
-            echo "::error::The bot token exchange failed three times, so the review cannot be posted. A PR whose copy of this workflow differs from the default branch's is refused every time: ship that edit in a PR of its own, or merge the pending cascade first. Otherwise re-run this job"
+            echo "::error::The bot token exchange failed three times, so the review cannot be posted. A PR whose copy of this workflow differs from the default branch's is refused every time: ship that edit in a PR of its own, or merge the pending cascade, then merge the base branch into this PR and push (a re-run reuses the old copy). Otherwise re-run this job"
             exit 1
           fi
           echo "::add-mask::$bot_token"
