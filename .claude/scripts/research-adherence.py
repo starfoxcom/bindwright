@@ -72,7 +72,7 @@ def path_arguments(head):
         words = head.split()
     if words[:2] == ["git", "grep"]:
         words = words[1:]
-    positional = [w for w in words[1:] if not w.startswith("-")]
+    positional = [w for w in words[1:] if not w.startswith("-") and not REDIRECT.match(w)]
     # grep, rg, ag and ack take the pattern first; a pattern is not a path, even with a slash.
     if words and not PS_LISTING.search(head):
         positional = positional[1:]

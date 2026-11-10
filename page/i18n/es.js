@@ -251,6 +251,11 @@ export default {
   "evidence.story5.now": "Si se pide una revisión a fondo, nada se integra hasta que pase.",
   "evidence.story6.was": "Un cambio de workflow hecho en una rama de feature reprobó su propia revisión.",
   "evidence.story6.now": "Los cambios de workflow van primero a main y luego vuelven a develop.",
+  "evidence.story7.was": "Un modelo de revisión elegido con una sola ronda de pruebas bloqueó pull requests "
+    + "limpios en cinco de nueve revisiones cuando la prueba se repitió tres veces.",
+  "evidence.story7.now": "Los modelos de revisión se eligen con pruebas al mejor de tres, con el modelo actual "
+    + "en la misma corrida (<a href=\"https://github.com/starfoxcom/bindwright/blob/main/docs/review-model-trials.md\">"
+    + "todas las pruebas</a>).",
 
   "nav.settings": "Ajustes del plugin",
   "asks.more": "Ver todos los ajustes",
@@ -289,6 +294,9 @@ export default {
   "settings.push-guard.title": "Guardia de push",
   "settings.push-guard.text": "Bloquea los force push en cada repo de tu computadora.",
   "settings.push-guard.value": "Sí",
+  "settings.session-title.title": "Títulos de sesión",
+  "settings.session-title.text": "Nombra cada sesión según su proyecto y en qué está trabajando.",
+  "settings.session-title.value": "Sí",
   "settings.builder.title": "Agente constructor",
   "settings.builder.text": "Un ayudante barato con Haiku escribe el código, y el modelo principal lo revisa.",
   "settings.builder.value": "Sí",

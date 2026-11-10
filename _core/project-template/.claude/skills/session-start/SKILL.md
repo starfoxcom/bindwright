@@ -69,10 +69,8 @@ Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude 
 
 ## 4. Stop
 
-<!-- TOGGLE:guard_hooks_repo START -->
-Before ending the turn, write this session's purpose to `.bindwright/sessions/${CLAUDE_SESSION_ID}.purpose`: what the plan works on, in 10 words at most and as few as will do, without the project's name. That is the one file this turn writes; create the folder first when it is missing, with a `.gitignore` that holds `*`. From the next prompt, the one that approves the plan, the session's title reads `<Project> - <purpose>`. Rewrite the file when the user corrects the plan or the session's focus changes.
+When the session-title hook named a purpose file at the start of this session (Bindwright's global `session-title` extra), write this session's purpose to that file before ending the turn: what the plan works on, in 10 words at most and as few as will do, without the project's name. That is the one file this turn writes. From the next prompt, the one that approves the plan, the session's title reads `<Project> - <purpose>`. Rewrite the file when the user corrects the plan or the session's focus changes.
 
-<!-- TOGGLE:guard_hooks_repo END -->
 End the turn after the report. Once the user approves or corrects the plan, create the tasks per `.claude/rules/task-tracking.md` and start.
 
 Produce every section even when a branch with work in progress is already checked out.

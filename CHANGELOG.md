@@ -6,9 +6,20 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.2.0] — 2026-11-10
+
+v3.2.0 moves the review tiers to Fable 5.2, names every session after its project from one computer-wide setting, and lets self-hosted runners without a Linux Node run the reviews in full.
+
+### Changed
+
+- **The review tiers move to Fable 5.2.** The routine review runs `claude-fable-5-2` at low effort and the deep review `claude-fable-5-2` at medium, both with the same `claude-opus-5-5` high backup. In a best-of-three, head-to-head trial against Fable 5.1 low on saved pull requests with known findings, scored by a two-judge panel, both settings missed fewer known defects for less money; the deep setting lists more findings the judges ruled out. Existing binds keep their pins until `/bindwright:update` or an edit to `.github/review-gate.yml`.
+- **Session titles move to the computer setup, for every project.** The `session-title` hook is now a global extra in `~/.claude`, asked once per computer: every session is named after its project (the name setup saved, else the repo's folder), then `<Project> - <purpose>`, in projects Bindwright never set up too. Its files live in `~/.bindwright/session-titles/` instead of each repo's `.bindwright/sessions/`, with an allow rule so the purpose is written without a prompt, and `/session-start` writes the purpose to the file the hook names. Binds no longer write the project copy of the hook.
+- **The `runners` mod's WSL disk figure stays current and shows real use.** While the runners run, the data inside the distro is read at most once a minute and the disk file every 15 minutes (both right after a start, the file after a stop), instead of hourly. The file's size is its allocated bytes, so a sparse disk shows what it takes on the host, and its hint reads `trim` (an `fstrim` inside the distro, no shutdown) instead of `compact`. The reading is shared by every session on the computer through the mod's store.
+
 ### Fixed
 
 - **The review jobs install their CLI on self-hosted runners with no Linux Node** (#714). On a WSL runner whose only `npm` was the Windows one, the install left no Linux binary, so the review ran without its credits run and its backup. Each review job now downloads the official Node build into its temp folder when the runner has no Linux Node 22 or newer, checks it against a pinned checksum, and uses it only for the install.
+- **The session-close count of code searches no longer reads a shell redirect as a path** (#733). A search of a folder outside the repo that ended in `2>/dev/null` counted as a plain search of the repo's code.
 
 ## [v3.1.0] — 2026-11-09
 

@@ -186,6 +186,7 @@ h1 {
 .stories th { padding: 0 24px 10px 0; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .stories td { width: 50%; padding: 14px 24px 14px 0; border-top: 1px solid var(--rule); vertical-align: top; }
 .stories .now { font-size: 16px; line-height: 1.35; font-weight: 700; color: var(--text); }
+.stories a { color: var(--accent); text-underline-offset: 4px; }
 
 /* Mods: one card per mod the setup can add. The default chip sits at the foot of every card. */
 .mods-lede { max-width: 640px; font-size: 17px; color: var(--text-2); }

@@ -14,10 +14,12 @@ export type RunnerView = {
   startedAt?: number
   /** Stop was pressed while a job ran; the next press stops anyway. */
   isConfirming?: boolean
-  /** The size of the WSL virtual disk file, in bytes. */
+  /** The WSL virtual disk file's allocated bytes, not its length. */
   diskBytes?: number
   /** The data inside the WSL distro, in bytes (df's Used). */
   usedBytes?: number
+  /** The disk file is sparse, so fstrim inside the distro can hand its free space back. */
+  isSparse?: boolean
 }
 
 /** The settings pane's own state: the last refusal per field, shown under that field. */

@@ -86,7 +86,6 @@ function included(path, a, flags) {
     ".github/review-guide.md.template": gate,
     ".claude/hooks/run-hook.sh": flags.guard_hooks_repo,
     ".claude/hooks/push-guard.py": flags.guard_hooks_repo,
-    ".claude/hooks/session-title.py": flags.guard_hooks_repo,
     ".claude/hooks/no-ai-attribution.py": flags.guard_hooks_repo && flags.attribution_guard,
     ".gitattributes": flags.guard_hooks_repo,
   };
@@ -135,8 +134,8 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
 
 // The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
 // additions, the memory index, the push guard, the builder agent, the reply
-// style, the attribution guard when the guards live in ~/.claude, and the
-// research hook for a tool without its own.
+// style, the session-title hook, the attribution guard when the guards live in
+// ~/.claude, and the research hook for a tool without its own.
 async function globalFiles(a, ctx, readFile) {
   const verbatim = async (p) => (await readFile(GLOBAL_CORE + p)).replace(/\r\n/g, "\n");
   const render = async (p) => renderTemplate(await readFile(GLOBAL_CORE + p), ctx, GLOBAL_CORE + p);
@@ -144,6 +143,7 @@ async function globalFiles(a, ctx, readFile) {
     ["CLAUDE.md.additions", await render("CLAUDE.md.additions")],
     ["memory/MEMORY.md", await render("memory-template/MEMORY.md")],
     ["hooks/push-guard.py", await verbatim("hooks/push-guard.py")],
+    ["hooks/session-title.py", await verbatim("hooks/session-title.py")],
     ["agents/builder.md", await verbatim("agents/builder.md")],
     ["output-styles/straight-talk.md", await verbatim("output-styles/straight-talk.md")],
   ];

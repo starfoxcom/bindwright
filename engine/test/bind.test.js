@@ -989,7 +989,7 @@ test("guard hooks and settings follow the hook location and the attribution guar
 
 test("shipped guard hooks match this repo's live copies byte for byte", () => {
   const read = (p) => readFileSync(join(repo, p));
-  for (const name of ["run-hook.sh", "push-guard.py", "session-title.py", "no-ai-attribution.py"]) {
+  for (const name of ["run-hook.sh", "push-guard.py", "no-ai-attribution.py"]) {
     assert.ok(read(`_core/project-template/.claude/hooks/${name}`).equals(read(`.claude/hooks/${name}`)),
       `_core/project-template/.claude/hooks/${name} differs from .claude/hooks/${name}`);
   }
@@ -1001,7 +1001,7 @@ test("shipped guard hooks match this repo's live copies byte for byte", () => {
 
 test("bound guard hooks are the canonical files, unrendered", async () => {
   const files = await run(defaults());
-  for (const name of ["run-hook.sh", "push-guard.py", "session-title.py", "no-ai-attribution.py"]) {
+  for (const name of ["run-hook.sh", "push-guard.py", "no-ai-attribution.py"]) {
     const src = readFileSync(join(repo, `_core/project-template/.claude/hooks/${name}`), "utf8").replace(/\r\n/g, "\n");
     assert.equal(files.get(`.claude/hooks/${name}`), src, name);
   }

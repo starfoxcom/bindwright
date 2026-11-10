@@ -611,12 +611,14 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
 // A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.
 // Each hook awaits the same start, so none reads the owner file mid-claim and passes itself on as retired.
 function startPolling($: EngineInterface): Promise<void> {
-  const start = (live.started ??= (async () => {
+  // Read only after the first await, once the assignment below has run.
+  let start: Promise<void> | undefined
+  start = live.started ??= (async () => {
     await claimOwner($)
     await sweep($)
     await load($)
     if (live.started === start) armPolling($)
-  })().catch(() => undefined))
+  })().catch(() => undefined)
   return start
 }
 

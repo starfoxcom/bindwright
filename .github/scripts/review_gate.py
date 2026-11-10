@@ -166,9 +166,9 @@ WRITE_ROUNDS = 3
 
 DEFAULTS = {
     "checks": "one", "runner": "ubuntu-latest",
-    "routine.model": "claude-fable-5-1", "routine.effort": "low", "routine.max_turns": "120",
+    "routine.model": "claude-fable-5-2", "routine.effort": "low", "routine.max_turns": "120",
     "routine.fallback_model": "claude-opus-5-5", "routine.fallback_effort": "high",
-    "deep.model": "claude-fable-5-1", "deep.effort": "low", "deep.max_turns": "120",
+    "deep.model": "claude-fable-5-2", "deep.effort": "medium", "deep.max_turns": "120",
     "deep.fallback_model": "claude-opus-5-5", "deep.fallback_effort": "high",
     "fallback.model": "claude-opus-5-5", "fallback.effort": "high",
     "prescreen.dir": "", "prescreen.attribution": "on",

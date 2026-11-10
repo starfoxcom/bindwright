@@ -58,6 +58,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["an unquoted search of a repo folder", bash(`rg foo ${join(root, "src")}`), "fallback"],
     ["a cd outside, then a grep of the current folder", bash(`cd "${scratch}" && grep -rn foo .`), null],
     ["a pattern with a slash is not taken for a path", bash(`rg "a/b" "${scratch}"`), null],
+    ["a redirect is not taken for a path",
+      bash(`grep -rl foo "${scratch}" 2>/dev/null`), null],
     ["git grep searches the repo", bash("git grep -n foo"), "fallback"],
     ["cd - returns to the repo", bash(`cd "${scratch}" && ls && cd - && grep -rn foo src/`), "fallback"],
     ["cd - with a redirect returns to the repo",
