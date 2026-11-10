@@ -44,6 +44,8 @@ test("the helper binds what the repo's engine binds, and the plugin ships no cod
     assert.equal(pkg.dependencies, undefined);
     assert.equal(pkg.scripts, undefined);
     assert.ok(existsSync(join(helper, "hooks", "counts.mjs")));
+    assert.ok(existsSync(join(helper, "workflows", "review-trial.js")));
+    assert.ok(pkg.files.includes("workflows"));
 
     // Every path a skill names, in the plugin or the helper, is in that pack.
     for (const name of readdirSync(join(out, "skills"))) {
