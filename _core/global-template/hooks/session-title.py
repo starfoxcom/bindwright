@@ -17,9 +17,9 @@ in `.bindwright/sessions/`; the newer of the two purposes wins.
 A title is set once: the hook prints nothing while the title is unchanged, so a
 name the user picks with /rename stays until the purpose changes. On SessionStart
 the hook also asks the assistant to write the session's focus to its purpose file,
-and deletes the files of the titles folder that are 30 days old. Every run
-refreshes the session's own files, so their age is the time since the session
-was last used.
+and deletes the files of the titles folder that are 30 days old. A session's files
+go together, once the newest of them is 30 days old, and every run stamps the
+session's `.title` file, so that age is the time since the session was last used.
 
 The project root is CLAUDE_PROJECT_DIR, else the input's `cwd`, else the current
 folder. Every failure prints nothing and exits 0: a title never blocks a session
@@ -128,30 +128,44 @@ def purpose_path(titles, session_id):
     return os.path.abspath(os.path.join(titles, session_id + ".purpose")).replace(os.sep, "/")
 
 
-def refresh_own_files(titles, session_id):
-    """Marks the session's own files as used now, so the sweep keeps them."""
-    for suffix in (".title", ".purpose"):
+def mark_used(titles, session_id):
+    """Stamps the session's `.title` file with the current time as its last use. The
+    purpose files keep their own times, which decide the newer purpose."""
+    try:
+        os.utime(os.path.join(titles, session_id + ".title"))
+    except OSError:
+        pass
+
+
+def last_use_by_session(titles, names):
+    """The newest modification time among each session's files, keyed by session id."""
+    last_use = {}
+    for name in names:
+        path = os.path.join(titles, name)
         try:
-            os.utime(os.path.join(titles, session_id + suffix))
+            if os.path.isfile(path):
+                stem = name.rsplit(".", 1)[0]
+                last_use[stem] = max(last_use.get(stem, 0), os.path.getmtime(path))
         except OSError:
             pass
+    return last_use
 
 
 def sweep_old_files(titles, session_id):
-    """Deletes the titles folder's files unused for 30 days, except this session's own,
+    """Deletes the files of every session unused for 30 days, except this session's own,
     so a resumed old session keeps its purpose. Best effort: nothing raises."""
     try:
         names = os.listdir(titles)
     except OSError:
         return
     limit = time.time() - SWEEP_AGE_IN_SECONDS
+    last_use = last_use_by_session(titles, names)
     for name in names:
-        path = os.path.join(titles, name)
+        stem = name.rsplit(".", 1)[0]
+        if stem == session_id or last_use.get(stem, limit) >= limit:
+            continue
         try:
-            if name.startswith(session_id + ".") or not os.path.isfile(path):
-                continue
-            if os.path.getmtime(path) < limit:
-                os.remove(path)
+            os.remove(os.path.join(titles, name))
         except OSError:
             pass
 
@@ -180,7 +194,7 @@ def title_session(event, titles):
     title = f"{name} - {purpose}" if purpose else name
     os.makedirs(titles, exist_ok=True)
     changed = set_title(titles, session_id, title)
-    refresh_own_files(titles, session_id)
+    mark_used(titles, session_id)
     request = None
     if event_name == "SessionStart":
         sweep_old_files(titles, session_id)

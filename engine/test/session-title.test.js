@@ -259,3 +259,12 @@ test(sweepKeepsUsed, { skip }, () => withLayout((layout) => {
   assert.equal(existsSync(purpose), true);
   assert.equal(existsSync(title), true);
 }));
+
+test("a newer purpose in the repo keeps the title on the next prompt too", { skip }, () => withLayout((layout) => {
+  writeProject(layout, "Demo");
+  ageFile(purposeInTitles(layout, "old titles focus"), 2);
+  purposeInRepo(layout, "new repo focus");
+  assert.equal(hookOutput(runHook(layout, event("UserPromptSubmit")).out).sessionTitle, "Demo - new repo focus");
+  assert.equal(runHook(layout, event("UserPromptSubmit")).out, "");
+  assert.equal(titleRecord(layout), "Demo - new repo focus");
+}));
