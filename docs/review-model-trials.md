@@ -4,7 +4,7 @@ The CI workflows setup writes run an AI review on every pull request, in two tie
 
 The trials ran in the maintainer's own private projects, so the projects are described here by kind, not by name.
 
-## Current pins (2026-11-09)
+## Current pins (2026-11-09, confirmed by the Opus 5.5 trial the same day)
 
 | Tier | Model | Effort | Backup when it fails |
 |---|---|---|---|
@@ -31,6 +31,21 @@ Two scoring lessons from the trials:
 - **Tool calls don't break ties.** Fewer tool calls was once the last tie-breaker, as a stand-in for cost. Once cost is priced in dollars, it counts cost twice, and about half the rounds were then decided by a gap of one or two calls. Those rounds now count as ties.
 
 ## Trials
+
+### 2026-11-09: Opus 5.5 high against the Fable 5.2 pins
+
+The workflows run Opus 5.5 only at high effort, as the backup on both tiers, so this trial asked whether that setting beats the new Fable 5.2 pins. Same states, rounds and judges as the trial below; 180 review and judge agents across three runs.
+
+| Tier | Arm | Missed defects | False blocks | False positives | Cost | Against the pin |
+|---|---|---|---|---|---|---|
+| Routine | Fable 5.2 low (pin) | 3 of 9 | 3 of 9 | 3 | $24.96 | |
+| Routine | Opus 5.5 high | 3 of 9 | 5 of 9 | 6.5 | $17.58 | loses, 0-1 states, 30% cheaper |
+| Deep | Fable 5.2 medium (pin) | 2 of 12 | 3 of 6 | 15 | $38.99 | |
+| Deep | Opus 5.5 high | 1 of 12 | 4 of 6 | 19.5 | $26.76 | loses, 0-1 states, 31% cheaper |
+
+Opus 5.5 high costs half as much per token, but it read about twice the cache of the pins, and cache reads cost the same on both models, so it saved about 30% rather than half. It lost both tiers on false blocks of clean PRs and on false positives; on the deep tier it also caught fewer of the known findings (7 against 9), though it missed one real defect fewer. Pins unchanged, and Opus 5.5 high stays the backup.
+
+The same runs also held Opus 5.5 at low and medium, settings the workflows don't use. On the routine tier both lost to the pin, and Opus 5.5 low wrote very short reviews that caught none of the known findings. On the deep tier Opus 5.5 medium came out ahead of the pin (1-1 states, 5-3 rounds) at half its cost, which makes it the candidate to test first if the deep tier's setting is ever reopened.
 
 ### 2026-11-09: Fable 5.2
 
