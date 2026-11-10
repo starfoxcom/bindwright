@@ -20,8 +20,9 @@ Standard library, Python 3.8+.
 install-hook takes exactly one of --matcher (an entry under PreToolUse) or
 --events (one entry per named event, with no matcher). --block-on-failure sets
 "onFailure": "block" on the hook, so a hook that crashes or times out blocks
-the tool call, while a removed hook file or interpreter still lets it through;
-use it for a guard, never for a hook that only adds context.
+the tool call, while a removed hook file or an interpreter that no longer runs
+still lets it through; such a hook runs through sh (Git Bash on Windows). Use
+it for a guard, never for a hook that only adds context.
 remove-hook and list-hooks cover every event under hooks.
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
@@ -235,12 +236,14 @@ def _launcher_hook(python, target, block_on_failure=False):
     interpreter = _hook_command(python)
     target = target.replace("\\", "/")
     if block_on_failure:
-        # onFailure blocks a command that cannot start, so a shell checks first that
-        # the interpreter is still there and lets the call through when it is gone,
-        # as for a removed hook file. The hook file's path stays the last word.
+        # onFailure blocks a command that cannot start, so a shell first starts the
+        # interpreter once and lets the call through when it does not run: gone, or
+        # a name that now finds a stub (the Windows store alias, a pyenv shim of a
+        # removed version). The hook file's path stays the last word. A shell-form
+        # hook needs Git Bash on Windows, which setup requires.
         words = (interpreter.replace("\\", "/"), "-I", "-c", LAUNCHER, target)
         quoted = [shlex.quote(word) for word in words]
-        command = "command -v {} >/dev/null 2>&1 || exit 0; exec {}".format(
+        command = "{} -I -c '' >/dev/null 2>&1 || exit 0; exec {}".format(
             quoted[0], " ".join(quoted))
         return {"type": "command", "command": command, "timeout": 10, "onFailure": "block"}
     # The exec form of the CLI's hooks reference: with `args`, `command` is
