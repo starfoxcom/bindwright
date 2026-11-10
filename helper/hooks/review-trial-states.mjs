@@ -91,7 +91,7 @@ function requestFor(comments, review) {
     .filter((comment) => isBot(comment) && REQUEST_MARKER.test(comment.body ?? ""))
     .filter((comment) => (comment.created_at ?? "") < review.createdAt)
     .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
-  return requests.length ? requests[requests.length - 1].body.trim() : null;
+  return requests.length ? requests[requests.length - 1] : null;
 }
 
 /** The input a tier received: the deep tier's request comment when present, else the PR text. */
@@ -99,14 +99,25 @@ export function promptOf(tier, pr, comments, review) {
   const request = tier === "deep" ? requestFor(comments, review) : null;
   const body = (pr.body ?? "").slice(0, BODY_LIMIT);
   const text = `Pull request #${pr.number}: ${pr.title}\n\n${body}`;
-  return request ?? text;
+  return request ? request.body.trim() : text;
+}
+
+/**
+ * The run whose head commit is the one `review` read, or null when none names it. A deep run
+ * starts on a comment, so GitHub files it under the default branch's tip; the request that
+ * started it carries the routine run, which ran on the pull request's head.
+ */
+export function readRunIdOf(tier, comments, review) {
+  if (tier !== "deep") return review.runId;
+  const request = requestFor(comments, review);
+  return request ? REQUEST_MARKER.exec(request.body)[1] : null;
 }
 
 function candidateOf(pr, comments, tier, kind, review, truth) {
   return {
     kind,
     pr: pr.number,
-    runId: review.runId,
+    runId: readRunIdOf(tier, comments, review),
     mergeOid: pr.mergeCommit?.oid ?? null,
     truth,
     prompt: promptOf(tier, pr, comments, review),
@@ -210,12 +221,21 @@ async function commentsOf(root, repo, number) {
 // neither can be used.
 async function resolveCandidate(root, repo, candidate) {
   if (candidate.mergeOid === null) return { reason: `PR #${candidate.pr} has no merge commit` };
+  if (candidate.runId === null) {
+    return { reason: `no request names the commit the deep review of PR #${candidate.pr} read` };
+  }
   const endpoint = `repos/${repo}/actions/runs/${candidate.runId}`;
+  let event;
   let sha;
   try {
-    sha = await ghText(root, ["api", endpoint, "--jq", ".head_sha"]);
+    [event, sha] = (await ghText(root, ["api", endpoint, "--jq", '.event + " " + .head_sha']))
+      .split(" ");
   } catch {
     return { reason: `run ${candidate.runId} of PR #${candidate.pr} could not be read` };
+  }
+  // Only a pull-request run's head is the pull request's commit.
+  if (!event.startsWith("pull_request")) {
+    return { reason: `run ${candidate.runId} of PR #${candidate.pr} did not run on its head` };
   }
   if ((await gitText(root, ["cat-file", "-e", `${sha}^{commit}`])) === null) {
     return { reason: `commit ${sha.slice(0, 12)} of PR #${candidate.pr} is not in this clone` };

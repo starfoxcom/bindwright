@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 
 const HELPER = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "helper");
 const WORKFLOW = join(HELPER, "workflows", "review-trial.js");
-const SOURCE = readFileSync(WORKFLOW, "utf8");
+// LF throughout, whatever line endings the checkout gave the file.
+const SOURCE = readFileSync(WORKFLOW, "utf8").replace(/\r\n/g, "\n");
 const BODY = SOURCE.replace(/^export const meta/m, "const meta");
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 

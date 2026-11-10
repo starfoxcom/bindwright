@@ -15,7 +15,9 @@ import {
   parseArgs,
   pickStates,
   promptOf,
+  readRunIdOf,
   reviewMarkerOf,
+  reviewsOf,
   truthOf,
   verdictOf,
 } from "../../helper/hooks/review-trial-states.mjs";
@@ -82,7 +84,8 @@ const candidateRows = [
     "routine", [routine(1, BLOCKING, T1), routine(2, LGTM, T2), routine(3, BLOCKING, T3),
       routine(4, LGTM, T4)], [["dirty", "3"], ["dirty", "1"]]],
   ["a deep review is read for the deep tier",
-    "deep", [deep(1, BLOCKING, T1), deep(2, LGTM, T2)], [["dirty", "1"]]],
+    "deep", [request(9, "2025-12-31T00:00:00Z"), deep(1, BLOCKING, T1), deep(2, LGTM, T2)],
+    [["dirty", "9"]]],
   ["the other tier's reviews are ignored",
     "routine", [deep(1, BLOCKING, T1), deep(2, LGTM, T2)], []],
   ["a human's copy of a review is ignored",
@@ -134,6 +137,23 @@ test("a deep prompt falls back to the PR text when no request came before it", (
   const [dirty] = candidatesOf(PR, comments, "deep");
   assert.ok(dirty.prompt.startsWith("Pull request #7: Fix the parser"));
 });
+
+// A deep run is filed under the default branch, so its commit comes from the routine run its
+// request names; with no request there is no commit to read.
+const runIdRows = [
+  ["a routine review reads its own run", "routine", [routine(5, BLOCKING, T2)], "5"],
+  ["a deep review reads the run its request names", "deep",
+    [request(8, T1), deep(1, BLOCKING, T2)], "8"],
+  ["a deep review with no request before it reads none", "deep",
+    [deep(1, BLOCKING, T1), request(8, T2)], null],
+];
+
+for (const [name, tier, comments, expected] of runIdRows) {
+  test(`readRunIdOf: ${name}`, () => {
+    const [review] = reviewsOf(comments, tier);
+    assert.equal(readRunIdOf(tier, comments, review), expected);
+  });
+}
 
 const cand = (kind, pr) => ({
   kind, pr, runId: String(pr), mergeOid: "merge", truth: "t", prompt: "p",
