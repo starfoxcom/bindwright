@@ -17,6 +17,7 @@ import {
   promptOf,
   readRunIdOf,
   resolveCandidate,
+  reviewAsComment,
   reviewMarkerOf,
   reviewsOf,
   truthOf,
@@ -155,6 +156,11 @@ const runIdRows = [
     [deep(1, BLOCKING, T1), request(8, T2)], null],
   ["a deep review a person started by hand reads none", "deep",
     [request(8, T1), human(bot("@claude review this PR", T2)), deep(1, BLOCKING, T3)], null],
+  ["a person's trigger in another letter case reads none", "deep",
+    [request(8, T1), human(bot("@Claude Review this PR", T2)), deep(1, BLOCKING, T3)], null],
+  ["a person's trigger in a review body reads none", "deep", [request(8, T1),
+    reviewAsComment({ body: "@claude review this PR", submitted_at: T2, user: human({}).user }),
+    deep(1, BLOCKING, T3)], null],
 ];
 
 // resolveCandidate with its gh and git readers stubbed: one row per answer it can give.

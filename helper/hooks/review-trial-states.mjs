@@ -29,8 +29,9 @@ const MARKERS = {
 const REQUEST_MARKER = /<!-- review-run: (\d+)-(\d+) request -->/;
 const VERDICT_LINE = /🔴|🟢/;
 const GATE_BOT = "claude[bot]";
-// What the deep workflow starts on: a comment that begins with this phrase.
-const DEEP_TRIGGER = /^\s*@claude review this PR/;
+// What the deep workflow starts on: a comment, review comment or review body that begins with
+// this phrase, in any letter case, as GitHub Actions' startsWith compares it.
+const DEEP_TRIGGER = /^\s*@claude review this PR/i;
 // The gate's early block: a line that opens, after list, quote, heading or emphasis markup, with
 // a 🔴 or the word Blocking blocks wherever it sits, whatever the last line says.
 const RED_OPENER = /^(?:\[[ xX]\]|(?!\[[ xX]\]|[`🔴🟢])\P{L})*🔴/u;
@@ -222,15 +223,25 @@ async function gitText(root, args) {
   }
 }
 
-async function commentsOf(root, repo, number) {
-  // --slurp gives one array of the pages' arrays, which flat() joins.
-  const endpoint = `repos/${repo}/issues/${number}/comments`;
-  const pages = await ghJson(root, ["api", endpoint, "--paginate", "--slurp"]);
-  return pages.flat();
+/** A pull request review as a comment: its body, its author and when it was submitted. */
+export function reviewAsComment(review) {
+  return { body: review.body ?? "", created_at: review.submitted_at ?? "", user: review.user };
 }
 
-// The commit a run reviewed and its merge base with the PR's merge commit, or the reason
-// neither can be used.
+// The PR's comments; for the deep tier also its review comments and review bodies, since a deep
+// run starts on any of the three.
+async function commentsOf(root, repo, number, tier) {
+  // --slurp gives one array of the pages' arrays, which flat() joins.
+  const list = async (path) => (await ghJson(root, [
+    "api", `repos/${repo}/${path}`, "--paginate", "--slurp",
+  ])).flat();
+  const comments = await list(`issues/${number}/comments`);
+  if (tier !== "deep") return comments;
+  const reviewComments = await list(`pulls/${number}/comments`);
+  const reviews = (await list(`pulls/${number}/reviews`)).map(reviewAsComment);
+  return [...comments, ...reviewComments, ...reviews];
+}
+
 // The gh and git readers resolveCandidate uses; a test passes its own.
 const READERS = { gh: ghText, git: gitText };
 
@@ -269,7 +280,7 @@ async function collect(root, repo, pulls, tier) {
   for (const pr of pulls) {
     let comments;
     try {
-      comments = await commentsOf(root, repo, pr.number);
+      comments = await commentsOf(root, repo, pr.number, tier);
     } catch {
       out.skipped.push({ pr: pr.number, reason: "its comments could not be listed" });
       continue;
