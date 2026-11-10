@@ -268,9 +268,24 @@ test('a hold while this session still runs heavy work keeps the seat, even with 
   sb.run('claim', 'a', 'build')
   sb.run('claim', 'b', 'build')
   sb.run('hold', 'a', '5', 'timing')
+  assert.strictEqual(sb.state().seat.kind, 'hold')
+  sb.run('hold', 'a', '5', 'timing again')
+  assert.strictEqual(sb.state().seat.session, 'a')
+})
+
+test('a hold, and a second one, while a background task runs keep the seat with others waiting', () => {
+  const sb = sandbox()
+  sb.register('a')
+  sb.register('b')
+  sb.run('claim', 'a', 'build')
+  sb.run('done', 'a', 'bg1')
+  sb.run('claim', 'b', 'build')
+  sb.run('hold', 'a', '5', 'timing 1')
+  assert.strictEqual(sb.state().seat.session, 'a')
+  sb.run('hold', 'a', '5', 'timing 2')
   const s = sb.state()
   assert.strictEqual(s.seat.session, 'a')
-  assert.strictEqual(s.seat.kind, 'hold')
+  assert.deepStrictEqual(s.line.map(e => e.session), ['b'])
 })
 
 test('holding again with nobody waiting extends the hold', () => {

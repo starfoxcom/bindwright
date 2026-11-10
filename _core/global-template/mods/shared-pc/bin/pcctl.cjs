@@ -343,9 +343,10 @@ function othersWait(s, id) {
   return s.line.some(e => e.session !== id) || Boolean(s.nextUp && s.nextUp.session !== id)
 }
 
-// Whether the seat runs nothing of its holder's: a hold, or a work seat with no command or task left.
+// Whether the seat runs nothing of its holder's: no command or background task left, whatever its kind
+// (a work seat turned into a hold keeps its counts).
 function isSeatIdle(seat) {
-  return seat.kind === 'hold' || (!(seat.running > 0) && !(seat.tasks && seat.tasks.length > 0))
+  return !(seat.running > 0) && !(seat.tasks && seat.tasks.length > 0)
 }
 
 // Whether `id` may take a free seat now: it holds the reservation, or nobody else does and it is first.
@@ -474,7 +475,7 @@ const OPS = {
       s.line = s.line.filter(e => e.session !== id)
       grant(s, entry)
     } else if (s.seat && s.seat.session === id && !(othersWait(s, id) && isSeatIdle(s.seat))) {
-      // Nobody waits, or this session still runs work: the seat becomes the hold, as before.
+      // Nobody waits, or this session still runs work: the seat becomes the hold.
       s.seat = { ...s.seat, kind: 'hold', until: t + minutes * 60_000, reason, label: reason }
     } else if (s.seat && s.seat.session === id) {
       log({ op: 'seat-freed', session: id, reason: 'hold-renewed-while-others-wait', heldMs: t - s.seat.since })
