@@ -4,7 +4,16 @@ import type { EngineInterface as Engine, Register } from 'claude-code'
 import type { RunnerView } from '../types'
 import { parseAdd, withRunner } from './add'
 import { soonestRun } from './cron'
-import { diskText, isOptionalWsl, parseUsedBytes, parseWholeNumber } from './disk'
+import type { DiskRecord } from './disk'
+import {
+  diskText,
+  dueReads,
+  isOptionalWsl,
+  isSparseFile,
+  parseStat,
+  parseUsedBytes,
+  readRecord,
+} from './disk'
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
@@ -19,8 +28,8 @@ const START_GRACE_MS = 2 * 60_000
 // The hooks run in a sandbox with no time zone of its own (its clock reads UTC), so the host's UTC
 // offset is read through node at start and every hour, as shared-pc and usage-guard do.
 const READ_ZONE = ['node', '-e', 'console.log(new Date().getTimezoneOffset())']
-const STAT_SCRIPT = 'console.log(require("fs").statSync(process.argv[1]).size)'
-type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes'>
+const STAT_SCRIPT = 'const s = require("fs").statSync(process.argv[1]); console.log(s.size, s.blocks * 512)'
+type DiskFields = Pick<RunnerView, 'diskBytes' | 'usedBytes' | 'isSparse'>
 const view = atom({ plugin: 'runners', key: 'view' } as const, null)
 const live = {
   checkMs: 60_000,
@@ -32,8 +41,6 @@ const live = {
   /** Minutes behind UTC, as getTimezoneOffset gives it; null until read. */
   zoneOffset: null as number | null,
   schedules: new Map<string, { at: number; texts: string[] }>(),
-  /** Each entry's last disk reading, by label, kept between the hourly reads. */
-  disks: new Map<string, { at: number; fields: DiskFields }>(),
   /** rules.ts, then the machine's own list file: read once at start. */
   runners: [...RUNNERS] as Runner[],
   isChecking: false,
@@ -139,20 +146,44 @@ async function workflowTexts($: Engine, repo: string, now: number): Promise<stri
   return texts
 }
 
-// The disk file is sized by node, which leaves the distro stopped; the data inside needs df, which boots
-// it, so df runs only while the row is on. A failed read is not kept, so the next check retries it.
+// The figures are read when dueReads says so and kept in the mod store, which every session shares. The file
+// size comes from node, which leaves the distro stopped; df boots it, so the data inside is read only while
+// the row is on. A failed read keeps that figure's older value and time, so the next check retries it.
 async function readDisk($: Engine, runner: Runner, isOn: boolean, now: number): Promise<DiskFields> {
-  const last = live.disks.get(runner.label)
-  if (!runner.wsl || !isOn) return last?.fields ?? {}
-  if (last && now - last.at < HOUR_MS) return last.fields
-  const size = await run($, ['node', '-e', STAT_SCRIPT, runner.wsl.disk])
-  const df = ['wsl.exe', '-d', runner.wsl.distro, '--exec', 'df', '-B1', '--output=used', '/']
-  const used = await run($, df)
-  const diskBytes = size === null ? null : parseWholeNumber(size)
-  const usedBytes = used === null ? null : parseUsedBytes(used)
-  if (diskBytes === null || usedBytes === null) return {}
-  live.disks.set(runner.label, { at: now, fields: { diskBytes, usedBytes } })
-  return { diskBytes, usedBytes }
+  if (!runner.wsl) return {}
+  const key = `disk:${runner.label}`
+  const last = await loadRecord($, key)
+  const due = dueReads(last, isOn, now)
+  const next: DiskRecord = { ...last, isOn }
+  if (due.size) {
+    const stat = parseStat((await run($, ['node', '-e', STAT_SCRIPT, runner.wsl.disk])) ?? '')
+    if (stat) Object.assign(next, { sizeAt: now, diskBytes: stat.allocated, isSparse: isSparseFile(stat) })
+  }
+  if (due.used) {
+    const df = ['wsl.exe', '-d', runner.wsl.distro, '--exec', 'df', '-B1', '--output=used', '/']
+    const used = parseUsedBytes((await run($, df)) ?? '')
+    if (used !== null) Object.assign(next, { usedAt: now, usedBytes: used })
+  }
+  if (due.size || due.used || last.isOn !== isOn) await saveRecord($, key, next)
+  return { diskBytes: next.diskBytes, usedBytes: next.usedBytes, isSparse: next.isSparse }
+}
+
+// A store that cannot be read counts as empty, and a write that fails is skipped: the row keeps the figures it
+// has, and the next check reads them again.
+async function loadRecord($: Engine, key: string): Promise<DiskRecord> {
+  try {
+    return readRecord(await $.store.get(key))
+  } catch {
+    return readRecord(undefined)
+  }
+}
+
+async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<void> {
+  try {
+    await $.store.set(key, record)
+  } catch {
+    return
+  }
 }
 
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {

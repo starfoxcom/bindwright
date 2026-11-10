@@ -2,7 +2,18 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { COMPACT_GAP_BYTES, diskText, parseUsedBytes } from '../hooks/disk'
+import type { DiskRecord, DueReads } from '../hooks/disk'
+import {
+  COMPACT_GAP_BYTES,
+  diskText,
+  dueReads,
+  isSparseFile,
+  parseStat,
+  parseUsedBytes,
+  readRecord,
+  SIZE_READ_MS,
+  USED_READ_MS,
+} from '../hooks/disk'
 import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
 import type { RunnerView } from '../types'
 
@@ -10,6 +21,7 @@ import type { RunnerView } from '../types'
 // the tests fake.
 const NOW = Date.UTC(2026, 9, 2, 17, 0, 0)
 const GIB = 1024 ** 3
+const MIB = 1024 ** 2
 const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16)
 const ON: RunnerView = { label: 'runners', isOn: true, online: 4, busy: 1, queued: 2, nextRun: NOW + 3_600_000 }
 
@@ -53,16 +65,85 @@ test('parseUsedBytes reads the number under the df header, and null for anything
   for (const [name, text, bytes] of cases) expect([name, parseUsedBytes(text)]).toEqual([name, bytes])
 })
 
-test('diskText flags compacting from exactly 10 GB of gap, and waits until both fields are read', () => {
-  const diskRow = (diskBytes: number, usedBytes: number): RunnerView => ({ ...ON, diskBytes, usedBytes })
+test('diskText flags compacting or trimming from exactly 10 GB of gap, and waits until both fields are read', () => {
+  const diskRow = (diskBytes: number, usedBytes: number, isSparse?: boolean): RunnerView => ({
+    ...ON,
+    diskBytes,
+    usedBytes,
+    isSparse,
+  })
+  const gap = 12 * GIB + COMPACT_GAP_BYTES
   const cases: [name: string, row: RunnerView, text: string | undefined][] = [
     ['the gap under 10 GB', diskRow(20 * GIB, 12 * GIB), 'disk 20.0 GB (12.0 used)'],
-    ['the gap exactly 10 GB', diskRow(12 * GIB + COMPACT_GAP_BYTES, 12 * GIB), 'disk 22.0 GB (12.0 used, compact)'],
-    ['the gap one byte under 10 GB', diskRow(12 * GIB + COMPACT_GAP_BYTES - 1, 12 * GIB), 'disk 22.0 GB (12.0 used)'],
+    ['the gap exactly 10 GB', diskRow(gap, 12 * GIB), 'disk 22.0 GB (12.0 used, compact)'],
+    ['the gap one byte under 10 GB', diskRow(gap - 1, 12 * GIB), 'disk 22.0 GB (12.0 used)'],
+    ['the gap exactly 10 GB, not sparse', diskRow(gap, 12 * GIB, false), 'disk 22.0 GB (12.0 used, compact)'],
+    ['the gap exactly 10 GB, sparse', diskRow(gap, 12 * GIB, true), 'disk 22.0 GB (12.0 used, trim)'],
+    ['the gap one byte under 10 GB, sparse', diskRow(gap - 1, 12 * GIB, true), 'disk 22.0 GB (12.0 used)'],
     ['no data reading', { ...ON, diskBytes: 20 * GIB }, undefined],
     ['no disk reading', { ...ON, usedBytes: 12 * GIB }, undefined],
   ]
   for (const [name, row, text] of cases) expect([name, diskText(row)]).toEqual([name, text])
+})
+
+test('parseStat reads the length and the allocated bytes, and null for anything else', () => {
+  const cases: [name: string, text: string, stat: { size: number; allocated: number } | null][] = [
+    ['normal output', '1073741824 69632', { size: 1073741824, allocated: 69632 }],
+    ['trailing newline', '1073741824 69632\n', { size: 1073741824, allocated: 69632 }],
+    ['garbage', 'big small\n', null],
+    ['one number only', '69632\n', null],
+    ['three numbers', '1 2 3\n', null],
+    ['empty', '', null],
+  ]
+  for (const [name, text, stat] of cases) expect([name, parseStat(text)]).toEqual([name, stat])
+})
+
+test('a file is sparse only when its allocated bytes fall more than 1 MiB short of its length', () => {
+  const cases: [name: string, stat: { size: number; allocated: number }, isSparse: boolean][] = [
+    ['fully allocated', { size: GIB, allocated: GIB }, false],
+    ['short by exactly 1 MiB', { size: GIB, allocated: GIB - MIB }, false],
+    ['short by one byte over 1 MiB', { size: GIB, allocated: GIB - MIB - 1 }, true],
+    ['64 KiB written into 1 GiB', { size: GIB, allocated: 69632 }, true],
+  ]
+  for (const [name, stat, isSparse] of cases) expect([name, isSparseFile(stat)]).toEqual([name, isSparse])
+})
+
+test('dueReads reads the size every 15 min and the data every 60 s while the row is on, and nothing while off', () => {
+  const fresh: DiskRecord = { isOn: true, sizeAt: NOW, usedAt: NOW }
+  const cases: [name: string, last: DiskRecord | undefined, isOn: boolean, due: DueReads][] = [
+    ['no last reading, on', undefined, true, { size: true, used: true }],
+    ['no last reading, off', undefined, false, { size: false, used: false }],
+    [
+      'off, though both are due',
+      { ...fresh, sizeAt: NOW - SIZE_READ_MS, usedAt: NOW - USED_READ_MS },
+      false,
+      { size: false, used: false },
+    ],
+    ['switched on since the last reading', { ...fresh, isOn: false }, true, { size: true, used: true }],
+    ['data read exactly 60 s ago', { ...fresh, usedAt: NOW - USED_READ_MS }, true, { size: false, used: true }],
+    ['data read 1 ms under 60 s ago', { ...fresh, usedAt: NOW - USED_READ_MS + 1 }, true, { size: false, used: false }],
+    ['size read exactly 15 min ago', { ...fresh, sizeAt: NOW - SIZE_READ_MS }, true, { size: true, used: false }],
+    [
+      'size read 1 ms under 15 min ago',
+      { ...fresh, sizeAt: NOW - SIZE_READ_MS + 1 },
+      true,
+      { size: false, used: false },
+    ],
+    ['data never read, size fresh', { isOn: true, sizeAt: NOW }, true, { size: false, used: true }],
+    ['a reading stamped after now', { ...fresh, sizeAt: NOW + 1 }, true, { size: true, used: false }],
+  ]
+  for (const [name, last, isOn, due] of cases) expect([name, dueReads(last, isOn, NOW)]).toEqual([name, due])
+})
+
+test('readRecord keeps the stored fields of the right type, and reads anything else as unset', () => {
+  const stored: DiskRecord = { sizeAt: 1, usedAt: 2, isOn: true, diskBytes: 3, usedBytes: 4, isSparse: true }
+  const cases: [name: string, value: unknown, record: DiskRecord][] = [
+    ['a stored record', stored, stored],
+    ['fields of the wrong type', { sizeAt: '1', isOn: 1, diskBytes: 'big', isSparse: 'yes' }, {}],
+    ['a text value', 'text', {}],
+    ['no record', undefined, {}],
+  ]
+  for (const [name, value, record] of cases) expect([name, readRecord(value)]).toEqual([name, record])
 })
 
 test('a reading keeps a Start or Stop pressed while it was being taken', () => {
