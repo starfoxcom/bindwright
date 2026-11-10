@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **Setup suggests the merge for files a repo already has** (#661). A new engine command, `--propose-merge`, compares each staged file with the repo's copy and prints a suggestion without changing anything: for JSON settings the permission lists unioned, missing hooks appended and every clashing key listed with both values; for Markdown the sections to add, the ones that differ and the ones only the repo has. Setup's merge step, and `/bindwright:update` for files it has no earlier version of, read that suggestion against the repo, recommend a choice for each clash and save only after a yes.
+
 ## [v3.2.0] — 2026-11-10
 
 v3.2.0 moves the review tiers to Fable 5.2, names every session after its project from one computer-wide setting, and lets self-hosted runners without a Linux Node run the reviews in full.

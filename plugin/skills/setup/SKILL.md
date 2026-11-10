@@ -212,17 +212,21 @@ Fill `{{STACK_COMMANDS_ALLOWLIST}}` in `.claude/settings.local.json` now (see st
 
 Every file under `.bindwright/incoming/` is new text for the file at the same path without that prefix. The engine always stages files a repo often has (`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, `.gitattributes`, `.claude/settings.json`), plus every file reported as `staged`.
 
-For each one:
+First run the engine with `--propose-merge <repo root>`. It changes nothing and prints `{"proposals": [...]}`, one per staged file, each with its `path` and a `kind`:
 
-- **The repo has no file at that path:** move the staged copy into place.
-- **The files are identical:** delete the staged copy.
-- **Both exist and differ:** merge them. Keep everything the repo's copy says that the new text does not contradict, add what the new text brings, and where the two disagree, show both versions and ask which wins. Show the user a short summary of each merge and save it only after a yes.
-  - `.claude/settings.json`: merge as JSON. Union the permission lists, append hooks the repo does not have, keep the repo's value for any other key both set.
-  - `LICENSE`: never replace an existing license without an explicit yes; a license change is a legal decision.
-  - `CLAUDE.md`: keep the repo's project-specific sections, and put the new rules where they read naturally rather than appending a second copy of a section.
+- `missing`: the repo has no file at that path. Move the staged copy into place.
+- `identical`: delete the staged copy.
+- `json`: `merged` and `text` are the suggested file: the permission lists unioned, the hooks the repo lacks appended, the repo's value kept for every other key both set. `clashes` lists each of those keys with both values (`key`, `repo`, `incoming`).
+- `markdown`: `add` holds the staged sections the repo lacks, `differ` the sections both have with different text (`heading`, `repo`, `incoming`), and `repoOnly` the headings only the repo has, which stay.
+- `text`: any other file that differs, such as `LICENSE`. There is no suggestion; compare the two by hand.
+
+The proposal is a starting point, not the answer. Before showing it, read it against the repo: what the repo's own rules and settings are for, and whether a clash looks deliberate (a stricter permission, a project-specific section, a hook that already does the same job under another name). Adjust the proposal where the repo's intent calls for it. Then show the user, per file, a short summary of the merge, each clash with both versions, and your recommendation for each clash with its reason. Save a file only after a yes.
+
+- `CLAUDE.md`: keep the repo's project-specific sections, and put each added section where it reads naturally rather than appending a second copy of a section.
+- `LICENSE`: never replace an existing license without an explicit yes; a license change is a legal decision.
 - Delete the staged copy once its file is settled.
 
-In adopt mode, offer every staged file without a repo copy on its own: one line on what it does, move it into place on a yes, delete the staged copy on a no. For a file both have, go through the differences one at a time rather than merging the whole file at once.
+In adopt mode, offer every staged file without a repo copy on its own: one line on what it does, move it into place on a yes, delete the staged copy on a no. For a file both have, go through the proposal's clashes and sections one at a time rather than merging the whole file at once.
 
 Then offer the two ways to mark parts of the repo as the project's own, which a later update never changes. In adopt mode, suggest them for whatever the user kept over the new text.
 
