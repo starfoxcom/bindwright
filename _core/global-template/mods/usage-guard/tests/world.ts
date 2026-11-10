@@ -3,12 +3,17 @@ import type { Engine } from 'claude-code/testing'
 import { mock } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
 import { CLAIM } from '../hooks/plan'
+import { READ_ZONE } from '../hooks/texts'
 
 // The faked engine every usage-guard hook test runs in, and the helpers that read it.
 
-// The shipped stop list is empty, and the mod under test loads its own copy of rules.ts, so the
-// lookup is tested on its own below and the hook tests check that only the zone probe ran.
-export const stopsRun = (seen: World) => seen.runs.filter(argv => argv[0] !== 'node')
+// The stop list is the user's own, and the mod under test loads that copy of rules.ts, so the lookup is
+// tested with a table of its own and the hook tests expect exactly what the list names for the test project.
+// The mod's own node calls are told apart by their script, so a user's `node ...` stop command still counts.
+const MKDIR_SCRIPT = 'require("fs").mkdirSync(process.argv[1],{recursive:true})'
+const isOwnCall = (argv: readonly string[]) =>
+  argv[0] === 'node' && argv[1] === '-e' && [READ_ZONE[2], CLAIM, MKDIR_SCRIPT].includes(argv[2] ?? '')
+export const stopsRun = (seen: World) => seen.runs.filter(argv => !isOwnCall(argv))
 
 // 2026-10-02 17:00 UTC; the 5-hour window resets at 19:00 UTC.
 export const NOW = Date.UTC(2026, 9, 2, 17, 0, 0)

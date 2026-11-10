@@ -2,7 +2,7 @@ import type { SessionRateLimit } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
 import { NO_WORK_NOTICE, planArm, WRAP_UP_ARGS } from '../hooks/plan'
-import { STOP_COMMANDS, stopCommandsFor } from '../hooks/rules'
+import { stopCommandsFor } from '../hooks/rules'
 import {
   cardOf,
   doWork,
@@ -48,7 +48,7 @@ test('crossing the line wraps up, stops background work and resumes after the re
   expect(seen.claims).toEqual(
     new Set([`pause-${KEY}`, `${KEY}-sess-a`, `stop-${KEY}-c__repos_my-game`, `work-${KEY}-sess-a`]),
   )
-  expect(stopsRun(seen)).toEqual([])
+  expect(stopsRun(seen)).toEqual(stopCommandsFor('C:/Repos/my-game').map(argv => [...argv]))
   expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
   expect(cardOf(seen)?.text).toContain('Fri 2026-10-02 12:02 (America/Phoenix)')
 
@@ -497,8 +497,6 @@ test('stop commands are found by the project folder name, case-insensitively, an
   expect(stopCommandsFor('C:\\Repos\\my-game', table)).toEqual([['docker', 'compose', 'stop']])
   expect(stopCommandsFor('/home/me/repos/MY-GAME/', table)).toEqual([['docker', 'compose', 'stop']])
   expect(stopCommandsFor('C:/Repos/app', table)).toEqual([])
-  expect(Object.keys(STOP_COMMANDS)).toEqual([])
-  expect(stopCommandsFor('C:/Repos/my-game')).toEqual([])
 })
 
 test('crossing the line mid-turn waits for the turn to end before the wrap-up runs', async ($, on) => {
