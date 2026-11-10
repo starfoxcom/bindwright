@@ -67,7 +67,7 @@ The hotfix or release is done only when the cascade PR is merged and its branch 
 
 ### Workflow file changes
 
-Review workflows triggered by comments or schedules run the copy on the GitHub default branch, and the review action refuses to run when a PR's workflow file differs from that copy.
+Review workflows triggered by comments or schedules run the copy on the GitHub default branch, and the review app refuses its token to a run whose copy of the review workflow differs from that copy, so its review is never posted.
 Because `main` is the default branch, a change to `.github/workflows/` lands on `main` first as a `hotfix/<name>` PR, then cascades to `develop`. A workflow change made on a feature branch fails the review check.
 
 ---

@@ -8,8 +8,8 @@ import { join } from "node:path";
 /** The staging folders, relative to the repo root, in the order they are removed. */
 export const STAGING_FOLDERS = [".bindwright/incoming", ".bindwright/global"];
 
-// The lstat of `path`, or null when nothing is there.
-function entryAt(path) {
+/** The lstat of `path`, or null when nothing is there. */
+export function entryAt(path) {
   try {
     return lstatSync(path);
   } catch (err) {
