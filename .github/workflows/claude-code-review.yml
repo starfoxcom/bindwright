@@ -2172,10 +2172,10 @@ jobs:
     #     check, routine tier only:
     #       1. Triage classified the diff as non-reviewable → pass (and, with
     #          `checks: two`, Claude On-Demand → skipped).
-    #       2. Routine review job didn't reach success → fail (action errored,
-    #          runner crash).
-    #       3. Routine verdict comment missing (the post job's token exchange
-    #          refused a PR whose copy of this workflow differs) or 🔴 → fail.
+    #       2. Routine review or Post review job didn't reach success → fail
+    #          (action errored, runner crash, or the post job's token exchange
+    #          refused a PR whose copy of this workflow differs).
+    #       3. Routine verdict comment missing or 🔴 → fail.
     #       4. Routine 🟢 → pass.
     if: always()
     runs-on: ${{ fromJSON(needs.init-gate.outputs.runner_labels || '["ubuntu-latest"]') }}
