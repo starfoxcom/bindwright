@@ -865,7 +865,7 @@ jobs:
           ai_pats = [
               re.compile(r'Co-Authored-By:\s*Claude', re.IGNORECASE),
               re.compile(r'Generated\s+with\s+\[?Claude\s+Code', re.IGNORECASE),
-              re.compile(r'claude\.(?:com|ai)\b', re.IGNORECASE),
+              re.compile(r'claude\.(?:com|ai)/(?:code|claude-code)\b', re.IGNORECASE),
               re.compile(r'🤖\s*Generated', re.IGNORECASE),
           ] if attribution else []
           for fname, lines in per_file_added.items():
