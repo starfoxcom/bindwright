@@ -20,7 +20,7 @@ import {
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
-import { isSameName, splitPath, startPaths } from './start'
+import { isSameName, splitPath, startScripts } from './start'
 
 // The machine's local CI runners in one row above the prompt: on or off, how many are online and
 // busy, queued runs and the next scheduled run, with Start and Stop. Every value is read in a timer,
@@ -197,17 +197,23 @@ async function saveRecord($: Engine, key: string, record: DiskRecord): Promise<v
   await $.store.set(key, record).catch(() => undefined)
 }
 
-// A Start whose script is gone does nothing, silently. The flag needs every file path the command names to be
-// gone, so an output file the script has yet to write never raises it, and a listing that fails counts as
-// present, so a transient error never does either.
+// Whether a folder lists without the entry: false when it holds it, and undefined when it cannot be listed.
+async function isAbsent($: Engine, path: string): Promise<boolean | undefined> {
+  const { folder, name } = splitPath(path)
+  const entries = await $.fs.list(folder).catch(() => undefined)
+  return entries && !entries.some(entry => isSameName(entry.name, name))
+}
+
+// A Start whose script is gone does nothing, silently. A script counts as gone when its folder lists without it,
+// or when that folder is itself gone from a parent that lists; anything that cannot be listed counts as present,
+// so a transient error never raises the flag.
 async function isStartMissing($: Engine, argv: unknown): Promise<boolean> {
-  const files = startPaths(argv, live.isWindows)
-  for (const file of files) {
-    const { folder, name } = splitPath(file)
-    const entries = await $.fs.list(folder).catch(() => undefined)
-    if (entries === undefined || entries.some(entry => isSameName(entry.name, name))) return false
+  const scripts = startScripts(argv, live.isWindows)
+  for (const script of scripts) {
+    const isGone = (await isAbsent($, script)) ?? (await isAbsent($, splitPath(script).folder)) === true
+    if (!isGone) return false
   }
-  return files.length > 0
+  return scripts.length > 0
 }
 
 async function readRunner($: Engine, runner: Runner, now: number): Promise<RunnerView> {

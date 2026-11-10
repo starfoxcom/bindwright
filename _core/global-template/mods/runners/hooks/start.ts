@@ -1,13 +1,13 @@
-// A drive path in either slash style, never ending in a slash (that names a folder): on Windows the only words of
-// a start command sure to name a file on this host. A word with a space carries arguments, a lone `/c` is a
-// switch, and a Linux path lives inside WSL, where the host cannot list it. Elsewhere a path can as well live in
+// A script the host runs, named by drive path in either slash style: on Windows the only words of a start command
+// sure to name a file Start needs. A bare program (`C:/Windows/System32/wsl`), a file the start creates (a cid
+// file, a log) and a word with a space carrying arguments are not scripts. Off Windows a path can as well live in
 // a container, a VM or a remote host, so nothing is checked there.
-const WINDOWS_PATH = /^[A-Za-z]:[\\/][^\s]*[^\s\\/]$/
+const SCRIPT_PATH = /^[A-Za-z]:[\\/][^\s]*\.(?:vbs|vbe|js|jse|wsf|cmd|bat|ps1)$/i
 
-/** Every word of a start command that names a file on this Windows host, in order; none off Windows. */
-export function startPaths(argv: unknown, isWindows: boolean): string[] {
+/** Every word of a start command that names a script on this Windows host, in order; none off Windows. */
+export function startScripts(argv: unknown, isWindows: boolean): string[] {
   if (!isWindows || !Array.isArray(argv)) return []
-  return argv.filter((word): word is string => typeof word === 'string' && WINDOWS_PATH.test(word))
+  return argv.filter((word): word is string => typeof word === 'string' && SCRIPT_PATH.test(word))
 }
 
 /** A path split into the folder that holds it and the file's name; backslashes read as slashes. */
