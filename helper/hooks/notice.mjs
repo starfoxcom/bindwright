@@ -140,10 +140,12 @@ async function driftOf(root, repo, config) {
   return runSettings(repo, config).drift;
 }
 
-// When the repo shares its review counts and its last send failed, the time it failed (ms), else null.
-function countsFailedAtOf(repo, config) {
+/** When the repo shares its review counts and its last send failed, the time it failed (ms), else null. */
+export function countsFailedAtOf(repo, config) {
   const state = readState(stateFileIn(config));
-  const failedAt = repo && state.share ? state.projects[repoKey(repo)]?.failedAt : null;
+  const entry = repo && state.share ? state.projects[repoKey(repo)] : null;
+  // A repo left out of the counts (no kind) sends nothing, so an old failure no longer matters.
+  const failedAt = entry?.kind ? entry.failedAt : null;
   return typeof failedAt === "number" ? failedAt : null;
 }
 

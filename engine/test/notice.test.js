@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { notice, older, findRepo } from "../../helper/hooks/notice.mjs";
+import { countsFailedAtOf, notice, older, findRepo } from "../../helper/hooks/notice.mjs";
 import { python } from "./python.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -199,6 +199,29 @@ test("a failed review counts send is named in a repo, and nowhere else", async (
     assert.equal(await ask(failedAt, s.root), null, "outside a repo");
   } finally {
     rmSync(s.root, { recursive: true, force: true });
+  }
+});
+
+test("only a repo that still shares its counts reports a failed send", () => {
+  const root = mkdtempSync(join(tmpdir(), "bw-counts-notice-"));
+  try {
+    const repo = join(root, "repo");
+    const write = (state) => {
+      mkdirSync(join(root, "bindwright"), { recursive: true });
+      writeFileSync(join(root, "bindwright", "counts.json"), JSON.stringify(state));
+    };
+    const entry = (kind) => ({ [repo]: { id: "0123456789abcdef0123456789abcdef", kind, since: "2026-11-01T00:00:00.000Z", failedAt: 5 } });
+    const cases = [
+      ["sharing, with a kind", { share: true, projects: entry("game") }, 5],
+      ["left out of the counts", { share: true, projects: entry(null) }, null],
+      ["sharing turned off", { share: false, projects: entry("game") }, null],
+    ];
+    for (const [name, state, failedAt] of cases) {
+      write(state);
+      assert.equal(countsFailedAtOf(repo, root), failedAt, name);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
