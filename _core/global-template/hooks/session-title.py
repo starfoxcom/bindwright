@@ -16,10 +16,7 @@ in `.bindwright/sessions/`; the newer of the two purposes wins.
 
 A title is set once: the hook prints nothing while the title is unchanged, so a
 name the user picks with /rename stays until the purpose changes. On SessionStart
-the hook also asks the assistant to write the session's focus to its purpose file,
-and deletes the files of the titles folder that are 30 days old. A session's files
-go together, once the newest of them is 30 days old, and every run stamps the
-session's `.title` file, so that age is the time since the session was last used.
+the hook also asks the assistant to write the session's focus to its purpose file.
 
 The project root is CLAUDE_PROJECT_DIR, else the input's `cwd`, else the current
 folder. Every failure prints nothing and exits 0: a title never blocks a session
@@ -29,7 +26,6 @@ import json
 import os
 import re
 import sys
-import time
 
 PROJECT_FILE = os.path.join(".bindwright", "project.json")
 REPO_SESSIONS = os.path.join(".bindwright", "sessions")
@@ -37,7 +33,6 @@ TITLES_FOLDER = os.path.join(".bindwright", "session-titles")
 # A file-name stem only, so a session id can never leave the titles folder.
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 PURPOSE_WORDS = 10
-SWEEP_AGE_IN_SECONDS = 30 * 24 * 60 * 60
 PURPOSE_REQUEST = (
     "Once the session's focus is clear, write it in 10 words or fewer, without the "
     "project's name, to {path}, and rewrite that file whenever the focus changes."
@@ -128,48 +123,6 @@ def purpose_path(titles, session_id):
     return os.path.abspath(os.path.join(titles, session_id + ".purpose")).replace(os.sep, "/")
 
 
-def mark_used(titles, session_id):
-    """Stamps the session's `.title` file with the current time as its last use. The
-    purpose files keep their own times, which decide the newer purpose."""
-    try:
-        os.utime(os.path.join(titles, session_id + ".title"))
-    except OSError:
-        pass
-
-
-def last_use_by_session(titles, names):
-    """The newest modification time among each session's files, keyed by session id."""
-    last_use = {}
-    for name in names:
-        path = os.path.join(titles, name)
-        try:
-            if os.path.isfile(path):
-                stem = name.rsplit(".", 1)[0]
-                last_use[stem] = max(last_use.get(stem, 0), os.path.getmtime(path))
-        except OSError:
-            pass
-    return last_use
-
-
-def sweep_old_files(titles, session_id):
-    """Deletes the files of every session unused for 30 days, except this session's own,
-    so a resumed old session keeps its purpose. Best effort: nothing raises."""
-    try:
-        names = os.listdir(titles)
-    except OSError:
-        return
-    limit = time.time() - SWEEP_AGE_IN_SECONDS
-    last_use = last_use_by_session(titles, names)
-    for name in names:
-        stem = name.rsplit(".", 1)[0]
-        if stem == session_id or last_use.get(stem, limit) >= limit:
-            continue
-        try:
-            os.remove(os.path.join(titles, name))
-        except OSError:
-            pass
-
-
 def hook_output(event_name, title, request):
     """The hookSpecificOutput object, or None when there is nothing to tell Claude Code."""
     output = {"hookEventName": event_name}
@@ -194,10 +147,8 @@ def title_session(event, titles):
     title = f"{name} - {purpose}" if purpose else name
     os.makedirs(titles, exist_ok=True)
     changed = set_title(titles, session_id, title)
-    mark_used(titles, session_id)
     request = None
     if event_name == "SessionStart":
-        sweep_old_files(titles, session_id)
         request = PURPOSE_REQUEST.format(path=purpose_path(titles, session_id))
     output = hook_output(event_name, title if changed else None, request)
     if output:

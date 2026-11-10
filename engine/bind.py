@@ -185,8 +185,8 @@ def plan_files(answers, core_files, precommit_profiles):
 def _global_files(a, ctx, read_file):
     """The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
     additions, the memory index, the push guard, the builder agent, the reply
-    style, the attribution guard when the guards live in ~/.claude, and the
-    research hook for a tool without its own."""
+    style, the session-title hook, the attribution guard when the guards live in
+    ~/.claude, and the research hook for a tool without its own."""
     def verbatim(p):
         return read_file(GLOBAL_CORE + p).replace("\r\n", "\n")
 

@@ -192,30 +192,6 @@ const cases = [
       assert.equal(run.out, "");
     },
   },
-  {
-    name: "SessionStart deletes a 31-day-old file of the titles folder and keeps a fresh one",
-    setup(layout) {
-      ageFile(writeFile(join(layout.titles, "other-session.title"), "Old"), 31);
-      writeFile(join(layout.titles, "other-session-2.title"), "Fresh");
-    },
-    input: event(),
-    check(layout) {
-      assert.equal(existsSync(join(layout.titles, "other-session.title")), false);
-      assert.equal(readFileSync(join(layout.titles, "other-session-2.title"), "utf8"), "Fresh");
-    },
-  },
-  {
-    name: "SessionStart keeps this session's own 31-day-old purpose so a resumed session keeps its title",
-    setup(layout) {
-      writeProject(layout, "Demo");
-      ageFile(purposeInTitles(layout, "fix the login bug"), 31);
-    },
-    input: event(),
-    check(layout, run) {
-      assert.equal(hookOutput(run.out).sessionTitle, "Demo - fix the login bug");
-      assert.equal(existsSync(join(layout.titles, `${SESSION}.purpose`)), true);
-    },
-  },
 ];
 
 for (const row of cases) {
@@ -245,19 +221,6 @@ test("a new purpose after a title was set prints the new title, once", { skip },
   purposeInTitles(layout, "fix the login bug");
   assert.equal(hookOutput(runHook(layout, event("UserPromptSubmit")).out).sessionTitle, "Demo - fix the login bug");
   assert.equal(runHook(layout, event("UserPromptSubmit")).out, "");
-}));
-
-const sweepKeepsUsed = "another session's sweep keeps the 31-day-old files of a session used since";
-test(sweepKeepsUsed, { skip }, () => withLayout((layout) => {
-  writeProject(layout, "Demo");
-  const purpose = purposeInTitles(layout, "fix the login bug", "busy-session");
-  const title = writeFile(join(layout.titles, "busy-session.title"), "Demo - fix the login bug");
-  ageFile(purpose, 31);
-  ageFile(title, 31);
-  runHook(layout, event("UserPromptSubmit", "busy-session"));
-  runHook(layout, event());
-  assert.equal(existsSync(purpose), true);
-  assert.equal(existsSync(title), true);
 }));
 
 test("a newer purpose in the repo keeps the title on the next prompt too", { skip }, () => withLayout((layout) => {

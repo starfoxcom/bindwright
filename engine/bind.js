@@ -134,8 +134,8 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
 
 // The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
 // additions, the memory index, the push guard, the builder agent, the reply
-// style, the attribution guard when the guards live in ~/.claude, and the
-// research hook for a tool without its own.
+// style, the session-title hook, the attribution guard when the guards live in
+// ~/.claude, and the research hook for a tool without its own.
 async function globalFiles(a, ctx, readFile) {
   const verbatim = async (p) => (await readFile(GLOBAL_CORE + p)).replace(/\r\n/g, "\n");
   const render = async (p) => renderTemplate(await readFile(GLOBAL_CORE + p), ctx, GLOBAL_CORE + p);
