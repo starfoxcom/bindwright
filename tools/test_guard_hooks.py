@@ -163,12 +163,20 @@ class GuardHookTest(unittest.TestCase):
         result = self.run_hook("push-guard", FORCE_PUSH, project=self.temp_project())
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def sh_only_path(self):
+        """A PATH that finds sh but no Python."""
+        if os.name == "nt":
+            # Git for Windows' sh.exe needs the DLLs in its own folder, which holds no Python.
+            return os.path.dirname(SH)
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        os.symlink(SH, os.path.join(folder, "sh"))
+        return folder
+
     def test_no_python_on_path_lets_the_call_through(self):
-        sh_folder = os.path.dirname(SH)
-        if any(shutil.which(name, path=sh_folder) for name in ("python3", "python", "py")):
-            self.skipTest("the folder of sh holds a Python, so PATH cannot hide it")
-        result = self.run_hook("push-guard", FORCE_PUSH, path=sh_folder)
-        self.assert_passes(result)
+        path = self.sh_only_path()
+        self.assertFalse([n for n in ("python3", "python", "py") if shutil.which(n, path=path)])
+        self.assert_passes(self.run_hook("push-guard", FORCE_PUSH, path=path))
 
     def test_crashing_guard_exits_one_so_on_failure_blocks_it(self):
         # Claude Code blocks a command hook that exits with a code other than 0 or 2

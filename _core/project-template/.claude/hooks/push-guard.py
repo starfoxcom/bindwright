@@ -85,7 +85,7 @@ these run without a block:
 
 Project deny rules cover some of these by text (`git remote *--mi*`, `gh repo
 sync *--force*`). Input that is not JSON and any error while reading a
-command let the call through, the same as a hook that timed out.
+command let the call through.
 
 It runs from one of two places. Installed in `~/.claude/hooks/`, setup
 registers it in `~/.claude/settings.json` only after finding a Python 3.8+
