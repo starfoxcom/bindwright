@@ -146,7 +146,8 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
     if (owner === 'older') {
       await claim($, folder)
       live.watches = joinWatches((await readSaved($)) ?? [], live.watches)
-      await publish($)
+      live.generation++
+      await save($)
     }
     return owner === 'newer'
   } catch {

@@ -145,6 +145,22 @@ test('a load newer than this one keeps a resumed id, whichever claimed it first'
   expect(seen.files.has(STATE)).toBe(false)
 })
 
+test('a takeover by the poll timer keeps both its own watch and the earlier owner\'s', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+  seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+  seen.session = 's1'
+  await clock.advance(POLL_MS)
+  const saved = JSON.parse(seen.files.get(STATE) ?? '{}')
+  expect(saved.watches).toHaveLength(2)
+  expect(saved.watches.some((w: { number: number }) => w.number === 3)).toBe(true)
+})
+
 test('a /clear that lands while a reload is still starting keeps the saved watches', async ($, on) => {
   const { seen } = world(on)
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
