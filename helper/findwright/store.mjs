@@ -5,7 +5,7 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { EXTRACTORS, fromRules } from "./extract.mjs";
 
@@ -132,7 +132,10 @@ export function refresh(db, root, config = readConfig(root)) {
   const changed = [];
   for (const path of listFiles(root, config)) {
     let stat;
-    try { stat = statSync(join(root, path)); } catch { continue; }
+    // Regular files only: a submodule, a nested repo or a symlink (which may point
+    // outside the repo) is listed by git but never read.
+    try { stat = lstatSync(join(root, path)); } catch { continue; }
+    if (!stat.isFile()) continue;
     seen.add(path);
     const old = known.get(path);
     if (old && old.size === stat.size && old.mtime === stat.mtimeMs) continue;
@@ -162,7 +165,8 @@ function dropFile(db, path) {
 function indexFile(db, root, path, stat, config) {
   dropFile(db, path);
   const kind = kindOf(path, config);
-  const text = readText(root, path, stat.size);
+  let text;
+  try { text = readText(root, path, stat.size); } catch { text = null; }
   const symbols = text === null ? [] : symbolsOf(text, path, kind, config);
   db.prepare("INSERT INTO files VALUES (?, ?, ?, ?, ?)").run(path, stat.size, stat.mtimeMs, text === null ? "binary" : kind, symbols.length);
   if (text === null) return;

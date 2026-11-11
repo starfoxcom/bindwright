@@ -4,6 +4,8 @@
 import { dot, ensureModel, loadModel, packVector } from "./embed.mjs";
 
 let loading = null;
+let loaded = null;
+let failure = null;
 
 /**
  * The meaning model with the index's vectors brought up to date: `{ ready }`, or
@@ -12,22 +14,21 @@ let loading = null;
  */
 export async function meaningModel(db) {
   if (process.env.FINDWRIGHT_MEANING === "off") return { ready: null };
-  loading ??= ensureModel().then(loadModel);
-  try {
-    const model = await loading;
-    embedMissing(db, model);
-    return { ready: model };
-  } catch (error) {
-    loading = null;
-    return { ready: null, note: `(meaning search is off: ${error.message}; ranked by words only)` };
-  }
+  // The download runs in the background: until it lands, searches rank by words alone.
+  loading ??= ensureModel().then(loadModel).then((model) => { loaded = model; }, (error) => { failure = error; loading = null; });
+  if (failure) return { ready: null, note: `(meaning search is off: ${failure.message}; ranked by words only)` };
+  if (!loaded) return { ready: null, note: "(meaning model still downloading; ranked by words only)" };
+  // A big repo's vectors are built over several calls, two seconds at a time.
+  embedMissing(db, loaded, 2000);
+  return { ready: loaded };
 }
 
 const WINDOW_LINES = 30;
 const STEP_LINES = 20;
 
 /** Embeds every indexed text file that has no vectors yet; returns how many it embedded. */
-export function embedMissing(db, model) {
+export function embedMissing(db, model, budgetMs = Infinity) {
+  const started = performance.now();
   const todo = db.prepare(
     "SELECT b.path, b.text FROM body b JOIN files f ON f.path = b.path WHERE b.path NOT IN (SELECT path FROM embedded)",
   ).all();
@@ -44,6 +45,7 @@ export function embedMissing(db, model) {
         if (end === lines.length) break;
       }
       mark.run(path);
+      if (performance.now() - started > budgetMs) break;
     }
     db.exec("COMMIT");
   } catch (error) {
