@@ -58,9 +58,10 @@ export default {
   "lands.item.review": "AI review on every PR",
   "lands.item.board": "Work board settings",
   "lands.verb": "Asking the questions",
-  "lands.say.first": "First run on this computer, so it asks the computer questions once, then the "
-    + "project's.",
-  "lands.say.done": "Done. Change the computer choices any time with /bindwright:setup global.",
+  "lands.say.first": "First run on this computer, so it starts with the computer questions, asked once.",
+  "lands.say.project": "The computer is ready. Now this project: its rules, checks and mods.",
+  "lands.say.done": "Done. Run /bindwright:setup project in each new project; /bindwright:setup global "
+    + "changes the computer choices.",
   "mods.scene.session-facts.facts": "Facts: 14:32 · context 41% · plan 38% of 5 hours, 62% of the week",
   "mods.scene.session-facts.use": "At 41% of context used, the task fits in this session.",
   "mods.scene.ci-watch.wake": "The checks finished, so ci-watch woke the session. PR #14 is ready to merge.",
