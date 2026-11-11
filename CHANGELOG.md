@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.3.0] — 2026-11-11
+
+v3.3.0 replaces tokensave with FindWright, an adaptive code index that ships inside the helper, lets per-project mods be switched off in one project, and renames the session skills to `/start-session` and `/close-session`.
+
 ### Added
 
 - **Mods can be turned off for one project, and setup has a project part of its own** (#767). `ci-watch`, `tasks` and `skill-check` can be switched off in a single project while every other project keeps them: a project with no CI checks has nothing for `ci-watch` to watch. The switch is the CLI's own `enabledPlugins` setting in the project's personal `.claude/settings.local.json`; the other seven mods act for the whole computer and stay computer choices. A first `/bindwright:setup` now asks the computer choices, then offers to set up the current project. The new `/bindwright:setup project` asks the project questions plus which per-project mods run there, with `ci-watch` off by default where the project has no GitHub CI, and `/bindwright:join` asks the same. `/mods` marks the mods the current project turned off.
