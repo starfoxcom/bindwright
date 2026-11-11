@@ -6,6 +6,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.3.1] — 2026-11-11
+
+v3.3.1 fixes how `/bindwright:update` treats a project that owns a session skill under its old name.
+
+### Fixed
+
+- A project that lists `.claude/skills/session-close/SKILL.md` or `.claude/skills/session-start/SKILL.md` in `.bindwright/owned` keeps only its own copy, and the update keeps that file's base under the old name. Once the project removes the line, the next update moves its copy to the new name, edits included. In v3.3.0 the update recorded the new name as written, so after the line was removed it reported the skill as deleted and never added it.
+
 ## [v3.3.0] — 2026-11-11
 
 v3.3.0 replaces tokensave with FindWright, an adaptive code index that ships inside the helper, lets per-project mods be switched off in one project, and renames the session skills to `/start-session` and `/close-session`.
