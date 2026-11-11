@@ -46,7 +46,7 @@ env:
   # The release the mods were last verified on. Raising it is a workflow
   # change, so it follows git.md's rule for those, and the mods on each branch
   # the raise reaches must already pass on the new release.
-  PINNED_VERSION: "2.1.316"
+  PINNED_VERSION: "2.1.322"
   DISABLE_AUTOUPDATER: "1"
   DISABLE_TELEMETRY: "1"
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
