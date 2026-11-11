@@ -260,6 +260,10 @@ test('a reading keeps a Start or Stop pressed while it was being taken', () => {
   // The job it asked about has ended: the next Stop asks again if a new one starts.
   const idle: RunnerView[] = [{ label: 'runners', isOn: true, online: 1, busy: 0 }]
   expect(mergeReading(idle, pressed)).toEqual([{ ...idle[0], startedAt: NOW, isConfirming: false }])
+  // A failed Start stands while the runners stay off, and ends once they are up.
+  const failed: RunnerView[] = [{ label: 'runners', isOn: false, isStartFailed: true }]
+  expect(mergeReading(off, failed)[0]?.isStartFailed).toBe(true)
+  expect(mergeReading(reading, failed)[0]?.isStartFailed).toBeUndefined()
 })
 
 test('a process counts as running only under its own full name', () => {
@@ -302,7 +306,7 @@ const LIST_FILE = 'C:/Users/me/.claude/mods-data/runners/runners.json'
 const registered: { name: string; description?: string; argumentHint?: string }[] = []
 
 // `files`: more readable files, by full path or, for the manifest, `plugin.json`.
-function machine(on: On, isUp: () => boolean, files: Record<string, string> = {}) {
+function machine(on: On, isUp: () => boolean, files: Record<string, string> = {}, startExit = () => 0) {
   const runs: string[][] = []
   const clock = mock.clock(on, { now: NOW })
   mock.env(on, { USERPROFILE: 'C:/Users/me', OS: 'Windows_NT' })
@@ -321,7 +325,8 @@ function machine(on: On, isUp: () => boolean, files: Record<string, string> = {}
     runs.push([...e.argv])
     const listed = isUp() ? '"Runner.Listener.exe","1"\r\n' : ''
     const out = e.argv[0] === 'node' ? '360\n' : e.argv[0] === 'tasklist' ? listed : ''
-    return { value: { exitCode: 0, stdout: out, stderr: '' } } as never
+    const exitCode = e.argv[0] === 'start-runners' ? startExit() : 0
+    return { value: { exitCode, stdout: out, stderr: '' } } as never
   })
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => {
@@ -353,6 +358,24 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ key: 'runner-stop-0' })).toBeDefined()
   })
 }
+
+test('a Start whose command fails says so on the row until the runners come up', async ($, on) => {
+  let isRunning = false
+  let exit = 1
+  const { clock } = machine(on, () => isRunning, {}, () => exit)
+  await $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
+  await clock.advance(1_000)
+  const props = { hasSurvey: false, isWorking: false, maxRows: 12, bodyColumns: 100 } as never
+  const ui = await $.ui.mount({ plugin: 'runners', surface: 'terminal', component: 'AbovePrompt', props })
+  await ui.press({ key: 'runner-start-0' })
+  await clock.advance(60_000)
+  expect(await rowNow($)).toContain('start failed')
+  exit = 0
+  isRunning = true
+  await ui.press({ key: 'runner-start-0' })
+  await clock.advance(60_000)
+  expect(await rowNow($)).not.toContain('start failed')
+})
 
 // A WSL runner whose disk figures go through the mod store, faked as working, failing every call, or
 // readable but refusing every write. `seed` is a record already in the store.

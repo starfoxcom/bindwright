@@ -215,6 +215,8 @@ export function mergeReading(reading: RunnerView[], shown: RunnerView[] | undefi
   return reading.map((row, i) => ({
     ...row,
     startedAt: shown?.[i]?.startedAt,
+    // A failed Start stands until the runners come up or Start is pressed again.
+    isStartFailed: shown?.[i]?.isStartFailed && !row.isOn ? true : undefined,
     isConfirming: Boolean(shown?.[i]?.isConfirming) && row.isOn && row.busy !== 0,
   }))
 }
@@ -328,8 +330,10 @@ async function setRow($: Engine, index: number, change: Partial<RunnerView>): Pr
 async function pressStart($: Engine, index: number): Promise<void> {
   const argv = live.runners[index]?.start
   if (!argv) return
-  await run($, argv)
-  await setRow($, index, { startedAt: await $.clock.now() })
+  // A command that cannot launch, exits non-zero or outlives its 30 s says so on the row, as a service
+  // manager reports a failed start, instead of the row waiting on runners that never come.
+  const isStartFailed = (await run($, argv)) === null
+  await setRow($, index, { startedAt: isStartFailed ? undefined : await $.clock.now(), isStartFailed })
   await check($).catch(() => undefined)
 }
 
@@ -355,6 +359,7 @@ export function rowText(row: RunnerView, now: number, zoneTime: (ms: number) => 
   if (row.nextRun !== undefined) parts.push(`next ${zoneTime(row.nextRun)} (scheduled)`)
   const disk = diskText(row)
   if (disk !== undefined) parts.push(disk)
+  if (row.isStartFailed) parts.push('start failed')
   return parts.join(' · ')
 }
 

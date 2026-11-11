@@ -12,6 +12,8 @@ export type RunnerView = {
   nextRun?: number
   /** When Start was pressed: GitHub reports the runners offline for a minute or two after. */
   startedAt?: number
+  /** The last Start press's command failed to launch, exited non-zero or timed out. */
+  isStartFailed?: boolean
   /** Stop was pressed while a job ran; the next press stops anyway. */
   isConfirming?: boolean
   /** The WSL virtual disk file's allocated bytes, not its length. */
