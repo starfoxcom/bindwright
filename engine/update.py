@@ -221,10 +221,13 @@ def run_update(root, bind_with, version, state_json):
     refuse_links(root, [path for path, _ in plan["write"]] + [PRISTINE] + fresh_staged + plan["remove"])
     skipped = [path[len(STAGING):] for path, _ in plan["stage"] if os.path.lexists(at(path))]
     files = plan["pristine"]["files"]
+    renamed_from = {new: old for old, new in RENAMES.items()}
     for path in skipped:
         # The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.
-        if path in pristine["files"]:
-            files[path] = pristine["files"][path]
+        # A renamed file's base is still under its old name.
+        base = path if path in pristine["files"] else renamed_from.get(path)
+        if base in pristine["files"]:
+            files[path] = pristine["files"][base]
         else:
             files.pop(path, None)
     for path, text in plan["write"]:

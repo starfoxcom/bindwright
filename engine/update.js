@@ -237,9 +237,12 @@ export async function runUpdate(root, { bindWith, version }) {
   const freshStaged = plan.stage.map(([path]) => path).filter((path) => entry(root, path) === null);
   refuseLinks(root, [...plan.write.map(([path]) => path), PRISTINE, ...freshStaged, ...plan.remove]);
   const skipped = plan.stage.filter(([path]) => entry(root, path) !== null).map(([path]) => path.slice(STAGING.length));
+  const renamedFrom = Object.fromEntries(Object.entries(RENAMES).map(([from, to]) => [to, from]));
   for (const path of skipped) {
     // The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.
-    if (path in pristine.files) plan.pristine.files[path] = pristine.files[path];
+    // A renamed file's base is still under its old name.
+    const base = path in pristine.files ? path : renamedFrom[path];
+    if (base in pristine.files) plan.pristine.files[path] = pristine.files[base];
     else delete plan.pristine.files[path];
   }
   for (const [path, text] of plan.write) put(root, path, text);
