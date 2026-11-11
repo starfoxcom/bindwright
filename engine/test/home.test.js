@@ -578,6 +578,23 @@ test("a per-project mod turns off and back on in the repo's personal settings on
   });
 });
 
+test("turning a mod on outranks the shared file's off with a personal on", { skip }, () => {
+  withHome((dir) => {
+    const repo = join(dir, "repo");
+    const local = join(repo, ".claude", "settings.local.json");
+    mkdirSync(join(repo, ".claude"), { recursive: true });
+    const shared = { enabledPlugins: { "tasks@inline": false } };
+    writeFileSync(join(repo, ".claude", "settings.json"), JSON.stringify(shared));
+    assert.deepEqual(home(dir, "project-mod", repo, "tasks", "on").out,
+      { settings: local, mod: "tasks", on: true, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(local, "utf8")), { enabledPlugins: { "tasks@inline": true } });
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: [] });
+    // Asked again, it keeps that personal on.
+    assert.equal(home(dir, "project-mod", repo, "tasks", "on").out.changed, false);
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: [] });
+  });
+});
+
 test("a computer-wide mod cannot be turned off for one project", { skip }, () => {
   withHome((dir) => {
     const repo = join(dir, "repo");

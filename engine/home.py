@@ -510,9 +510,13 @@ def set_project_mod(root, name, state):
     plugins = _section(data, "enabledPlugins", dict, path)
     key = name + INLINE
     before = plugins.get(key)
-    # On is the mod's own default, so it drops the key rather than writing true over the shared file.
+    shared = _load_project_settings(os.path.join(root, ".claude", "settings.json")).get("enabledPlugins")
+    is_off_for_team = isinstance(shared, dict) and shared.get(key) is False
+    # On is the mod's own default, so it writes true only to outrank the shared file's false.
     if state == "off":
         plugins[key] = False
+    elif is_off_for_team:
+        plugins[key] = True
     else:
         plugins.pop(key, None)
     if not plugins:
