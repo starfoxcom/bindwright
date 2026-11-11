@@ -264,6 +264,14 @@ test('a reading keeps a Start or Stop pressed while it was being taken', () => {
   const failed: RunnerView[] = [{ label: 'runners', isOn: false, isStartFailed: true }]
   expect(mergeReading(off, failed)[0]?.isStartFailed).toBe(true)
   expect(mergeReading(reading, failed)[0]?.isStartFailed).toBeUndefined()
+  // After a reload reorders the list, another runner at that index never inherits it.
+  expect(mergeReading([{ label: 'other', isOn: false }], failed)[0]?.isStartFailed).toBeUndefined()
+  // A timed-out Start that did start the runners keeps its starting grace once the row is on.
+  const timedOut: RunnerView = { label: 'runners', isOn: true, online: 0, startedAt: NOW, isStartFailed: true }
+  expect(rowText(timedOut, NOW, hhmm)).not.toContain('starting')
+  expect(rowText(mergeReading([{ label: 'runners', isOn: true, online: 0 }], [timedOut])[0]!, NOW, hhmm)).toContain(
+    'starting',
+  )
 })
 
 test('a process counts as running only under its own full name', () => {
