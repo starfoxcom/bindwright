@@ -50,7 +50,6 @@ function included(path, a, flags) {
   const github = adv.tracker === "github";
   if (path.startsWith("precommit/")) return false;
   if (path.startsWith(".claude/rules/architecture/")) return false;
-  if (path.startsWith(".claude/skills/architecture-graph/")) return false;
   // Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
   // `.template` sources match too; the scripts and the size-check folder run anywhere.
   if (!flags.code_host_github && GITHUB_ONLY.some((p) => path.startsWith(p))) return false;
