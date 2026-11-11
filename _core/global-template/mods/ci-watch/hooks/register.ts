@@ -9,7 +9,7 @@ import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
-import { claim, isRetired as isRetiredFrom } from './owner'
+import { claim, joinWatches, ownerOf } from './owner'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -137,10 +137,18 @@ async function claimOwner($: EngineInterface): Promise<void> {
   }
 }
 
+// Taking over from an older load keeps the watches it saved under this id: they join memory before any save.
 export async function isRetired($: EngineInterface): Promise<boolean> {
   if (live.isRetiredForGood) return true
   try {
-    return await isRetiredFrom($, await dataFolder($))
+    const folder = await dataFolder($)
+    const owner = await ownerOf($, folder)
+    if (owner === 'older') {
+      await claim($, folder)
+      live.watches = joinWatches((await readSaved($)) ?? [], live.watches)
+      await publish($)
+    }
+    return owner === 'newer'
   } catch {
     return false
   }

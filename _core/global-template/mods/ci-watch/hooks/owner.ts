@@ -1,3 +1,4 @@
+import type { Watch } from '../types'
 import type { EngineInterface } from 'claude-code'
 
 // A hot reload loads the mod again but leaves the earlier instance's timer (and old code) running beside
@@ -8,6 +9,9 @@ import type { EngineInterface } from 'claude-code'
 // one. An unreadable file retires none.
 const LOADED_AT = Date.now()
 const INSTANCE = `${LOADED_AT}-${Math.random().toString(36).slice(2)}`
+
+/** Who the owner file names for the session's current id, as seen by this instance. */
+export type Owner = 'this' | 'older' | 'newer' | 'none'
 
 async function ownerFile($: EngineInterface, folder: string): Promise<string> {
   return `${folder}/${await $.session.id()}.owner`
@@ -22,17 +26,20 @@ export async function claim($: EngineInterface, folder: string): Promise<void> {
   }
 }
 
-/** Whether a newer load owns the session, so this instance's hooks pass through. */
-export async function isRetired($: EngineInterface, folder: string): Promise<boolean> {
+/** Reads the owner file of the session's current id; an unreadable or empty one names nobody. */
+export async function ownerOf($: EngineInterface, folder: string): Promise<Owner> {
   try {
     const owner = String(await $.fs.read(await ownerFile($, folder))).trim()
-    if (owner === '' || owner === INSTANCE) return false
-    if (Number(owner.split('-')[0]) < LOADED_AT) {
-      await claim($, folder)
-      return false
-    }
-    return true
+    if (owner === '') return 'none'
+    if (owner === INSTANCE) return 'this'
+    return Number(owner.split('-')[0]) < LOADED_AT ? 'older' : 'newer'
   } catch {
-    return false
+    return 'none'
   }
+}
+
+/** The watches an earlier owner saved, joined with this load's own, which win for the same PR. */
+export function joinWatches(saved: readonly Watch[], own: readonly Watch[]): Watch[] {
+  const ownPrs = new Set(own.map(w => `${w.repo}#${w.number}`))
+  return [...saved.filter(w => !ownPrs.has(`${w.repo}#${w.number}`)), ...own]
 }

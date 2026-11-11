@@ -120,11 +120,16 @@ test('a resumed session that goes on under its old id is still watched', async (
   seen.session = 'fresh'
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.files.set(OWNER, EARLIER_PROCESS)
+  // The earlier process was watching another PR under that id.
+  const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+  seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
   seen.session = 's1'
   expect(await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)).toEqual({
     result: 'Watching o/r#7; you will be woken once its checks settle.',
   })
   expect(seen.files.get(OWNER)).not.toBe(EARLIER_PROCESS)
+  const saved = JSON.parse(seen.files.get(STATE) ?? '{}')
+  expect(saved.watches.map((w: { number: number }) => w.number).sort()).toEqual([3, 7])
 })
 
 test('a load newer than this one keeps a resumed id, whichever claimed it first', async ($, on) => {
