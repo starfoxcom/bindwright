@@ -5,8 +5,8 @@ import type { ArmedWake, UsageCard } from '../types'
 import { catchUpOf, caughtUpText, missedArmText, parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
-import type { Pause } from './plan'
-import { armFor, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, joinPause, limitName } from './plan'
+import { closeCommand, limitName, type Pause } from './plan'
+import { armFor, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, joinPause } from './plan'
 import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
 import { drawArmLine, drawCards } from './cards'
@@ -204,9 +204,9 @@ async function runPendingWrapUp($: EngineInterface): Promise<void> {
 async function startWrapUp($: EngineInterface, pause: Pause): Promise<void> {
   const resumeAt = localTime(pause.wakeAt)
   live.compactAfterTurn = pause
-  const commands = await $.command.list().catch(() => [])
-  if (commands.some(command => command.name === 'session-close')) {
-    void $.command.run({ command: 'session-close', args: WRAP_UP_ARGS }).catch(() => undefined)
+  const close = closeCommand(await $.command.list().catch(() => []))
+  if (close) {
+    void $.command.run({ command: close, args: WRAP_UP_ARGS }).catch(() => undefined)
   } else {
     void $.prompt
       .submit({ text: `[usage-guard] ${WRAP_UP_ARGS} Work resumes automatically at ${resumeAt}.` })
@@ -340,7 +340,7 @@ async function hadWork($: EngineInterface, pause: Pause): Promise<boolean | null
   }
 }
 
-// Never the project's /session-start: a ritual that proposes a plan and waits for an OK would wake the
+// Never the project's /start-session: a ritual that proposes a plan and waits for an OK would wake the
 // session only to stop it again. The engine runs a plugin's prompt once the session is idle, so a
 // person typing meanwhile is never cut off.
 async function resumeWork($: EngineInterface, text: string, reason?: string): Promise<void> {
@@ -627,7 +627,7 @@ async function startOnce($: EngineInterface): Promise<void> {
 async function meetPause($: EngineInterface, pause: Pause): Promise<void> {
   if (pause.wakeAt <= (await $.clock.now())) {
     await writePause($, { ...pause, status: 'done' })
-    const text = 'Plan limits have reset since the last wrap-up. Run /session-start to resume the saved work.'
+    const text = 'Plan limits have reset since the last wrap-up. Run /start-session to resume the saved work.'
     await showCard($, `missed:${pause.resetsAt}`, text)
     await notice($, text)
     return

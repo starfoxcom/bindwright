@@ -37,13 +37,21 @@ export function reasonText(reason: string): string {
   return `The reason this wake was set with: "${reason}".`
 }
 
+/**
+ * The project's close-session skill among `commands`: its current name first, then the name a
+ * project set up before the rename still has; undefined when it has neither.
+ */
+export function closeCommand(commands: readonly { name: string }[]): string | undefined {
+  return ['close-session', 'session-close'].find(name => commands.some(command => command.name === name))
+}
+
 export const WRAP_UP_ARGS =
   'Plan usage limit nearly reached (automatic wrap-up). Commit locally only: no push, no PR, no CI. ' +
   'Save the hand-off so the work can resume after the reset, stop every background task and monitor, ' +
   'keep it short.'
 
 // What every wake submits: to a session the person armed by hand, or to one the pause resumes because it
-// saved work at its wrap-up. Only the plan approval is waived, the one stop `/session-start` would add;
+// saved work at its wrap-up. Only the plan approval is waived, the one stop `/start-session` would add;
 // every step a project's rules keep for the person still waits for them. A wrap-up ends in a compaction
 // or a /clear more often than not, hence the hand-off.
 export function resumePrompt(reason: string): string {
@@ -59,7 +67,7 @@ export function resumePrompt(reason: string): string {
 // a wrap-up whose claim failed before a hot reload, or one before a /clear, left work and no record.
 export const NO_WORK_NOTICE =
   'Plan limits have reset. No saved work is on record for this session, so it does not go on by itself; ' +
-  'pick up a hand-off by hand, for example with /session-start.'
+  'pick up a hand-off by hand, for example with /start-session.'
 
 export function hotLimits(limits: readonly SessionRateLimit[], wrapUpAt: number): SessionRateLimit[] {
   return limits.filter(limit => limit.resetsAt !== undefined && limit.percentUsed >= wrapUpAt)

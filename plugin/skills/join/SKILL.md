@@ -44,6 +44,6 @@ Mods load at start-up: if any were installed or turned off here, say the CLI nee
 
 ## 5. Start
 
-Summarise in plain words what was set up, what was declined, and anything still missing. Then run `/session-start`.
+Summarise in plain words what was set up, what was declined, and anything still missing. Then run `/start-session`.
 
 Do not commit or push. Outside the repo, change only what the user said yes to.

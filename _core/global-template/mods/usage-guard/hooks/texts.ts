@@ -105,7 +105,7 @@ export function armedText(arm: ArmedWake, wakeText: string, untilText: string): 
 }
 
 export const CANCELLED_TEXT =
-  'Automatic resume cancelled for every session. Run /session-start in a session when you want to pick its ' +
+  'Automatic resume cancelled for every session. Run /start-session in a session when you want to pick its ' +
   'saved work back up.'
 
 // When a claim helper fails at the wake: whether this session should go on by itself is not known.
@@ -123,7 +123,7 @@ export function questionText(wakeText: string): string {
 
 export type Tone = 'green' | 'blue' | 'yellow'
 
-// yellow: the person may act (cancel the resume, run /session-start); blue: information; green: good news.
+// yellow: the person may act (cancel the resume, run /start-session); blue: information; green: good news.
 export function cardTone(id: string): Tone {
   if (id.startsWith('reset:')) return 'green'
   return id.startsWith('cancelled:') ? 'blue' : 'yellow'

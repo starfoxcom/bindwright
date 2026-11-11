@@ -25,7 +25,7 @@ Allowed only when:
 - the target is not code (Markdown, config, binaries, ignored files);
 - tokensave is unavailable for this scope.
 
-Say which condition applies. For a shell `grep` or `rg`, add the comment `# TOKENSAVE_BYPASS: <reason>` to the command so the session-close count treats it as a deliberate fallback.
+Say which condition applies. For a shell `grep` or `rg`, add the comment `# TOKENSAVE_BYPASS: <reason>` to the command so the close-session count treats it as a deliberate fallback.
 
 ## Citing
 
