@@ -306,6 +306,16 @@ export function expandAnswers(saved) {
   return { ...rest, project: fillKeys(project, base.project), advanced: mapRemovedTool(filled) };
 }
 
+// Removed tools that installed a search hook of their own: one kept as a custom tool gets no Bindwright hook beside it.
+const REMOVED_TOOLS_WITH_OWN_HOOK = ["tokensave"];
+
+/** Whether the answers keep a removed tool that brings its own search hook. */
+export function bringsOwnHook(advanced) {
+  const name = isObject(advanced?.codeResearchCustom) ? advanced.codeResearchCustom.name : undefined;
+  const isKept = (k) => REMOVED_CODE_RESEARCH_TOOLS[k].name === name;
+  return advanced?.codeResearch === "custom" && REMOVED_TOOLS_WITH_OWN_HOOK.some(isKept);
+}
+
 export function mapRemovedTool(advanced) {
   if (!isObject(advanced) || !own(REMOVED_CODE_RESEARCH_TOOLS, advanced.codeResearch)) return advanced;
   const old = REMOVED_CODE_RESEARCH_TOOLS[advanced.codeResearch];

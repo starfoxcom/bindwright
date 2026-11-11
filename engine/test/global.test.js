@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind, GLOBAL } from "../bind.js";
-import { defaults, CODE_RESEARCH_TOOLS } from "../model.js";
+import { defaults, mapRemovedTool, CODE_RESEARCH_TOOLS } from "../model.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const readFile = async (p) => readFileSync(join(repo, p), "utf8");
@@ -67,6 +67,9 @@ test("a research hook ships only for tools that bring none of their own", async 
   assert.match(hook, /^DISPLAY_NAME = "My Tool\.v2\+"$/m);
   assert.match(hook, /^DETECTION_TARGET = "my-tool-v2"$/m);
   assert.ok(hook.includes(CUSTOM.url));
+  // A project that keeps tokensave, read as a custom tool, keeps tokensave's own hook and gets no stub.
+  const kept = await globalFiles((a) => { a.advanced = mapRemovedTool({ ...a.advanced, codeResearch: "tokensave" }); });
+  assert.deepEqual([...kept.keys()].filter((p) => p.endsWith("-first.py")), []);
 });
 
 // Each tool's block in the template, as its lines without placeholders.

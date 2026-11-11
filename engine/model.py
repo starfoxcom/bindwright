@@ -391,6 +391,18 @@ def expand_answers(saved):
                 advanced=map_removed_tool(_fill_keys(advanced, base["advanced"])))
 
 
+# Removed tools that installed a search hook of their own: one kept as a custom tool gets no Bindwright hook beside it.
+REMOVED_TOOLS_WITH_OWN_HOOK = ["tokensave"]
+
+
+def brings_own_hook(advanced):
+    """Whether the answers keep a removed tool that brings its own search hook."""
+    custom = advanced.get("codeResearchCustom") if isinstance(advanced, dict) else None
+    name = custom.get("name") if isinstance(custom, dict) else None
+    return (isinstance(advanced, dict) and advanced.get("codeResearch") == "custom"
+            and any(REMOVED_CODE_RESEARCH_TOOLS[k]["name"] == name for k in REMOVED_TOOLS_WITH_OWN_HOOK))
+
+
 def map_removed_tool(advanced):
     """An answers file saved while a tool was offered reads as a custom tool
     with that tool's old name and homepage."""
