@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" width="96" alt=""></p>
+
 # Bindwright
 
 > **Live: [starfoxcom.github.io/bindwright](https://starfoxcom.github.io/bindwright/)**
