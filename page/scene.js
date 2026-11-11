@@ -57,7 +57,7 @@ function reset() {
 // Act 1: the session starts from the board and plans the work.
 async function actStart() {
   await caption(1, t("scene.caption.1"));
-  await term.type("/session-start");
+  await term.type("/start-session");
   await term.think(t("scene.verb.reading"), 1900, 1.2);
   term.say(t("scene.say.next"));
   await term.wait(500);
@@ -122,7 +122,7 @@ async function actReview(last) {
 // Act 5: the session closes with a hand-off note for the next one.
 async function actHandoff() {
   await caption(5, t("scene.caption.5"));
-  await term.type("/session-close");
+  await term.type("/close-session");
   await term.think(t("scene.verb.handoff"), 1500, 0.8);
   await term.tool("Write", ".bindwright/handoff.md", 500);
   term.out(`<span class="mute">${t("scene.next")}</span>`);

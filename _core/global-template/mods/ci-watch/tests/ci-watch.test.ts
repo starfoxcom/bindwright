@@ -108,6 +108,94 @@ test('after a reload and a /clear, the instance the reload retired leaves the ne
   expect(seen.files.has('C:/Users/me/.claude/mods-data/ci-watch/s2.json')).toBe(false)
 })
 
+// Owner names start with when their load ran: one from before this test's load, one from long after.
+const EARLIER_PROCESS = '1-earlier'
+const NEWER_LOAD = '99999999999999-newer'
+
+test('a resumed session that goes on under its old id is still watched', async ($, on) => {
+  const { seen } = world(on)
+  seen.isReadable = true
+  // The process starts under a fresh id, then carries on under the resumed one, whose owner file
+  // names the process that ran it before.
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  // The earlier process was watching another PR under that id.
+  const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+  seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+  seen.session = 's1'
+  expect(await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)).toEqual({
+    result: 'Watching o/r#7; you will be woken once its checks settle.',
+  })
+  expect(seen.files.get(OWNER)).not.toBe(EARLIER_PROCESS)
+  const saved = JSON.parse(seen.files.get(STATE) ?? '{}')
+  expect(saved.watches.map((w: { number: number }) => w.number).sort()).toEqual([3, 7])
+})
+
+test('a load newer than this one keeps a resumed id, whichever claimed it first', async ($, on) => {
+  const { seen } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  // A hot reload's instance reached the resumed id first.
+  seen.files.set(OWNER, NEWER_LOAD)
+  seen.session = 's1'
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  expect(seen.files.get(OWNER)).toBe(NEWER_LOAD)
+  expect(seen.files.has(STATE)).toBe(false)
+})
+
+test('a stop right after a resume stops the earlier owner\'s watches too', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+  seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+  seen.session = 's1'
+  await $.command.run({ command: 'ci-watch', args: 'stop' } as never)
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  expect(JSON.parse(seen.files.get(STATE) ?? '{}').watches).toEqual([])
+  expect(seen.prompts).toEqual([])
+})
+
+test('a wake the earlier owner held for the same head is still sent once after a resume', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)
+  // Its checks pass, and the resume lands one poll before they settle.
+  seen.bucket = 'pass'
+  await clock.advance(POLL_MS)
+  const mine = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/fresh.json') ?? '{}').watches[0]
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  const held = { ...PENDING_WATCH, headSha: mine.headSha }
+  seen.files.set(STATE, JSON.stringify({ watches: [held], isTurnRunning: false }))
+  seen.session = 's1'
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.filter(p => p.includes('o/r#7'))).toHaveLength(1)
+})
+
+test('a takeover by the poll timer keeps both its own watch and the earlier owner\'s', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+  seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+  seen.session = 's1'
+  await clock.advance(POLL_MS)
+  const saved = JSON.parse(seen.files.get(STATE) ?? '{}')
+  expect(saved.watches).toHaveLength(2)
+  expect(saved.watches.some((w: { number: number }) => w.number === 3)).toBe(true)
+})
+
 test('a /clear that lands while a reload is still starting keeps the saved watches', async ($, on) => {
   const { seen } = world(on)
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
@@ -372,6 +460,28 @@ test('a watch started while a poll reads the saved file is kept by that poll', a
   await clock.advance(POLL_MS)
   const saved = JSON.parse(seen.files.get(STATE) ?? '{}') as { watches: Watch[] }
   expect(saved.watches.map(w => w.number).sort()).toEqual([7, 8])
+})
+
+test('a resume during a poll still wakes the session once and keeps both watches', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  seen.bucket = 'pass'
+  // The first poll sees the checks done; the next one settles them, and the resume lands inside it.
+  await clock.advance(POLL_MS)
+  seen.duringChecks = () => {
+    seen.duringChecks = undefined
+    seen.files.set(OWNER, EARLIER_PROCESS)
+    const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+    seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+    seen.session = 's1'
+  }
+  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  // This load's own PR wakes once; the earlier owner's PR is kept and polled with it.
+  expect(seen.prompts.filter(p => p.includes('o/r#7'))).toHaveLength(1)
+  expect(seen.prompts.filter(p => p.includes('o/r#3'))).toHaveLength(1)
 })
 
 test('a poll in flight when a newer load takes over neither saves nor wakes', async ($, on) => {

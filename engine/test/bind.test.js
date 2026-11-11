@@ -249,7 +249,7 @@ test("a custom code-research tool fills every value from its name and URL", asyn
   assert.equal(values.TOOLS_CODE_RESEARCH_BYPASS_MARKER, "AST_GREP_V2_BYPASS:");
   const match = new RegExp(values.TOOLS_CODE_RESEARCH_MATCH);
   for (const name of ["mcp__ast-grep-v2__search", "mcp__ast_grep_v2__find", "mcp__plugin__astgrepv2_x"]) assert.match(name, match);
-  for (const name of ["Grep", "ast_grep_v2", "mcp__tokensave__search", "mcp__ast grep v2__x"]) assert.doesNotMatch(name, match);
+  for (const name of ["Grep", "ast_grep_v2", "mcp__findwright__search", "mcp__ast grep v2__x"]) assert.doesNotMatch(name, match);
 });
 
 test("a custom tool named after a built-in tool counts only MCP calls", () => {
@@ -377,11 +377,11 @@ const python = spawnSync(process.execPath, ["-e", `
 
 test("the adherence script counts only code searches", { skip: !python && "needs Python 3.8+" }, async () => {
   const a = defaults();
-  a.advanced.codeResearch = "tokensave";
+  a.advanced.codeResearch = "findwright";
   const text = (await run(a)).get(".claude/scripts/research-adherence.py");
   const marker = text.match(/BYPASS = "(.*)"/)[1];
   const cases = [
-    ["tokensave_search", { query: "x" }, "research"],
+    ["mcp__findwright__find", { query: "x" }, "research"],
     ["Grep", { pattern: "foo", path: "src" }, "fallback"],
     ["Grep", { pattern: "foo", glob: "*.md" }, null],
     ["Grep", { pattern: "foo", type: "md" }, null],
@@ -1012,8 +1012,8 @@ test("the tracker decides where the hand-off lives", async () => {
   assertClean(github);
   assert.ok(github.has(".claude/rules/tracker.md"));
   assert.ok(github.has(".github/ISSUE_TEMPLATE/work-item.md"));
-  assert.ok(github.get(".claude/skills/session-start/SKILL.md").includes("tracker.md"));
-  assert.ok(!github.get(".claude/skills/session-close/SKILL.md").includes("-CONTEXT_"));
+  assert.ok(github.get(".claude/skills/start-session/SKILL.md").includes("tracker.md"));
+  assert.ok(!github.get(".claude/skills/close-session/SKILL.md").includes("-CONTEXT_"));
   assert.ok(!github.get(`${STAGING}CLAUDE.md`).includes("ROADMAP.md"));
 
   const a = defaults();
@@ -1022,8 +1022,8 @@ test("the tracker decides where the hand-off lives", async () => {
   assertClean(file);
   assert.ok(!file.has(".claude/rules/tracker.md"));
   assert.ok(!file.has(".github/ISSUE_TEMPLATE/work-item.md"));
-  assert.ok(file.get(".claude/skills/session-close/SKILL.md").includes("MY_PROJECT-CONTEXT_"));
-  assert.ok(!file.get(".claude/skills/session-close/SKILL.md").includes("tracker.md"));
+  assert.ok(file.get(".claude/skills/close-session/SKILL.md").includes("MY_PROJECT-CONTEXT_"));
+  assert.ok(!file.get(".claude/skills/close-session/SKILL.md").includes("tracker.md"));
   assert.ok(file.get(`${STAGING}CLAUDE.md`).includes("ROADMAP.md"));
   // Both keep the project's own session steps, written once.
   assert.ok(github.has(".bindwright/session-steps.md") && file.has(".bindwright/session-steps.md"));

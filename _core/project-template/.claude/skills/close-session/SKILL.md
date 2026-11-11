@@ -1,9 +1,9 @@
 ---
-name: session-close
+name: close-session
 description: Close a work session. Verifies what is really finished, commits, lands the work, cleans up and hands off to the next session. Use when the maintainer asks for it, or when every task of the session is done; never just because the context is filling up.
 ---
 
-# /session-close
+# /close-session
 
 <!-- TOGGLE:code_host_local START -->
 Run the steps in order without asking between them. Stop and ask only before throwing away work that is not in a save point. If `.claude/rules/visual.md` exists and this session changed what people see, do not call that work done until the maintainer has confirmed the visual check.
@@ -86,6 +86,12 @@ Then check the living docs are still current: for each behaviour, name, path, co
 Run `python3 .claude/scripts/research-adherence.py` from the repo root (`python` on Windows). It reads the transcript and compares calls to {{TOOLS_CODE_RESEARCH_NAME}} with plain code searches that carry no bypass marker: Grep and Glob calls, and shell commands that start with a recursive search. Searches of docs, logs and data, and filters on another command's output, do not count. Report its line. Below 70% means the next session starts by finding out why.
 
 <!-- TOGGLE:code_research_first END -->
+<!-- TOGGLE:code_research:findwright START -->
+## FindWright hit rate
+
+When `$HOME/.bindwright/helper/node_modules/bindwright/findwright/cli.mjs` exists and `node --version` shows 22.13 or later, run `node "$HOME/.bindwright/helper/node_modules/bindwright/findwright/cli.mjs" hits` from the repo root; otherwise say the hit rate is not recorded on this computer, and why, and go on. It scores this session's FindWright searches (a hit when the file the session opened next was in the answer), records the figure in `.findwright/hits.jsonl` and prints `{rate, scored, goal, assess}`. Report the rate against the goal (90% unless `.findwright/config.json` sets `goal`). When `assess` is true, the last three sessions all fell short: run the same command with `assess`, explain each cause and suggested change in plain words, and apply a change to `.findwright/config.json` only on the user's yes.
+
+<!-- TOGGLE:code_research:findwright END -->
 ## Project steps
 
 If `.bindwright/session-steps.md` lists "Extra close steps", run them now.

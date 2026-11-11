@@ -1,5 +1,5 @@
-// Bindwright's session-start notice, run from the helper by the repo's
-// /session-start skill from the repo root, with `--plugin <plugin folder>`. At
+// Bindwright's start-session notice, run from the helper by the repo's
+// /start-session skill from the repo root, with `--plugin <plugin folder>`. At
 // most once a day per repo it says when the repo's Bindwright files are older
 // than the plugin (/bindwright:update brings them up), when the helper is not
 // at the plugin's version, or when a newer plugin is out. It asks the network at most once a day, with
@@ -67,8 +67,10 @@ function save(cacheFile, cache, today) {
 // null; `driftFor(repo)` the extras the repo's setup expects that this machine
 // lacks; `helperVersion` is the helper's own version; `cacheFile` remembers
 // the day of the last check, what it found, and the day each repo last saw a notice.
+// `countsFailedAt` is when this repo's last review counts send failed (ms), or null.
 export async function notice({
   cwd, today, cacheFile, pluginVersion, helperVersion = null, fetchLatest, driftFor = async () => [],
+  countsFailedAt = null,
 }) {
   const cache = { checked: null, latest: null, ...readJson(cacheFile) };
   cache.shown = Object.fromEntries(todays(cache.shown, today));
@@ -103,6 +105,12 @@ export async function notice({
     lines.push(`This repo's Bindwright setup expects extras this machine lacks (${drift.join(", ")}): `
       + "/bindwright:join walks through them, and remembers a no.");
   }
+  if (repo && Number.isFinite(countsFailedAt)) {
+    const day = new Date(countsFailedAt).toLocaleDateString("en-CA");
+    lines.push(`This computer shares the review counts, but this repo's last send failed (${day}): `
+      + "the next session start or merge tries again. If this keeps showing, check that gh is signed in "
+      + "and the network is up.");
+  }
   if (lines.length) {
     cache.shown[key] = today;
     dirty = true;
@@ -132,6 +140,15 @@ async function driftOf(root, repo, config) {
   return runSettings(repo, config).drift;
 }
 
+/** When the repo shares its review counts and its last send failed, the time it failed (ms), else null. */
+export function countsFailedAtOf(repo, config) {
+  const state = readState(stateFileIn(config));
+  const entry = repo && state.share ? state.projects[repoKey(repo)] : null;
+  // A repo left out of the counts (no kind) sends nothing, so an old failure no longer matters.
+  const failedAt = entry?.kind ? entry.failedAt : null;
+  return typeof failedAt === "number" ? failedAt : null;
+}
+
 // Starts the opt-in daily counts send for a repo that shares them, in its own
 // process, so the session never waits on gh or the network.
 function startCountsSend(repo, config) {
@@ -147,7 +164,10 @@ function startCountsSend(repo, config) {
 async function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+  let countsFailedAt = null;
   try {
+    // Read before this session's send starts, so a failure it then clears still shows once.
+    countsFailedAt = countsFailedAtOf(findRepo(process.cwd()), config);
     startCountsSend(findRepo(process.cwd()), config);
   } catch {
     // The counts never stand in the way of the notice.
@@ -182,6 +202,7 @@ async function main() {
     helperVersion,
     fetchLatest: () => fetchVersion(url),
     driftFor: (repo) => driftOf(root, repo, config),
+    countsFailedAt,
   });
   if (text) process.stdout.write(`${text}\n`);
 }

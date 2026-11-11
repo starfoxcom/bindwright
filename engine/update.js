@@ -4,7 +4,9 @@
 // templates. update.py is the Python twin; a test runs both on the same cases.
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
@@ -38,6 +40,32 @@ export const OUTCOMES = [
   "updated", "merged", "added", "staged", "unchanged", "conflict", "owned", "deleted", "removed", "removed_edited",
 ];
 
+// Files the templates moved, old path to new. An update merges the repo's copy
+// at the old path, edits included, into the new path and deletes the old file.
+export const RENAMES = {
+  ".claude/skills/session-close/SKILL.md": ".claude/skills/close-session/SKILL.md",
+  ".claude/skills/session-start/SKILL.md": ".claude/skills/start-session/SKILL.md",
+};
+
+// The renames this update carries out, new path to old: the bind last wrote
+// the old path, today's templates have only the new one, and the repo holds
+// nothing at the new path and owns neither.
+function movesFor(theirsAll, pristine, { readRepo, owned }) {
+  const moves = new Map();
+  for (const [from, to] of Object.entries(RENAMES)) {
+    const due = theirsAll.has(to) && !theirsAll.has(from) && from in pristine.files && !(to in pristine.files);
+    if (due && !isOwned(from, owned) && !isOwned(to, owned) && readRepo(to) === null) moves.set(to, from);
+  }
+  return moves;
+}
+
+// A project that owns a file's old path owns its new one too, so the template
+// does not add a second copy beside the project's own.
+function ownsPath(path, owned) {
+  const from = Object.keys(RENAMES).find((old) => RENAMES[old] === path);
+  return isOwned(path, owned) || (from !== undefined && isOwned(from, owned));
+}
+
 function decide(path, { ours, base, theirs }, merge) {
   if (theirs === undefined) {
     if (ours === null) return ["deleted"];
@@ -65,20 +93,31 @@ function decide(path, { ours, base, theirs }, merge) {
 export function planUpdate(rendered, pristine, { readRepo, owned, merge, version }) {
   const theirsAll = repoFiles(rendered);
   const paths = [...new Set([...Object.keys(pristine.files), ...theirsAll.keys()])].sort();
-  const result = { write: [], stage: [], pristine: {} };
+  const result = { write: [], stage: [], pristine: {}, renamed: [], remove: [] };
   for (const outcome of OUTCOMES) result[outcome] = [];
+  const moves = movesFor(theirsAll, pristine, { readRepo, owned });
+  const movedFrom = new Set(moves.values());
   for (const path of paths) {
-    const base = pristine.files[path];
+    if (movedFrom.has(path)) continue;
+    const from = moves.get(path);
+    const base = pristine.files[from ?? path];
     const theirs = theirsAll.get(path);
-    if (isOwned(path, owned)) {
+    if (ownsPath(path, owned)) {
       result.owned.push(path);
       if (theirs !== undefined) result.pristine[path] = theirs;
       continue;
     }
-    const [outcome, text] = decide(path, { ours: readRepo(path), base, theirs }, merge);
+    const ours = readRepo(from ?? path);
+    const [outcome, text] = decide(path, { ours, base, theirs }, merge);
     result[outcome].push(path);
     if (outcome === "updated" || outcome === "merged" || outcome === "added") result.write.push([path, text]);
     if (outcome === "staged" || outcome === "conflict") result.stage.push([STAGING + path, text]);
+    // A moved file the merge leaves as it was, or stages, still lands at its new path.
+    if (from && (outcome === "unchanged" || outcome === "conflict")) result.write.push([path, ours]);
+    if (from && ours !== null) {
+      result.renamed.push([from, path]);
+      result.remove.push(from);
+    }
     if (theirs !== undefined) result.pristine[path] = theirs;
   }
   result.pristine = { version, year: pristine.year, files: result.pristine };
@@ -165,6 +204,17 @@ function put(root, path, text, flag = "w") {
   writeFileSync(target, text, { encoding: "utf8", flag });
 }
 
+// Deletes a moved file's old copy, then its folder once nothing else is in it.
+function removeMoved(root, path) {
+  const target = join(root, ...path.split("/"));
+  rmSync(target, { force: true });
+  try {
+    if (readdirSync(dirname(target)).length === 0) rmdirSync(dirname(target));
+  } catch {
+    // The folder is gone or still holds the project's own files.
+  }
+}
+
 // What sits at a path without following a link: "link", "other" or null.
 function entry(root, path) {
   const stat = lstatSync(join(root, ...path.split("/")), { throwIfNoEntry: false });
@@ -192,17 +242,21 @@ export async function runUpdate(root, { bindWith, version }) {
   // Every check before the first write, so a refusal leaves the repo as it was.
   // A staged copy that already exists is skipped, not written, so it is not checked.
   const freshStaged = plan.stage.map(([path]) => path).filter((path) => entry(root, path) === null);
-  refuseLinks(root, [...plan.write.map(([path]) => path), PRISTINE, ...freshStaged]);
+  refuseLinks(root, [...plan.write.map(([path]) => path), PRISTINE, ...freshStaged, ...plan.remove]);
   const skipped = plan.stage.filter(([path]) => entry(root, path) !== null).map(([path]) => path.slice(STAGING.length));
+  const renamedFrom = Object.fromEntries(Object.entries(RENAMES).map(([from, to]) => [to, from]));
   for (const path of skipped) {
     // The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.
-    if (path in pristine.files) plan.pristine.files[path] = pristine.files[path];
+    // A renamed file's base is still under its old name.
+    const base = path in pristine.files ? path : renamedFrom[path];
+    if (base in pristine.files) plan.pristine.files[path] = pristine.files[base];
     else delete plan.pristine.files[path];
   }
   for (const [path, text] of plan.write) put(root, path, text);
   for (const [path, text] of plan.stage) {
     if (!skipped.includes(path.slice(STAGING.length))) put(root, path, text, "wx");
   }
+  for (const path of plan.remove) removeMoved(root, path);
   put(root, PRISTINE, stateJson(plan.pristine));
-  return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), skipped };
+  return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
 }

@@ -14,7 +14,7 @@ import { python } from "./python.js";
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const needsPython = { skip: !python && "needs Python 3.8+" };
 const ANSWERS = {
-  team: true, client: false, project: { name: "x" }, advanced: { codeResearch: "tokensave", tracker: "github" },
+  team: true, client: false, project: { name: "x" }, advanced: { codeResearch: "findwright", tracker: "github" },
 };
 
 // A set-up repo and two machines' config folders, one per engine run.
@@ -71,7 +71,7 @@ test("a setup round-trips: export, then a teammate's settings, choices and drift
   assert.deepEqual(seen.before.drift, ["session-facts", "tasks"]);
   assert.deepEqual(seen.after.drift, ["session-facts"]);
   assert.deepEqual(seen.after.settings, {
-    codeResearch: { value: "tokensave", from: "project", required: true },
+    codeResearch: { value: "findwright", from: "project", required: true },
     tracker: { value: "file", from: "local", required: false },
   });
   assert.deepEqual(seen.after.ignored, ["local: codeResearch (the project requires it)"]);

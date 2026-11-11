@@ -489,6 +489,29 @@ test("--events installs one entry per event, with no matcher, beside the user's 
   });
 });
 
+test("--block-on-failure sets onFailure on the hook, and leaving it out sets none", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py");
+    const install = (...flags) => home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash", ...flags);
+    assert.equal(install("--block-on-failure").status, 0);
+    assert.equal(settings(dir).hooks.PreToolUse[0].hooks[0].onFailure, "block");
+    assert.equal(install().status, 0);
+    const hook = settings(dir).hooks.PreToolUse[0].hooks[0];
+    assert.ok(!("onFailure" in hook));
+  });
+});
+
+test("a registered hook whose file is gone exits 0 through its launcher", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const { command, args } = settings(dir).hooks.PreToolUse[0].hooks[0];
+    rmSync(join(dir, ".claude", "hooks", "push-guard.py"));
+    const r = spawnSync(command, args, { input: "{}", encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
 test("reinstalling with --events replaces its own entries under every event it names", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "session-title.py");
@@ -529,5 +552,60 @@ test("install-hook refuses both or neither of --matcher and --events, and writes
     assert.match(empty.out.error, /Not a list of event names/);
     assert.equal(existsSync(join(dir, ".claude", "hooks", "session-title.py")), false);
     assert.equal(existsSync(settingsPath(dir)), false);
+  });
+});
+
+test("a per-project mod turns off and back on in the repo's personal settings only", { skip }, () => {
+  withHome((dir) => {
+    const repo = join(dir, "repo");
+    const local = join(repo, ".claude", "settings.local.json");
+    mkdirSync(join(repo, ".claude"), { recursive: true });
+    writeFileSync(local, JSON.stringify({ permissions: { allow: ["Bash(npm test:*)"] } }));
+    const shared = { enabledPlugins: { "tasks@inline": false } };
+    writeFileSync(join(repo, ".claude", "settings.json"), JSON.stringify(shared));
+    const off = home(dir, "project-mod", repo, "ci-watch", "off");
+    assert.equal(off.status, 0, off.stderr);
+    assert.deepEqual(off.out, { settings: local, mod: "ci-watch", on: false, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(local, "utf8")),
+      { permissions: { allow: ["Bash(npm test:*)"] }, enabledPlugins: { "ci-watch@inline": false } });
+    assert.ok(!existsSync(local + ".bak"));
+    assert.ok(!existsSync(settingsPath(dir)));
+    // The shared file's switch counts too.
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: ["ci-watch", "tasks"] });
+    assert.equal(home(dir, "project-mod", repo, "ci-watch", "on").out.changed, true);
+    assert.deepEqual(JSON.parse(readFileSync(local, "utf8")), { permissions: { allow: ["Bash(npm test:*)"] } });
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: ["tasks"] });
+  });
+});
+
+test("turning a mod on outranks the shared file's off with a personal on", { skip }, () => {
+  withHome((dir) => {
+    const repo = join(dir, "repo");
+    const local = join(repo, ".claude", "settings.local.json");
+    mkdirSync(join(repo, ".claude"), { recursive: true });
+    const shared = { enabledPlugins: { "tasks@inline": false } };
+    writeFileSync(join(repo, ".claude", "settings.json"), JSON.stringify(shared));
+    assert.deepEqual(home(dir, "project-mod", repo, "tasks", "on").out,
+      { settings: local, mod: "tasks", on: true, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(local, "utf8")), { enabledPlugins: { "tasks@inline": true } });
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: [] });
+    // Asked again, it keeps that personal on.
+    assert.equal(home(dir, "project-mod", repo, "tasks", "on").out.changed, false);
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: [] });
+  });
+});
+
+test("a computer-wide mod cannot be turned off for one project", { skip }, () => {
+  withHome((dir) => {
+    const repo = join(dir, "repo");
+    mkdirSync(repo);
+    const refused = home(dir, "project-mod", repo, "shared-pc", "off");
+    assert.equal(refused.status, 1, refused.stderr);
+    assert.match(refused.out.error, /shared-pc is not a per-project mod/);
+    assert.ok(!existsSync(join(repo, ".claude")));
+    // A mistyped repo folder is refused, never read as "nothing is off".
+    const missing = home(dir, "project-mods", join(dir, "no-such-repo"));
+    assert.equal(missing.status, 1, missing.stderr);
+    assert.match(missing.out.error, /Not a folder/);
   });
 });

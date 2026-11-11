@@ -172,10 +172,11 @@ export default {
   "lands.item.review": "Revisión con IA en cada PR",
   "lands.item.board": "Ajustes del tablero de trabajo",
   "lands.verb": "Haciendo las preguntas",
-  "lands.say.first": "Primera vez en esta computadora: primero hace las preguntas de la "
-    + "computadora, una sola vez, y luego las del proyecto.",
-  "lands.say.done": "Listo. Cambia las opciones de la computadora cuando quieras con "
-    + "/bindwright:setup global.",
+  "lands.say.first": "Primera vez en esta computadora: empieza con las preguntas de la "
+    + "computadora, una sola vez.",
+  "lands.say.project": "La computadora está lista. Ahora este proyecto: sus reglas, revisiones y mods.",
+  "lands.say.done": "Listo. Corre /bindwright:setup project en cada proyecto nuevo; "
+    + "/bindwright:setup global cambia las opciones de la computadora.",
   "mods.scene.session-facts.facts": "Datos: 14:32 · contexto 41% · plan 38% de 5 horas, 62% de la semana",
   "mods.scene.session-facts.use": "Con 41% de contexto usado, la tarea cabe en esta sesión.",
   "mods.scene.ci-watch.wake": "Terminaron las revisiones, así que ci-watch despertó la sesión. "
@@ -278,12 +279,11 @@ export default {
     + "2.1.287 o más reciente y Node.",
 
   "settings.code-research.title": "Búsqueda de código",
-  "settings.code-research.text": "<a href=\"https://github.com/aovestdipaperino/tokensave\">tokensave</a> "
-    + "indexa tu código para que "
-    + "las respuestas salgan como un cuarto más rápido en proyectos grandes, "
-    + "con unos cuantos puntos porcentuales más de tokens. "
-    + "none usa la búsqueda integrada: igual de precisa y más barata, pero más lenta.",
-  "settings.code-research.value": "tokensave",
+  "settings.code-research.text": "<a href=\"https://github.com/starfoxcom/findwright\">findwright</a> "
+    + "indexa cada archivo que el proyecto sigue, código, docs y configuración por igual, "
+    + "y responde preguntas en lenguaje normal, nombres y búsquedas con regex, con respuestas cortas. "
+    + "Viene con Bindwright. none usa la búsqueda integrada: sin índice, y más lenta.",
+  "settings.code-research.value": "findwright",
   "settings.work-language.title": "Idioma de trabajo",
   "settings.work-language.text": "El idioma de las respuestas, los mensajes de commit y los comentarios del código, "
     + "inglés o español. Los archivos del setup quedan en inglés: solo el asistente los lee.",

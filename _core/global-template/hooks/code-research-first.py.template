@@ -17,8 +17,8 @@ Bypass paths:
   - {{TOOLS_CODE_RESEARCH_NAME}} not available → hook exits 0 (allows the tool).
   - Searching non-code content (markdown, binaries, .gitignored, etc.) →
     add `# {{TOOLS_CODE_RESEARCH_BYPASS_MARKER}} <reason>` inside the Bash
-    command. The hook lets it through. For Grep/Glob tool calls there is no
-    inline escape — briefly explain the bypass in chat and re-issue.
+    command. The hook lets it through. The Grep and Glob tools have no
+    bypass: the same search goes through Bash with the marker.
 
 Generated from `_core/global-template/hooks/code-research-first.py.template`
 at bind time, from the `{{TOOLS_CODE_RESEARCH_NAME}}` profile in
@@ -195,7 +195,7 @@ def main() -> None:
         "  2. You're searching non-code content (markdown, binaries, .gitignored).\n"
         f"  3. {DISPLAY_NAME}'s status check shows it's unavailable for the scope you need.\n\n"
         f"Bypass (Bash only): include `# {BYPASS_MARKER} <reason>` in the command.\n"
-        f"Bypass (Grep/Glob tools): briefly explain in chat why {DISPLAY_NAME} doesn't fit, then re-issue."
+        "The Grep and Glob tools have no bypass: run the same search with grep or rg in Bash, with the marker."
     )
     print(msg, file=sys.stderr)
     sys.exit(2)

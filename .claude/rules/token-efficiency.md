@@ -2,7 +2,7 @@
 
 ## Find before you read
 
-Locate a symbol before opening a file, then read only the function or section you need. `/find` (`.claude/skills/find/SKILL.md`) holds the lookup sequence for this project's code-research tool, **tokensave**, and when to fall back to Grep, Glob and Read.
+Locate a symbol before opening a file, then read only the function or section you need. `/find` (`.claude/skills/find/SKILL.md`) holds the lookup sequence for this project's code-research tool, **FindWright**, and when to fall back to Grep, Glob and Read.
 
 Enable an MCP server only while the work needs it. Every enabled server adds its tool definitions to every message.
 
@@ -44,7 +44,7 @@ When everything is green, merge per `git.md` § Merging. On a red check, read th
 
 ## Long sessions
 
-An approaching auto-compaction is no reason to stop, wrap up or close the session: keep working through it, mid-task included. Run the session-close ritual only when the maintainer asks for it, or when every task of the session is done and nothing is left to work on.
+An approaching auto-compaction is no reason to stop, wrap up or close the session: keep working through it, mid-task included. Run the close-session ritual only when the maintainer asks for it, or when every task of the session is done and nothing is left to work on.
 
 Without a hand-off that carries the work across a compaction (the `compact-handoff` mod is one), keep the task list current as the context fills, so the compaction's summary starts from where the work stands.
 

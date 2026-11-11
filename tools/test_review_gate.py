@@ -250,6 +250,7 @@ class Verdict(unittest.TestCase):
             (head + "Post a binary 🔴/🟢 verdict", "block", "Post a binary 🔴/🟢 verdict", None),
             (head + "Post a binary verdict 🟢 or not", "missing", "", None),
             ("**Code Review - claude-code-templates**\n🟢 LGTM", "pass", "🟢 LGTM", None),
+            ("## code review — Claude-Code-Templates\n🟢 LGTM", "pass", "🟢 LGTM", None),
             # A dropped glyph next to a 🟢 elsewhere still blocks.
             (head + "**Blocking** — must fix\nOnce fixed, this is 🟢 LGTM.", "block",
              "**Blocking** — must fix", over),

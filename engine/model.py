@@ -13,12 +13,12 @@ REVIEW_MODELS = {"routine": "claude-fable-5-2", "deep": "claude-fable-5-2", "bac
 REVIEW_EFFORTS = {"routine": "low", "deep": "medium", "backup": "high"}
 
 CODE_RESEARCH_TOOLS = {
-    # match: regex over tool-call names, used by the session-close adherence count.
-    "tokensave": {
-        "name": "tokensave",
-        "url": "https://github.com/aovestdipaperino/tokensave",
-        "bypass": "TOKENSAVE_BYPASS:",
-        "match": "tokensave",
+    # match: regex over tool-call names, used by the close-session adherence count.
+    "findwright": {
+        "name": "FindWright",
+        "url": "https://github.com/starfoxcom/findwright",
+        "bypass": "FINDWRIGHT_BYPASS:",
+        "match": "findwright",
     },
     "none": {"name": "none", "url": "(no homepage)", "bypass": None, "match": None},
     # A tool the person names: values_for fills all four from codeResearchCustom.
@@ -27,6 +27,7 @@ CODE_RESEARCH_TOOLS = {
 # Tools no longer offered. An answers file saved while one was offered is read
 # as a custom tool with its old name and homepage (expand_answers).
 REMOVED_CODE_RESEARCH_TOOLS = {
+    "tokensave": {"name": "tokensave", "url": "https://github.com/aovestdipaperino/tokensave"},
     "lsp-plugins": {"name": "Claude Code LSP plugins", "url": "https://code.claude.com/docs/en/discover-plugins"},
     "codegraph": {"name": "CodeGraph", "url": "https://github.com/colbymchenry/codegraph"},
     "serena": {"name": "Serena", "url": "https://github.com/oraios/serena"},
@@ -388,6 +389,18 @@ def expand_answers(saved):
     project, advanced = a.pop("project", UNDEFINED), a.pop("advanced", UNDEFINED)
     return dict(a, project=_fill_keys(project, base["project"]),
                 advanced=map_removed_tool(_fill_keys(advanced, base["advanced"])))
+
+
+# Removed tools that installed a search hook of their own: one kept as a custom tool gets no Bindwright hook beside it.
+REMOVED_TOOLS_WITH_OWN_HOOK = ["tokensave"]
+
+
+def brings_own_hook(advanced):
+    """Whether the answers keep a removed tool that brings its own search hook."""
+    custom = advanced.get("codeResearchCustom") if isinstance(advanced, dict) else None
+    name = custom.get("name") if isinstance(custom, dict) else None
+    return (isinstance(advanced, dict) and advanced.get("codeResearch") == "custom"
+            and any(REMOVED_CODE_RESEARCH_TOOLS[k]["name"] == name for k in REMOVED_TOOLS_WITH_OWN_HOOK))
 
 
 def map_removed_tool(advanced):

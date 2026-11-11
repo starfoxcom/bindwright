@@ -114,7 +114,7 @@ def roadmap_problems(text):
 def _roadmap_check(root):
     path = os.path.join(root, "ROADMAP.md")
     if not os.path.exists(path):
-        return _check("roadmap", True, "No ROADMAP.md yet; the next /session-close writes it.")
+        return _check("roadmap", True, "No ROADMAP.md yet; the next /close-session writes it.")
     try:
         # newline="" hands every line end through as written, as doctor.js reads it.
         with open(path, encoding="utf-8", newline="") as f:

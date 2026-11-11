@@ -51,10 +51,10 @@ ENGINE_FILES = [
     "package.json", "core-files.json", "cli.js",
     "bind.js", "model.js", "render.js", "setupcode.js", "apply.js", "keep.js", "update.js",
     "layers.js", "share.js", "doctor.js", "report.js", "audit.js", "remove.js", "staging.js", "releases.js",
-    "exclude.js",
+    "exclude.js", "propose.js",
     "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py",
     "layers.py", "share.py", "doctor.py", "report.py", "audit.py", "remove.py", "staging.py", "releases.py",
-    "exclude.py",
+    "exclude.py", "propose.py",
     "home.py", "authored.py",
 ]
 # The ~/.claude templates bind.js and bind.py read (globalFiles).
@@ -74,7 +74,7 @@ DESCRIPTION = "The Bindwright plugin, from its GitHub releases."
 HELPER_DESCRIPTION = "The files the Bindwright plugin runs on your computer: its setup engine, templates and scripts."
 HOMEPAGE = "https://starfoxcom.github.io/bindwright/"
 # What npm installs from the helper folder, beside package.json, README.md and LICENSE.
-HELPER_FILES = ["engine", "_core", "hooks", "VERSION", "CHANGELOG.md"]
+HELPER_FILES = ["engine", "_core", "hooks", "findwright", "workflows", "VERSION", "CHANGELOG.md"]
 # A fixed date for every zip entry, the earliest a zip can hold.
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
 # The largest stored deflate block.

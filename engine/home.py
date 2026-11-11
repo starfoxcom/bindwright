@@ -6,6 +6,7 @@ Standard library, Python 3.8+.
     python engine/home.py find-python
     python engine/home.py install-hook FILE --python PATH --matcher "Bash|PowerShell"
     python engine/home.py install-hook FILE --python PATH --events SessionStart,UserPromptSubmit
+    python engine/home.py install-hook FILE --python PATH --matcher Bash --block-on-failure
     python engine/home.py remove-hook NAME.py
     python engine/home.py list-hooks
     python engine/home.py allow RULE          /  disallow RULE
@@ -15,10 +16,19 @@ Standard library, Python 3.8+.
     python engine/home.py add-style FILE      (copies the output style, turns it on)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
+    python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
+    python engine/home.py project-mod ROOT NAME on|off
+
+project-mod writes the repo's personal .claude/settings.local.json, never
+~/.claude, and keeps no .bak there: the repo's ignore list covers that file,
+not a backup beside it.
 
 install-hook takes exactly one of --matcher (an entry under PreToolUse) or
---events (one entry per named event, with no matcher). remove-hook and
-list-hooks cover every event under hooks.
+--events (one entry per named event, with no matcher). --block-on-failure sets
+"onFailure": "block" on the hook, so a hook that crashes, times out or cannot
+start (its interpreter removed) blocks the tool call; a removed hook file still
+lets it through. Use it for a guard, never for a hook that only adds context.
+remove-hook and list-hooks cover every event under hooks.
 
 Each prints one line of JSON, {"error": message} with exit status 1 on
 failure. `--home DIR` stands in for the home folder (tests). Every edit of
@@ -35,10 +45,14 @@ import sys
 
 from apply import _is_link
 
-# Runs the hook file by path. A missing file then fails with exit 1, which the
-# CLI reports and moves past; a plain `python FILE` exits 2, which blocks
-# every command. -I keeps the project folder off the import path.
-LAUNCHER = "import runpy, sys; runpy.run_path(sys.argv[1], run_name='__main__')"
+# Runs the hook file by path, and exits 0 when the file is gone, so a
+# registration whose file was removed lets calls through. A hook that fails
+# to run exits 1, which its entry's onFailure blocks. -I keeps the project
+# folder off the import path.
+LAUNCHER = (
+    "import os, runpy, sys; "
+    "os.path.isfile(sys.argv[1]) and runpy.run_path(sys.argv[1], run_name='__main__')"
+)
 
 # Prints the interpreter only when it is 3.8+ and not inside a virtual or a
 # conda environment: the hooks serve every project, so they must not depend
@@ -101,10 +115,10 @@ def _claude(home):
     return os.path.join(home, ".claude")
 
 
-def _load(home):
-    path = os.path.join(_claude(home), "settings.json")
+def _read_settings(path):
+    """The JSON object in a settings file, {} when the file is missing."""
     if not os.path.exists(path):
-        return path, {}
+        return {}
     with open(path, encoding="utf-8-sig") as fh:
         try:
             data = json.load(fh)
@@ -112,7 +126,12 @@ def _load(home):
             raise HomeError("%s is not valid JSON; fix it before running setup again" % path)
     if not isinstance(data, dict):
         raise HomeError("%s does not hold a JSON object" % path)
-    return path, data
+    return data
+
+
+def _load(home):
+    path = os.path.join(_claude(home), "settings.json")
+    return path, _read_settings(path)
 
 
 def _section(data, key, kind, path):
@@ -186,6 +205,14 @@ def _event_lists(data, path):
     return [entries for entries in hooks.values() if entries is not None]
 
 
+def _flag(argv, name):
+    """True when the bare flag `name` is in argv; it is removed from argv."""
+    if name not in argv:
+        return False
+    argv.remove(name)
+    return True
+
+
 def _event_names(events):
     """The event names in a comma-separated list, each once and in order."""
     names = [name.strip() for name in events.split(",")]
@@ -212,18 +239,21 @@ def _hook_command(python):
     return python
 
 
-def _launcher_hook(python, target):
+def _launcher_hook(python, target, block_on_failure=False):
     """The hook that runs `target` through the launcher."""
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
     # A bare name follows PATH, so the hook survives the install it came from moving.
-    return {
+    hook = {
         "type": "command", "command": _hook_command(python),
         "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
     }
+    if block_on_failure:
+        hook["onFailure"] = "block"
+    return hook
 
 
-def install_hook(home, file, python, matcher=None, events=None):
+def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
     name = os.path.basename(file)
     if not name.endswith(".py"):
         raise HomeError("A hook is a .py file: " + file)
@@ -241,7 +271,7 @@ def install_hook(home, file, python, matcher=None, events=None):
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
-        entry["hooks"] = [_launcher_hook(python, target)]
+        entry["hooks"] = [_launcher_hook(python, target, block_on_failure)]
         entries.append(entry)
     _save(path, data)
     return {"installed": target, "settings": path}
@@ -435,6 +465,63 @@ def remove_style(home, name):
     return {"removed": target, "deleted_file": deleted, "turned_off": turned_off, "outputStyle": style}
 
 
+# The mods a project may turn off for itself alone. The others act for the whole computer
+# (shared-pc's line for heavy work, usage-guard's pause, the session-facts line), so one
+# project turning them off would break them for every other.
+PROJECT_MODS = ("ci-watch", "tasks", "skill-check")
+# The engine names a mod loaded from CLAUDE_CODE_PLUGIN_DIRS `<name>@inline`.
+INLINE = "@inline"
+
+
+def _repo_folder(root):
+    if not os.path.isdir(root):
+        raise HomeError("Not a folder: " + root)
+    return root
+
+
+def project_mods(root):
+    """The per-project mods turned off in `root`, merged as the engine merges the shared
+    .claude/settings.json and then the personal .claude/settings.local.json."""
+    is_on = {}
+    for name in ("settings.json", "settings.local.json"):
+        path = os.path.join(_repo_folder(root), ".claude", name)
+        plugins = _read_settings(path).get("enabledPlugins")
+        if not isinstance(plugins, dict):
+            continue
+        for key, value in plugins.items():
+            if key.endswith(INLINE) and isinstance(value, bool):
+                is_on[key[:-len(INLINE)]] = value
+    return {"off": [name for name in PROJECT_MODS if is_on.get(name) is False]}
+
+
+def set_project_mod(root, name, state):
+    """Turns a per-project mod off (or back on) in `root`'s personal .claude/settings.local.json."""
+    if name not in PROJECT_MODS:
+        raise HomeError("%s is not a per-project mod; those are %s" % (name, ", ".join(PROJECT_MODS)))
+    if state not in ("on", "off"):
+        raise HomeError("Use on or off, not " + state)
+    path = os.path.join(_repo_folder(root), ".claude", "settings.local.json")
+    data = _read_settings(path)
+    plugins = _section(data, "enabledPlugins", dict, path)
+    key = name + INLINE
+    before = plugins.get(key)
+    shared = _read_settings(os.path.join(root, ".claude", "settings.json")).get("enabledPlugins")
+    is_off_for_team = isinstance(shared, dict) and shared.get(key) is False
+    # On is the mod's own default, so it writes true only to outrank the shared file's false.
+    if state == "off":
+        plugins[key] = False
+    elif is_off_for_team:
+        plugins[key] = True
+    else:
+        plugins.pop(key, None)
+    if not plugins:
+        del data["enabledPlugins"]
+    changed = plugins.get(key) != before
+    if changed:
+        _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return {"settings": path, "mod": name, "on": state == "on", "changed": changed}
+
+
 def _work_language_rule(home):
     return os.path.abspath(os.path.join(_claude(home), "rules", "work-language.md"))
 
@@ -491,18 +578,23 @@ def run(argv):
     home = _option(argv, "--home") or os.path.expanduser("~")
     python, matcher = _option(argv, "--python"), _option(argv, "--matcher")
     events = _option(argv, "--events")
+    block_on_failure = _flag(argv, "--block-on-failure")
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     one = args[0] if len(args) == 1 else None
     if cmd == "find-python" and not args:
         return find_python()
     if cmd == "install-hook" and one and python:
-        return install_hook(home, one, python, matcher or None, events or None)
+        return install_hook(home, one, python, matcher or None, events or None, block_on_failure)
     if cmd == "list-hooks" and not args:
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
+    if cmd == "project-mods" and one:
+        return project_mods(one)
+    if cmd == "project-mod" and len(args) == 3:
+        return set_project_mod(*args)
     raise HomeError("Usage: see the top of engine/home.py")
 
 

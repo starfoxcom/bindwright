@@ -1,9 +1,9 @@
 ---
-name: session-start
+name: start-session
 description: Start a work session. Reads the project state and git state, then proposes a plan and waits for approval. Use at the start of every session, or when the user says "session start", "let's start" or "ready to work".
 ---
 
-# /session-start
+# /start-session
 
 Planning only. Create no branches and change no files in this turn, apart from the session's purpose note in step 4 where it applies.
 
@@ -50,7 +50,7 @@ After the fetch, check each Now item in `ROADMAP.md` that names a branch: it is 
 
 Then run the extra start steps, if any.
 
-Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude config folder (`$CLAUDE_CONFIG_DIR`, or `~/.claude`), take the `bindwright` install that applies here: the one whose `projectPath` is this repo root, otherwise the one with `scope` `managed` or `user`; never one whose `projectPath` names another folder. Skip the step when the most specific settings file that sets that plugin's `enabledPlugins` entry (the managed settings an administrator installs, then `.claude/settings.local.json`, then `.claude/settings.json`, then `settings.json` in the config folder) sets it to `false`: a plugin turned off in `/plugin` stays installed. Otherwise run `node "$HOME/.bindwright/helper/node_modules/bindwright/hooks/notice.mjs" --plugin "<installPath>"` from the repo root. At most once a day it prints a line when the plugin, its helper or this repo's Bindwright files are behind; put any line it prints at the top of the report. It prints nothing otherwise. Run it outside the Bash sandbox when one is on: inside it the opt-in counts send cannot reach the network. A missing or unreadable file, plugin, helper or Node skips the step without a word.
+Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude config folder (`$CLAUDE_CONFIG_DIR`, or `~/.claude`), take the `bindwright` install that applies here: the one whose `projectPath` is this repo root, otherwise the one with `scope` `managed` or `user`; never one whose `projectPath` names another folder. Skip the step when the most specific settings file that sets that plugin's `enabledPlugins` entry (the managed settings an administrator installs, then `.claude/settings.local.json`, then `.claude/settings.json`, then `settings.json` in the config folder) sets it to `false`: a plugin turned off in `/plugin` stays installed. Otherwise run `node "$HOME/.bindwright/helper/node_modules/bindwright/hooks/notice.mjs" --plugin "<installPath>"` from the repo root. At most once a day it prints a line when the plugin, its helper or this repo's Bindwright files are behind; put any line it prints at the top of the report. It prints nothing otherwise. Run it outside the Bash sandbox when one is on: inside it the opt-in counts send cannot reach the network. A missing or unreadable file, plugin, helper or Node skips the step without a word, with one exception: when a `bindwright` install applies here and is not turned off, the helper is missing, and `bindwright/counts.json` in the Claude config folder holds `"share": true` with an entry for this repo whose `kind` is set, put one line at the top of the report instead: this computer turned the review counts on, but they are not being sent while Bindwright's helper is missing, and `/bindwright:setup` installs it again.
 
 ## 3. Report, in this order
 

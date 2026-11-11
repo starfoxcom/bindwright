@@ -6,6 +6,34 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.3.0] — 2026-11-11
+
+v3.3.0 replaces tokensave with FindWright, an adaptive code index that ships inside the helper, lets per-project mods be switched off in one project, and renames the session skills to `/start-session` and `/close-session`.
+
+### Added
+
+- **Mods can be turned off for one project, and setup has a project part of its own** (#767). `ci-watch`, `tasks` and `skill-check` can be switched off in a single project while every other project keeps them: a project with no CI checks has nothing for `ci-watch` to watch. The switch is the CLI's own `enabledPlugins` setting in the project's personal `.claude/settings.local.json`; the other seven mods act for the whole computer and stay computer choices. A first `/bindwright:setup` now asks the computer choices, then offers to set up the current project. The new `/bindwright:setup project` asks the project questions plus which per-project mods run there, with `ci-watch` off by default where the project has no GitHub CI, and `/bindwright:join` asks the same. `/mods` marks the mods the current project turned off.
+- **Setup suggests the merge for files a repo already has** (#661). A new engine command, `--propose-merge`, compares each staged file with the repo's copy and prints a suggestion without changing anything: for JSON settings the permission lists unioned, missing hooks appended and every clashing key listed with both values; for Markdown the sections to add, the ones that differ and the ones only the repo has. Setup's merge step, and `/bindwright:update` for files it has no earlier version of, read that suggestion against the repo, recommend a choice for each clash and save only after a yes.
+- **`/bindwright:review-trial` compares models for the repo's AI review on its own history** (#732). It builds the cases from merged pull requests the review gate commented on, offers only the models the user's plan includes (a Fable candidate on Pro only after a yes, since it bills credits), shows how many reviews and judge runs it will start before anything runs, and recommends whether to change `.github/review-gate.yml`. A light run (4 pull requests, one round, one judge) is the default; the full best-of-three with two judges is an option.
+- **The `runners` row flags data growth** (#728). It adds `+X GB in a week` when the data inside a WSL runner's disk grew by 5 GB or more over the last full week, which the gap-only `compact` hint missed. `/bindwright:runners` scopes its log pruning to each job's own runner, offers to prune the review jobs' package cache and old CLI versions in the runner account's home, and says how to register a runner again after the repo is renamed.
+- **Session start says when the review counts are on but not going out** (#741). The notice names a repo whose last counts send failed, and when the helper is missing on a computer that turned the counts on, `/start-session` says so and points at `/bindwright:setup`, instead of skipping its check without a word.
+- **The `runners` row says when a Start press failed** (#755). A Start command that cannot launch, exits non-zero or runs past its 30 seconds shows `start failed` on the row until the runners come up, instead of the row waiting on runners that never start.
+
+### Changed
+
+- **FindWright replaces tokensave as setup's code-search tool.** FindWright ships inside the helper, so nothing extra is installed: it indexes every file a project tracks (code, Markdown, config, templates), answers plain-English questions, names and regex searches, and keeps its index current on every call. Its meaning search uses a 32 MB static code model, downloaded once and checked against a pinned SHA-256, with no inference runtime. It needs Node 22.13 or later. A project whose saved answers name tokensave keeps working as a custom tool until it picks FindWright, and setup offers to take tokensave's hook and server out. A setup code from the page that names tokensave is refused, like codes naming earlier removed tools: make a new one.
+- **The session skills are `/start-session` and `/close-session`** (#774). With the verb first, `/st` and `/cl` complete them; the shared `session-` prefix needed nearly the whole name. `/bindwright:update` moves a project's two skill files to the new names with its own edits merged in, and reports them under `renamed`. `usage-guard` still runs `/session-close` in a project not updated yet, and its notices name both commands. A `skill-contracts.json` made from the old example names the skills by their old names, so rename its two keys.
+- **`/bindwright:review-trial` and `/bindwright:runners` run only when typed** (#765). The first spends model time and the second installs software, so neither starts unless the user asks, and their descriptions no longer sit in every session's context. `/bindwright:doctor` and `/bindwright:report` can still be started by the session when something breaks.
+- **The guard hooks block a command when they crash or time out** (#679). The attribution and push guards set Claude Code's `onFailure: block` (CLI 2.1.295+): a guard that crashes, times out or exits with a code other than 0 or 2 blocks the command instead of letting it through. A repo whose setup was removed or half-installed (no launcher, hook file or Python) still lets commands through, with an explicit exit 0. A guard in `~/.claude` whose Python was removed cannot start, so it blocks every shell command, setup's included, until that Python is back or its entry is deleted from `~/.claude/settings.json` in a text editor. `/bindwright:update` brings the change to existing projects; the guards in `~/.claude` get it on their next install.
+
+### Removed
+
+- **The `architecture-graph` skill template** (#769). No setup has shipped it since v2.0.0, so the template, its entry in the engine's file list and the lines that kept it out of every setup are gone. The architecture pattern rules stay.
+
+### Fixed
+
+- **The review gate finds the routine review whatever the case of its heading** (#716). A review headed `## code review — My-Repo` was read as missing and spent the next attempt. `review-tiers.md` also says how the maintainer recovers when a broken gate script or gate settings file lands on a protected branch, and the runners guide says what the review loses when a Linux runner cannot download Node.
+
 ## [v3.2.0] — 2026-11-10
 
 v3.2.0 moves the review tiers to Fable 5.2, names every session after its project from one computer-wide setting, and lets self-hosted runners without a Linux Node run the reviews in full.

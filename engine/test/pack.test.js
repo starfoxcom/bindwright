@@ -44,6 +44,8 @@ test("the helper binds what the repo's engine binds, and the plugin ships no cod
     assert.equal(pkg.dependencies, undefined);
     assert.equal(pkg.scripts, undefined);
     assert.ok(existsSync(join(helper, "hooks", "counts.mjs")));
+    assert.ok(existsSync(join(helper, "workflows", "review-trial.js")));
+    assert.ok(pkg.files.includes("workflows"));
 
     // Every path a skill names, in the plugin or the helper, is in that pack.
     for (const name of readdirSync(join(out, "skills"))) {
@@ -58,7 +60,7 @@ test("the helper binds what the repo's engine binds, and the plugin ships no cod
     const team = defaults({ team: true, client: true });
     // Every template family: pre-commit, architecture, the research hook and the home guards.
     team.advanced = {
-      ...team.advanced, precommit: "husky", architecture: "hexagonal", codeResearch: "tokensave", hookLocation: "home",
+      ...team.advanced, precommit: "husky", architecture: "hexagonal", codeResearch: "findwright", hookLocation: "home",
     };
     for (const answers of [defaults(), team]) {
       const args = ["--code", encodeSetupCode(answers), "--year", "2026"];

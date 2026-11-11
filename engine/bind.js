@@ -3,7 +3,9 @@
 // browser, fs in Node), so the same code runs in both.
 
 import { renderTemplate, fillPlaceholders } from "./render.js";
-import { validate, flagsFor, choicesFor, valuesFor, CHOICE_OPTIONS, DEFERRED, LICENSES } from "./model.js";
+import {
+  validate, flagsFor, choicesFor, valuesFor, bringsOwnHook, CHOICE_OPTIONS, DEFERRED, LICENSES,
+} from "./model.js";
 
 const CORE = "_core/project-template/";
 
@@ -50,7 +52,6 @@ function included(path, a, flags) {
   const github = adv.tracker === "github";
   if (path.startsWith("precommit/")) return false;
   if (path.startsWith(".claude/rules/architecture/")) return false;
-  if (path.startsWith(".claude/skills/architecture-graph/")) return false;
   // Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
   // `.template` sources match too; the scripts and the size-check folder run anywhere.
   if (!flags.code_host_github && GITHUB_ONLY.some((p) => path.startsWith(p))) return false;
@@ -152,7 +153,7 @@ async function globalFiles(a, ctx, readFile) {
   }
   const profiles = JSON.parse(await readFile(`${GLOBAL_CORE}hooks/code-research-profiles.json`));
   const hook = profiles[a.advanced.codeResearch].hook;
-  if (hook.source === "bindwright") {
+  if (hook.source === "bindwright" && !bringsOwnHook(a.advanced)) {
     // The custom profile's fields name the tool through placeholders of their own.
     const field = (k) => fillPlaceholders(hook[k], ctx.values, ctx.deferred, `profile hook ${k}`);
     const values = {

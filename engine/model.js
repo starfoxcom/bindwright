@@ -9,12 +9,12 @@ export const REVIEW_MODELS = { routine: "claude-fable-5-2", deep: "claude-fable-
 export const REVIEW_EFFORTS = { routine: "low", deep: "medium", backup: "high" };
 
 export const CODE_RESEARCH_TOOLS = {
-  // match: regex over tool-call names, used by the session-close adherence count.
-  tokensave: {
-    name: "tokensave",
-    url: "https://github.com/aovestdipaperino/tokensave",
-    bypass: "TOKENSAVE_BYPASS:",
-    match: "tokensave",
+  // match: regex over tool-call names, used by the close-session adherence count.
+  findwright: {
+    name: "FindWright",
+    url: "https://github.com/starfoxcom/findwright",
+    bypass: "FINDWRIGHT_BYPASS:",
+    match: "findwright",
   },
   none: { name: "none", url: "(no homepage)", bypass: null, match: null },
   // A tool the person names: valuesFor fills all four from codeResearchCustom.
@@ -23,6 +23,7 @@ export const CODE_RESEARCH_TOOLS = {
 // Tools no longer offered. An answers file saved while one was offered is read
 // as a custom tool with its old name and homepage (expandAnswers).
 const REMOVED_CODE_RESEARCH_TOOLS = {
+  tokensave: { name: "tokensave", url: "https://github.com/aovestdipaperino/tokensave" },
   "lsp-plugins": { name: "Claude Code LSP plugins", url: "https://code.claude.com/docs/en/discover-plugins" },
   codegraph: { name: "CodeGraph", url: "https://github.com/colbymchenry/codegraph" },
   serena: { name: "Serena", url: "https://github.com/oraios/serena" },
@@ -303,6 +304,16 @@ export function expandAnswers(saved) {
   const base = defaults({ team: rest.team, client: rest.client, isPrivate: rest.private });
   const filled = fillKeys(advanced, base.advanced);
   return { ...rest, project: fillKeys(project, base.project), advanced: mapRemovedTool(filled) };
+}
+
+// Removed tools that installed a search hook of their own: one kept as a custom tool gets no Bindwright hook beside it.
+const REMOVED_TOOLS_WITH_OWN_HOOK = ["tokensave"];
+
+/** Whether the answers keep a removed tool that brings its own search hook. */
+export function bringsOwnHook(advanced) {
+  const name = isObject(advanced?.codeResearchCustom) ? advanced.codeResearchCustom.name : undefined;
+  const isKept = (k) => REMOVED_CODE_RESEARCH_TOOLS[k].name === name;
+  return advanced?.codeResearch === "custom" && REMOVED_TOOLS_WITH_OWN_HOOK.some(isKept);
 }
 
 export function mapRemovedTool(advanced) {

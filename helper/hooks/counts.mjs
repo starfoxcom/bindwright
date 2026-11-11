@@ -412,11 +412,11 @@ function isDue(entry, current) {
   return current.getTime() - entry.failedAt >= RETRY_GAP_IN_MILLISECONDS;
 }
 
-// What a send the counter took, or found already counted, leaves in the entry: the next
-// send waits a cooldown, and the old day field is cleared.
+// What a send that ended well (taken, already counted, or nothing to count) leaves in the
+// entry: the next send waits a cooldown, and the old day field and any failure are cleared.
 function cooldownFrom(current) {
   const nextSendAt = new Date(current.getTime() + SEND_COOLDOWN_IN_MILLISECONDS).toISOString();
-  return { nextSendAt, lastSendDay: null };
+  return { nextSendAt, lastSendDay: null, failedAt: null };
 }
 
 // What the counter's answer changes in the repo's entry. A 409 means an earlier
@@ -454,16 +454,17 @@ export async function send({
   const entry = state.share ? state.projects[key] : undefined;
   const current = now();
   if (!entry?.kind || !isDue(entry, current)) return;
-  const batch = await planWindow({
-    since: entry.since,
-    current,
-    backfill: entry.backfill === true,
-    ghJson,
-    cwd: key,
-  }).catch(() => null);
+  // A gh that fails (signed out, missing, offline) is a failed send too, so session start can name it.
+  const failed = () => changeProject(stateFile, key, { failedAt: current.getTime() });
+  let batch;
+  try {
+    batch = await planWindow({ since: entry.since, current, backfill: entry.backfill === true, ghJson, cwd: key });
+  } catch {
+    return failed();
+  }
   if (!batch) return;
   const prs = await listPrs(batch.search, "number,labels,comments", key, ghJson).catch(() => null);
-  if (!prs) return;
+  if (!prs) return failed();
   const counts = countPrs(prs);
   if (Object.values(counts).every((count) => count === 0)) {
     return changeProject(stateFile, key, { since: batch.nextSince, ...cooldownFrom(current) });

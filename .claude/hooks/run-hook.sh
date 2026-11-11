@@ -2,23 +2,21 @@
 # Starts one of this repo's guard hooks: sh run-hook.sh <name>
 # Claude Code pipes the tool call to stdin as JSON; the hook reads it there.
 #
-# The settings entry tests that this file exists before running it: dash,
-# the sh on Debian and Ubuntu, exits 2 when it cannot open its script, and
-# exit 2 blocks the tool call. A branch without this file, checked out in a
-# session started with it, would otherwise block every command.
-#
-# The hook is skipped, and the tool call goes ahead, when:
+# The tool call goes ahead on purpose (exit 0) when:
 # - ~/.claude/hooks/<name>.py exists and ~/.claude/settings.json names it
 #   outside a permission rule, so the user's own copy runs and the check
 #   never runs twice (a registration whose file is gone does not count);
-# - no Python 3.8+ outside a virtual environment is on PATH.
+# - no Python 3.8+ outside a virtual environment is on PATH;
+# - this folder holds no hook file <name>.py.
+#
+# A hook that starts and then crashes, times out or exits with a code other
+# than 0 or 2 is not handled here: the settings entry sets "onFailure":
+# "block", so Claude Code blocks the tool call.
 #
 # A committed file cannot name the interpreter by absolute path, so this
 # looks for one. A virtual environment's interpreter is refused because it
 # can belong to the project. Python runs with -I, so the project's own
-# modules cannot replace the ones the hook imports, and through runpy, so a
-# missing hook file is an ordinary error (the call goes ahead) instead of
-# Python's exit 2, which would block every call.
+# modules cannot replace the ones the hook imports.
 
 name=$1
 hook="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/$name.py"
@@ -34,6 +32,8 @@ if [ -f "$HOME/.claude/hooks/$name.py" ] && [ -f "$settings" ] &&
   grep -E "$path" "$settings" | grep -Evq "\"[A-Za-z]+\\(([^\"\\\\]|\\\\.)*$path"; then
   exit 0
 fi
+
+[ -f "$hook" ] || exit 0
 
 for py in python3 python py; do
   if "$py" -I -c 'import sys; sys.exit(sys.version_info < (3, 8) or sys.prefix != sys.base_prefix)' >/dev/null 2>&1; then

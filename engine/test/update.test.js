@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planUpdate, MERGE_LABELS } from "../update.js";
+import { planUpdate, MERGE_LABELS, RENAMES } from "../update.js";
 import { PRISTINE, STAGING, makeRepo } from "./bound-repo.js";
 import { python } from "./python.js";
 
@@ -350,4 +350,88 @@ test("a merge that drops a kept section counts as a conflict", () => {
   assert.deepEqual(plan.conflict, ["x.py"]);
   assert.deepEqual(plan.write, []);
   assert.deepEqual(plan.stage, [[`${STAGING}x.py`, "b\n"]]);
+});
+
+// A repo set up before the session skills were renamed, one of them edited.
+function beforeRename(r) {
+  for (const [from, to] of Object.entries(RENAMES)) {
+    const old = r.read(to).replace(/start-session/g, "session-start").replace(/close-session/g, "session-close");
+    r.pristine.files[from] = old;
+    delete r.pristine.files[to];
+    rmSync(r.at(dirname(to)), { recursive: true, force: true });
+    r.write(from, from.includes("start") ? `${old}MINE\n` : old);
+  }
+}
+
+test("a renamed skill moves to its new path with the repo's edits", needsPython, async () => {
+  const [[closeFrom, closeTo], [startFrom, startTo]] = Object.entries(RENAMES);
+  const results = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo(beforeRename);
+    const theirs = await makeRepo(() => {});
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.deepEqual(out.renamed, [[closeFrom, closeTo], [startFrom, startTo]], cmd);
+    assert.ok(out.updated.includes(closeTo) && out.merged.includes(startTo), cmd);
+    assert.equal(repo.read(closeTo), theirs.read(closeTo), cmd);
+    assert.equal(repo.read(startTo), `${theirs.read(startTo)}MINE\n`, cmd);
+    for (const from of [closeFrom, startFrom]) assert.ok(!existsSync(repo.at(dirname(from))), `${cmd}: ${from}`);
+    const saved = JSON.parse(repo.read(PRISTINE)).files;
+    assert.ok(!(closeFrom in saved) && startTo in saved, cmd);
+    results.push(out);
+    for (const r of [repo, theirs]) rmSync(r.at(""), { recursive: true, force: true });
+  }
+  if (results.length === 2) assert.deepEqual(results[1], results[0], "the two engines report alike");
+});
+
+test("a renamed skill whose staged copy is still unsettled keeps its old base", needsPython, async () => {
+  const startTo = Object.values(RENAMES).find((to) => to.includes("start"));
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    let base;
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      const startFrom = Object.keys(RENAMES).find((from) => from.includes("start"));
+      base = r.pristine.files[startFrom];
+      r.write(startFrom, r.read(startFrom).replace("name: session-start", "name: my-start"));
+      r.write(`${STAGING}${startTo}`, "left from the last update\n");
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.ok(out.skipped.includes(startTo), `${cmd}: ${JSON.stringify(out)}`);
+    assert.equal(JSON.parse(repo.read(PRISTINE)).files[startTo], base, cmd);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+});
+
+test("a project that owns the old skill path keeps only its own copy", needsPython, async () => {
+  const [[closeFrom, closeTo]] = Object.entries(RENAMES);
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      r.write(".bindwright/owned", `${closeFrom}\n`);
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.ok(out.owned.includes(closeFrom) && out.owned.includes(closeTo), cmd);
+    assert.ok(existsSync(repo.at(closeFrom)) && !existsSync(repo.at(closeTo)), cmd);
+    outs.push(out);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+});
+
+test("a move into a path the project owns is not made, and the old file is reported", needsPython, async () => {
+  const [[closeFrom, closeTo], [startFrom, startTo]] = Object.entries(RENAMES);
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      r.write(".bindwright/owned", `${closeTo}\n`);
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.deepEqual(out.renamed, [[startFrom, startTo]], cmd);
+    assert.ok(out.owned.includes(closeTo) && out.removed.includes(closeFrom), cmd);
+    assert.ok(existsSync(repo.at(closeFrom)), cmd);
+    outs.push(out);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
 });

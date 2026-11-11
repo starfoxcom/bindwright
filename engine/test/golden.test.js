@@ -131,7 +131,7 @@ function refused() {
     (a) => { a.advanced = withTool(a.advanced, "custom"); a.advanced.codeResearchCustom = { ...CUSTOM, url: "https://exa mple.com" }; },
     (a) => { a.advanced = withTool(a.advanced, "custom"); a.advanced.codeResearchCustom = { ...CUSTOM, url: "https://ejemplo.com/ñ" }; },
     (a) => { a.advanced = withTool(a.advanced, "custom"); a.advanced.codeResearchCustom = { name: "x" }; },
-    (a) => { a.advanced.codeResearch = "tokensave"; a.advanced.codeResearchCustom = CUSTOM; },
+    (a) => { a.advanced.codeResearch = "findwright"; a.advanced.codeResearchCustom = CUSTOM; },
     (a) => { a.advanced.precommit = "npm"; },
     (a) => { a.advanced.architecture = null; },
     (a) => { a.advanced.branching = "github-flow"; },

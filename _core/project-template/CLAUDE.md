@@ -26,10 +26,10 @@ Work is tracked in GitHub issues: `.claude/rules/tracker.md` says where each ite
 <!-- TOGGLE:tracker:github END -->
 <!-- TOGGLE:tracker:file START -->
 <!-- TOGGLE:code_host_local START -->
-Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/session-close` keeps it current and `/session-start` reads it.
+Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/close-session` keeps it current and `/start-session` reads it.
 <!-- TOGGLE:code_host_local END -->
 <!-- TOGGLE:code_host_local:off START -->
-Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/session-close` keeps it current; `/session-start` checks it against git.
+Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id). `/close-session` keeps it current; `/start-session` checks it against git.
 <!-- TOGGLE:code_host_local:off END -->
 <!-- TOGGLE:tracker:file END -->
 
@@ -41,18 +41,18 @@ Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id
 <!-- TOGGLE:code_research_first START -->
 ## Code research
 
-Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RESEARCH_NAME}}**; `/find` has the lookup sequence and the only cases where Grep and Glob are allowed. `/session-close` reports how often each was used.
+Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RESEARCH_NAME}}**; `/find` has the lookup sequence and the only cases where Grep and Glob are allowed. `/close-session` reports how often each was used.
 
 <!-- TOGGLE:code_research_first END -->
 ## Sessions
 
-- **Start:** `/session-start` reads the current state, proposes a plan and waits for approval before changing code.
+- **Start:** `/start-session` reads the current state, proposes a plan and waits for approval before changing code.
 - **During:** track multi-step work per `.claude/rules/task-tracking.md`.
 <!-- TOGGLE:code_host_local START -->
-- **End:** `/session-close` checks what is really finished and makes the save point.
+- **End:** `/close-session` checks what is really finished and makes the save point.
 <!-- TOGGLE:code_host_local END -->
 <!-- TOGGLE:code_host_local:off START -->
-- **End:** `/session-close` checks what is really finished, commits, and opens or merges the PR.
+- **End:** `/close-session` checks what is really finished, commits, and opens or merges the PR.
 <!-- TOGGLE:code_host_local:off END -->
 
 <!-- TOGGLE:lazy_rules_folder START -->

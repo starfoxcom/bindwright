@@ -18,6 +18,7 @@
 #   python engine/bind.py --remove-plan DIR              -> what setup wrote, sorted for removal
 #   python engine/bind.py --remove-files DIR < {"paths": [...], "state": true} -> files removed
 #   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
+#   python engine/bind.py --propose-merge DIR            -> the merge each staged file suggests, read only
 #   python engine/bind.py --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.py)
 #   python engine/bind.py --releases-since DIR -> the plugin's releases since DIR's bound version (releases.py)
 # A failed bind gives {"error": message} and, alone, exit status 1.
@@ -32,7 +33,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from model import (
-    validate, expand_answers, flags_for, choices_for, values_for,
+    validate, expand_answers, flags_for, choices_for, values_for, brings_own_hook,
     CHOICE_OPTIONS, DEFERRED, LICENSES, JS_WHITESPACE,
 )
 from render import render_template, fill_placeholders
@@ -45,6 +46,7 @@ from share import export_setup, remember_choices
 from doctor import cli_version_from, run_doctor
 from report import draft_report
 from staging import clean_staging
+from propose import propose_merges
 from exclude import local_exclude, undo_local_exclude
 from releases import releases_for_repo
 
@@ -93,8 +95,6 @@ def _included(path, a, flags):
     if path.startswith("precommit/"):
         return False
     if path.startswith(".claude/rules/architecture/"):
-        return False
-    if path.startswith(".claude/skills/architecture-graph/"):
         return False
     # Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
     # `.template` sources match too; the scripts and the size-check folder run anywhere.
@@ -205,7 +205,7 @@ def _global_files(a, ctx, read_file):
         out.append(["hooks/no-ai-attribution.py", verbatim("hooks/no-ai-attribution.py")])
     profiles = json.loads(read_file(GLOBAL_CORE + "hooks/code-research-profiles.json"))
     hook = profiles[a["advanced"]["codeResearch"]]["hook"]
-    if hook["source"] == "bindwright":
+    if hook["source"] == "bindwright" and not brings_own_hook(a["advanced"]):
         # The custom profile's fields name the tool through placeholders of their own.
         def field(k):
             return fill_placeholders(hook[k], ctx["values"], ctx["deferred"], "profile hook " + k)
@@ -422,6 +422,14 @@ def _clean_staging(argv):
         return {"error": str(e)}
 
 
+def _propose_merge(argv):
+    """--propose-merge DIR: the merge each file staged in that repo's incoming folder suggests."""
+    try:
+        return propose_merges(_option(argv, "--propose-merge"))
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
 def _local_exclude(argv, read_file, core_files):
     """--local-exclude DIR: lists the bind's files in the clone's exclude file; --undo removes that block."""
     try:
@@ -468,6 +476,8 @@ def _main(argv):
 
     if "--clean-staging" in argv:
         result = _clean_staging(argv)
+    elif "--propose-merge" in argv:
+        result = _propose_merge(argv)
     elif "--releases-since" in argv:
         result = _releases(argv, root)
     elif "--remove-plan" in argv or "--remove-files" in argv:

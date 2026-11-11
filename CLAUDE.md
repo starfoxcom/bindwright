@@ -10,18 +10,16 @@ When canonical templates evolve in `_core/`, re-bind with `node engine/cli.js --
 
 ## Code research
 
-Start any "where is X / what calls Y / find usages of Z" task with `tokensave_search` or `tokensave_context`, not Grep, Glob or raw `grep`/`rg`.
+Start any "where is X / how does Y work / find usages of Z" task with FindWright's `find` (a question or a name) or `search` (regexes over every tracked file), not Grep, Glob or raw `grep`/`rg`. `/find` holds the full sequence.
 
-This rule is enforced by a hook at `~/.claude/hooks/tokensave-first.py` (installed **globally**, never project-local — see `reference_tokensave_hook_global_install` memory for why). Grep/Glob/raw-grep calls are **blocked** when tokensave is available.
-
-**This repo has a tokensave index** at `.tokensave/` (`tokensave_status` shows its size and freshness). The hook routes code-research through tokensave MCP tools by default. Re-sync incrementally with `tokensave sync` after edits; full rebuild via `tokensave sync -f` after schema migrations or large refactors.
+A global hook (`~/.claude/hooks/findwright-first.py`) blocks Grep, Glob and raw greps while this repo has a FindWright index (`.findwright/index.db`). The index updates itself on every call, so it never needs a sync, and `/close-session` records FindWright's hit rate.
 
 Fallback to Grep/Glob is allowed when:
-1. You've tried tokensave with 2+ keyword variants and got nothing usable
-2. You're searching non-code content (markdown, binaries, `.gitignored`)
-3. `tokensave_status` returns `unavailable` for the scope you need
+1. FindWright returned nothing usable for two differently worded queries
+2. The target is outside the repo, binary or git-ignored
+3. FindWright is unavailable in the session
 
-Bypass for Bash `grep`/`rg`: include `# TOKENSAVE_BYPASS: <reason>` in the command. For Grep/Glob tools: briefly explain in chat and re-issue.
+Bypass for Bash `grep`/`rg`: include `# FINDWRIGHT_BYPASS: <reason>` in the command. The Grep and Glob tools have no bypass while the index exists: for a search FindWright cannot answer, run `grep`/`rg` in Bash with the marker.
 
 ---
 
@@ -59,14 +57,14 @@ Per `.claude/rules/git.md` (resolved from canonical `_core/project-template/.cla
 
 Rules from `.claude/rules/token-efficiency.md`, `.claude/rules/task-tracking.md` and `.claude/rules/git.md`, plus a few that live only here:
 
-- **Task tracking is mandatory for 3+ step sessions** (`.claude/rules/task-tracking.md`). Use the `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` tools (`TodoWrite` where they are not available). Enumerate the planned steps with `TaskCreate` at session start. To chain dependencies, capture each new task's ID from the `tool_result` and call `TaskUpdate({ taskId, addBlockedBy: [<prereq-id>] })` (`addBlockedBy` is a `TaskUpdate` input parameter, not a separate tool). `TaskUpdate({ taskId, status: 'in_progress' })` BEFORE starting; `TaskUpdate({ taskId, status: 'completed' })` immediately when done — don't batch. New follow-ups discovered mid-session get their own `TaskCreate` call. The task list is the in-session source of truth and the basis for the session-close DoD audit. Single-task or trivial conversational work doesn't need it; the threshold is 3+ discrete items. **For multi-PR workstreams** (hotfix + cascade chains, large refactors split for review), create one task per PR up-front and chain dependencies with `TaskUpdate({ taskId, addBlockedBy: [<prior-pr-task-id>] })` so the task list mirrors the merge order — treating a 10-PR chain as ad-hoc work burns hours on out-of-sequence routing.
-- **Read before writing.** Locate the relevant function/class before reading whole files. Use `tokensave_body <symbol>` to pull a single symbol's source when reading the whole file would be wasteful.
+- **Task tracking is mandatory for 3+ step sessions** (`.claude/rules/task-tracking.md`). Use the `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` tools (`TodoWrite` where they are not available). Enumerate the planned steps with `TaskCreate` at session start. To chain dependencies, capture each new task's ID from the `tool_result` and call `TaskUpdate({ taskId, addBlockedBy: [<prereq-id>] })` (`addBlockedBy` is a `TaskUpdate` input parameter, not a separate tool). `TaskUpdate({ taskId, status: 'in_progress' })` BEFORE starting; `TaskUpdate({ taskId, status: 'completed' })` immediately when done — don't batch. New follow-ups discovered mid-session get their own `TaskCreate` call. The task list is the in-session source of truth and the basis for the close-session DoD audit. Single-task or trivial conversational work doesn't need it; the threshold is 3+ discrete items. **For multi-PR workstreams** (hotfix + cascade chains, large refactors split for review), create one task per PR up-front and chain dependencies with `TaskUpdate({ taskId, addBlockedBy: [<prior-pr-task-id>] })` so the task list mirrors the merge order — treating a 10-PR chain as ad-hoc work burns hours on out-of-sequence routing.
+- **Read before writing.** Locate the relevant function/class before reading whole files. Use FindWright's `outline` to find a symbol's line range and read only that.
 - **Command timeout scaling** follows `.claude/rules/token-efficiency.md`.
 - **Never use `gh run watch`.** When the ci-watch mod is loaded, it watches the PR after `git push`/`gh pr create` and wakes the session once all checks settle; without it, use the watchers in `.claude/rules/token-efficiency.md` (the Monitor tool, then a bounded background loop).
 - **What the checks report by PR class:**
   - **Docs-only / non-reviewable PRs** (anything `triage` classifies non-reviewable; `.claude/` and any `CLAUDE.md` always get a review) — expect `Diff triage: SUCCESS` and `Review gate: SUCCESS` ("No review needed"). Merge with `gh pr merge <pr> --merge` once the PR reports `CLEAN`.
   - **Normal-review PRs** — the `Review gate` check's title says where the PR stands (routine 🔴, deep review in progress, both 🟢); read the verdict comments for the findings. Green gate: merge with `--merge`. 🔴: fix on the PR branch and push.
-  - **PRs that edit `.github/workflows/claude-code-review.yml`** — triage never reviews that one file, so with only skippable docs beside it the PR passes the gate like a docs PR. The review action would refuse to run anyway: it requires the PR's copy of that workflow to match the default branch's. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate script, `.claude/`, code) starts the review, which stops on `Workflow validation failed`, and the PR can never merge: split it into its own PR first. Edits to `claude.yml` alone get a normal review. It merges only as `.claude/rules/review-tiers.md` § "PRs that edit the review workflow" describes: two local 🟢 reviews on the head commit when every commit came from our own sessions, otherwise the maintainer's read.
+  - **PRs that edit `.github/workflows/claude-code-review.yml`** — triage never reviews that one file, so with only skippable docs beside it the PR passes the gate like a docs PR. Its review could never be posted anyway: the review app refuses its token to a run whose copy of that workflow differs from the default branch's. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate script, `.claude/`, code) starts the review, whose post job is then refused ("The bot token exchange failed three times"), and the PR can never merge: split it into its own PR first. Edits to `claude.yml` alone get a normal review. It merges only as `.claude/rules/review-tiers.md` § "PRs that edit the review workflow" describes: two local 🟢 reviews on the head commit when every commit came from our own sessions, otherwise the maintainer's read.
 - **No admin bypass, ever.** Never `gh pr merge --admin`. The rulesets have no bypass actors; `BLOCKED` means find and fix the cause.
 - **Branch cleanup after every merge** follows `.claude/rules/git.md` § Merging: `gh pr merge --delete-branch` removes the remote branch (and the local one when it is checked out); run `git branch -D <name>` as a separate call if it remains. Never `&&`-chain cleanup commands: permission rules match the whole command string, so chained calls get denied.
 - **Our own PRs merge on green, without waiting for the maintainer.** Once every check passes (and, for a PR that edits the review workflow, both local reviews of the head commit are 🟢), the session merges and cleans up. Only a PR carrying a commit from outside our sessions waits for the maintainer's read.
@@ -105,7 +103,7 @@ The page IS a visual artifact. Per `.claude/rules/visual.md` (resolved from cano
 
 ## Session ritual
 
-Skills `/session-start`, `/session-close` and `/find` live at `.claude/skills/`, rendered with the rules above. Work state lives on the GitHub board (`starfoxcom/6`) and in each issue's `### Current state` (`.claude/rules/tracker.md`); `/session-close` also rewrites the git-ignored pointer file `.bindwright/handoff.md`. This repo's own extra steps (the review gate's `--check` at session start) live in `.bindwright/session-steps.md`.
+Skills `/start-session`, `/close-session` and `/find` live at `.claude/skills/`, rendered with the rules above. Work state lives on the GitHub board (`starfoxcom/6`) and in each issue's `### Current state` (`.claude/rules/tracker.md`); `/close-session` also rewrites the git-ignored pointer file `.bindwright/handoff.md`. This repo's own extra steps (the review gate's `--check` at session start) live in `.bindwright/session-steps.md`.
 
 ---
 

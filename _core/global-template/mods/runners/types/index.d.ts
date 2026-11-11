@@ -12,6 +12,8 @@ export type RunnerView = {
   nextRun?: number
   /** When Start was pressed: GitHub reports the runners offline for a minute or two after. */
   startedAt?: number
+  /** The last Start press's command failed to launch, exited non-zero or timed out. */
+  isStartFailed?: boolean
   /** Stop was pressed while a job ran; the next press stops anyway. */
   isConfirming?: boolean
   /** The WSL virtual disk file's allocated bytes, not its length. */
@@ -20,6 +22,8 @@ export type RunnerView = {
   usedBytes?: number
   /** The disk file is sparse, so fstrim inside the distro can hand its free space back. */
   isSparse?: boolean
+  /** The data inside grew this many bytes over the last full week; negative when it shrank. */
+  grewBytes?: number
 }
 
 /** The settings pane's own state: the last refusal per field, shown under that field. */

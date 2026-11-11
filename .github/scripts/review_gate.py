@@ -54,7 +54,7 @@ import subprocess
 import sys
 import time
 
-# Never reviewed: the review action refuses to run on a PR whose copy of the
+# Never reviewed: the review app refuses its token to a run whose copy of the
 # review workflow differs from the default branch's, so a workflow-only PR has
 # to pass as non-reviewable. Only that one workflow: claude.yml (the deep tier
 # runs the default branch's copy), any other workflow, and a script or action
@@ -296,7 +296,7 @@ def verdict(text, since, tier, marker=None):
     """The verdict in the bot's newest comment of `tier` posted at or after
     `since`. A block read from a "Blocking" line rather than a 🔴 adds
     `recovered`."""
-    body = _pick(_bot_bodies(text, since), tier, re.compile(marker) if marker else None)
+    body = _pick(_bot_bodies(text, since), tier, re.compile(marker, re.I) if marker else None)
     if body is None:
         return {"verdict": "missing", "line": ""}
     result, line, how = _line(body)

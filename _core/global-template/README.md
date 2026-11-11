@@ -38,7 +38,7 @@ If you DO have one, append the contents of `CLAUDE.md.additions` (or have Claude
 
 The additions include:
 
-- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — tokensave / none / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
+- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — findwright / none / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
 - **Memory system instructions** — the four memory types, when to save each, when to access, how MEMORY.md works as an index.
 
 These are project-agnostic — they're useful for any project, which is why they live in the global config.
@@ -70,7 +70,7 @@ Claude will start populating memory entries during your normal sessions — you 
 
 | Key | Tool | Search redirect |
 |---|---|---|
-| `tokensave` | tokensave | the tool's own installer adds it (`tokensave install --agent claude`) |
+| `findwright` | FindWright | this hook; detection looks for the project's index, `.findwright/index.db` |
 | `none` | (no tool) | none |
 | `custom` | a tool you name | this hook, as a stub; detection looks for the tool's CLI on PATH |
 
@@ -160,11 +160,11 @@ The AI-side counterpart — instructions that tell the model to attend to the `[
 
 The project's deny rules match command text, so a force push written as a bundle of short flags (`git push -qf`) gets past them. `hooks/push-guard.py` reads the command's text with quoting removed and blocks a `git push` carrying `--force`, `-f` inside any flag bundle, `--mirror` or a `+` refspec, wherever it appears in the command. `--force-with-lease` and `--force-if-includes` stay allowed. It only ever blocks or stays silent, never asks. Text that only mentions a force push (a commit message, a script) is blocked too, as, rarely, is a plain push chained after a quoted string that spans lines or in a Bash command with a `\` ending a line when a force word follows it anywhere, and the message says to pass such text in a file, or to put such a command on one line or run the push as its own command. It is a safety net for force pushes written the ordinary way, not a sandbox; its docstring lists what stays out of reach.
 
-`/bindwright:setup` installs it to `~/.claude/hooks/push-guard.py`, registers it in `~/.claude/settings.json` by the absolute path of a Python 3.8+ interpreter found on the machine (`engine/home.py install-hook`, whose launcher keeps a missing file from blocking every command), and then asks whether pushes should run without a prompt in every project. Without Python, or if you say no, pushes other than a bare `git push` ask for approval.
+`/bindwright:setup` installs it to `~/.claude/hooks/push-guard.py`, registers it in `~/.claude/settings.json` by the absolute path of a Python 3.8+ interpreter found on the machine (`engine/home.py install-hook`, whose launcher keeps a missing file from blocking every command; a removed interpreter blocks every shell command, setup's included, until that Python is back or the entry is deleted from `~/.claude/settings.json` in a text editor), and then asks whether pushes should run without a prompt in every project. Without Python, or if you say no, pushes other than a bare `git push` ask for approval.
 
 ## 4b2. Install session titles (recommended)
 
-`hooks/session-title.py` names every session on the computer after its project, then `<Project> - <purpose>` once the session's focus is clear, so several open sessions, the phone and the desktop app's session lists tell projects and tasks apart. The project name is the one setup saved in `.bindwright/project.json`, else the name of the repo's folder, else the session's folder, so it works in every project, set up or not. At the start of each session it names the purpose file, `~/.bindwright/session-titles/<session id>.purpose`, and asks the assistant to write the session's focus there in 10 words or fewer; `/session-start` writes it once the plan is approved. Its files live in that folder only, never in a project. The folder sits outside `~/.claude` because the CLI asks before every write inside a `.claude` folder, whatever the allow rules say; setup adds the rule `Edit(~/.bindwright/session-titles/**)` so the purpose is written without a prompt. A title is set once per change, so a name picked with `/rename` stays until the purpose changes.
+`hooks/session-title.py` names every session on the computer after its project, then `<Project> - <purpose>` once the session's focus is clear, so several open sessions, the phone and the desktop app's session lists tell projects and tasks apart. The project name is the one setup saved in `.bindwright/project.json`, else the name of the repo's folder, else the session's folder, so it works in every project, set up or not. At the start of each session it names the purpose file, `~/.bindwright/session-titles/<session id>.purpose`, and asks the assistant to write the session's focus there in 10 words or fewer; `/start-session` writes it once the plan is approved. Its files live in that folder only, never in a project. The folder sits outside `~/.claude` because the CLI asks before every write inside a `.claude` folder, whatever the allow rules say; setup adds the rule `Edit(~/.bindwright/session-titles/**)` so the purpose is written without a prompt. A title is set once per change, so a name picked with `/rename` stays until the purpose changes.
 
 `/bindwright:setup` installs it to `~/.claude/hooks/session-title.py` and registers it for `SessionStart` and `UserPromptSubmit` (`engine/home.py install-hook --events`).
 

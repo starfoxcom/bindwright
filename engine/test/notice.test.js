@@ -1,7 +1,7 @@
-// The plugin's session-start notice (helper/hooks/notice.mjs): what it says,
+// The plugin's start-session notice (helper/hooks/notice.mjs): what it says,
 // that it says it at most once a day per repo, asks the network at most once
 // a day, and stays quiet offline. The last case runs the script from a fresh
-// helper pack, as /session-start does.
+// helper pack, as /start-session does.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { notice, older, findRepo } from "../../helper/hooks/notice.mjs";
+import { countsFailedAtOf, notice, older, findRepo } from "../../helper/hooks/notice.mjs";
 import { python } from "./python.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -186,6 +186,47 @@ test("drift names the extras the repo's setup expects, and nothing else", async 
   }
 });
 
+test("a failed review counts send is named in a repo, and nowhere else", async () => {
+  const s = scene("1.4.0");
+  try {
+    const ask = (countsFailedAt, cwd = s.repo) =>
+      notice({ cwd, today: "2026-11-10", cacheFile: s.cacheFile, pluginVersion: "1.4.0", fetchLatest: latest(null),
+        countsFailedAt });
+    const failedAt = new Date(2026, 10, 9, 12).getTime();
+    assert.match(await ask(failedAt), /this repo's last send failed \(2026-11-09\)/);
+    rmSync(s.cacheFile);
+    assert.equal(await ask(null), null, "no failure");
+    assert.equal(await ask(failedAt, s.root), null, "outside a repo");
+  } finally {
+    rmSync(s.root, { recursive: true, force: true });
+  }
+});
+
+test("only a repo that still shares its counts reports a failed send", () => {
+  const root = mkdtempSync(join(tmpdir(), "bw-counts-notice-"));
+  try {
+    const repo = join(root, "repo");
+    const write = (state) => {
+      mkdirSync(join(root, "bindwright"), { recursive: true });
+      writeFileSync(join(root, "bindwright", "counts.json"), JSON.stringify(state));
+    };
+    const entry = (kind) => ({
+      [repo]: { id: "0123456789abcdef0123456789abcdef", kind, since: "2026-11-01T00:00:00.000Z", failedAt: 5 },
+    });
+    const cases = [
+      ["sharing, with a kind", { share: true, projects: entry("game") }, 5],
+      ["left out of the counts", { share: true, projects: entry(null) }, null],
+      ["sharing turned off", { share: false, projects: entry("game") }, null],
+    ];
+    for (const [name, state, failedAt] of cases) {
+      write(state);
+      assert.equal(countsFailedAtOf(repo, root), failedAt, name);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a helper at another version than the plugin points at /bindwright:update", async () => {
   const s = scene("1.4.0");
   try {
@@ -202,7 +243,7 @@ test("a helper at another version than the plugin points at /bindwright:update",
 
 const needs = { skip: !python && "needs Python 3.8+" };
 
-test("the notice, run from the helper as /session-start runs it, tells the user and then stays quiet", needs, () => {
+test("the notice, run from the helper as /start-session runs it, tells the user and then stays quiet", needs, () => {
   const s = scene("0.1.0");
   try {
     const helper = join(s.root, "helper");

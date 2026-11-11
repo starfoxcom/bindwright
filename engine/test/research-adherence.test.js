@@ -1,4 +1,4 @@
-// .claude/scripts/research-adherence.py, the session-close count of code searches: which
+// .claude/scripts/research-adherence.py, the close-session count of code searches: which
 // tool calls count as a search through the code-research tool, which as a plain search of
 // the repo's code, and which not at all. Each case runs the script's own classify().
 
@@ -45,7 +45,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
   mkdirSync(scratch);
   const bash = (command) => ({ name: "Bash", args: { command } });
   const rows = [
-    ["a tokensave call", { name: "mcp__tokensave__tokensave_search", args: {} }, "research"],
+    ["a FindWright call", { name: "mcp__findwright__find", args: {} }, "research"],
     ["Grep with no path searches the repo", { name: "Grep", args: { pattern: "x" } }, "fallback"],
     ["Grep on a repo folder", { name: "Grep", args: { pattern: "x", path: "src" } }, "fallback"],
     ["Grep on a folder outside the repo", { name: "Grep", args: { pattern: "x", path: scratch } }, null],
@@ -65,7 +65,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["cd - with a redirect returns to the repo",
       bash(`cd "${scratch}" && cd - >/dev/null && grep -rn foo src/`), "fallback"],
     ["popd returns to the repo", bash(`pushd "${scratch}" && ls && popd && grep -rn foo src/`), "fallback"],
-    ["a marked bypass", bash("grep -rn foo src/ # TOKENSAVE_BYPASS: regex"), "bypass"],
+    ["a marked bypass", bash("grep -rn foo src/ # FINDWRIGHT_BYPASS: regex"), "bypass"],
     ["a filter on another command's output", bash("git log | grep fix"), null],
   ];
   try {
