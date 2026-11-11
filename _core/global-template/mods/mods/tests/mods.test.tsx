@@ -28,16 +28,18 @@ const COMMANDS: CommandInfo[] = [
   { name: 'help', description: 'Help', source: 'builtin' },
 ]
 
-function world(on: On, env: Record<string, string> = WINDOWS_ENV) {
+function world(on: On, env: Record<string, string> = WINDOWS_ENV, project: Record<string, object> = {}) {
   const seen = { opened: [] as string[], commands: [] as { name: string; argumentHint?: string }[] }
   mock.env(on, env)
+  const files: Record<string, object> = { ...MANIFESTS, ...project }
   on('fs.read', ($, e) => {
     // The engine resolves a POSIX path against the host's drive when the tests run on Windows.
     const path = e.path.replaceAll('\\', '/')
-    const manifest = MANIFESTS[path] ?? MANIFESTS[path.replace(/^[A-Za-z]:(?=\/(?:home|opt)\/)/, '')]
+    const manifest = files[path] ?? files[path.replace(/^[A-Za-z]:(?=\/(?:home|opt)\/)/, '')]
     if (!manifest) throw new Error('ENOENT')
     return { value: JSON.stringify(manifest) }
   })
+  on('session.root', () => ({ value: String.raw`C:\Repos\app` }))
   on('command.list', () => ({ value: COMMANDS }))
   on('command.register', ($, e) => {
     seen.commands.push({ name: e.name, argumentHint: e.argumentHint })
@@ -77,6 +79,18 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ key: 'mods-command-help' })).toBeUndefined()
   })
 }
+
+test('a mod the project turns off is marked and left out of the loaded count', async ($, on) => {
+  world(on, WINDOWS_ENV, {
+    'C:/Repos/app/.claude/settings.json': { enabledPlugins: { 'ci-watch@inline': false, 'shared-pc@inline': false } },
+    // The personal file is merged last, so its true turns shared-pc back on here.
+    'C:/Repos/app/.claude/settings.local.json': { enabledPlugins: { 'shared-pc@inline': true } },
+  })
+  const ui = await mountPane($, 'terminal')
+  expect(await ui.find({ type: 'Text', text: /^2 mods loaded, 1 off in this project$/ })).toBeDefined()
+  expect(await ui.find({ key: 'mods-off-ci-watch' })).toBeDefined()
+  expect(await ui.find({ key: 'mods-off-shared-pc' })).toBeUndefined()
+})
 
 test('/mods opens the pane, and any argument lists its verbs', async ($, on) => {
   const seen = world(on)

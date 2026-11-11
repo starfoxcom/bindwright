@@ -1,8 +1,8 @@
 ---
 name: setup
-description: Set up Bindwright in this repo. Asks a few questions in the session (the ones about this computer only the first time), then writes the rules, session skills, guard hooks and review workflows and fits them to the repo.
+description: Set up Bindwright on this computer and in this repo. The first run asks the computer choices, then offers the project setup, which writes the rules, session skills, guard hooks and review workflows, fits them to the repo and picks the mods it runs.
 disable-model-invocation: true
-argument-hint: "[global | bw1- setup code]"
+argument-hint: "[global | project | bw1- setup code]"
 ---
 
 # /bindwright:setup
@@ -14,7 +14,7 @@ This skill asks the user how they want to work, writes the files that fit into t
 Two kinds of choices, and the user always hears which is which:
 
 - **Computer choices** apply to every project on this computer and are asked only once: the code-search tool, the work language, global instructions, the push guard for every project, session titles, the builder agent, the code-style profile, the reply style, and the mods. They are saved in `<config>/bindwright/settings.json`, where `<config>` is `CLAUDE_CONFIG_DIR` or `~/.claude`.
-- **Project choices** apply to this repo only and are asked on every run, never copied from an earlier project, since a lot can change between two projects.
+- **Project choices** apply to this repo only and are asked on every run, never copied from an earlier project, since a lot can change between two projects. They include which per-project mods run here: a mod turned off in one project stays on in every other.
 
 ## 0. Pick the engine and read the saved choices
 
@@ -45,7 +45,7 @@ Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: se
 
 **Git for Windows.** On Windows, the project's guard hooks run in Git for Windows' own shell, and the CLI blocks every shell command when that shell is missing. `git --version` printing `.windows.` (as in `git version 2.47.0.windows.1`) means it is there. When it is not, treat Git as missing above and offer the same `winget` install.
 
-**Lizard, for the size check.** Skip this with the `global` argument. With Python there, check `<python> -m lizard --version`, and when that fails, the copy step 6 may have installed in setup's own environment: `~/.bindwright/size-check-venv/bin/python -m lizard --version` (`Scripts\python.exe` in place of `bin/python` on Windows). When both are missing, ask now, with the other requirements, so nothing stops for it later: "The size check, which keeps files and functions under the size limits, needs a small Python tool called lizard. Install it when setup writes the size check?" Offer "Yes" first. Step 6 installs it on a yes, and only when the size check is written, so a run that leaves the check out installs nothing. Without Python, skip the question; step 6 says the size check needs Python.
+**Lizard, for the size check.** Skip this with the `global` argument and in a first run's computer part (step 1); a first run that goes on to the project asks it then, before step 3. With Python there, check `<python> -m lizard --version`, and when that fails, the copy step 6 may have installed in setup's own environment: `~/.bindwright/size-check-venv/bin/python -m lizard --version` (`Scripts\python.exe` in place of `bin/python` on Windows). When both are missing, ask now, with the other requirements, so nothing stops for it later: "The size check, which keeps files and functions under the size limits, needs a small Python tool called lizard. Install it when setup writes the size check?" Offer "Yes" first. Step 6 installs it on a yes, and only when the size check is written, so a run that leaves the check out installs nothing. Without Python, skip the question; step 6 says the size check needs Python.
 
 **Plain mode.** When `git config user.name` prints nothing or `gh auth status` fails, ask first: "Have you used Git and GitHub before?", with "Not really" first. On "Not really", word every later question and message in everyday words, with no term such as branch, pull request, CI, remote or repo left unexplained; recommend the safe answers (just me, mine, private, AI credit kept out); and offer "Just this computer" first where step 3 asks where the code lives. With both commands working, skip the question.
 
@@ -53,12 +53,14 @@ Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: se
 
 ## 1. Check the argument and the repo
 
+- **No argument:** run the engine with `--settings` as step 2 says (any folder works outside a repo). When no entry's `from` is `"personal"`, this computer has not been set up: this is a **first run**, and it starts with the computer part only. Ask step 2's questions, save them, set up step 7's computer choices and tell the user the "This computer" part of step 8. Then say, in plain words, that the computer is ready and a project setup is still to do: it fits the rules, reviews, checks and the per-project mods to each project, and that is where most of what Bindwright does lives. Inside a git repo, offer to set up this project now, "Yes" first: on a yes, go on as `project` (the computer questions are saved, so step 2 asks none); on a no, say to run `/bindwright:setup project` in each project, and stop. Outside a repo, say the same and stop. When the computer choices are saved already, a run with no argument is a `project` run.
+- **`project`:** set up this repo: the checks below, then steps 2 to 8. Step 2 asks only the computer questions with no saved answer, often none.
 - **`global`:** the user wants to change their computer choices. Find the repo root as below if there is one (any folder works for the settings commands otherwise), ask every question of step 2, even those with a saved answer, saying what each is now. Save them as step 2 says, set up the extras of step 7 that just turned on and a work language that changed, and for each one that turned off, say what stays installed and how to remove it (`python "<helper>/engine/home.py" remove-hook <name>` for a guard; `home.py remove-hook session-title.py` and `home.py disallow "Edit(~/.bindwright/session-titles/**)"` for session titles, whose files in `~/.bindwright/session-titles/` can be deleted too; delete `~/.claude/mods/<name>` and its `CLAUDE_CODE_PLUGIN_DIRS` entry for a mod; delete `~/.claude/agents/builder.md` for the builder agent; delete `~/.claude/rules/code-style.md` for the code-style profile; `/output-style default` for the reply style, whose file in `~/.claude/output-styles/` can stay; `counts.mjs share off` for the counts, which stops every send). When sharing just turned on and the repo root holds `.bindwright/pristine.json` with no entry in `counts.mjs status`, ask this repo's kind as step 3 says; other set-up repos are asked at their next `/bindwright:update`. Then stop.
 - **A code starting with `bw1-`:** a setup code from an older Bindwright page. It holds every project answer, so skip step 3 and run the engine with `--code <the code>` in step 4. Step 2 still asks the computer questions that have no saved answer.
-- **Anything else that is not empty:** say this skill takes no argument, `global`, or a `bw1-` code, and stop.
+- **Anything else that is not empty:** say this skill takes no argument, `global`, `project`, or a `bw1-` code, and stop.
 - Find the repo root with `git rev-parse --show-toplevel`. If this is not a git repo, ask whether to run `git init` here or stop.
 - If `git status --porcelain` shows uncommitted changes, say so and ask whether to continue. The setup is easier to review on a clean tree.
-- If `.bindwright/pristine.json` already exists, this repo was set up before, with the answers in `.bindwright/project.json`. Say so and offer `/bindwright:update`, which keeps the repo current; ask whether to start over instead (delete both files first, so the new ones are written) or stop.
+- If `.bindwright/pristine.json` already exists, this repo was set up before, with the answers in `.bindwright/project.json`. Say so and offer `/bindwright:update`, which keeps the repo current; ask whether to change only this project's mods instead (§ Mods in this project, then stop), start over (delete both files first, so the new ones are written) or stop.
 - Otherwise, if the repo has its own agent setup already (`CLAUDE.md`, `.claude/rules/`, `.claude/skills/`, `.claude/hooks/`, or a review workflow under `.github/workflows/`), this is **adopt mode**: say so in one line. Nothing lands without a yes, file by file.
 - If `.bindwright/incoming/` or `.bindwright/global/` already exists, an earlier setup stopped before it finished. Ask whether to finish its merges first (steps 5 and 7 on those files) or remove both folders and start fresh. To remove them, run the engine with `--clean-staging <repo root> --discard-incoming`, never `rm -rf`, which the project's settings deny: it removes only those two folders and refuses a folder that is a link.
 
@@ -147,6 +149,18 @@ Then read its visibility (`gh project view <number> --owner <owner> --format jso
 > ⚠️ **This publishes the project's engineering record.** Everyone, including AI crawlers and anyone building a copy of the product, could read the board's fields, status updates and every note on its items: measurements, file and function names, tuning values, dead ends, what is planned next. Once public, it can be scraped and cached within hours, and making it private again does not take back what was copied. The safer way is the clean public copy: outsiders see what is planned and done, and the details stay private.
 
 Then ask once more: keep it private (recommended), add the clean public copy instead, or make it public anyway. On "make it public anyway", run `gh project edit <number> --owner <owner> --visibility PUBLIC` and say once that the session checks warn about it from now on. It is the user's call; do not ask a third time.
+
+### Mods in this project
+
+Three mods can be turned off for one project while every other project keeps them: `ci-watch`, `tasks` and `skill-check`. The other mods act for the whole computer (shared-pc's line for heavy work, usage-guard's pause, the session-facts line), so only `/bindwright:setup global` turns them on or off. Ask only about the per-project mods installed on this computer (`installed` from step 2, or a yes saved for them); with none, skip this.
+
+Run `python "<helper>/engine/home.py" project-mods <repo root>`: it prints `{"off": [...]}`, the ones already off here. Then ask one multiple-choice question, "Which of these mods run in this project?", one line each on what it does here, with the ones to recommend already picked:
+
+- `ci-watch`: watches each pushed pull request's checks and wakes the session once they finish. Recommend it only with `"codeHost": "github"` and GitHub apps allowed; otherwise say in one line that the project has no CI checks for it to watch, and leave it unpicked.
+- `tasks`: keeps the session's task list honest and carries it across compactions. Recommended.
+- `skill-check`: checks that the project's session skills ran every step they promise. Recommended.
+
+Every listed mod not picked is turned off here; every picked one is on. Step 6 writes the answers. A run that changes only the mods (offered when the repo was set up before) writes them right away, the way step 6 says, then says which mods are off here and that the change applies from the next session start, and stops.
 
 ### What kind of project, for the counts
 
@@ -260,6 +274,7 @@ Then fit the rules to the repo:
 - **Tracker:** when `.claude/rules/tracker.md` was written, the work state lives in GitHub issues. With a board (`advanced.trackerProject` in `.bindwright/project.json`), check `gh project view <number> --owner <owner>` reaches it; a scope error means `gh auth refresh -s project`. Without one, offer to create and pin the `Project status` issue that `tracker.md` describes. With a public roadmap (`advanced.publicRoadmap`), check `gh api "repos/<public repo>/issues?state=all&per_page=1"` reaches it and returns `[]`: the tool keeps public numbers equal to private ones, so the public repo must start with no issues, pull requests or discussions, which share the numbers; check discussions on the repo's page. Then offer to turn any `ROADMAP.md` items or hand-off file the repo already has into issues, one at a time, with the "New item" command in `tracker.md`; the old files stay until the user removes them.
 - `.claude/rules/git.md` names the branches work lands on. If it names a development branch the repo does not have (`git branch --list <name>`), offer to create it from the current branch, locally only.
 - Check that every command and path the new files name exists in the repo. Fix what you can; list the rest for the user.
+- **Mods in this project:** for each mod asked about in step 3, `python "<helper>/engine/home.py" project-mod <repo root> <name> on` (or `off`). It writes `enabledPlugins` (`"<name>@inline": false`) in this repo's personal `.claude/settings.local.json`, which the CLI reads at each session start and git leaves out, and keeps every other key there. A mod off here does not load in this project's sessions; every other project keeps it. A computer-wide mod is refused. On `{"error": ...}` (a `settings.local.json` that is not valid JSON), show it and say which mods could not be set.
 
 ## 7. Set up the computer choices
 
@@ -293,6 +308,7 @@ Tell the user, in plain words, in two parts.
 - What was written, merged and left out, grouped by kind (rules, skills, hooks, workflows, docs), not file by file.
 - Where the work state lives: the board's link and whether it is private, the clean public copy's repo when there is one, or the hand-off file.
 - What still needs them: for a repo with AI review workflows, the repository secret and branch rules those workflows describe.
+- Which per-project mods are off here, if any, that they stay on in every other project, and that `/bindwright:setup project` changes them. A change applies from the next session start.
 - That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive. With `"localOnly": true` they stay on this computer with the other assistant files, out of every commit.
 - With `"localOnly": true`, each `shared` file from step 4, one at a time: drop it (recommended: delete a new file, `git restore` a changed one) or keep it, for the user to commit when the team wants it.
 - That nothing is committed yet: they can read the changes with `git diff` and `git status`, and commit when happy.
@@ -301,7 +317,7 @@ Tell the user, in plain words, in two parts.
 **This computer:**
 
 - Each computer choice and its answer, one line each (code-search tool, work language, global instructions, push guard, session titles, builder agent, code-style profile, reply style, mods, anonymous review counts), and what was installed this run.
-- Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The counts answer and each project's kind live in `<config>/bindwright/counts.json`; `node "<helper>/hooks/counts.mjs" share off` stops every send at once. The next project on this computer will not ask them.
+- Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The counts answer and each project's kind live in `<config>/bindwright/counts.json`; `node "<helper>/hooks/counts.mjs" share off` stops every send at once. The next project on this computer will not ask them: `/bindwright:setup project` (or a plain `/bindwright:setup`) there asks only its own questions.
 - That `~/.claude/settings.json.bak` holds the settings from before the last change, when one was made.
 
 Do not commit or push. Outside the repo, change only what the user said yes to.

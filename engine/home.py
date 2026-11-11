@@ -16,6 +16,12 @@ Standard library, Python 3.8+.
     python engine/home.py add-style FILE      (copies the output style, turns it on)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
+    python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
+    python engine/home.py project-mod ROOT NAME on|off
+
+project-mod writes the repo's personal .claude/settings.local.json, never
+~/.claude, and keeps no .bak there: the repo's ignore list covers that file,
+not a backup beside it.
 
 install-hook takes exactly one of --matcher (an entry under PreToolUse) or
 --events (one entry per named event, with no matcher). --block-on-failure sets
@@ -454,6 +460,69 @@ def remove_style(home, name):
     return {"removed": target, "deleted_file": deleted, "turned_off": turned_off, "outputStyle": style}
 
 
+# The mods a project may turn off for itself alone. The others act for the whole computer
+# (shared-pc's line for heavy work, usage-guard's pause, the session-facts line), so one
+# project turning them off would break them for every other.
+PROJECT_MODS = ("ci-watch", "tasks", "skill-check")
+# The engine names a mod loaded from CLAUDE_CODE_PLUGIN_DIRS `<name>@inline`.
+INLINE = "@inline"
+
+
+def _load_project_settings(path):
+    """The JSON object at `path`, {} when the file is missing."""
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8-sig") as fh:
+        try:
+            data = json.load(fh)
+        except ValueError:
+            raise HomeError("%s is not valid JSON; fix it before running setup again" % path)
+    if not isinstance(data, dict):
+        raise HomeError("%s does not hold a JSON object" % path)
+    return data
+
+
+def project_mods(root):
+    """The per-project mods turned off in `root`, merged as the engine merges the shared
+    .claude/settings.json and then the personal .claude/settings.local.json."""
+    is_on = {}
+    for name in ("settings.json", "settings.local.json"):
+        path = os.path.join(root, ".claude", name)
+        plugins = _load_project_settings(path).get("enabledPlugins")
+        if not isinstance(plugins, dict):
+            continue
+        for key, value in plugins.items():
+            if key.endswith(INLINE) and isinstance(value, bool):
+                is_on[key[:-len(INLINE)]] = value
+    return {"off": [name for name in PROJECT_MODS if is_on.get(name) is False]}
+
+
+def set_project_mod(root, name, state):
+    """Turns a per-project mod off (or back on) in `root`'s personal .claude/settings.local.json."""
+    if name not in PROJECT_MODS:
+        raise HomeError("%s is not a per-project mod; those are %s" % (name, ", ".join(PROJECT_MODS)))
+    if state not in ("on", "off"):
+        raise HomeError("Use on or off, not " + state)
+    if not os.path.isdir(root):
+        raise HomeError("Not a folder: " + root)
+    path = os.path.join(root, ".claude", "settings.local.json")
+    data = _load_project_settings(path)
+    plugins = _section(data, "enabledPlugins", dict, path)
+    key = name + INLINE
+    before = plugins.get(key)
+    # On is the mod's own default, so it drops the key rather than writing true over the shared file.
+    if state == "off":
+        plugins[key] = False
+    else:
+        plugins.pop(key, None)
+    if not plugins:
+        del data["enabledPlugins"]
+    changed = plugins.get(key) != before
+    if changed:
+        _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    return {"settings": path, "mod": name, "on": state == "on", "changed": changed}
+
+
 def _work_language_rule(home):
     return os.path.abspath(os.path.join(_claude(home), "rules", "work-language.md"))
 
@@ -523,6 +592,10 @@ def run(argv):
         return attribution_off(home)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
+    if cmd == "project-mods" and one:
+        return project_mods(one)
+    if cmd == "project-mod" and len(args) == 3:
+        return set_project_mod(*args)
     raise HomeError("Usage: see the top of engine/home.py")
 
 

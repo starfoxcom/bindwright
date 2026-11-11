@@ -554,3 +554,37 @@ test("install-hook refuses both or neither of --matcher and --events, and writes
     assert.equal(existsSync(settingsPath(dir)), false);
   });
 });
+
+test("a per-project mod turns off and back on in the repo's personal settings only", { skip }, () => {
+  withHome((dir) => {
+    const repo = join(dir, "repo");
+    const local = join(repo, ".claude", "settings.local.json");
+    mkdirSync(join(repo, ".claude"), { recursive: true });
+    writeFileSync(local, JSON.stringify({ permissions: { allow: ["Bash(npm test:*)"] } }));
+    const shared = { enabledPlugins: { "tasks@inline": false } };
+    writeFileSync(join(repo, ".claude", "settings.json"), JSON.stringify(shared));
+    const off = home(dir, "project-mod", repo, "ci-watch", "off");
+    assert.equal(off.status, 0, off.stderr);
+    assert.deepEqual(off.out, { settings: local, mod: "ci-watch", on: false, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(local, "utf8")),
+      { permissions: { allow: ["Bash(npm test:*)"] }, enabledPlugins: { "ci-watch@inline": false } });
+    assert.ok(!existsSync(local + ".bak"));
+    assert.ok(!existsSync(settingsPath(dir)));
+    // The shared file's switch counts too.
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: ["ci-watch", "tasks"] });
+    assert.equal(home(dir, "project-mod", repo, "ci-watch", "on").out.changed, true);
+    assert.deepEqual(JSON.parse(readFileSync(local, "utf8")), { permissions: { allow: ["Bash(npm test:*)"] } });
+    assert.deepEqual(home(dir, "project-mods", repo).out, { off: ["tasks"] });
+  });
+});
+
+test("a computer-wide mod cannot be turned off for one project", { skip }, () => {
+  withHome((dir) => {
+    const repo = join(dir, "repo");
+    mkdirSync(repo);
+    const refused = home(dir, "project-mod", repo, "shared-pc", "off");
+    assert.equal(refused.status, 1, refused.stderr);
+    assert.match(refused.out.error, /shared-pc is not a per-project mod/);
+    assert.ok(!existsSync(join(repo, ".claude")));
+  });
+});
