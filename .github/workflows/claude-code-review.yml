@@ -513,7 +513,7 @@ jobs:
 
         Read ONLY the files most likely to contain risk. Then expand outward if the architecture review surfaces a concern.
 
-        **Project invariants:** verify the ones the review guide lists, in its order. Always verify, guide or not, unless the review context says the project turned this check off: no AI-attribution markers (`Co-Authored-By` lines naming an AI model, "Generated with" footers naming an AI tool, AI-vendor links) in added lines, commit messages or the PR body.
+        **Project invariants:** verify the ones the review guide lists, in its order. Always verify, guide or not, unless the review context says the project turned this check off: no AI-attribution markers (`Co-Authored-By` lines naming an AI model, "Generated with" footers naming an AI tool, links to an AI tool's sessions) in added lines, commit messages or the PR body.
 
         ## Step 2.5 — Decide whether to escalate
 
