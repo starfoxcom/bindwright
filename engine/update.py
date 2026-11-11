@@ -69,7 +69,7 @@ def _moves_for(theirs_all, pristine, read_repo, owned):
     moves = {}
     for old, new in RENAMES.items():
         due = new in theirs_all and old not in theirs_all and old in pristine["files"] and new not in pristine["files"]
-        if due and not is_owned(old, owned) and read_repo(new) is None:
+        if due and not is_owned(old, owned) and not is_owned(new, owned) and read_repo(new) is None:
             moves[new] = old
     return moves
 

@@ -67,7 +67,7 @@ export function resumePrompt(reason: string): string {
 // a wrap-up whose claim failed before a hot reload, or one before a /clear, left work and no record.
 export const NO_WORK_NOTICE =
   'Plan limits have reset. No saved work is on record for this session, so it does not go on by itself; ' +
-  'pick up a hand-off by hand, for example with /start-session.'
+  'pick up a hand-off by hand, for example with /start-session (or /session-start).'
 
 export function hotLimits(limits: readonly SessionRateLimit[], wrapUpAt: number): SessionRateLimit[] {
   return limits.filter(limit => limit.resetsAt !== undefined && limit.percentUsed >= wrapUpAt)

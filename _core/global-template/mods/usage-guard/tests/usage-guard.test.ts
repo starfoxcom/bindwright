@@ -224,7 +224,7 @@ test('a session opened after the reset is told to resume by hand', async ($, on)
   seen.files.set(PAUSE_FILE, JSON.stringify(pause))
   await start($)
 
-  expect(cardOf(seen)?.text).toContain('Run /start-session to resume')
+  expect(cardOf(seen)?.text).toContain('Run /start-session (or /session-start) to resume')
   expect(pauseOf(seen)?.status).toBe('done')
   expect(resumes(seen)).toEqual([])
 })

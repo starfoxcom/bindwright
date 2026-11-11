@@ -49,12 +49,12 @@ export const RENAMES = {
 
 // The renames this update carries out, new path to old: the bind last wrote
 // the old path, today's templates have only the new one, and the repo holds
-// nothing at the new path and does not own the old one.
+// nothing at the new path and owns neither.
 function movesFor(theirsAll, pristine, { readRepo, owned }) {
   const moves = new Map();
   for (const [from, to] of Object.entries(RENAMES)) {
     const due = theirsAll.has(to) && !theirsAll.has(from) && from in pristine.files && !(to in pristine.files);
-    if (due && !isOwned(from, owned) && readRepo(to) === null) moves.set(to, from);
+    if (due && !isOwned(from, owned) && !isOwned(to, owned) && readRepo(to) === null) moves.set(to, from);
   }
   return moves;
 }

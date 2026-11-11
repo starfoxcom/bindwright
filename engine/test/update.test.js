@@ -382,3 +382,21 @@ test("a renamed skill moves to its new path with the repo's edits", needsPython,
   }
   if (results.length === 2) assert.deepEqual(results[1], results[0], "the two engines report alike");
 });
+
+test("a move into a path the project owns is not made, and the old file is reported", needsPython, async () => {
+  const [[closeFrom, closeTo], [startFrom, startTo]] = Object.entries(RENAMES);
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      r.write(".bindwright/owned", `${closeTo}\n`);
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.deepEqual(out.renamed, [[startFrom, startTo]], cmd);
+    assert.ok(out.owned.includes(closeTo) && out.removed.includes(closeFrom), cmd);
+    assert.ok(existsSync(repo.at(closeFrom)), cmd);
+    outs.push(out);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+});

@@ -105,8 +105,8 @@ export function armedText(arm: ArmedWake, wakeText: string, untilText: string): 
 }
 
 export const CANCELLED_TEXT =
-  'Automatic resume cancelled for every session. Run /start-session in a session when you want to pick its ' +
-  'saved work back up.'
+  'Automatic resume cancelled for every session. Run /start-session (or /session-start) in a session ' +
+  'when you want to pick its saved work back up.'
 
 // When a claim helper fails at the wake: whether this session should go on by itself is not known.
 export const UNCONFIRMED_NOTICE =

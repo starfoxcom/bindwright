@@ -627,7 +627,7 @@ async function startOnce($: EngineInterface): Promise<void> {
 async function meetPause($: EngineInterface, pause: Pause): Promise<void> {
   if (pause.wakeAt <= (await $.clock.now())) {
     await writePause($, { ...pause, status: 'done' })
-    const text = 'Plan limits have reset since the last wrap-up. Run /start-session to resume the saved work.'
+    const text = 'Plan limits have reset since the last wrap-up. Run /start-session (or /session-start) to resume.'
     await showCard($, `missed:${pause.resetsAt}`, text)
     await notice($, text)
     return
