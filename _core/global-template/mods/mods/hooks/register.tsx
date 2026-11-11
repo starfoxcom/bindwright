@@ -50,8 +50,9 @@ async function readMods($: Engine): Promise<ModInfo[]> {
 // The engine names a mod loaded from CLAUDE_CODE_PLUGIN_DIRS `<name>@inline`.
 const INLINE = '@inline'
 
-// The mods turned off here: `"<name>@inline": false` under `enabledPlugins`, read from the
-// settings files in the order the engine merges them, so a later file's `true` turns a mod back on.
+// The mods a project turns off: `"<name>@inline": false` under `enabledPlugins`, in the order the
+// engine merges the files (the shared `.claude/settings.json`, then the personal
+// `.claude/settings.local.json`), so a later file's `true` turns a mod back on.
 export function offInProject(files: readonly unknown[]): Set<string> {
   const isOn = new Map<string, boolean>()
   for (const file of files) {
@@ -72,18 +73,11 @@ async function readJson($: Engine, path: string): Promise<unknown> {
   }
 }
 
-const slashes = (path: string) => path.replaceAll('\\', '/').replace(/\/+$/, '')
-
-// The user's own settings, then the project's shared and personal files: the order the CLI
-// merges them in, each later one winning.
 async function readOffInProject($: Engine): Promise<Set<string>> {
-  const root = slashes(await $.session.root().catch(() => ''))
+  const root = (await $.session.root().catch(() => '')).replaceAll('\\', '/').replace(/\/+$/, '')
   if (!root) return new Set()
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? ''
-  const config = slashes((await $.env.get('CLAUDE_CONFIG_DIR')) ?? (home ? `${home}/.claude` : ''))
-  const paths = [`${root}/.claude/settings.json`, `${root}/.claude/settings.local.json`]
-  if (config) paths.unshift(`${config}/settings.json`)
-  return offInProject(await Promise.all(paths.map(path => readJson($, path))))
+  const names = ['settings.json', 'settings.local.json']
+  return offInProject(await Promise.all(names.map(name => readJson($, `${root}/.claude/${name}`))))
 }
 
 // Every surface but mobile draws the pane; the mobile app gets the engine's own.

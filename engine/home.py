@@ -115,10 +115,10 @@ def _claude(home):
     return os.path.join(home, ".claude")
 
 
-def _load(home):
-    path = os.path.join(_claude(home), "settings.json")
+def _read_settings(path):
+    """The JSON object in a settings file, {} when the file is missing."""
     if not os.path.exists(path):
-        return path, {}
+        return {}
     with open(path, encoding="utf-8-sig") as fh:
         try:
             data = json.load(fh)
@@ -126,7 +126,12 @@ def _load(home):
             raise HomeError("%s is not valid JSON; fix it before running setup again" % path)
     if not isinstance(data, dict):
         raise HomeError("%s does not hold a JSON object" % path)
-    return path, data
+    return data
+
+
+def _load(home):
+    path = os.path.join(_claude(home), "settings.json")
+    return path, _read_settings(path)
 
 
 def _section(data, key, kind, path):
@@ -468,18 +473,10 @@ PROJECT_MODS = ("ci-watch", "tasks", "skill-check")
 INLINE = "@inline"
 
 
-def _load_project_settings(path):
-    """The JSON object at `path`, {} when the file is missing."""
-    if not os.path.exists(path):
-        return {}
-    with open(path, encoding="utf-8-sig") as fh:
-        try:
-            data = json.load(fh)
-        except ValueError:
-            raise HomeError("%s is not valid JSON; fix it before running setup again" % path)
-    if not isinstance(data, dict):
-        raise HomeError("%s does not hold a JSON object" % path)
-    return data
+def _repo_folder(root):
+    if not os.path.isdir(root):
+        raise HomeError("Not a folder: " + root)
+    return root
 
 
 def project_mods(root):
@@ -487,8 +484,8 @@ def project_mods(root):
     .claude/settings.json and then the personal .claude/settings.local.json."""
     is_on = {}
     for name in ("settings.json", "settings.local.json"):
-        path = os.path.join(root, ".claude", name)
-        plugins = _load_project_settings(path).get("enabledPlugins")
+        path = os.path.join(_repo_folder(root), ".claude", name)
+        plugins = _read_settings(path).get("enabledPlugins")
         if not isinstance(plugins, dict):
             continue
         for key, value in plugins.items():
@@ -503,14 +500,12 @@ def set_project_mod(root, name, state):
         raise HomeError("%s is not a per-project mod; those are %s" % (name, ", ".join(PROJECT_MODS)))
     if state not in ("on", "off"):
         raise HomeError("Use on or off, not " + state)
-    if not os.path.isdir(root):
-        raise HomeError("Not a folder: " + root)
-    path = os.path.join(root, ".claude", "settings.local.json")
-    data = _load_project_settings(path)
+    path = os.path.join(_repo_folder(root), ".claude", "settings.local.json")
+    data = _read_settings(path)
     plugins = _section(data, "enabledPlugins", dict, path)
     key = name + INLINE
     before = plugins.get(key)
-    shared = _load_project_settings(os.path.join(root, ".claude", "settings.json")).get("enabledPlugins")
+    shared = _read_settings(os.path.join(root, ".claude", "settings.json")).get("enabledPlugins")
     is_off_for_team = isinstance(shared, dict) and shared.get(key) is False
     # On is the mod's own default, so it writes true only to outrank the shared file's false.
     if state == "off":

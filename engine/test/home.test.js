@@ -603,5 +603,9 @@ test("a computer-wide mod cannot be turned off for one project", { skip }, () =>
     assert.equal(refused.status, 1, refused.stderr);
     assert.match(refused.out.error, /shared-pc is not a per-project mod/);
     assert.ok(!existsSync(join(repo, ".claude")));
+    // A mistyped repo folder is refused, never read as "nothing is off".
+    const missing = home(dir, "project-mods", join(dir, "no-such-repo"));
+    assert.equal(missing.status, 1, missing.stderr);
+    assert.match(missing.out.error, /Not a folder/);
   });
 });
