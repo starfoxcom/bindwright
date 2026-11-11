@@ -409,10 +409,16 @@ test("a project that owns the old skill path keeps only its own copy", needsPyth
       beforeRename(r);
       r.write(".bindwright/owned", `${closeFrom}\n`);
     });
-    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    const run = () => JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    const out = run();
     assert.ok(out.owned.includes(closeFrom) && out.owned.includes(closeTo), cmd);
     assert.ok(existsSync(repo.at(closeFrom)) && !existsSync(repo.at(closeTo)), cmd);
     outs.push(out);
+    // Once the project drops its claim, the next update makes the move.
+    rmSync(repo.at(".bindwright/owned"));
+    const after = run();
+    assert.deepEqual(after.renamed, [[closeFrom, closeTo]], cmd);
+    assert.ok(existsSync(repo.at(closeTo)) && !existsSync(repo.at(closeFrom)), cmd);
     rmSync(repo.at(""), { recursive: true, force: true });
   }
   if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");

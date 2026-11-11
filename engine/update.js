@@ -59,11 +59,11 @@ function movesFor(theirsAll, pristine, { readRepo, owned }) {
   return moves;
 }
 
-// A project that owns a file's old path owns its new one too, so the template
-// does not add a second copy beside the project's own.
-function ownsPath(path, owned) {
-  const from = Object.keys(RENAMES).find((old) => RENAMES[old] === path);
-  return isOwned(path, owned) || (from !== undefined && isOwned(from, owned));
+// The old path a renamed file is owned through, when the project owns that and
+// not the new path: the template then adds no second copy beside the project's own.
+function ownedOldPath(path, owned) {
+  if (isOwned(path, owned)) return undefined;
+  return Object.keys(RENAMES).find((old) => RENAMES[old] === path && isOwned(old, owned));
 }
 
 function decide(path, { ours, base, theirs }, merge) {
@@ -102,9 +102,14 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
     const from = moves.get(path);
     const base = pristine.files[from ?? path];
     const theirs = theirsAll.get(path);
-    if (ownsPath(path, owned)) {
+    const ownedOld = ownedOldPath(path, owned);
+    if (ownedOld !== undefined || isOwned(path, owned)) {
       result.owned.push(path);
-      if (theirs !== undefined) result.pristine[path] = theirs;
+      // Owned through its old name, the file keeps that name's base, so the move
+      // is still due once the project drops its claim.
+      if (ownedOld !== undefined) {
+        if (ownedOld in pristine.files) result.pristine[ownedOld] = pristine.files[ownedOld];
+      } else if (theirs !== undefined) result.pristine[path] = theirs;
       continue;
     }
     const ours = readRepo(from ?? path);

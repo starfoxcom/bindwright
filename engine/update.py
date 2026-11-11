@@ -74,10 +74,11 @@ def _moves_for(theirs_all, pristine, read_repo, owned):
     return moves
 
 
-def _owns_path(path, owned):
-    """A project that owns a file's old path owns its new one too; see ownsPath in update.js."""
-    old = next((o for o, n in RENAMES.items() if n == path), None)
-    return is_owned(path, owned) or (old is not None and is_owned(old, owned))
+def _owned_old_path(path, owned):
+    """The old path a renamed file is owned through; see ownedOldPath in update.js."""
+    if is_owned(path, owned):
+        return None
+    return next((o for o, n in RENAMES.items() if n == path and is_owned(o, owned)), None)
 
 
 def plan_update(rendered, pristine, read_repo, owned, merge, version):
@@ -93,9 +94,15 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
             continue
         old = moves.get(path)
         base, theirs = pristine["files"].get(old or path), theirs_all.get(path)
-        if _owns_path(path, owned):
+        owned_old = _owned_old_path(path, owned)
+        if owned_old is not None or is_owned(path, owned):
             result["owned"].append(path)
-            if theirs is not None:
+            # Owned through its old name, the file keeps that name's base, so the move
+            # is still due once the project drops its claim.
+            if owned_old is not None:
+                if owned_old in pristine["files"]:
+                    files[owned_old] = pristine["files"][owned_old]
+            elif theirs is not None:
                 files[path] = theirs
             continue
         ours = read_repo(old or path)
