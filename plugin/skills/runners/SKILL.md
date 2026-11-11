@@ -1,6 +1,7 @@
 ---
 name: runners
 description: Set up local CI runners for this repo. Checks the computer and the repo's CI, recommends how many runners (or none), installs the ones the user picks and lists them in the runners mod.
+disable-model-invocation: true
 ---
 
 # /bindwright:runners
