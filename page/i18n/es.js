@@ -172,10 +172,11 @@ export default {
   "lands.item.review": "Revisión con IA en cada PR",
   "lands.item.board": "Ajustes del tablero de trabajo",
   "lands.verb": "Haciendo las preguntas",
-  "lands.say.first": "Primera vez en esta computadora: primero hace las preguntas de la "
-    + "computadora, una sola vez, y luego las del proyecto.",
-  "lands.say.done": "Listo. Cambia las opciones de la computadora cuando quieras con "
-    + "/bindwright:setup global.",
+  "lands.say.first": "Primera vez en esta computadora: empieza con las preguntas de la "
+    + "computadora, una sola vez.",
+  "lands.say.project": "La computadora está lista. Ahora este proyecto: sus reglas, revisiones y mods.",
+  "lands.say.done": "Listo. Corre /bindwright:setup project en cada proyecto nuevo; "
+    + "/bindwright:setup global cambia las opciones de la computadora.",
   "mods.scene.session-facts.facts": "Datos: 14:32 · contexto 41% · plan 38% de 5 horas, 62% de la semana",
   "mods.scene.session-facts.use": "Con 41% de contexto usado, la tarea cabe en esta sesión.",
   "mods.scene.ci-watch.wake": "Terminaron las revisiones, así que ci-watch despertó la sesión. "

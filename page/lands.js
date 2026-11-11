@@ -43,6 +43,8 @@ async function story() {
   await term.wait(1200);
   await land(computerList, computer);
   await term.wait(1000);
+  term.say(t("lands.say.project"));
+  await term.wait(1200);
   await land(projectList, project);
   term.gap();
   term.say(t("lands.say.done"));
