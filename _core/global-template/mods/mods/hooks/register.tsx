@@ -47,6 +47,39 @@ async function readMods($: Engine): Promise<ModInfo[]> {
   return Promise.all(folders.map(folder => readMod($, expandHome(folder, home))))
 }
 
+// The engine names a mod loaded from CLAUDE_CODE_PLUGIN_DIRS `<name>@inline`.
+const INLINE = '@inline'
+
+// The mods a project turns off: `"<name>@inline": false` under `enabledPlugins`, in the order the
+// engine merges the files (the shared `.claude/settings.json`, then the personal
+// `.claude/settings.local.json`), so a later file's `true` turns a mod back on.
+export function offInProject(files: readonly unknown[]): Set<string> {
+  const isOn = new Map<string, boolean>()
+  for (const file of files) {
+    const plugins = (file as { enabledPlugins?: unknown } | null)?.enabledPlugins
+    if (!plugins || typeof plugins !== 'object') continue
+    for (const [id, value] of Object.entries(plugins)) {
+      if (id.endsWith(INLINE) && typeof value === 'boolean') isOn.set(id.slice(0, -INLINE.length), value)
+    }
+  }
+  return new Set([...isOn].filter(([, value]) => !value).map(([name]) => name))
+}
+
+async function readJson($: Engine, path: string): Promise<unknown> {
+  try {
+    return JSON.parse(String(await $.fs.read(path)))
+  } catch {
+    return null
+  }
+}
+
+async function readOffInProject($: Engine): Promise<Set<string>> {
+  const root = (await $.session.root().catch(() => '')).replaceAll('\\', '/').replace(/\/+$/, '')
+  if (!root) return new Set()
+  const names = ['settings.json', 'settings.local.json']
+  return offInProject(await Promise.all(names.map(name => readJson($, `${root}/.claude/${name}`))))
+}
+
 // Every surface but mobile draws the pane; the mobile app gets the engine's own.
 type Ui = Elements['terminal'] | Elements['desktop'] | Elements['vscode']
 
@@ -61,10 +94,17 @@ function commandLine(ui: Ui, command: CommandInfo) {
   )
 }
 
-function modRow(ui: Ui, mod: ModInfo, commands: readonly CommandInfo[]) {
+function modRow(ui: Ui, mod: ModInfo, commands: readonly CommandInfo[], isOff: boolean) {
   return (
     <ui.Box key={`mods-row-${mod.name}`} flexDirection="column" marginTop={1}>
-      <ui.Text bold>{mod.name}</ui.Text>
+      <ui.Box flexDirection="row">
+        <ui.Text bold>{mod.name}</ui.Text>
+        {isOff ? (
+          <ui.Box key={`mods-off-${mod.name}`}>
+            <ui.Text dimColor>{'  off in this project'}</ui.Text>
+          </ui.Box>
+        ) : null}
+      </ui.Box>
       <ui.Text dimColor wrap="wrap">
         {mod.description}
       </ui.Text>
@@ -92,16 +132,20 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE || e.surface === 'mobile') return next(e)
     const ui = $.ui.resolve(e) as Ui
-    const mods = await readMods($)
+    const [mods, offHere] = await Promise.all([readMods($), readOffInProject($)])
     const names = new Set(mods.map(mod => mod.name))
+    const offCount = mods.filter(mod => offHere.has(mod.name)).length
+    const heading = `${mods.length - offCount} mods loaded` + (offCount ? `, ${offCount} off in this project` : '')
     const listed = await $.command.list().catch((): CommandInfo[] => [])
     const commands = listed.filter(command => command.source === 'plugin')
     const others = commands.filter(command => !names.has(command.name))
     const close = () => void $.ui.close({ id: PANE }).catch(() => undefined)
     return (
       <ui.Box flexDirection="column">
-        <ui.Text bold>{`${mods.length} mods loaded`}</ui.Text>
-        {mods.map(mod => modRow(ui, mod, commands.filter(command => command.name === mod.name)))}
+        <ui.Text bold>{heading}</ui.Text>
+        {mods.map(mod =>
+          modRow(ui, mod, commands.filter(command => command.name === mod.name), offHere.has(mod.name)),
+        )}
         {others.length > 0 ? (
           <ui.Box key="mods-others" flexDirection="column" marginTop={1}>
             <ui.Text bold>Other plugin commands</ui.Text>
