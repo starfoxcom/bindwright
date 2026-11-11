@@ -5,11 +5,17 @@
 //   findwright symbols <name> [--kind K] [--glob G]
 //   findwright outline <path>
 //   findwright coverage
+//   findwright find <question or name>
+//   findwright hits [transcript]   (score the newest session, record it, say when to assess)
+//   findwright assess              (why recorded searches missed, and what would fix it)
 // Runs from the repo root (or any folder inside it).
 
 import { execFileSync } from "node:child_process";
 import { openIndex, readConfig, refresh } from "./store.mjs";
 import { coverage, outline, search, symbols } from "./query.mjs";
+import { find } from "./find.mjs";
+import { assess, DEFAULT_GOAL, recordSession } from "./hits.mjs";
+import { meaningModel } from "./meaning.mjs";
 
 function parse(argv) {
   const opts = { positional: [], globs: [], ignoreCase: false, context: 0, all: false };
@@ -37,7 +43,7 @@ function printSearch(result) {
   if (result.truncated) console.log("(more matches; narrow the search)");
 }
 
-function main() {
+async function main() {
   const [command, ...rest] = process.argv.slice(2);
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
   const db = openIndex(root);
@@ -54,8 +60,16 @@ function main() {
   } else if (command === "outline") {
     for (const s of outline(db, opts.positional[0])) console.log(`${s.line}-${s.end_line}  ${s.kind} ${s.name}`);
   } else if (command === "coverage") console.log(JSON.stringify(coverage(db), null, 1));
+  else if (command === "find") {
+    const model = await meaningModel(db);
+    for (const f of find(db, { query: opts.positional.join(" "), limit: 12, model: model.ready })) console.log(f.path);
+    if (model.note) console.log(model.note);
+  } else if (command === "hits") {
+    const goal = readConfig(root).goal ?? DEFAULT_GOAL;
+    console.log(JSON.stringify(recordSession(root, { goal, ...(opts.positional[0] ? { transcript: opts.positional[0] } : {}) })));
+  } else if (command === "assess") console.log(JSON.stringify(assess(db, root, (await meaningModel(db)).ready), null, 1));
   else console.log("Usage: see the top of src/cli.mjs");
   db.close();
 }
 
-main();
+await main();
