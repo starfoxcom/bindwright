@@ -35,6 +35,7 @@ Run it with `--update <repo root>`. It prints one line of JSON:
 | `added` | New in the templates; written in place | Nothing, beyond step 4 |
 | `staged` | New in the templates, but the repo already has a file there; the new text is at `.bindwright/incoming/<path>` | Merge it (step 3) |
 | `conflict` | Both sides changed the same lines, or the merge would lose a kept section; the repo's copy is untouched and the merge, with all three versions at each clash, is at `.bindwright/incoming/<path>` | Settle it (step 3) |
+| `renamed` | Pairs of `[old path, new path]`: the templates moved the file, so its copy, the repo's edits included, now sits at the new path (and in the list above that says how it merged), and the old file is gone | Nothing, beyond what that list asks |
 | `removed` | The templates dropped a file the repo never changed | Say whether to delete it |
 | `removed_edited` | The templates dropped a file the repo changed; it stays | Nothing, or delete it by hand |
 | `deleted` | The repo deleted a file setup wrote; it stays deleted | Nothing |
