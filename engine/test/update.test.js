@@ -401,6 +401,23 @@ test("a renamed skill whose staged copy is still unsettled keeps its old base", 
   }
 });
 
+test("a project that owns the old skill path keeps only its own copy", needsPython, async () => {
+  const [[closeFrom, closeTo]] = Object.entries(RENAMES);
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      r.write(".bindwright/owned", `${closeFrom}\n`);
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.ok(out.owned.includes(closeFrom) && out.owned.includes(closeTo), cmd);
+    assert.ok(existsSync(repo.at(closeFrom)) && !existsSync(repo.at(closeTo)), cmd);
+    outs.push(out);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+});
+
 test("a move into a path the project owns is not made, and the old file is reported", needsPython, async () => {
   const [[closeFrom, closeTo], [startFrom, startTo]] = Object.entries(RENAMES);
   const outs = [];
