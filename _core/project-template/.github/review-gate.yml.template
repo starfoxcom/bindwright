@@ -50,7 +50,7 @@ fallback:
 # processes behind for the review; keep such checks on hosted or one-job
 # runners. Empty: none.
 # attribution: on scans the lines a PR adds for AI-attribution markers
-# (co-author lines, "generated with" footers, vendor links), and the
+# (co-author lines, "generated with" footers, session links), and the
 # reviewer checks the commits and the PR body for them; off skips both.
 prescreen:
   dir:
