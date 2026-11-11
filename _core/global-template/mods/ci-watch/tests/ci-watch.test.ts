@@ -145,6 +145,41 @@ test('a load newer than this one keeps a resumed id, whichever claimed it first'
   expect(seen.files.has(STATE)).toBe(false)
 })
 
+test('a stop right after a resume stops the earlier owner\'s watches too', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+  seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+  seen.session = 's1'
+  await $.command.run({ command: 'ci-watch', args: 'stop' } as never)
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  expect(JSON.parse(seen.files.get(STATE) ?? '{}').watches).toEqual([])
+  expect(seen.prompts).toEqual([])
+})
+
+test('a wake the earlier owner held for the same head is still sent once after a resume', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)
+  // Its checks pass, and the resume lands one poll before they settle.
+  seen.bucket = 'pass'
+  await clock.advance(POLL_MS)
+  const mine = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/fresh.json') ?? '{}').watches[0]
+  seen.files.set(OWNER, EARLIER_PROCESS)
+  const held = { ...PENDING_WATCH, headSha: mine.headSha }
+  seen.files.set(STATE, JSON.stringify({ watches: [held], isTurnRunning: false }))
+  seen.session = 's1'
+  seen.bucket = 'pass'
+  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.filter(p => p.includes('o/r#7'))).toHaveLength(1)
+})
+
 test('a takeover by the poll timer keeps both its own watch and the earlier owner\'s', async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true

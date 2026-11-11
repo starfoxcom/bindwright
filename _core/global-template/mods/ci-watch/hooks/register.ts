@@ -116,9 +116,13 @@ async function statePath($: EngineInterface): Promise<string> {
 async function dataFolder($: EngineInterface): Promise<string> {
   return (await statePath($)).replace(/\/[^/]*$/, '')
 }
-// Before every save and every poll's read: a resumed id's saved watches join memory (owner.ts).
+// At the entry check of every hook and poll: a resumed id's saved watches join memory (owner.ts).
 async function followSession($: EngineInterface): Promise<void> {
-  if (await followId($, await dataFolder($), live).catch(() => false)) await publish($)
+  try {
+    if (await followId($, await dataFolder($), live)) await publish($)
+  } catch {
+    // The id or the folder cannot be read: memory stays as it is.
+  }
 }
 
 // The owner claim and the retirement check live in owner.ts; neither ever rejects a hook. An older
@@ -139,7 +143,9 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
     const folder = await dataFolder($)
     const owner = await ownerOf($, folder)
     if (owner === 'older') await claim($, folder)
-    return owner === 'newer'
+    if (owner === 'newer') return true
+    await followSession($)
+    return false
   } catch {
     return false
   }
@@ -154,7 +160,6 @@ async function publish($: EngineInterface): Promise<void> {
 }
 
 async function save($: EngineInterface): Promise<void> {
-  await followSession($)
   try {
     const path = await statePath($)
     await ensureDir($, path.slice(0, path.lastIndexOf('/')))
@@ -451,7 +456,6 @@ async function poll($: EngineInterface): Promise<void> {
   // this one, and reading the file keeps a watch the other already settled from waking twice. With
   // no saved file yet, or after a failed save, the watches in memory stand. So do they when a push or a
   // stop landed during the read: the file it read is older than memory.
-  await followSession($)
   const generation = live.generation
   const start = live.isUnsaved ? undefined : await readSaved($)
   if (start && live.generation === generation) live.watches = start

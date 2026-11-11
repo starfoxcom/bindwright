@@ -49,8 +49,10 @@ export interface Memory {
 
 /**
  * When the session goes on under another id (a resume), joins the watches saved under that id into memory,
- * this load's own winning for the same PR, and marks memory unsaved, so the next poll keeps it and the next
- * save writes both. Returns whether it joined anything. Called before every save and every poll's read.
+ * and marks memory unsaved, so the next poll keeps it and the next save writes both. For a PR both hold,
+ * the copy further along wins: the saved one when it settled the same head (it may hold a wake not yet
+ * sent), this load's otherwise. Returns whether it joined anything. Called from the entry check every hook
+ * and poll passes, before anything changes memory.
  */
 export async function followId($: EngineInterface, folder: string, memory: Memory): Promise<boolean> {
   const id = await $.session.id()
@@ -61,8 +63,14 @@ export async function followId($: EngineInterface, folder: string, memory: Memor
   } catch {
     // No file under that id: nothing to join.
   }
-  const ownPrs = new Set(memory.watches.map(w => `${w.repo}#${w.number}`))
-  memory.watches = [...saved.filter(w => !ownPrs.has(`${w.repo}#${w.number}`)), ...memory.watches]
+  const prOf = (w: Watch) => `${w.repo}#${w.number}`
+  const savedByPr = new Map(saved.map(w => [prOf(w), w]))
+  const own = memory.watches.map(w => {
+    const there = savedByPr.get(prOf(w))
+    return there && there.headSha === w.headSha && there.outcome && !w.outcome ? there : w
+  })
+  const ownPrs = new Set(own.map(prOf))
+  memory.watches = [...saved.filter(w => !ownPrs.has(prOf(w))), ...own]
   memory.stateId = id
   memory.isUnsaved = true
   memory.generation++
