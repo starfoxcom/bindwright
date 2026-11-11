@@ -8,7 +8,7 @@ window.BW = {
   ],
   tree: [
     { d: ".claude/rules", f: ["git.md", "review-tiers.md", "token-efficiency.md", "collaboration.md", "clean-room.md", "visual.md"] },
-    { d: ".claude/skills", f: ["session-start/SKILL.md", "session-close/SKILL.md", "find/SKILL.md", "architecture-graph/SKILL.md"] },
+    { d: ".claude/skills", f: ["session-start/SKILL.md", "session-close/SKILL.md", "find/SKILL.md"] },
     { d: ".github/workflows", f: ["claude-code-review.yml", "claude.yml"] },
     { d: ".github", f: ["CODEOWNERS", "PULL_REQUEST_TEMPLATE.md", "ISSUE_TEMPLATE/bug_report.yml"] },
     { d: "", f: ["CLAUDE.md", "CONTRIBUTING.md", "CHANGELOG.md", "LICENSE", "README.md"] },

@@ -30,7 +30,6 @@
   ".claude/scripts/research-adherence.py",
   ".claude/settings.json.template",
   ".claude/settings.local.json.template",
-  ".claude/skills/architecture-graph/SKILL.md",
   ".claude/skills/find/SKILL.md",
   ".claude/skills/session-close/SKILL.md",
   ".claude/skills/session-start/SKILL.md",

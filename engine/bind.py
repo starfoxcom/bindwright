@@ -96,8 +96,6 @@ def _included(path, a, flags):
         return False
     if path.startswith(".claude/rules/architecture/"):
         return False
-    if path.startswith(".claude/skills/architecture-graph/"):
-        return False
     # Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
     # `.template` sources match too; the scripts and the size-check folder run anywhere.
     if not flags["code_host_github"] and path.startswith(GITHUB_ONLY):
