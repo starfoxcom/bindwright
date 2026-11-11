@@ -5,8 +5,8 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import { EXTRACTORS, fromRules } from "./extract.mjs";
 
 // Files past this size are listed but not read: they are data, not code.
@@ -82,6 +82,18 @@ function walk(root, folder, out) {
 
 // Every file git tracks or would track, plus the config's `include` globs
 // (files git ignores but the work reads, such as generated typings), minus `exclude`.
+// A folder an include walks must really sit in the repo: one reached through a
+// symlink that points outside is skipped.
+function realInside(root, folder) {
+  try {
+    const real = realpathSync(join(root, folder));
+    const base = realpathSync(root);
+    return real === base || real.startsWith(base + sep);
+  } catch {
+    return false;
+  }
+}
+
 // An include glob may not climb out of the repo or name an absolute path.
 const insideRepo = (glob) => typeof glob === "string" && !/^([\\/]|[A-Za-z]:)/.test(glob)
   && !glob.split(/[\\/]/).includes("..");
@@ -93,6 +105,7 @@ export function listFiles(root, config) {
     const base = glob.split("/").filter((part) => !/[*?]/.test(part));
     const start = glob.includes("*") ? base.slice(0, glob.split("/").findIndex((p) => /[*?]/.test(p))).join("/") : glob;
     const found = [];
+    if (!realInside(root, start)) continue;
     try { walk(root, start, found); } catch { continue; }
     for (const path of found) if (globToRegExp(glob).test(path)) files.add(path);
   }

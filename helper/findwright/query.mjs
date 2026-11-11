@@ -28,23 +28,30 @@ export function requiredLiterals(source) {
     } else if ("*?{".includes(ch)) {
       run = run.slice(0, -1);
       flush();
-      if (ch === "{") i = source.indexOf("}", i);
+      if (ch === "{") i = closing(source, "}", i);
     } else if (ch === "+") flush();
     else if (".^$()[]|".includes(ch)) {
       flush();
-      if (ch === "[") i = source.indexOf("]", i + 1);
+      if (ch === "[") i = closing(source, "]", i + 1);
     } else run += ch;
   }
   flush();
   return runs.sort((a, b) => b.length - a.length);
 }
 
+// Where `mark` next appears from `from`, or the end when it never does, so an
+// unclosed `{` or `[` ends the scan instead of restarting it.
+const closing = (source, mark, from) => {
+  const at = source.indexOf(mark, from);
+  return at < 0 ? source.length : at;
+};
+
 // The index of the `)` that closes the group opened at `start`.
 function groupEnd(source, start) {
   let depth = 0;
   for (let i = start; i < source.length; i++) {
     if (source[i] === "\\") i++;
-    else if (source[i] === "[") i = source.indexOf("]", i + 1);
+    else if (source[i] === "[") i = closing(source, "]", i + 1);
     else if (source[i] === "(") depth++;
     else if (source[i] === ")" && --depth === 0) return i;
   }
@@ -59,7 +66,7 @@ export function branches(source) {
   for (let i = 0; i < source.length; i++) {
     const ch = source[i];
     if (ch === "\\") i++;
-    else if (ch === "[") i = source.indexOf("]", i + 1);
+    else if (ch === "[") i = closing(source, "]", i + 1);
     else if (ch === "(") depth++;
     else if (ch === ")") depth--;
     else if (ch === "|" && depth === 0) { out.push(source.slice(start, i)); start = i + 1; }
