@@ -34,6 +34,17 @@ test('below the line nothing happens', async ($, on) => {
   expect(seen.commands).toEqual([])
 })
 
+test('a project set up before the skills were renamed wraps up with its /session-close', async ($, on) => {
+  const seen = world(on)
+  seen.projectCommands = ['session-close', 'session-start']
+  await start($)
+  await doWork($)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
+  await endTurn($)
+
+  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+})
+
 test('crossing the line wraps up, stops background work and resumes after the reset', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
@@ -49,19 +60,19 @@ test('crossing the line wraps up, stops background work and resumes after the re
     new Set([`pause-${KEY}`, `${KEY}-sess-a`, `stop-${KEY}-c__repos_my-game`, `work-${KEY}-sess-a`]),
   )
   expect(stopsRun(seen)).toEqual(stopCommandsFor('C:/Repos/my-game').map(argv => [...argv]))
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   expect(cardOf(seen)?.text).toContain('Fri 2026-10-02 12:02 (America/Phoenix)')
 
   // In 10-minute steps: one two-hour jump (thousands of 2-second ticks) stopped short of the wake on a slow
   // CI runner, about 10 s in (2026-10-08 and 2026-10-14).
   for (let left = WAKE - NOW; left > 0; left -= 10 * 60_000) await seen.clock.advance(Math.min(10 * 60_000, left))
-  // The session goes on by itself: no /session-start, whose plan would wait for the person's OK.
+  // The session goes on by itself: no /start-session, whose plan would wait for the person's OK.
   expect(resumes(seen)).toHaveLength(1)
   expect(resumes(seen)[0]).toContain('do not wait for a plan approval')
   // Only the plan approval is waived: the steps a project keeps for the person still wait for them.
   expect(resumes(seen)[0]).toContain("Every step the project's rules keep for the person")
   expect(resumes(seen)[0]).toContain('still stops and waits for them')
-  expect(seen.commands.map(c => c.command)).toEqual(['session-close'])
+  expect(seen.commands.map(c => c.command)).toEqual(['close-session'])
   expect(pauseOf(seen)?.status).toBe('done')
 })
 
@@ -83,7 +94,7 @@ test('another session in the same project wraps up once and leaves the stop comm
   await seen.clock.advance(60_000)
   await endTurn($)
 
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   expect(seen.claims).toEqual(new Set([`stop-${KEY}-c__repos_my-game`, `${KEY}-sess-a`, `work-${KEY}-sess-a`]))
   expect(pauseOf(seen)).toEqual(other)
 })
@@ -150,7 +161,7 @@ test('a pause another session wrote for an earlier reset is extended; each wraps
   // Claims stay keyed on the first reset: the next checks wrap up nothing more.
   expect(seen.claims.has(`${KEY}-sess-a`)).toBe(true)
   await seen.clock.advance(5 * 60_000)
-  expect(seen.commands.filter(c => c.command === 'session-close')).toHaveLength(1)
+  expect(seen.commands.filter(c => c.command === 'close-session')).toHaveLength(1)
 })
 
 test('a pause another session wrote for a later reset is kept, and this session wraps up once', async ($, on) => {
@@ -173,7 +184,7 @@ test('a pause another session wrote for a later reset is kept, and this session 
   await endTurn($)
   expect(pauseOf(seen)).toEqual(other)
   await seen.clock.advance(5 * 60_000)
-  expect(seen.commands.filter(c => c.command === 'session-close')).toHaveLength(1)
+  expect(seen.commands.filter(c => c.command === 'close-session')).toHaveLength(1)
 })
 
 test(
@@ -213,7 +224,7 @@ test('a session opened after the reset is told to resume by hand', async ($, on)
   seen.files.set(PAUSE_FILE, JSON.stringify(pause))
   await start($)
 
-  expect(cardOf(seen)?.text).toContain('Run /session-start to resume')
+  expect(cardOf(seen)?.text).toContain('Run /start-session (or /session-start) to resume')
   expect(pauseOf(seen)?.status).toBe('done')
   expect(resumes(seen)).toEqual([])
 })
@@ -314,7 +325,7 @@ test('a session whose entry in the shared pause was overwritten does not wrap up
   await seen.clock.advance(60_000)
   await endTurn($)
 
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
 })
 
 test('a session that loses the pause claim still stops its own project once', LONG, async ($, on) => {
@@ -328,7 +339,7 @@ test('a session that loses the pause claim still stops its own project once', LO
   await endTurn($)
 
   expect(seen.claims.has(`stop-${KEY}-c__repos_my-game`)).toBe(true)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toHaveLength(1)
 })
@@ -414,7 +425,7 @@ test('work whose claim failed before a hot reload is never called no work at the
   seen.failClaims = new Set([`work-${KEY}-sess-a`])
   seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   expect(seen.claims.has(`work-${KEY}-sess-a`)).toBe(false)
 })
 
@@ -513,11 +524,11 @@ test('crossing the line mid-turn waits for the turn to end before the wrap-up ru
   expect(seen.commands).toEqual([])
 
   await endTurn($)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   // Once only: later checks find the wrap-up done.
   await seen.clock.advance(60_000)
   await endTurn($)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
 })
 
 // Since Claude Code 2.1.299 a subagent's turn fires turn.start too, with no main turn.complete after it.
@@ -530,7 +541,7 @@ test("a subagent's turn between main's turns does not hold the wrap-up", async (
   seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await seen.clock.advance(60_000)
 
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
 })
 
 test("a subagent's turn ending mid-turn does not start the wrap-up beside main's turn", async ($, on) => {
@@ -552,7 +563,7 @@ test("a subagent's turn ending mid-turn does not start the wrap-up beside main's
   expect(seen.commands).toEqual([])
 
   await endTurn($)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
 })
 
 test('a wrap-up owed by a running turn still runs when another session extends the pause', async ($, on) => {
@@ -568,7 +579,7 @@ test('a wrap-up owed by a running turn still runs when another session extends t
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pauseOf(seen), resetsAt: WEEKLY, wakeAt, episode: RESET }))
   await endTurn($)
 
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   await seen.clock.advance(60_000)
   expect(seen.commands).toHaveLength(1)
 })
@@ -583,7 +594,7 @@ test('a wrap-up owed by a running turn is dropped when the pause is cancelled be
   await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
   await endTurn($)
 
-  expect(seen.commands.filter(c => c.command === 'session-close')).toEqual([])
+  expect(seen.commands.filter(c => c.command === 'close-session')).toEqual([])
 })
 
 test('an armed session resumes after the reset it named, below the line and without a pause', LONG, async ($, on) => {
@@ -598,7 +609,7 @@ test('an armed session resumes after the reset it named, below the line and with
   expect(resumes(seen)).toHaveLength(1)
   // Nothing is shared: no pause, no wrap-up, no card for the other sessions.
   expect(pauseOf(seen)).toBeUndefined()
-  expect(seen.commands.filter(c => c.command === 'session-close')).toEqual([])
+  expect(seen.commands.filter(c => c.command === 'close-session')).toEqual([])
 })
 
 test('disarm drops the armed wake', LONG, async ($, on) => {
@@ -783,7 +794,7 @@ test('after a /clear the new session id has no work: it only waits, and is not s
   seen.sessionId = 'sess-b'
   seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
   await endTurn($)
-  expect(seen.commands.filter(c => c.command === 'session-close')).toEqual([])
+  expect(seen.commands.filter(c => c.command === 'close-session')).toEqual([])
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
 })

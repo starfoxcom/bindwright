@@ -59,7 +59,7 @@ Approval to open the PR covers this merge. A PR that changes `.github/workflows/
 
 ## Long sessions
 
-An approaching auto-compaction is no reason to stop, wrap up or close the session: keep working through it, mid-task included. Run the session-close ritual only when the maintainer asks for it, or when every task of the session is done and nothing is left to work on.
+An approaching auto-compaction is no reason to stop, wrap up or close the session: keep working through it, mid-task included. Run the close-session ritual only when the maintainer asks for it, or when every task of the session is done and nothing is left to work on.
 
 Without a hand-off that carries the work across a compaction (the `compact-handoff` mod is one), keep the task list current as the context fills, so the compaction's summary starts from where the work stands.
 

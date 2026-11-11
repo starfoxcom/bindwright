@@ -1,7 +1,7 @@
-// The plugin's session-start notice (helper/hooks/notice.mjs): what it says,
+// The plugin's start-session notice (helper/hooks/notice.mjs): what it says,
 // that it says it at most once a day per repo, asks the network at most once
 // a day, and stays quiet offline. The last case runs the script from a fresh
-// helper pack, as /session-start does.
+// helper pack, as /start-session does.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -243,7 +243,7 @@ test("a helper at another version than the plugin points at /bindwright:update",
 
 const needs = { skip: !python && "needs Python 3.8+" };
 
-test("the notice, run from the helper as /session-start runs it, tells the user and then stays quiet", needs, () => {
+test("the notice, run from the helper as /start-session runs it, tells the user and then stays quiet", needs, () => {
   const s = scene("0.1.0");
   try {
     const helper = join(s.root, "helper");

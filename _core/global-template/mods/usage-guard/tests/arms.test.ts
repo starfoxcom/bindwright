@@ -28,13 +28,13 @@ import {
 // a slower machine.
 const LONG = { timeoutMs: 15_000 }
 
-// A working session crosses the line at a turn's end, so the wrap-up (/session-close) runs as the next turn.
+// A working session crosses the line at a turn's end, so the wrap-up (/close-session) runs as the next turn.
 async function crossAndWrapUp($: Engine, seen: World, resetsAt = RESET): Promise<void> {
   await start($)
   await doWork($)
   seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt }]
   await endTurn($)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
 }
 
 test('a session that resumes by itself compacts once its wrap-up turn ends, and says what it freed', async ($, on) => {
@@ -76,7 +76,7 @@ test('after a reload in a pause, a wrap-up begun at a turn end compacts after it
   // No session.start: the module reloaded mid-turn, and the turn changed something after it.
   await doWork($)
   await endTurn($)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
   await seen.clock.advance(1_000)
   expect(seen.compactions).toEqual([])
   await endTurn($)
@@ -519,7 +519,7 @@ test('an idle session takes a new wrap-up line from the settings file at the nex
   expect(seen.commands).toEqual([])
   settingsFile(seen, { wrapUpAt: 35 })
   await seen.clock.advance(60_000)
-  expect(seen.commands).toEqual([{ command: 'session-close', args: WRAP_UP_ARGS }])
+  expect(seen.commands).toEqual([{ command: 'close-session', args: WRAP_UP_ARGS }])
 })
 
 test('/usage-guard set after an idle hot reload still restarts the saved arm and its timer', LONG, async ($, on) => {

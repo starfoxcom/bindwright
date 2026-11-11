@@ -71,7 +71,7 @@ test("prompts the mods submit and the lines they attach are not the person's wor
     user('[ci-watch] #12: all 3 checks settled with no failure. Verify it is mergeable.'),
     user('[usage-guard] Plan usage limit nearly reached (automatic wrap-up).'),
     user('[shared-pc] The person approved your request: this session goes next on the PC.'),
-    user('[skill-check] /session-close is not finished: no sign of the push.'),
+    user('[skill-check] /close-session is not finished: no sign of the push.'),
     user('[tasks] Open: #1 Fix the parser (in progress).\n[session-facts] 2026-10-02 10:00 | ctx 40%'),
     user('keep the parser strict\n[tasks] Open: #1 Fix the parser.\n[session-facts] 2026-10-02 10:01 | ctx 41%'),
     user('[link](https://example.com) is the spec to follow'),

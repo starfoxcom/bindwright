@@ -15,7 +15,7 @@ Claude Code has no built-in time-of-day awareness across turns. Without this hoo
 - **Multi-day sessions** — noticing "the user slept" vs "the user is mid-thought" changes how you respond.
 - **Polling loops** — knowing how long a `gh run list` background loop has actually been running.
 - **Timing reasoning** — "did the deploy finish?", "has the cache expired?", "is this conversation stale?" — all need wall-clock truth.
-- **Telemetry accuracy** — session-close summaries that report elapsed time, not just a guess.
+- **Telemetry accuracy** — close-session summaries that report elapsed time, not just a guess.
 
 Cost: ~50 ms per prompt on a warm Node runtime. No side effects.
 

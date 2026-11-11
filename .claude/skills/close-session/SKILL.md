@@ -1,9 +1,9 @@
 ---
-name: session-close
+name: close-session
 description: Close a work session. Verifies what is really finished, commits, lands the work, cleans up and hands off to the next session. Use when the maintainer asks for it, or when every task of the session is done; never just because the context is filling up.
 ---
 
-# /session-close
+# /close-session
 
 Run the steps in order without asking between them. Stop and ask only before a force-push, deleting a branch that holds unmerged work, or rewriting history someone else has pulled. If `.claude/rules/visual.md` exists and this session changed what people see, do not push until the maintainer has confirmed the visual check.
 

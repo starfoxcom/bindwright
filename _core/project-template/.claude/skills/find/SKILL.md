@@ -51,7 +51,7 @@ Allowed only when:
 - the target is not code (Markdown, config, binaries, ignored files);
 - {{TOOLS_CODE_RESEARCH_NAME}} is unavailable for this scope.
 
-Say which condition applies. For a shell `grep` or `rg`, add the comment `# {{TOOLS_CODE_RESEARCH_BYPASS_MARKER}} <reason>` to the command so the session-close count treats it as a deliberate fallback.
+Say which condition applies. For a shell `grep` or `rg`, add the comment `# {{TOOLS_CODE_RESEARCH_BYPASS_MARKER}} <reason>` to the command so the close-session count treats it as a deliberate fallback.
 <!-- TOGGLE:code_research_first END -->
 
 ## Citing

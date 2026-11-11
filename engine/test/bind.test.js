@@ -1012,8 +1012,8 @@ test("the tracker decides where the hand-off lives", async () => {
   assertClean(github);
   assert.ok(github.has(".claude/rules/tracker.md"));
   assert.ok(github.has(".github/ISSUE_TEMPLATE/work-item.md"));
-  assert.ok(github.get(".claude/skills/session-start/SKILL.md").includes("tracker.md"));
-  assert.ok(!github.get(".claude/skills/session-close/SKILL.md").includes("-CONTEXT_"));
+  assert.ok(github.get(".claude/skills/start-session/SKILL.md").includes("tracker.md"));
+  assert.ok(!github.get(".claude/skills/close-session/SKILL.md").includes("-CONTEXT_"));
   assert.ok(!github.get(`${STAGING}CLAUDE.md`).includes("ROADMAP.md"));
 
   const a = defaults();
@@ -1022,8 +1022,8 @@ test("the tracker decides where the hand-off lives", async () => {
   assertClean(file);
   assert.ok(!file.has(".claude/rules/tracker.md"));
   assert.ok(!file.has(".github/ISSUE_TEMPLATE/work-item.md"));
-  assert.ok(file.get(".claude/skills/session-close/SKILL.md").includes("MY_PROJECT-CONTEXT_"));
-  assert.ok(!file.get(".claude/skills/session-close/SKILL.md").includes("tracker.md"));
+  assert.ok(file.get(".claude/skills/close-session/SKILL.md").includes("MY_PROJECT-CONTEXT_"));
+  assert.ok(!file.get(".claude/skills/close-session/SKILL.md").includes("tracker.md"));
   assert.ok(file.get(`${STAGING}CLAUDE.md`).includes("ROADMAP.md"));
   // Both keep the project's own session steps, written once.
   assert.ok(github.has(".bindwright/session-steps.md") && file.has(".bindwright/session-steps.md"));

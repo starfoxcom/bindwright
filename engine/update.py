@@ -21,6 +21,12 @@ OUTCOMES = [
     "updated", "merged", "added", "staged", "unchanged", "conflict", "owned", "deleted", "removed", "removed_edited",
 ]
 
+# Files the templates moved, old path to new; update.js explains the move.
+RENAMES = {
+    ".claude/skills/session-close/SKILL.md": ".claude/skills/close-session/SKILL.md",
+    ".claude/skills/session-start/SKILL.md": ".claude/skills/start-session/SKILL.md",
+}
+
 
 def repo_files(rendered):
     out = {}
@@ -58,26 +64,48 @@ def _decide(path, ours, base, theirs, merge):
     return ("merged", text)
 
 
+def _moves_for(theirs_all, pristine, read_repo, owned):
+    """The renames this update carries out, new path to old; see movesFor in update.js."""
+    moves = {}
+    for old, new in RENAMES.items():
+        due = new in theirs_all and old not in theirs_all and old in pristine["files"] and new not in pristine["files"]
+        if due and not is_owned(old, owned) and not is_owned(new, owned) and read_repo(new) is None:
+            moves[new] = old
+    return moves
+
+
 def plan_update(rendered, pristine, read_repo, owned, merge, version):
     theirs_all = repo_files(rendered)
     paths = sorted(set(pristine["files"]) | set(theirs_all), key=_code_units)
     result = {o: [] for o in OUTCOMES}
-    result.update({"write": [], "stage": []})
+    result.update({"write": [], "stage": [], "renamed": [], "remove": []})
     files = {}
+    moves = _moves_for(theirs_all, pristine, read_repo, owned)
+    moved_from = set(moves.values())
     for path in paths:
-        base, theirs = pristine["files"].get(path), theirs_all.get(path)
+        if path in moved_from:
+            continue
+        old = moves.get(path)
+        base, theirs = pristine["files"].get(old or path), theirs_all.get(path)
         if is_owned(path, owned):
             result["owned"].append(path)
             if theirs is not None:
                 files[path] = theirs
             continue
-        decided = _decide(path, read_repo(path), base, theirs, merge)
+        ours = read_repo(old or path)
+        decided = _decide(path, ours, base, theirs, merge)
         outcome = decided[0]
         result[outcome].append(path)
         if outcome in ("updated", "merged", "added"):
             result["write"].append((path, decided[1]))
         if outcome in ("staged", "conflict"):
             result["stage"].append((STAGING + path, decided[1]))
+        # A moved file the merge leaves as it was, or stages, still lands at its new path.
+        if old and outcome in ("unchanged", "conflict"):
+            result["write"].append((path, ours))
+        if old and ours is not None:
+            result["renamed"].append([old, path])
+            result["remove"].append(old)
         if theirs is not None:
             files[path] = theirs
     result["pristine"] = {"version": version, "year": pristine["year"], "files": files}
@@ -160,6 +188,16 @@ def _put(root, path, text, exclusive=False):
         f.write(text)
 
 
+def _remove_moved(target):
+    """Deletes a moved file's old copy, then its folder once nothing else is in it."""
+    if os.path.lexists(target):
+        os.remove(target)
+    try:
+        os.rmdir(os.path.dirname(target))
+    except OSError:
+        pass  # The folder is gone or still holds the project's own files.
+
+
 def run_update(root, bind_with, version, state_json):
     """See runUpdate in update.js. `bind_with(answers, year)` returns a bind."""
     read = _reader(root)
@@ -180,7 +218,7 @@ def run_update(root, bind_with, version, state_json):
     # Every check before the first write, so a refusal leaves the repo as it was.
     # A staged copy that already exists is skipped, not written, so it is not checked.
     fresh_staged = [path for path, _ in plan["stage"] if not os.path.lexists(at(path))]
-    refuse_links(root, [path for path, _ in plan["write"]] + [PRISTINE] + fresh_staged)
+    refuse_links(root, [path for path, _ in plan["write"]] + [PRISTINE] + fresh_staged + plan["remove"])
     skipped = [path[len(STAGING):] for path, _ in plan["stage"] if os.path.lexists(at(path))]
     files = plan["pristine"]["files"]
     for path in skipped:
@@ -194,7 +232,10 @@ def run_update(root, bind_with, version, state_json):
     for path, text in plan["stage"]:
         if path[len(STAGING):] not in skipped:
             _put(root, path, text, exclusive=True)
+    for path in plan["remove"]:
+        _remove_moved(at(path))
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
+    out["renamed"] = plan["renamed"]
     out["skipped"] = skipped
     return out

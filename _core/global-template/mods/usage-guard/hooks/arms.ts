@@ -42,7 +42,7 @@ export function missedArmText(armedFor: string, wakeText: string, catchUpMinutes
   const window = catchUpMinutes > 0 ? `more than ${catchUpMinutes} minutes ago` : 'while it was closed'
   return (
     `This session was armed to resume at ${wakeText}, ${armedFor}, but that passed ${window}, ` +
-    'so it did not resume by itself. Run /session-start to pick the work back up.'
+    'so it did not resume by itself. Run /start-session (or /session-start) to pick the work back up.'
   )
 }
 
