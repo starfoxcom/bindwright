@@ -9,7 +9,9 @@ import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
-import { claim, joinWatches, ownerOf } from './owner'
+import { claim, followId, ownerOf } from './owner'
+import { HELP, HINT } from './help'
+export { HELP } from './help'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -19,18 +21,6 @@ const OWN_HEAD_MS = 60 * 60_000
 const RECHECK_MS = 10 * 60_000
 /** Whether a head that shows now was pushed by someone else: the session's last push is past the hour. */
 const isForeign = (watch: Watch, now: number) => now - (watch.pushedAt ?? watch.startedAt) >= OWN_HEAD_MS
-const HINT = '[help | settings | set | stop | phone | rounds]'
-export const HELP = [
-  "/ci-watch: watches a PR's checks and wakes the session once when they settle.",
-  '  /ci-watch           the watched PRs and their checks',
-  '  /ci-watch stop      stop watching every PR in this session',
-  '  /ci-watch settings  open the settings pane',
-  '  /ci-watch set       change a setting: set <name> <value>; alone, list them',
-  '  /ci-watch phone     the same as text, for phone chats',
-  `  /ci-watch rounds    the fix rounds in a row without green checks on this branch's PR (or rounds <pr>,`,
-  `                      a number or owner/name#N); every ${RESEARCH_EVERY}, the red wake asks for a step back`,
-  '  /ci-watch help      this list',
-].join('\n')
 
 const live = {
   pollMs: 30_000,
@@ -44,6 +34,7 @@ const live = {
   tick: undefined as { cancel: () => void } | undefined,
   endedId: undefined as string | undefined,
   isRetiredForGood: false,
+  stateId: undefined as string | undefined,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -125,8 +116,13 @@ async function statePath($: EngineInterface): Promise<string> {
 async function dataFolder($: EngineInterface): Promise<string> {
   return (await statePath($)).replace(/\/[^/]*$/, '')
 }
+// Before every save and every poll's read: a resumed id's saved watches join memory (owner.ts).
+async function followSession($: EngineInterface): Promise<void> {
+  if (await followId($, await dataFolder($), live).catch(() => false)) await publish($)
+}
 
-// The owner claim and the retirement check live in owner.ts; neither ever rejects a hook.
+// The owner claim and the retirement check live in owner.ts; neither ever rejects a hook. An older
+// owner's name is replaced by this one's, and the watches it saved join memory in followSession.
 async function claimOwner($: EngineInterface): Promise<void> {
   try {
     const folder = await dataFolder($)
@@ -137,18 +133,12 @@ async function claimOwner($: EngineInterface): Promise<void> {
   }
 }
 
-// Taking over from an older load keeps the watches it saved under this id: they join memory before any save.
 export async function isRetired($: EngineInterface): Promise<boolean> {
   if (live.isRetiredForGood) return true
   try {
     const folder = await dataFolder($)
     const owner = await ownerOf($, folder)
-    if (owner === 'older') {
-      await claim($, folder)
-      live.watches = joinWatches((await readSaved($)) ?? [], live.watches)
-      live.generation++
-      await save($)
-    }
+    if (owner === 'older') await claim($, folder)
     return owner === 'newer'
   } catch {
     return false
@@ -164,6 +154,7 @@ async function publish($: EngineInterface): Promise<void> {
 }
 
 async function save($: EngineInterface): Promise<void> {
+  await followSession($)
   try {
     const path = await statePath($)
     await ensureDir($, path.slice(0, path.lastIndexOf('/')))
@@ -198,6 +189,7 @@ async function load($: EngineInterface): Promise<void> {
   const saved = (await readState($)) ?? (ended ? await readState($, ended) : undefined)
   live.watches = saved?.watches ?? []
   live.isTurnRunning = Boolean(saved?.isTurnRunning)
+  live.stateId = await $.session.id()
   await publish($)
 }
 
@@ -459,6 +451,7 @@ async function poll($: EngineInterface): Promise<void> {
   // this one, and reading the file keeps a watch the other already settled from waking twice. With
   // no saved file yet, or after a failed save, the watches in memory stand. So do they when a push or a
   // stop landed during the read: the file it read is older than memory.
+  await followSession($)
   const generation = live.generation
   const start = live.isUnsaved ? undefined : await readSaved($)
   if (start && live.generation === generation) live.watches = start

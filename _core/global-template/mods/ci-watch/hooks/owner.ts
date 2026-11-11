@@ -38,8 +38,33 @@ export async function ownerOf($: EngineInterface, folder: string): Promise<Owner
   }
 }
 
-/** The watches an earlier owner saved, joined with this load's own, which win for the same PR. */
-export function joinWatches(saved: readonly Watch[], own: readonly Watch[]): Watch[] {
-  const ownPrs = new Set(own.map(w => `${w.repo}#${w.number}`))
-  return [...saved.filter(w => !ownPrs.has(`${w.repo}#${w.number}`)), ...own]
+/** What the instance holds in memory about the session's watches, kept in the mod's live state. */
+export interface Memory {
+  watches: Watch[]
+  /** The session id whose state file the watches in memory were loaded from or saved to. */
+  stateId: string | undefined
+  isUnsaved: boolean
+  generation: number
+}
+
+/**
+ * When the session goes on under another id (a resume), joins the watches saved under that id into memory,
+ * this load's own winning for the same PR, and marks memory unsaved, so the next poll keeps it and the next
+ * save writes both. Returns whether it joined anything. Called before every save and every poll's read.
+ */
+export async function followId($: EngineInterface, folder: string, memory: Memory): Promise<boolean> {
+  const id = await $.session.id()
+  if (memory.stateId === undefined || memory.stateId === id) return false
+  let saved: Watch[] = []
+  try {
+    saved = (JSON.parse(String(await $.fs.read(`${folder}/${id}.json`))) as { watches?: Watch[] }).watches ?? []
+  } catch {
+    // No file under that id: nothing to join.
+  }
+  const ownPrs = new Set(memory.watches.map(w => `${w.repo}#${w.number}`))
+  memory.watches = [...saved.filter(w => !ownPrs.has(`${w.repo}#${w.number}`)), ...memory.watches]
+  memory.stateId = id
+  memory.isUnsaved = true
+  memory.generation++
+  return true
 }

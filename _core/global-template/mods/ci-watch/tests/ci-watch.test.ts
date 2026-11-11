@@ -427,6 +427,28 @@ test('a watch started while a poll reads the saved file is kept by that poll', a
   expect(saved.watches.map(w => w.number).sort()).toEqual([7, 8])
 })
 
+test('a resume that lands while a poll waits on gh still wakes the session once, keeping both watches', async ($, on) => {
+  const { seen, clock } = world(on)
+  seen.isReadable = true
+  seen.session = 'fresh'
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  seen.bucket = 'pass'
+  // The first poll sees the checks done; the next one settles them, and the resume lands inside it.
+  await clock.advance(POLL_MS)
+  seen.duringChecks = () => {
+    seen.duringChecks = undefined
+    seen.files.set(OWNER, EARLIER_PROCESS)
+    const earlier = { repo: 'o/r', number: 3, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w3' }
+    seen.files.set(STATE, JSON.stringify({ watches: [earlier], isTurnRunning: false }))
+    seen.session = 's1'
+  }
+  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  // This load's own PR wakes once; the earlier owner's PR is kept and polled with it.
+  expect(seen.prompts.filter(p => p.includes('o/r#7'))).toHaveLength(1)
+  expect(seen.prompts.filter(p => p.includes('o/r#3'))).toHaveLength(1)
+})
+
 test('a poll in flight when a newer load takes over neither saves nor wakes', async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
