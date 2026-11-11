@@ -9,6 +9,9 @@ import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
+import { claim, followId, ownerOf } from './owner'
+import { HELP, HINT } from './help'
+export { HELP } from './help'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -18,18 +21,6 @@ const OWN_HEAD_MS = 60 * 60_000
 const RECHECK_MS = 10 * 60_000
 /** Whether a head that shows now was pushed by someone else: the session's last push is past the hour. */
 const isForeign = (watch: Watch, now: number) => now - (watch.pushedAt ?? watch.startedAt) >= OWN_HEAD_MS
-const HINT = '[help | settings | set | stop | phone | rounds]'
-export const HELP = [
-  "/ci-watch: watches a PR's checks and wakes the session once when they settle.",
-  '  /ci-watch           the watched PRs and their checks',
-  '  /ci-watch stop      stop watching every PR in this session',
-  '  /ci-watch settings  open the settings pane',
-  '  /ci-watch set       change a setting: set <name> <value>; alone, list them',
-  '  /ci-watch phone     the same as text, for phone chats',
-  `  /ci-watch rounds    the fix rounds in a row without green checks on this branch's PR (or rounds <pr>,`,
-  `                      a number or owner/name#N); every ${RESEARCH_EVERY}, the red wake asks for a step back`,
-  '  /ci-watch help      this list',
-].join('\n')
 
 const live = {
   pollMs: 30_000,
@@ -43,6 +34,7 @@ const live = {
   tick: undefined as { cancel: () => void } | undefined,
   endedId: undefined as string | undefined,
   isRetiredForGood: false,
+  stateId: undefined as string | undefined,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -121,31 +113,39 @@ async function statePath($: EngineInterface): Promise<string> {
   return `${dir}/${await $.session.id()}.json`.replaceAll('\\', '/')
 }
 
-// A hot reload loads this module again but leaves the earlier instance's timer (and old code)
-// running beside the new one. The instance that starts polling last names itself in the session's
-// owner file; one that finds another name there is retired: it stops polling and its hooks pass
-// through. A file, not a global, because instances do not share one. An unreadable file retires none.
-const INSTANCE = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-async function ownerPath($: EngineInterface): Promise<string> {
-  return (await statePath($)).replace(/\.json$/, '.owner')
+async function dataFolder($: EngineInterface): Promise<string> {
+  return (await statePath($)).replace(/\/[^/]*$/, '')
+}
+// At the entry check of every hook and poll: a resumed id's saved watches join memory (owner.ts).
+async function followSession($: EngineInterface): Promise<void> {
+  try {
+    if (await followId($, await dataFolder($), live)) await publish($)
+  } catch {
+    // The id or the folder cannot be read: memory stays as it is.
+  }
 }
 
+// The owner claim and the retirement check live in owner.ts; neither ever rejects a hook. An older
+// owner's name is replaced by this one's, and the watches it saved join memory in followSession.
 async function claimOwner($: EngineInterface): Promise<void> {
   try {
-    const path = await ownerPath($)
-    await ensureDir($, path.slice(0, path.lastIndexOf('/')))
-    await $.fs.write(path, INSTANCE)
+    const folder = await dataFolder($)
+    await ensureDir($, folder)
+    await claim($, folder)
   } catch {
-    // No owner file: every instance stays active, as before.
+    // No owner file: every instance stays active.
   }
 }
 
 export async function isRetired($: EngineInterface): Promise<boolean> {
   if (live.isRetiredForGood) return true
   try {
-    const owner = String(await $.fs.read(await ownerPath($))).trim()
-    return owner !== '' && owner !== INSTANCE
+    const folder = await dataFolder($)
+    const owner = await ownerOf($, folder)
+    if (owner === 'older') await claim($, folder)
+    if (owner === 'newer') return true
+    await followSession($)
+    return false
   } catch {
     return false
   }
@@ -194,6 +194,7 @@ async function load($: EngineInterface): Promise<void> {
   const saved = (await readState($)) ?? (ended ? await readState($, ended) : undefined)
   live.watches = saved?.watches ?? []
   live.isTurnRunning = Boolean(saved?.isTurnRunning)
+  live.stateId = await $.session.id()
   await publish($)
 }
 
@@ -219,7 +220,7 @@ function isRecorded(saved: readonly Watch[] | undefined, watch: Watch): boolean 
 }
 
 // A last guard against a second wake from the same instance (two of its polls settling one watch). A
-// hot reload's instances may not share this global (see the owner file above), so across instances the
+// hot reload's instances may not share this global (see hooks/owner.ts), so across instances the
 // owner file and `isRecorded` are what keep a wake to one.
 const wakeKey = (watch: Watch) => `${watch.id ?? ''}|${watch.repo}#${watch.number}@${watch.headSha}`
 
