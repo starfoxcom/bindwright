@@ -1,6 +1,7 @@
 ---
 name: review-trial
 description: Compare models for this repo's AI review on its own merged pull requests, within what the user's plan includes. Builds the cases from past reviews, shows the cost before anything runs, and recommends whether to change the review settings.
+disable-model-invocation: true
 ---
 
 # /bindwright:review-trial
