@@ -102,9 +102,9 @@ export function listFiles(root, config) {
 export function openIndex(root) {
   const file = process.env.FINDWRIGHT_DB ?? join(root, ".findwright", "index.db");
   mkdirSync(dirname(file), { recursive: true });
-  // The index and the hit log are this computer's; only config.json belongs in git.
+  // Everything in .findwright/ is this computer's except config.json, the project's settings.
   const ignore = join(root, ".findwright", ".gitignore");
-  if (!process.env.FINDWRIGHT_DB && !existsSync(ignore)) writeFileSync(ignore, "index.db*\nhits.jsonl\n");
+  if (!process.env.FINDWRIGHT_DB && !existsSync(ignore)) writeFileSync(ignore, "*\n!config.json\n");
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
   db.exec(SCHEMA);

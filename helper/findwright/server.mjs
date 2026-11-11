@@ -19,7 +19,8 @@ function repoRoot() {
   }
 }
 const root = repoRoot();
-const db = root ? openIndex(root) : null;
+// Opened on the first tool call, so a session that never searches leaves the repo untouched.
+let db = null;
 
 const text = (value) => ({ content: [{ type: "text", text: value }] });
 const globs = { type: "array", items: { type: "string" }, description: "Path globs (`page/**`, `*.md`); any file when empty." };
@@ -108,7 +109,8 @@ async function answer(message) {
   if (method === "tools/call") {
     const tool = TOOLS[params.name];
     if (!tool) throw new Error(`No tool named ${params.name}`);
-    if (!db) throw new Error("FindWright works inside a git repository; this folder is not in one.");
+    if (!root) throw new Error("FindWright works inside a git repository; this folder is not in one.");
+    db ??= openIndex(root);
     refresh(db, root, readConfig(root));
     return await tool.run(params.arguments ?? {});
   }

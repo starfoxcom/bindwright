@@ -29,7 +29,7 @@ Run `python3 .claude/scripts/research-adherence.py` from the repo root (`python`
 
 ## FindWright hit rate
 
-Run `node ~/.bindwright/helper/node_modules/bindwright/findwright/cli.mjs hits` from the repo root. It scores this session's FindWright searches (a hit when the file the session opened next was in the answer), records the figure in `.findwright/hits.jsonl` and prints `{rate, scored, goal, assess}`. Report the rate against the goal (90% unless `.findwright/config.json` sets `goal`). When `assess` is true, the last three sessions all fell short: run the same command with `assess`, explain each cause and suggested change in plain words, and apply a change to `.findwright/config.json` only on the user's yes.
+Run `node "$HOME/.bindwright/helper/node_modules/bindwright/findwright/cli.mjs" hits` from the repo root. It scores this session's FindWright searches (a hit when the file the session opened next was in the answer), records the figure in `.findwright/hits.jsonl` and prints `{rate, scored, goal, assess}`. Report the rate against the goal (90% unless `.findwright/config.json` sets `goal`). When `assess` is true, the last three sessions all fell short: run the same command with `assess`, explain each cause and suggested change in plain words, and apply a change to `.findwright/config.json` only on the user's yes.
 
 ## Project steps
 
