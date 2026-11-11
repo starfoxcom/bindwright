@@ -3,7 +3,7 @@
 // Each session's figure is appended to .findwright/hits.jsonl; `assess` reads the
 // misses back and says why they missed and what config change would help.
 
-import { appendFileSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { find } from "./find.mjs";
@@ -89,7 +89,8 @@ export function recordSession(root, { goal = DEFAULT_GOAL, transcript = newestTr
   const score = scoreSession(transcript, root);
   const past = history(root).filter((h) => h.session !== session);
   const entry = { session, date: new Date().toISOString().slice(0, 10), ...score };
-  if (score.scored) appendFileSync(logFile(root), JSON.stringify(entry) + "\n");
+  // A second close of the same session replaces its line instead of adding one.
+  if (score.scored) writeFileSync(logFile(root), [...past, entry].map((h) => JSON.stringify(h) + "\n").join(""));
   const recent = [...past, ...(score.scored ? [entry] : [])].slice(-SESSIONS_BEFORE_ASSESS);
   const rate = (h) => (100 * h.hits) / h.scored;
   return {

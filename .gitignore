@@ -32,7 +32,8 @@ yarn.lock
 *.tmp
 .local/
 
-# tokensave — local code-research index (per-project, never committed)
+# Code-research indexes (per computer, never committed): FindWright writes its own
+# .findwright/.gitignore; .tokensave/ is from the tool it replaced.
 .tokensave/
 
 # Claude Code agent worktrees — created by parallel review fan-outs, local-only

@@ -70,7 +70,7 @@ Claude will start populating memory entries during your normal sessions — you 
 
 | Key | Tool | Search redirect |
 |---|---|---|
-| `findwright` | FindWright | this hook; detection looks for the project's `.findwright/` folder |
+| `findwright` | FindWright | this hook; detection looks for the project's index, `.findwright/index.db` |
 | `none` | (no tool) | none |
 | `custom` | a tool you name | this hook, as a stub; detection looks for the tool's CLI on PATH |
 

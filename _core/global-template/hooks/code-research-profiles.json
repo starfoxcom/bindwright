@@ -15,7 +15,7 @@
     "install": [],
     "agent": {
       "run": [
-        "claude mcp add --scope user findwright -- node ~/.bindwright/helper/node_modules/bindwright/findwright/server.mjs"
+        "claude mcp add --scope user findwright -- node \"$HOME/.bindwright/helper/node_modules/bindwright/findwright/server.mjs\""
       ]
     },
     "index": null,
@@ -23,17 +23,17 @@
       "name": "findwright",
       "command": "node",
       "args": [
-        "~/.bindwright/helper/node_modules/bindwright/findwright/server.mjs"
+        "$HOME/.bindwright/helper/node_modules/bindwright/findwright/server.mjs"
       ]
     },
     "hook": {
       "source": "bindwright",
       "filename_basename": "findwright-first",
       "detection_mode": "walk_up",
-      "detection_target": ".findwright",
+      "detection_target": ".findwright/index.db",
       "sequence_bullets": "  • find: a plain-English question or a name; the files that answer it, best first.\n  • search: regexes over every tracked file, with globs and context lines.\n  • symbols / outline: names by kind, and a file's symbols with line ranges."
     },
-    "notes": "Ships inside Bindwright's helper, so nothing is downloaded but its meaning model (32 MB, from Hugging Face, checked against a pinned SHA-256) on the first search. Needs Node 22.13 or later. The agent step registers it once for every project on this computer; each project's index builds itself in .findwright/ on the first search and stays current on every call. Add .findwright/index.db* to each project's ignore list."
+    "notes": "Ships inside Bindwright's helper, so nothing is downloaded but its meaning model (32 MB, from Hugging Face, checked against a pinned SHA-256) on the first search. Needs Node 22.13 or later. The agent step registers it once for every project on this computer; each project's index builds itself in .findwright/ on the first search and stays current on every call. It writes .findwright/.gitignore itself, so only .findwright/config.json is committed. In the mcp entry, $HOME stands for the home folder's absolute path."
   },
   "none": {
     "license": null,

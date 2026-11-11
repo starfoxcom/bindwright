@@ -21,7 +21,7 @@ export const MODEL = {
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 /** The model folder, downloading and checking each file the first time. */
-export async function ensureModel(dir = process.env.FINDWRIGHT_MODELS ?? join(homedir(), ".findwright", "models")) {
+export async function ensureModel(dir = process.env.FINDWRIGHT_MODELS ?? join(homedir(), ".cache", "findwright", "models")) {
   const folder = join(dir, MODEL.name);
   mkdirSync(folder, { recursive: true });
   for (const [file, sum] of Object.entries(MODEL.files)) {

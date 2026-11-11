@@ -5,7 +5,7 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { EXTRACTORS, fromRules } from "./extract.mjs";
 
@@ -82,10 +82,14 @@ function walk(root, folder, out) {
 
 // Every file git tracks or would track, plus the config's `include` globs
 // (files git ignores but the work reads, such as generated typings), minus `exclude`.
+// An include glob may not climb out of the repo or name an absolute path.
+const insideRepo = (glob) => typeof glob === "string" && !/^([\\/]|[A-Za-z]:)/.test(glob)
+  && !glob.split(/[\\/]/).includes("..");
+
 export function listFiles(root, config) {
   const git = execFileSync("git", ["ls-files", "-co", "--exclude-standard", "-z"], { cwd: root, maxBuffer: 1 << 28 });
   const files = new Set(git.toString("utf8").split("\0").filter(Boolean));
-  for (const glob of config.include ?? []) {
+  for (const glob of (config.include ?? []).filter(insideRepo)) {
     const base = glob.split("/").filter((part) => !/[*?]/.test(part));
     const start = glob.includes("*") ? base.slice(0, glob.split("/").findIndex((p) => /[*?]/.test(p))).join("/") : glob;
     const found = [];
@@ -98,6 +102,9 @@ export function listFiles(root, config) {
 export function openIndex(root) {
   const file = process.env.FINDWRIGHT_DB ?? join(root, ".findwright", "index.db");
   mkdirSync(dirname(file), { recursive: true });
+  // The index and the hit log are this computer's; only config.json belongs in git.
+  const ignore = join(root, ".findwright", ".gitignore");
+  if (!process.env.FINDWRIGHT_DB && !existsSync(ignore)) writeFileSync(ignore, "index.db*\nhits.jsonl\n");
   const db = new DatabaseSync(file);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
   db.exec(SCHEMA);

@@ -227,12 +227,20 @@ export const EXTRACTORS = { markdown, yaml, json, javascript, python, css, html,
 
 // Symbols from the project's own pattern rules: each rule's regex runs on every
 // line of the files its globs match, and its `name` group (or the whole match) names the symbol.
+// A rule comes from the repo's own config, so a cloned repo can carry a hostile one:
+// patterns with a quantified group that is itself quantified (catastrophic
+// backtracking) are skipped, and rules never run on very long lines.
+const MAX_RULE_LINE = 400;
+const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*[+*}](?:[^()\\]|\\.)*\)[+*{]/;
+const safePattern = (p) => typeof p === "string" && p.length <= 300 && !NESTED_QUANTIFIER.test(p);
+
 export function fromRules(text, rules) {
   const all = lines(text);
   const found = [];
-  for (const rule of rules) {
+  for (const rule of rules.filter((r) => safePattern(r.pattern))) {
     const pattern = new RegExp(rule.pattern, "g");
     for (let i = 0; i < all.length; i++) {
+      if (all[i].length > MAX_RULE_LINE) continue;
       for (const m of all[i].matchAll(pattern)) {
         found.push({ name: m.groups?.name ?? m[0], kind: rule.kind, line: i + 1, endLine: i + 1 });
       }

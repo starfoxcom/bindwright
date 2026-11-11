@@ -9,9 +9,17 @@ import { coverage, outline, search, symbols } from "./query.mjs";
 import { find } from "./find.mjs";
 import { meaningModel } from "./meaning.mjs";
 
-const root = process.env.FINDWRIGHT_ROOT
-  ?? execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const db = openIndex(root);
+// The repo the session runs in; outside a git repo every tool says so instead of indexing.
+function repoRoot() {
+  try {
+    return process.env.FINDWRIGHT_ROOT ?? execFileSync("git", ["rev-parse", "--show-toplevel"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return null;
+  }
+}
+const root = repoRoot();
+const db = root ? openIndex(root) : null;
 
 const text = (value) => ({ content: [{ type: "text", text: value }] });
 const globs = { type: "array", items: { type: "string" }, description: "Path globs (`page/**`, `*.md`); any file when empty." };
@@ -100,6 +108,7 @@ async function answer(message) {
   if (method === "tools/call") {
     const tool = TOOLS[params.name];
     if (!tool) throw new Error(`No tool named ${params.name}`);
+    if (!db) throw new Error("FindWright works inside a git repository; this folder is not in one.");
     refresh(db, root, readConfig(root));
     return await tool.run(params.arguments ?? {});
   }
