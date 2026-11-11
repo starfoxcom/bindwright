@@ -16,3 +16,13 @@ engine/test/profiles.test.js|line_length|-|test battery: case rows (exception 3)
 engine/test/render.test.js|line_length|-|test battery: case rows (exception 3)
 tools/test_review_gate.py|line_length|-|test battery: case rows (exception 3)
 tools/test_review_gate.py|function|test_the_last_glyph_line_decides_and_a_glyphless_blocking_blocks|test battery: one table of verdict cases (exception 3)
+
+# Vendored code (exception 1): FindWright's src/, copied as released into the
+# helper (helper/findwright/SOURCE.md); it is sized and reviewed in its own repo.
+helper/findwright/embed.mjs|line_length|-|vendored from FindWright (exception 1)
+helper/findwright/extract.mjs|line_length|-|vendored from FindWright (exception 1)
+helper/findwright/find.mjs|line_length|-|vendored from FindWright (exception 1)
+helper/findwright/query.mjs|line_length|-|vendored from FindWright (exception 1)
+helper/findwright/server.mjs|line_length|-|vendored from FindWright (exception 1)
+helper/findwright/store.mjs|line_length|-|vendored from FindWright (exception 1)
+helper/findwright/store.mjs|ccn|listFiles|vendored from FindWright (exception 1)

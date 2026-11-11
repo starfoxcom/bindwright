@@ -37,7 +37,7 @@ const changedOne = () => {
   return {
     ...a,
     project: { ...a.project, name: "shop-front" },
-    advanced: { ...a.advanced, codeResearch: "tokensave" },
+    advanced: { ...a.advanced, codeResearch: "findwright" },
   };
 };
 // Only an advanced switch differs, so the code carries no project part.
@@ -114,7 +114,7 @@ const FREE_TEXT = [
 const TOOL = "Invalid setup code: codeResearch names a tool the page does not offer";
 const REMOVED_TOOL = [
   ["a removed code-research tool is refused in a code", withAdvanced({ codeResearch: "codegraph" }), TOOL],
-  ["a code-research value that is not text is refused", withAdvanced({ codeResearch: ["tokensave"] }), TOOL],
+  ["a code-research value that is not text is refused", withAdvanced({ codeResearch: ["findwright"] }), TOOL],
 ];
 const DEFAULT_FREE_TEXT = [
   ["repoUrl at its default is accepted", withProject({ repoUrl: "" })],
@@ -241,7 +241,7 @@ test("only the changed project and advanced keys travel in a code", () => {
     client: false,
     private: false,
     project: { name: "shop-front" },
-    advanced: { codeResearch: "tokensave" },
+    advanced: { codeResearch: "findwright" },
   });
   sameBytes(expandAnswers(decodeSetupCode(code)), changedOne());
 });

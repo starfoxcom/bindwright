@@ -15,7 +15,7 @@
     "confidentiality": false,
     "cleanRoom": false,
     "plainWriting": false,
-    "codeResearch": "tokensave",
+    "codeResearch": "findwright",
     "codeResearchCustom": null,
     "branching": "gitflow",
     "devIsDefault": false,

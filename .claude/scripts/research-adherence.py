@@ -1,4 +1,4 @@
-"""Count this session's code-research calls: tokensave versus plain text search.
+"""Count this session's code-research calls: FindWright versus plain text search.
 
 Reads the newest transcript for the current directory under
 ~/.claude/projects/, or the transcript given as the first argument.
@@ -19,8 +19,8 @@ import re
 import shlex
 import sys
 
-TOOL = re.compile(r"tokensave")
-BYPASS = "TOKENSAVE_BYPASS:"
+TOOL = re.compile(r"findwright")
+BYPASS = "FINDWRIGHT_BYPASS:"
 NON_CODE = re.compile(r"\.(md|mdx|txt|log|json|jsonl|ya?ml|csv)\b|\b(md|json|yaml|txt)$", re.I)
 SHELL_SEARCH = re.compile(r"^\s*(rg|ag|ack|git\s+grep)\s|^\s*grep\s(.*\s)?(-[a-zA-Z]*[rR]|--recursive)")
 PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
@@ -172,7 +172,7 @@ def main():
             counts[kind] += 1
     total = counts["research"] + counts["fallback"]
     ratio = f"{100 * counts['research'] // total}%" if total else "n/a"
-    print(f"tokensave: {counts['research']} calls, plain code searches: {counts['fallback']} "
+    print(f"FindWright: {counts['research']} calls, plain code searches: {counts['fallback']} "
           f"(plus {counts['bypass']} marked bypasses) -> {ratio}")
 
 

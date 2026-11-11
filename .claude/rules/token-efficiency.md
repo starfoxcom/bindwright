@@ -2,7 +2,7 @@
 
 ## Find before you read
 
-Locate a symbol before opening a file, then read only the function or section you need. `/find` (`.claude/skills/find/SKILL.md`) holds the lookup sequence for this project's code-research tool, **tokensave**, and when to fall back to Grep, Glob and Read.
+Locate a symbol before opening a file, then read only the function or section you need. `/find` (`.claude/skills/find/SKILL.md`) holds the lookup sequence for this project's code-research tool, **FindWright**, and when to fall back to Grep, Glob and Read.
 
 Enable an MCP server only while the work needs it. Every enabled server adds its tool definitions to every message.
 

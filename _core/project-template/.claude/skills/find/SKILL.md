@@ -7,17 +7,17 @@ description: Locate code before reading or editing it. Use whenever the user ask
 
 The lookup sequence for this project's code-research tool, **{{TOOLS_CODE_RESEARCH_NAME}}** ({{TOOLS_CODE_RESEARCH_URL}}). Follow it in order and stop at the first useful result. Read only the range you found, never the whole file.
 
-<!-- TOGGLE:code_research:tokensave START -->
+<!-- TOGGLE:code_research:findwright START -->
 ## Sequence
 
-1. `tokensave_search` with the symbol name: matches with file and line.
-2. `tokensave_context` with a plain-English question when the name is unknown. Pass `keywords` for synonyms; `include_code: true` returns the source.
-3. `tokensave_callers`, `tokensave_callees`, `tokensave_impact` to walk the call graph from a located symbol.
-4. `tokensave_files` to find files by path pattern.
-5. `tokensave_body` to read one symbol instead of its file.
+1. `find` with a plain-English question, a name, or both: the files that answer it, best first.
+2. `search` with one or more regexes, optional `globs` and `context`: every matching line, with the symbol around it. It covers every file the project tracks, Markdown, config and templates included.
+3. `symbols` to look a name up by kind (function, class, heading, key).
+4. `outline` with a path: its symbols and line ranges, to read only the part you need.
+5. `coverage` when a file seems missing: what the index reads and which files yield no symbol.
 
-Run `tokensave sync` after large edits so the graph matches the code. tokensave's hook redirects symbol-shaped Grep and Glob calls to these tools.
-<!-- TOGGLE:code_research:tokensave END -->
+The index updates itself on every call. A project format it does not know gets a pattern rule in `.findwright/config.json`.
+<!-- TOGGLE:code_research:findwright END -->
 
 
 

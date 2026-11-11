@@ -10,11 +10,11 @@ export const REVIEW_EFFORTS = { routine: "low", deep: "medium", backup: "high" }
 
 export const CODE_RESEARCH_TOOLS = {
   // match: regex over tool-call names, used by the close-session adherence count.
-  tokensave: {
-    name: "tokensave",
-    url: "https://github.com/aovestdipaperino/tokensave",
-    bypass: "TOKENSAVE_BYPASS:",
-    match: "tokensave",
+  findwright: {
+    name: "FindWright",
+    url: "https://github.com/starfoxcom/findwright",
+    bypass: "FINDWRIGHT_BYPASS:",
+    match: "findwright",
   },
   none: { name: "none", url: "(no homepage)", bypass: null, match: null },
   // A tool the person names: valuesFor fills all four from codeResearchCustom.
@@ -23,6 +23,7 @@ export const CODE_RESEARCH_TOOLS = {
 // Tools no longer offered. An answers file saved while one was offered is read
 // as a custom tool with its old name and homepage (expandAnswers).
 const REMOVED_CODE_RESEARCH_TOOLS = {
+  tokensave: { name: "tokensave", url: "https://github.com/aovestdipaperino/tokensave" },
   "lsp-plugins": { name: "Claude Code LSP plugins", url: "https://code.claude.com/docs/en/discover-plugins" },
   codegraph: { name: "CodeGraph", url: "https://github.com/colbymchenry/codegraph" },
   serena: { name: "Serena", url: "https://github.com/oraios/serena" },
