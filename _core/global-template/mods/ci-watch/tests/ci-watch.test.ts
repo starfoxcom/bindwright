@@ -427,7 +427,7 @@ test('a watch started while a poll reads the saved file is kept by that poll', a
   expect(saved.watches.map(w => w.number).sort()).toEqual([7, 8])
 })
 
-test('a resume that lands while a poll waits on gh still wakes the session once, keeping both watches', async ($, on) => {
+test('a resume during a poll still wakes the session once and keeps both watches', async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   seen.session = 'fresh'
