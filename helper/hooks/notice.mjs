@@ -1,5 +1,5 @@
-// Bindwright's session-start notice, run from the helper by the repo's
-// /session-start skill from the repo root, with `--plugin <plugin folder>`. At
+// Bindwright's start-session notice, run from the helper by the repo's
+// /start-session skill from the repo root, with `--plugin <plugin folder>`. At
 // most once a day per repo it says when the repo's Bindwright files are older
 // than the plugin (/bindwright:update brings them up), when the helper is not
 // at the plugin's version, or when a newer plugin is out. It asks the network at most once a day, with

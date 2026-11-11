@@ -23,7 +23,7 @@ Then open a session in your project's folder and run `/bindwright:setup`. The fi
 - `/bindwright:runners` checks your computer and the repo's CI, recommends how many local CI runners to set up (or none), and installs the ones you pick.
 - `/bindwright:review-trial` compares models for the repo's AI review on its own merged pull requests, within what your plan includes, shows the cost before anything runs, and recommends whether to change the review settings.
 
-When a session starts with `/session-start`, a notice says at most once a day when the repo or the plugin is behind.
+When a session starts with `/start-session`, a notice says at most once a day when the repo or the plugin is behind.
 
 ## Privacy
 

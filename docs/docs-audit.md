@@ -1,6 +1,6 @@
 # Docs and rules audit
 
-How to sweep a repo for drift: docs that no longer match the code, comments that contradict it, rule breaches and code past the size limits. `/session-close` keeps the docs current day to day; run this sweep when that check has been skipped for a while, or before a release.
+How to sweep a repo for drift: docs that no longer match the code, comments that contradict it, rule breaches and code past the size limits. `/close-session` keeps the docs current day to day; run this sweep when that check has been skipped for a while, or before a release.
 
 ## Find
 

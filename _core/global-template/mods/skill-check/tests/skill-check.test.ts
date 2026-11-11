@@ -6,7 +6,7 @@ import { isMainSkill } from '../hooks/register'
 
 const CONTRACTS = {
   'my-game': {
-    'session-close': [
+    'close-session': [
       { step: 'the board check', match: 'board_check\\.py', tools: ['Bash', 'PowerShell'] },
       { step: 'a commit', match: 'git commit' },
     ],
@@ -39,7 +39,7 @@ function world(on: On): World {
 }
 
 async function runSkill($: Engine): Promise<void> {
-  await $.skill.prompt({ skill: 'session-close', text: '' })
+  await $.skill.prompt({ skill: 'close-session', text: '' })
 }
 
 async function shell($: Engine, command: string): Promise<void> {
@@ -98,7 +98,7 @@ test('a skill with no contract is left alone', async ($, on) => {
 test('the Skill tool starts a run like a typed /name', async ($, on) => {
   const seen = world(on)
   seen.duringSkill = () => runSkill($)
-  await $.tool.call({ tool: 'Skill', skill: 'session-close' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'close-session' } as never)
   await shell($, 'git commit -q -F msg.txt')
   await endTurn($)
   expect(seen.prompts.length).toBe(1)
@@ -108,7 +108,7 @@ test('the Skill tool starts a run like a typed /name', async ($, on) => {
 test("a subagent's skill starts no run for the main session", async ($, on) => {
   const seen = world(on)
   seen.duringSkill = () => runSkill($)
-  await $.tool.call({ tool: 'Skill', skill: 'session-close', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'close-session', agentId: 'a1' } as never)
   await endTurn($)
   expect(seen.prompts).toEqual([])
 })
@@ -119,7 +119,7 @@ test("the main session's skill starts a run even while a subagent's skill is exp
   seen.duringSkill = async () => {
     if (isInner) return runSkill($)
     isInner = true
-    return $.tool.call({ tool: 'Skill', skill: 'session-close' } as never)
+    return $.tool.call({ tool: 'Skill', skill: 'close-session' } as never)
   }
   await $.tool.call({ tool: 'Skill', skill: 'other', agentId: 'a1' } as never)
   await endTurn($)
@@ -132,7 +132,7 @@ test("a subagent's skill expanding inside the main session's Skill call starts n
   seen.duringSkill = async () => {
     if (isInner) return runSkill($)
     isInner = true
-    return $.tool.call({ tool: 'Skill', skill: 'session-close', agentId: 'a1' } as never)
+    return $.tool.call({ tool: 'Skill', skill: 'close-session', agentId: 'a1' } as never)
   }
   await $.tool.call({ tool: 'Skill', skill: 'other' } as never)
   await endTurn($)

@@ -1,4 +1,4 @@
-// .claude/scripts/research-adherence.py, the session-close count of code searches: which
+// .claude/scripts/research-adherence.py, the close-session count of code searches: which
 // tool calls count as a search through the code-research tool, which as a plain search of
 // the repo's code, and which not at all. Each case runs the script's own classify().
 

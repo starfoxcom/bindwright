@@ -51,6 +51,8 @@ export type World = {
   statuses: (string | undefined)[]
   /** The engine refuses the command's registration, as it may after a reload. */
   refuseRegister?: boolean
+  /** The project's own commands; the session skills under their current names when unset. */
+  projectCommands?: string[]
   /** The tasks mod keeps its lists here; without it the folder cannot be listed. */
   hasTasksMod?: boolean
   /** How many of the next attempts to make the arms folder fail; a write into it fails until one works. */
@@ -121,10 +123,11 @@ export function world(on: On, root = 'C:/Repos/my-game'): World {
     return seen.compactResult
   })
   on('command.list', () => ({
-    value: [
-      { name: 'session-close', description: '', source: 'user' },
-      { name: 'session-start', description: '', source: 'user' },
-    ],
+    value: (seen.projectCommands ?? ['close-session', 'start-session']).map(name => ({
+      name,
+      description: '',
+      source: 'user',
+    })),
   }))
   on('command.register', ($, e) => {
     if (seen.refuseRegister) throw new Error('already registered')
@@ -203,7 +206,7 @@ export function pauseOf(seen: World): Pause | undefined {
   return text === undefined ? undefined : (JSON.parse(text) as Pause)
 }
 
-// The resumes this session submitted: the automatic "continue now" prompt, never /session-start.
+// The resumes this session submitted: the automatic "continue now" prompt, never /start-session.
 // An armed wake with nothing pending: one line, no work started.
 export function quietWakes(seen: World): string[] {
   return seen.prompts.filter(text => text.startsWith('[usage-guard] ') && text.includes('wait for the person'))

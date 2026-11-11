@@ -164,7 +164,7 @@ function stagedCheck(root) {
     : check("staged", true, "No staged files are waiting.");
 }
 
-// What breaks the ROADMAP.md shape /session-close keeps: items are one line
+// What breaks the ROADMAP.md shape /close-session keeps: items are one line
 // that starts with an unused id, at most five sit under Now, and the Next id
 // is above every id in use. A missing file is fine; the next close writes it.
 export function roadmapProblems(text) {
@@ -195,7 +195,7 @@ export function roadmapProblems(text) {
 
 function roadmapCheck(root) {
   const file = join(root, "ROADMAP.md");
-  if (!existsSync(file)) return check("roadmap", true, "No ROADMAP.md yet; the next /session-close writes it.");
+  if (!existsSync(file)) return check("roadmap", true, "No ROADMAP.md yet; the next /close-session writes it.");
   let problems;
   try {
     problems = roadmapProblems(decode(readFileSync(file), "ROADMAP.md"));

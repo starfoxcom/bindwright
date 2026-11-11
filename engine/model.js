@@ -9,7 +9,7 @@ export const REVIEW_MODELS = { routine: "claude-fable-5-2", deep: "claude-fable-
 export const REVIEW_EFFORTS = { routine: "low", deep: "medium", backup: "high" };
 
 export const CODE_RESEARCH_TOOLS = {
-  // match: regex over tool-call names, used by the session-close adherence count.
+  // match: regex over tool-call names, used by the close-session adherence count.
   tokensave: {
     name: "tokensave",
     url: "https://github.com/aovestdipaperino/tokensave",
