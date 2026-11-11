@@ -9,6 +9,7 @@ import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
+import { claim, isRetired as isRetiredFrom } from './owner'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -43,6 +44,8 @@ const live = {
   tick: undefined as { cancel: () => void } | undefined,
   endedId: undefined as string | undefined,
   isRetiredForGood: false,
+  /** The session id the owner claim was written under: a resume can carry the session on under another. */
+  claimedId: undefined as string | undefined,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -121,34 +124,22 @@ async function statePath($: EngineInterface): Promise<string> {
   return `${dir}/${await $.session.id()}.json`.replaceAll('\\', '/')
 }
 
-// A hot reload loads this module again but leaves the earlier instance's timer (and old code)
-// running beside the new one. The instance that starts polling last names itself in the session's
-// owner file; one that finds another name there is retired: it stops polling and its hooks pass
-// through. A file, not a global, because instances do not share one. An unreadable file retires none.
-const INSTANCE = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-async function ownerPath($: EngineInterface): Promise<string> {
-  return (await statePath($)).replace(/\.json$/, '.owner')
+async function dataFolder($: EngineInterface): Promise<string> {
+  return (await statePath($)).replace(/\/[^/]*$/, '')
 }
 
 async function claimOwner($: EngineInterface): Promise<void> {
+  const folder = await dataFolder($)
   try {
-    const path = await ownerPath($)
-    await ensureDir($, path.slice(0, path.lastIndexOf('/')))
-    await $.fs.write(path, INSTANCE)
+    await ensureDir($, folder)
   } catch {
-    // No owner file: every instance stays active, as before.
+    return
   }
+  await claim($, folder, live)
 }
 
 export async function isRetired($: EngineInterface): Promise<boolean> {
-  if (live.isRetiredForGood) return true
-  try {
-    const owner = String(await $.fs.read(await ownerPath($))).trim()
-    return owner !== '' && owner !== INSTANCE
-  } catch {
-    return false
-  }
+  return isRetiredFrom($, await dataFolder($), live)
 }
 
 // A failed write never rejects a hook: the push it follows has already run.
