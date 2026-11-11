@@ -61,13 +61,13 @@ async function main() {
     for (const s of outline(db, opts.positional[0])) console.log(`${s.line}-${s.end_line}  ${s.kind} ${s.name}`);
   } else if (command === "coverage") console.log(JSON.stringify(coverage(db), null, 1));
   else if (command === "find") {
-    const model = await meaningModel(db);
+    const model = await meaningModel(db, { wait: true });
     for (const f of find(db, { query: opts.positional.join(" "), limit: 12, model: model.ready })) console.log(f.path);
     if (model.note) console.log(model.note);
   } else if (command === "hits") {
     const goal = readConfig(root).goal ?? DEFAULT_GOAL;
     console.log(JSON.stringify(recordSession(root, { goal, ...(opts.positional[0] ? { transcript: opts.positional[0] } : {}) })));
-  } else if (command === "assess") console.log(JSON.stringify(assess(db, root, (await meaningModel(db)).ready), null, 1));
+  } else if (command === "assess") console.log(JSON.stringify(assess(db, root, (await meaningModel(db, { wait: true })).ready), null, 1));
   else console.log("Usage: see the top of src/cli.mjs");
   db.close();
 }

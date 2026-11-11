@@ -12,11 +12,16 @@ let failure = null;
  * `{ ready: null, note }` while it downloads or when it cannot load, so a search
  * still answers by words alone. Set FINDWRIGHT_MEANING=off to skip it.
  */
-export async function meaningModel(db) {
+export async function meaningModel(db, { wait = false } = {}) {
   if (process.env.FINDWRIGHT_MEANING === "off") return { ready: null };
   // The download runs in the background: until it lands, searches rank by words alone.
-  loading ??= ensureModel().then(loadModel).then((model) => { loaded = model; }, (error) => { failure = error; loading = null; });
-  if (failure) return { ready: null, note: `(meaning search is off: ${failure.message}; ranked by words only)` };
+  if (!loaded && !loading) {
+    failure = null;
+    loading = ensureModel().then(loadModel).then((model) => { loaded = model; }, (error) => { failure = error; loading = null; });
+  }
+  // A one-shot caller (the CLI) waits; the server answers at once.
+  if (wait) await loading;
+  if (!loaded && failure) return { ready: null, note: `(meaning search is off: ${failure.message}; ranked by words only)` };
   if (!loaded) return { ready: null, note: "(meaning model still downloading; ranked by words only)" };
   // A big repo's vectors are built over several calls, two seconds at a time.
   embedMissing(db, loaded, 2000);
