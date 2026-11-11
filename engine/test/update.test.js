@@ -383,6 +383,41 @@ test("a renamed skill moves to its new path with the repo's edits", needsPython,
   if (results.length === 2) assert.deepEqual(results[1], results[0], "the two engines report alike");
 });
 
+test("a renamed skill whose staged copy is still unsettled keeps its old base", needsPython, async () => {
+  const startTo = Object.values(RENAMES).find((to) => to.includes("start"));
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    let base;
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      const startFrom = Object.keys(RENAMES).find((from) => from.includes("start"));
+      base = r.pristine.files[startFrom];
+      r.write(startFrom, r.read(startFrom).replace("name: session-start", "name: my-start"));
+      r.write(`${STAGING}${startTo}`, "left from the last update\n");
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.ok(out.skipped.includes(startTo), `${cmd}: ${JSON.stringify(out)}`);
+    assert.equal(JSON.parse(repo.read(PRISTINE)).files[startTo], base, cmd);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+});
+
+test("a project that owns the old skill path keeps only its own copy", needsPython, async () => {
+  const [[closeFrom, closeTo]] = Object.entries(RENAMES);
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo((r) => {
+      beforeRename(r);
+      r.write(".bindwright/owned", `${closeFrom}\n`);
+    });
+    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    assert.ok(out.owned.includes(closeFrom) && out.owned.includes(closeTo), cmd);
+    assert.ok(existsSync(repo.at(closeFrom)) && !existsSync(repo.at(closeTo)), cmd);
+    outs.push(out);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+});
+
 test("a move into a path the project owns is not made, and the old file is reported", needsPython, async () => {
   const [[closeFrom, closeTo], [startFrom, startTo]] = Object.entries(RENAMES);
   const outs = [];

@@ -59,6 +59,13 @@ function movesFor(theirsAll, pristine, { readRepo, owned }) {
   return moves;
 }
 
+// A project that owns a file's old path owns its new one too, so the template
+// does not add a second copy beside the project's own.
+function ownsPath(path, owned) {
+  const from = Object.keys(RENAMES).find((old) => RENAMES[old] === path);
+  return isOwned(path, owned) || (from !== undefined && isOwned(from, owned));
+}
+
 function decide(path, { ours, base, theirs }, merge) {
   if (theirs === undefined) {
     if (ours === null) return ["deleted"];
@@ -95,7 +102,7 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
     const from = moves.get(path);
     const base = pristine.files[from ?? path];
     const theirs = theirsAll.get(path);
-    if (isOwned(path, owned)) {
+    if (ownsPath(path, owned)) {
       result.owned.push(path);
       if (theirs !== undefined) result.pristine[path] = theirs;
       continue;
@@ -237,9 +244,12 @@ export async function runUpdate(root, { bindWith, version }) {
   const freshStaged = plan.stage.map(([path]) => path).filter((path) => entry(root, path) === null);
   refuseLinks(root, [...plan.write.map(([path]) => path), PRISTINE, ...freshStaged, ...plan.remove]);
   const skipped = plan.stage.filter(([path]) => entry(root, path) !== null).map(([path]) => path.slice(STAGING.length));
+  const renamedFrom = Object.fromEntries(Object.entries(RENAMES).map(([from, to]) => [to, from]));
   for (const path of skipped) {
     // The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.
-    if (path in pristine.files) plan.pristine.files[path] = pristine.files[path];
+    // A renamed file's base is still under its old name.
+    const base = path in pristine.files ? path : renamedFrom[path];
+    if (base in pristine.files) plan.pristine.files[path] = pristine.files[base];
     else delete plan.pristine.files[path];
   }
   for (const [path, text] of plan.write) put(root, path, text);
