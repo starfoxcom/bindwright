@@ -229,7 +229,7 @@ export const SCENES = {
     ["wait", 1000],
   ],
   "skill-check": [
-    ["tool", "Skill", "session-close", 600],
+    ["tool", "Skill", "close-session", 600],
     ["out", "mods.scene.skill-check.missing", "badt"],
     ["wait", 1500],
     ["out", "mods.scene.skill-check.rerun", "okt"],
