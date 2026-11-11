@@ -108,6 +108,10 @@ test('after a reload and a /clear, the instance the reload retired leaves the ne
   expect(seen.files.has('C:/Users/me/.claude/mods-data/ci-watch/s2.json')).toBe(false)
 })
 
+// Owner names start with when their load ran: one from before this test's load, one from long after.
+const EARLIER_PROCESS = '1-earlier'
+const NEWER_LOAD = '99999999999999-newer'
+
 test('a resumed session that goes on under its old id is still watched', async ($, on) => {
   const { seen } = world(on)
   seen.isReadable = true
@@ -115,24 +119,24 @@ test('a resumed session that goes on under its old id is still watched', async (
   // names the process that ran it before.
   seen.session = 'fresh'
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  seen.files.set(OWNER, 'the-earlier-process')
+  seen.files.set(OWNER, EARLIER_PROCESS)
   seen.session = 's1'
   expect(await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)).toEqual({
     result: 'Watching o/r#7; you will be woken once its checks settle.',
   })
-  expect(seen.files.get(OWNER)).not.toBe('the-earlier-process')
+  expect(seen.files.get(OWNER)).not.toBe(EARLIER_PROCESS)
 })
 
-test('a retired instance does not take over a resumed id', async ($, on) => {
+test('a load newer than this one keeps a resumed id, whichever claimed it first', async ($, on) => {
   const { seen } = world(on)
   seen.isReadable = true
   seen.session = 'fresh'
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  seen.files.set('C:/Users/me/.claude/mods-data/ci-watch/fresh.owner', 'a-newer-instance')
-  seen.files.set(OWNER, 'the-earlier-process')
+  // A hot reload's instance reached the resumed id first.
+  seen.files.set(OWNER, NEWER_LOAD)
   seen.session = 's1'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
-  expect(seen.files.get(OWNER)).toBe('the-earlier-process')
+  expect(seen.files.get(OWNER)).toBe(NEWER_LOAD)
   expect(seen.files.has(STATE)).toBe(false)
 })
 

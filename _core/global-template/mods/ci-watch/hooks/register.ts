@@ -44,8 +44,6 @@ const live = {
   tick: undefined as { cancel: () => void } | undefined,
   endedId: undefined as string | undefined,
   isRetiredForGood: false,
-  /** The session id the owner claim was written under: a resume can carry the session on under another. */
-  claimedId: undefined as string | undefined,
   /** The last save failed: memory holds watches the file may lack. */
   isUnsaved: false,
   /** Counts the changes made outside a poll (a new watch, a stop, a merge), so a poll can tell. */
@@ -128,18 +126,24 @@ async function dataFolder($: EngineInterface): Promise<string> {
   return (await statePath($)).replace(/\/[^/]*$/, '')
 }
 
+// The owner claim and the retirement check live in owner.ts; neither ever rejects a hook.
 async function claimOwner($: EngineInterface): Promise<void> {
-  const folder = await dataFolder($)
   try {
+    const folder = await dataFolder($)
     await ensureDir($, folder)
+    await claim($, folder)
   } catch {
-    return
+    // No owner file: every instance stays active.
   }
-  await claim($, folder, live)
 }
 
 export async function isRetired($: EngineInterface): Promise<boolean> {
-  return isRetiredFrom($, await dataFolder($), live)
+  if (live.isRetiredForGood) return true
+  try {
+    return await isRetiredFrom($, await dataFolder($))
+  } catch {
+    return false
+  }
 }
 
 // A failed write never rejects a hook: the push it follows has already run.
@@ -210,7 +214,7 @@ function isRecorded(saved: readonly Watch[] | undefined, watch: Watch): boolean 
 }
 
 // A last guard against a second wake from the same instance (two of its polls settling one watch). A
-// hot reload's instances may not share this global (see the owner file above), so across instances the
+// hot reload's instances may not share this global (see hooks/owner.ts), so across instances the
 // owner file and `isRecorded` are what keep a wake to one.
 const wakeKey = (watch: Watch) => `${watch.id ?? ''}|${watch.repo}#${watch.number}@${watch.headSha}`
 
