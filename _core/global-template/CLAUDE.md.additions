@@ -11,17 +11,14 @@ These are project-agnostic instructions that apply to every Claude Code session 
 
 The project's chosen tool is set by `tools.code_research` in the bound configuration. The per-project `CLAUDE.md` and `.claude/skills/find/SKILL.md` document the canonical command sequence; this global rule is the meta-rule about preferring that tool to agents.
 
-<!-- TOGGLE:code_research:tokensave START -->
-- Before ANY code research task, use a tokensave MCP tool. Default entry points:
-  - **Exploration / "where is X / what calls Y":** `tokensave_context` (natural-language query, returns symbols + relationships + optional code via `include_code: true`; `mode: "plan"` adds extension points + test coverage), `tokensave_search` (symbol-by-name), `tokensave_callees`, `tokensave_callers`, `tokensave_impact`, `tokensave_node`, `tokensave_files`, `tokensave_affected`, `tokensave_body`, `tokensave_type_hierarchy`.
-  - **Commit / PR drafting:** `tokensave_commit_context` (commit-message synthesis from staged diff), `tokensave_pr_context` (PR description from branch diff).
-  - **Refactor scoping & health:** `tokensave_simplify_scan`, `tokensave_health`, `tokensave_gini`, `tokensave_dependency_depth`, `tokensave_dsm`, `tokensave_god_class`, `tokensave_complexity`, `tokensave_coupling`, `tokensave_largest`, `tokensave_rank`, `tokensave_inheritance_depth`, `tokensave_recursion`, `tokensave_circular`, `tokensave_dead_code`, `tokensave_unused_imports`, `tokensave_doc_coverage`.
-  - **Test gap analysis:** `tokensave_test_map`, `tokensave_test_risk` (git-churn-weighted).
-- All tokensave tools are read-only and declare `readOnlyHint: true` — call them concurrently without serializing or pre-confirming.
-- v4.1+ walks up to find `.tokensave/` like git finds `.git/`. Do not `cd` to repo root before invoking.
-- Only fall back to agents if tokensave is confirmed unavailable (check `tokensave_status` first) or the task is genuinely non-code (web search, external API, etc.).
-- If a code analysis question cannot be fully answered by tokensave MCP tools, try querying the SQLite database directly at `.tokensave/tokensave.db` (tables: `nodes`, `edges`, `files`).
-<!-- TOGGLE:code_research:tokensave END -->
+<!-- TOGGLE:code_research:findwright START -->
+- Before ANY code research task, use a FindWright MCP tool:
+  - **"Where is X / how does Y work":** `find` with a plain-English question, a name, or both; it returns the files that answer it, best first.
+  - **Exact text or a pattern:** `search` with one or more regexes, `globs` and `context` lines, over every tracked file (code, Markdown, config, templates).
+  - **A name by kind, or a file's parts:** `symbols`, then `outline` to read only the range you need.
+- All FindWright tools are read-only; call them concurrently. The index updates itself on every call, so it never needs a sync.
+- Only fall back to Grep, Glob or agents when FindWright is unavailable or returned nothing usable for two differently worded queries.
+<!-- TOGGLE:code_research:findwright END -->
 <!-- TOGGLE:code_research:none START -->
 - This project has `tools.code_research: "none"` — no indexer is configured. The `/find` skill resolves to a Grep → Glob → Read sequence; follow it disciplined even without enforcement.
 - Explore agents remain forbidden even in the no-indexer case. Read the project sources directly with Grep/Glob/Read rather than spawning an exploration agent.

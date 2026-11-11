@@ -279,12 +279,11 @@ export default {
     + "2.1.287 o más reciente y Node.",
 
   "settings.code-research.title": "Búsqueda de código",
-  "settings.code-research.text": "<a href=\"https://github.com/aovestdipaperino/tokensave\">tokensave</a> "
-    + "indexa tu código para que "
-    + "las respuestas salgan como un cuarto más rápido en proyectos grandes, "
-    + "con unos cuantos puntos porcentuales más de tokens. "
-    + "none usa la búsqueda integrada: igual de precisa y más barata, pero más lenta.",
-  "settings.code-research.value": "tokensave",
+  "settings.code-research.text": "<a href=\"https://github.com/starfoxcom/findwright\">findwright</a> "
+    + "indexa cada archivo que el proyecto sigue, código, docs y configuración por igual, "
+    + "y responde preguntas en lenguaje normal, nombres y búsquedas con regex, con respuestas cortas. "
+    + "Viene con Bindwright. none usa la búsqueda integrada: sin índice, y más lenta.",
+  "settings.code-research.value": "findwright",
   "settings.work-language.title": "Idioma de trabajo",
   "settings.work-language.text": "El idioma de las respuestas, los mensajes de commit y los comentarios del código, "
     + "inglés o español. Los archivos del setup quedan en inglés: solo el asistente los lee.",

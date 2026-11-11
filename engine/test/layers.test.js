@@ -19,11 +19,11 @@ const answers = (advanced = {}, setup) =>
 test("a later layer wins: local over project over personal", () => {
   const { settings } = resolveLayers({
     personal: { schema: 1, codeResearch: "none", tracker: "file" },
-    project: answers({ codeResearch: "tokensave", tracker: "github" }),
+    project: answers({ codeResearch: "findwright", tracker: "github" }),
     local: { tracker: "file" },
   });
   assert.deepEqual(settings, {
-    codeResearch: { value: "tokensave", from: "project", required: false },
+    codeResearch: { value: "findwright", from: "project", required: false },
     tracker: { value: "file", from: "local", required: false },
   });
 });
@@ -31,10 +31,10 @@ test("a later layer wins: local over project over personal", () => {
 test("a value the project requires holds, and the overridden ones are noted", () => {
   const { settings, ignored } = resolveLayers({
     personal: { codeResearch: "none" },
-    project: answers({ codeResearch: "tokensave" }, { schema: 1, required: ["codeResearch"] }),
+    project: answers({ codeResearch: "findwright" }, { schema: 1, required: ["codeResearch"] }),
     local: { codeResearch: "none" },
   });
-  assert.deepEqual(settings.codeResearch, { value: "tokensave", from: "project", required: true });
+  assert.deepEqual(settings.codeResearch, { value: "findwright", from: "project", required: true });
   const note = "codeResearch (the project requires it)";
   assert.deepEqual(ignored, [`personal: ${note}`, `local: ${note}`]);
 });
@@ -148,9 +148,9 @@ const needsPython = { skip: !python && "needs Python 3.8+" };
 test("a personal layer cannot pick the custom tool, which only the project can define", needsPython, () => {
   const out = both({
     personal: { codeResearch: "custom" }, local: { codeResearch: "custom" },
-    project: answers({ codeResearch: "tokensave" }),
+    project: answers({ codeResearch: "findwright" }),
   });
-  assert.deepEqual(out.settings.codeResearch, { value: "tokensave", from: "project", required: false });
+  assert.deepEqual(out.settings.codeResearch, { value: "findwright", from: "project", required: false });
   assert.deepEqual(out.ignored, ["personal: codeResearch", "local: codeResearch"]);
 });
 
@@ -215,7 +215,7 @@ function random(seed) {
 }
 
 const VALUES = [
-  true, false, null, 0, 1, 1.0, 1.5, 2, -1, 1e300, "", "1", "github", "file", "jira", "tokensave", "custom",
+  true, false, null, 0, 1, 1.0, 1.5, 2, -1, 1e300, "", "1", "github", "file", "jira", "findwright", "custom",
   "required", "recommended", "yes", [], ["codeResearch"], ["tracker", "x"], {}, { a: 1 }, "é", "\u{1f600}",
 ];
 const KEYS = ["schema", "codeResearch", "tracker", "extras", "required", "setup", "0", "10", "z", "é"];

@@ -38,7 +38,7 @@ If you DO have one, append the contents of `CLAUDE.md.additions` (or have Claude
 
 The additions include:
 
-- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — tokensave / none / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
+- **No-Explore-agents-for-code-research rule** — overrides any skill recommendation to use `Agent(subagent_type=Explore)` for code research when the project's chosen code-research tool (`tools.code_research` — findwright / none / custom) is available. Hard rule, no exceptions; per-tool guidance lives in the relevant `:code_research:<tool>` blocks within `CLAUDE.md.additions`.
 - **Memory system instructions** — the four memory types, when to save each, when to access, how MEMORY.md works as an index.
 
 These are project-agnostic — they're useful for any project, which is why they live in the global config.
@@ -70,7 +70,7 @@ Claude will start populating memory entries during your normal sessions — you 
 
 | Key | Tool | Search redirect |
 |---|---|---|
-| `tokensave` | tokensave | the tool's own installer adds it (`tokensave install --agent claude`) |
+| `findwright` | FindWright | this hook; detection looks for the project's index, `.findwright/index.db` |
 | `none` | (no tool) | none |
 | `custom` | a tool you name | this hook, as a stub; detection looks for the tool's CLI on PATH |
 

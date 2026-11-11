@@ -51,7 +51,7 @@ const NEWER = [
   // A here-string message: its apostrophe opens no quote, and the next command still counts.
   use("p3", "PowerShell", { command: "git commit -m @'\nfix: don't drop the cache\n'@\ngh pr checks 502" }),
   use("t2", "TaskCreate", { subject: "y" }), // copied from the older session by a fork
-  use("r1", "mcp__tokensave__tokensave_search", { query: "x" }),
+  use("r1", "mcp__findwright__find", { query: "x" }),
   use("r2", "Grep", { pattern: "foo", path: "src" }),
   use("r3", "Grep", { pattern: "x", glob: "*.md" }),
   ...["e1", "e2", "e3"].map((id) => use(id, "Edit", { file_path: id })),
@@ -61,7 +61,7 @@ const OLDER = [
   '{"message": {"content": "plain text"}}',
   bash("ci1", "gh run watch 12"), // copied from the newer session by a fork: counted there only
   use("t2", "TaskCreate", { subject: "y" }, "2026-10-28T08:00:00.000Z"),
-  use("r9", "mcp__tokensave__tokensave_context", { task: "x" }, "2026-10-28T08:05:00.000Z"),
+  use("r9", "mcp__findwright__search", { task: "x" }, "2026-10-28T08:05:00.000Z"),
   // Lines Python's parser alone would refuse: nested too deep, or a number past 4,300 digits.
   `{"message": {"content": [{"type": "tool_use", "id": "deep", "name": "Grep", "input": {"pattern": "d"}}]}, `
     + `"x": ${"[".repeat(1100)}${"]".repeat(1100)}}`,
@@ -71,7 +71,7 @@ const OLDER = [
 const OLDEST = ["o1", "o2", "o3"].map((id) => use(id, "Edit", { file_path: id }));
 const AGENT = ["w2", "w3", "w4"].map((id) => use(id, "Write", { file_path: id }));
 
-function scene({ rules = RULES, logs = true, answers = { codeResearch: "tokensave" } } = {}) {
+function scene({ rules = RULES, logs = true, answers = { codeResearch: "findwright" } } = {}) {
   const root = mkdtempSync(join(tmpdir(), "bw-audit-"));
   const repo = join(root, "repo");
   for (const rule of rules) {

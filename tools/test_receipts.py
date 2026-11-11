@@ -143,7 +143,7 @@ class SessionTests(unittest.TestCase):
     def test_subagents_fold_into_their_session(self):
         self.write("s1.jsonl", assistant("a", "2026-09-01T00:00:00Z", "m1", 100, ("Grep", {"pattern": "x"})))
         self.write("s1/subagents/agent-1.jsonl",
-                   assistant("b", "2026-09-01T00:01:00Z", "m2", 50, ("mcp__tokensave__tokensave_search", {})))
+                   assistant("b", "2026-09-01T00:01:00Z", "m2", 50, ("mcp__findwright__find", {})))
         [s] = receipts.project_sessions(self.logs)
         self.assertEqual((s["output_tokens"], s["tool_calls"], s["research_calls"], s["search_fallbacks"]),
                          (150, 2, 1, 1))

@@ -14,13 +14,14 @@ export const COMPUTER = [
   {
     id: "code-research",
     title: "Code search",
-    text: "tokensave indexes your code so answers come about a quarter faster on big codebases, "
-      + "for a few percent more tokens. none uses the built-in search: as accurate and cheaper, but slower.",
-    value: "tokensave",
+    text: "findwright indexes every file the project tracks, code, docs and config alike, and answers "
+      + "plain questions, names and regex searches with short answers. It ships with Bindwright. "
+      + "none uses the built-in search: no index, and slower.",
+    value: "findwright",
     keys: ["advanced.codeResearch", "advanced.codeResearchCustom"],
-    options: ["tokensave", "none"],
+    options: ["findwright", "none"],
     links: {
-      tokensave: "https://github.com/aovestdipaperino/tokensave",
+      findwright: "https://github.com/starfoxcom/findwright",
     },
   },
   {

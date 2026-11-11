@@ -33,7 +33,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from model import (
-    validate, expand_answers, flags_for, choices_for, values_for,
+    validate, expand_answers, flags_for, choices_for, values_for, brings_own_hook,
     CHOICE_OPTIONS, DEFERRED, LICENSES, JS_WHITESPACE,
 )
 from render import render_template, fill_placeholders
@@ -205,7 +205,7 @@ def _global_files(a, ctx, read_file):
         out.append(["hooks/no-ai-attribution.py", verbatim("hooks/no-ai-attribution.py")])
     profiles = json.loads(read_file(GLOBAL_CORE + "hooks/code-research-profiles.json"))
     hook = profiles[a["advanced"]["codeResearch"]]["hook"]
-    if hook["source"] == "bindwright":
+    if hook["source"] == "bindwright" and not brings_own_hook(a["advanced"]):
         # The custom profile's fields name the tool through placeholders of their own.
         def field(k):
             return fill_placeholders(hook[k], ctx["values"], ctx["deferred"], "profile hook " + k)
