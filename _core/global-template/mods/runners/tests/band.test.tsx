@@ -20,7 +20,7 @@ import {
   USED_READ_MS,
   WEEK_MS,
 } from '../hooks/disk'
-import { clockTime, isListed, mergeReading, pgrepPattern, rowText } from '../hooks/register'
+import { clockTime, isListed, mergeReading, pgrepPattern, pressResult, rowText } from '../hooks/register'
 import type { RunnerView } from '../types'
 
 // The shipped rules.ts is empty, so the drawn row is tested through the machine's list file, which
@@ -268,7 +268,11 @@ test('a reading keeps a Start or Stop pressed while it was being taken', () => {
   expect(mergeReading([{ label: 'other', isOn: false }], failed)[0]?.isStartFailed).toBeUndefined()
   // A timed-out Start that did start the runners keeps its starting grace once the row is on.
   const timedOut: RunnerView = { label: 'runners', isOn: true, online: 0, startedAt: NOW, isStartFailed: true }
-  expect(rowText(timedOut, NOW, hhmm)).not.toContain('starting')
+  // On already, so it shows as starting and never as failed.
+  expect(rowText(timedOut, NOW, hhmm)).toBe('runners on · starting')
+  expect(rowText({ ...timedOut, isOn: false }, NOW, hhmm)).toBe('runners off · 0 online · start failed')
+  // A failed press still starts the grace, since a timed-out command may have launched the runners.
+  expect(pressResult(true, NOW)).toEqual({ startedAt: NOW, isStartFailed: true })
   expect(rowText(mergeReading([{ label: 'runners', isOn: true, online: 0 }], [timedOut])[0]!, NOW, hhmm)).toContain(
     'starting',
   )

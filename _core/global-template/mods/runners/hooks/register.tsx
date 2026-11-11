@@ -333,8 +333,7 @@ async function pressStart($: Engine, index: number): Promise<void> {
   // A command that cannot launch, exits non-zero or outlives its 30 s says so on the row, as a service
   // manager reports a failed start, instead of the row waiting on runners that never come.
   const isStartFailed = (await run($, argv)) === null
-  // A command that timed out may still have started the runners, so the starting grace is kept either way.
-  await setRow($, index, { startedAt: await $.clock.now(), isStartFailed })
+  await setRow($, index, pressResult(isStartFailed, await $.clock.now()))
   await check($).catch(() => undefined)
 }
 
@@ -351,16 +350,24 @@ async function pressStop($: Engine, index: number): Promise<void> {
   await check($).catch(() => undefined)
 }
 
+/** What a Start press leaves on its row. A command that timed out may still have started the runners, so the
+ * starting grace is kept either way. */
+export function pressResult(isStartFailed: boolean, now: number): Pick<RunnerView, 'startedAt' | 'isStartFailed'> {
+  return { startedAt: now, isStartFailed }
+}
+
 export function rowText(row: RunnerView, now: number, zoneTime: (ms: number) => string): string {
   const parts = [`${row.label} ${row.isOn ? 'on' : 'off'}`]
-  const isStarting = row.startedAt !== undefined && now - row.startedAt < START_GRACE_MS && !row.isStartFailed
+  // A row already on has started, whatever its last press reported.
+  const isFailed = row.isStartFailed === true && !row.isOn
+  const isStarting = row.startedAt !== undefined && now - row.startedAt < START_GRACE_MS && !isFailed
   if (row.online !== undefined) parts.push(isStarting && row.online === 0 ? 'starting' : `${row.online} online`)
   if (row.busy) parts.push(`${row.busy} busy`)
   if (row.queued) parts.push(`${row.queued} queued`)
   if (row.nextRun !== undefined) parts.push(`next ${zoneTime(row.nextRun)} (scheduled)`)
   const disk = diskText(row)
   if (disk !== undefined) parts.push(disk)
-  if (row.isStartFailed) parts.push('start failed')
+  if (isFailed) parts.push('start failed')
   return parts.join(' · ')
 }
 
