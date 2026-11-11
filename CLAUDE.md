@@ -19,7 +19,7 @@ Fallback to Grep/Glob is allowed when:
 2. The target is outside the repo, binary or git-ignored
 3. FindWright is unavailable in the session
 
-Bypass for Bash `grep`/`rg`: include `# FINDWRIGHT_BYPASS: <reason>` in the command. For Grep/Glob tools: briefly explain in chat and re-issue.
+Bypass for Bash `grep`/`rg`: include `# FINDWRIGHT_BYPASS: <reason>` in the command. The Grep and Glob tools have no bypass while the index exists: for a search FindWright cannot answer, run `grep`/`rg` in Bash with the marker.
 
 ---
 
