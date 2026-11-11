@@ -13,8 +13,6 @@ name: Mod tests
 #
 # Windows runner: the mods' test fakes answer Windows paths (C:/Users/...),
 # which Linux does not treat as absolute.
-# The type check stays local: its engine typings are generated per machine and
-# are not committed.
 
 on:
   pull_request:
@@ -113,6 +111,49 @@ jobs:
           done
           if [ "$ran" -eq 0 ]; then
             echo "::error::No mod test suite was found."
+            exit 1
+          fi
+          exit "$status"
+
+      # Each mod's tsconfig extends the typings the CLI writes beside a mod it
+      # loads (.claude-plugin/types/, git-ignored, made per CLI version), so one
+      # print run loads every mod to write them. It stops at the login check,
+      # after the typings are written. PLUGIN_DIR_WATCH makes a print run write
+      # them; the PowerShell tool puts that tool's name in the typed tool list.
+      # Runs even when a mod suite failed, and every mod is checked.
+      - name: Mod type check
+        if: ${{ !cancelled() && steps.mods.outputs.present == 'true' }}
+        env:
+          TYPESCRIPT_VERSION: "5.9.3"
+          CLAUDE_CODE_PLUGIN_DIR_WATCH: "1"
+          CLAUDE_CODE_USE_POWERSHELL_TOOL: "1"
+        run: |
+          npm install --global --no-fund --no-audit "typescript@$TYPESCRIPT_VERSION"
+          plugin_dirs=()
+          for dir in _core/global-template/mods/*/; do
+            plugin_dirs+=(--plugin-dir "$(cygpath -w "$PWD/${dir%/}")")
+          done
+          config=$(mktemp -d)
+          (cd "$config" && CLAUDE_CONFIG_DIR="$config" timeout 120 \
+            claude -p "load the mods" "${plugin_dirs[@]}" </dev/null >/dev/null 2>&1) || true
+          status=0
+          ran=0
+          for dir in _core/global-template/mods/*/; do
+            [ -f "${dir}tsconfig.json" ] || continue
+            name=$(basename "$dir")
+            ran=$((ran + 1))
+            echo "::group::$name"
+            if [ ! -f "${dir}.claude-plugin/types/tsconfig.json" ]; then
+              echo "::error::$name: the CLI wrote no typings for it"
+              status=1
+            elif ! (cd "$dir" && tsc --noEmit -p .); then
+              echo "::error::$name: its type check failed"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No mod tsconfig.json was found."
             exit 1
           fi
           exit "$status"
