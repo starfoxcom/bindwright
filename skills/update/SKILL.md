@@ -35,6 +35,7 @@ Run it with `--update <repo root>`. It prints one line of JSON:
 | `added` | New in the templates; written in place | Nothing, beyond step 4 |
 | `staged` | New in the templates, but the repo already has a file there; the new text is at `.bindwright/incoming/<path>` | Merge it (step 3) |
 | `conflict` | Both sides changed the same lines, or the merge would lose a kept section; the repo's copy is untouched and the merge, with all three versions at each clash, is at `.bindwright/incoming/<path>` | Settle it (step 3) |
+| `renamed` | Pairs of `[old path, new path]`: the templates moved the file, so its copy, the repo's edits included, now sits at the new path (and in the list above that says how it merged), and the old file is gone | Nothing, beyond what that list asks |
 | `removed` | The templates dropped a file the repo never changed | Say whether to delete it |
 | `removed_edited` | The templates dropped a file the repo changed; it stays | Nothing, or delete it by hand |
 | `deleted` | The repo deleted a file setup wrote; it stays deleted | Nothing |
@@ -48,7 +49,7 @@ Edits inside `.claude/` ask the user for permission even when edits are otherwis
 
 Go through `.bindwright/incoming/` file by file. Delete each staged copy once its file is settled. Then run the engine with `--clean-staging <repo root>`, never `rm -rf`, which the project's settings deny: it removes the folder once no staged copy waits in it, lists the ones that still do under `unsettled`, and refuses a folder that is a link.
 
-- **A `staged` file:** merge it with the repo's copy the way setup's step 3 does. Keep what the repo says that the new text does not contradict, add what the new text brings, and ask where the two disagree. Show a short summary and save only after a yes. Never replace a `LICENSE` without an explicit yes.
+- **A `staged` file:** no earlier version exists to merge against, so merge it with the repo's copy the way setup's merge step does: run the engine with `--propose-merge <repo root>` (it lists every file in `.bindwright/incoming/`; use the proposals for the `staged` ones, since a `conflict` file carries its own markers), read each proposal against the repo, and show the summary, the clashes with both versions and a recommendation for each. Save only after a yes. Never replace a `LICENSE` without an explicit yes.
 - **A `conflict` file:** the staged copy is the merged file, with each clash marked `<<<<<<< this repo`, `||||||| last setup or update`, `=======` and `>>>>>>> today's templates`. Everything outside the markers already merged cleanly. For each clash, show the user the three versions in plain words (what the repo has, what the templates had, what they have now) and ask which to keep, or write a mix they agree to. Then save the result over the repo's file, with no markers left. When the staged copy has no markers, the clash is a kept section (`bindwright:keep` to `bindwright:end-keep`) that the merge would change: keep the repo's section as it is, and take the rest from the staged copy only on a yes.
 
 A settled conflict does not come back: the update already recorded today's templates as the new base, so the next one compares against them.

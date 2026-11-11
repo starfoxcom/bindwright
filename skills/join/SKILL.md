@@ -38,10 +38,12 @@ Choices are passed on standard input to `--remember <repo root> --layer personal
 
 When this run rendered `.bindwright/global/`, remove it at the end the way setup step 7 does, with the engine's `--clean-staging <repo root>`.
 
-Mods load at start-up: if any were installed, say the CLI needs a restart.
+Then ask which per-project mods run in this project, as `/bindwright:setup` § "Mods in this project" says, and write the answers as its step 6 does. They go in this person's own `.claude/settings.local.json`, so each teammate picks their own.
+
+Mods load at start-up: if any were installed or turned off here, say the CLI needs a restart.
 
 ## 5. Start
 
-Summarise in plain words what was set up, what was declined, and anything still missing. Then run `/session-start`.
+Summarise in plain words what was set up, what was declined, and anything still missing. Then run `/start-session`.
 
 Do not commit or push. Outside the repo, change only what the user said yes to.
