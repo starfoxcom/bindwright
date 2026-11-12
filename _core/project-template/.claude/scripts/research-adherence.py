@@ -4,24 +4,31 @@ Reads the newest transcript for the current directory under
 ~/.claude/projects/, or the transcript given as the first argument.
 Run from the repo root at session close.
 
-A plain search counts only when it looks for code: a Grep or Glob call,
-or a shell command that starts with a recursive search (grep -r, rg,
-git grep, or a recursive listing piped into Select-String). Searches of
-docs, logs or data files, filters on another command's output
-(`... | grep x`), and searches of folders outside the repo (a scratchpad,
-a downloaded copy), which the code-research tool has no index for, are
-not code research and are not counted.
+A plain search counts only when it looks for code inside the repo: a Grep
+or Glob call, or a shell command that starts with a recursive search (grep
+-r, rg, git grep, or a recursive listing piped into Select-String). Each
+search is judged by what it reads: its file filters (globs, types,
+-Include) when it has any, otherwise the files and folders it names, and a
+folder by the files git tracks in it. A search that reads only docs, logs
+or data files, a filter on another command's output (`... | grep x`), and
+a search of folders outside the repo (a scratchpad, a package cache),
+which the code-research tool has no index for, are not counted. When a
+word cannot be read for sure, the search stays counted, the side that
+never flatters the figure.
 """
 import glob
 import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 
 TOOL = re.compile(r"{{TOOLS_CODE_RESEARCH_MATCH}}")
 BYPASS = "{{TOOLS_CODE_RESEARCH_BYPASS_MARKER}}"
-NON_CODE = re.compile(r"\.(md|mdx|txt|log|json|jsonl|ya?ml|csv)\b|\b(md|json|yaml|txt)$", re.I)
+NON_CODE_EXTENSIONS = {"md", "mdx", "txt", "log", "json", "jsonl", "yaml", "yml", "csv"}
+# ripgrep's and grep's file types for the same files.
+NON_CODE_TYPES = {"md", "markdown", "txt", "json", "jsonl", "yaml", "csv", "log"}
 SHELL_SEARCH = re.compile(r"^\s*(rg|ag|ack|git\s+grep)\s|^\s*grep\s(.*\s)?(-[a-zA-Z]*[rR]|--recursive)")
 PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
@@ -31,6 +38,31 @@ CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
 REDIRECT = re.compile(r"^\d*[<>]")
+# A redirect operator written apart from its target (`2> /dev/null`): the next word is the target.
+BARE_REDIRECT = re.compile(r"^\d*(?:>>?|<)&?$")
+WILDCARD = re.compile(r"[*?\[]")
+
+# Options that take a value, from each tool's --help: the value is neither the pattern nor a path.
+RG_SHORT = set("ABCEMTdefgjmrt")
+RG_LONG = {
+    "after-context", "before-context", "color", "colors", "context", "context-separator",
+    "dfa-size-limit", "encoding", "engine", "field-context-separator", "field-match-separator",
+    "file", "generate", "glob", "hostname-bin", "hyperlink-format", "iglob", "ignore-file",
+    "max-columns", "max-count", "max-depth", "max-filesize", "path-separator", "pre", "pre-glob",
+    "regex-size-limit", "regexp", "replace", "sort", "sortr", "threads", "type", "type-add",
+    "type-clear", "type-not",
+}
+GREP_SHORT = set("ABCDdefm")
+GREP_LONG = {
+    "after-context", "before-context", "binary-files", "context", "devices", "directories",
+    "exclude", "exclude-dir", "exclude-from", "file", "include", "label", "max-count",
+    "max-depth", "regexp",
+}
+# Which options name the pattern, and which narrow the files read.
+PATTERN_OPTIONS = {"e", "f", "regexp", "file"}
+GLOB_OPTIONS = {"g", "glob", "iglob", "include"}
+TYPE_OPTIONS = {"t", "type"}
+PS_VALUE_PARAMETERS = ("path", "literalpath", "include", "exclude", "filter", "depth", "attributes")
 
 
 def unquote_separators(command):
@@ -46,9 +78,13 @@ def unquote_separators(command):
     return "".join(out)
 
 
+def unquote(word):
+    return word.strip("'\"")
+
+
 def resolve(path, base):
     """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(path.strip("'\""))
+    path = os.path.expanduser(unquote(path))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))
@@ -62,34 +98,165 @@ def is_outside(path, root):
         return True  # another drive
 
 
-def path_arguments(head):
-    """The words of a search command that name a file or folder."""
+def is_wide(name):
+    """True when a glob names no extension, so it narrows nothing by file kind (`*`, `docs/**`)."""
+    return "." not in os.path.basename(unquote(name).rstrip("/\\"))
+
+
+def is_code_name(name):
+    """True when a file name or glob can match a code file, one whose extension is not a doc's."""
+    name = unquote(name).rstrip("/\\")
+    braces = re.search(r"\{([^}]*)\}$", name)
+    endings = [name]
+    if braces:
+        endings = [name[:braces.start()] + part for part in braces.group(1).split(",")]
+    for ending in endings:
+        extension = ending.rsplit(".", 1)[-1].lower() if "." in os.path.basename(ending) else ""
+        if extension not in NON_CODE_EXTENSIONS:
+            return True
+    return False
+
+
+def tracked_files(root):
+    """The tracked files, absolute and case-folded; every file there when git cannot list them."""
+    try:
+        command = ["git", "-C", root, "ls-files", "-z"]
+        listed = subprocess.run(command, capture_output=True, check=True).stdout
+        names = [n for n in listed.decode("utf-8", "replace").split("\0") if n]
+    except (OSError, subprocess.CalledProcessError):
+        names = []
+        for folder, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if d != ".git"]
+            names += [os.path.relpath(os.path.join(folder, f), root) for f in files]
+    return [os.path.normcase(os.path.abspath(os.path.join(root, n))) for n in names]
+
+
+class Repo:
+    """The repo a search is judged against: its root and, read once when needed, its code files."""
+
+    def __init__(self, root):
+        self.root = root
+        self._code_files = None
+
+    def code_files(self):
+        if self._code_files is None:
+            self._code_files = [f for f in tracked_files(self.root) if is_code_name(f)]
+        return self._code_files
+
+    def holds_code(self, path):
+        """True when an in-repo file or folder is code, or cannot be told apart from code."""
+        if WILDCARD.search(os.path.basename(path)):
+            return is_code_name(path)
+        if os.path.isdir(path):
+            prefix = path.rstrip("\\/") + os.sep
+            return path == self.root or any(f.startswith(prefix) for f in self.code_files())
+        return not os.path.exists(path) or is_code_name(path)
+
+
+class Search:
+    """What one search reads: the paths it names, and the globs and types that narrow its files."""
+
+    def __init__(self, paths=(), globs=(), types=()):
+        self.paths = list(paths)
+        # A negated glob (`!*.md`) leaves files out; it never says what the search reads.
+        globs = [g for g in map(unquote, globs) if g]
+        self.globs = [g for g in globs if not g.startswith("!") and not is_wide(g)]
+        self.types = [unquote(t).lower() for t in types]
+
+    def reads_code(self, base, repo):
+        """True when the search reads code inside the repo, with paths read from `base`."""
+        paths = [resolve(p, base) for p in self.paths] or [base]
+        inside = [p for p in paths if not is_outside(p, repo.root)]
+        if not inside:
+            return False
+        if self.globs or self.types:
+            return (any(is_code_name(g) for g in self.globs)
+                    or any(t not in NON_CODE_TYPES for t in self.types))
+        return any(repo.holds_code(p) for p in inside)
+
+
+def split_words(head):
+    """The words of one command, with quotes kept; redirects and their targets dropped."""
     # Not POSIX mode, which reads a backslash as an escape and would turn D:\scratch into
     # D:scratch; quotes stay on the words, and resolve() strips them.
     try:
         words = shlex.split(head, posix=False)
     except ValueError:
         words = head.split()
+    kept, skip_next = [], False
+    for word in words:
+        if skip_next:
+            skip_next = False
+        elif BARE_REDIRECT.match(word):
+            skip_next = True
+        elif not REDIRECT.match(word):
+            kept.append(word)
+    return kept
+
+
+def option_value(word, words, short, long):
+    """The (name, value) of the option in `word`; a separate value is taken from `words`."""
+    if word.startswith("--"):
+        name, joined, value = word[2:].partition("=")
+        if joined or name not in long:
+            return name, value if joined else None
+        return name, words.pop(0) if words else ""
+    name = word[1:2]
+    for i, flag in enumerate(word[1:]):
+        if flag in short:
+            rest = word[i + 2:]
+            return flag, rest if rest else (words.pop(0) if words else "")
+    return name, None
+
+
+def text_search(words):
+    """What grep, rg, ag, ack or git grep reads, from the words after the command name."""
+    is_rg = words[0] in ("rg", "ag", "ack")
     if words[:2] == ["git", "grep"]:
         words = words[1:]
-    positional = [w for w in words[1:] if not w.startswith("-") and not REDIRECT.match(w)]
-    # grep, rg, ag and ack take the pattern first; a pattern is not a path, even with a slash.
-    if words and not PS_LISTING.search(head):
-        positional = positional[1:]
-    return [w for w in positional if re.search(r"[/\\~]", w)]
+    short, long = (RG_SHORT, RG_LONG) if is_rg else (GREP_SHORT, GREP_LONG)
+    rest, positional, globs, types, has_pattern = words[1:], [], [], [], False
+    while rest:
+        word = rest.pop(0)
+        if word == "--":
+            positional += rest
+            break
+        if not word.startswith("-") or word == "-":
+            positional.append(word)
+            continue
+        name, value = option_value(word, rest, short, long)
+        has_pattern |= name in PATTERN_OPTIONS
+        if value is not None and name in GLOB_OPTIONS:
+            globs.append(value)
+        elif value is not None and name in TYPE_OPTIONS:
+            types.append(value)
+    paths = positional if has_pattern else positional[1:]
+    return Search(paths, globs, types)
 
 
-def searches_outside(head, base, root):
-    """True when every path the search names, read from `base`, lies outside the repo."""
-    paths = path_arguments(head)
-    if not paths:
-        return is_outside(base, root)
-    return all(is_outside(resolve(p, base), root) for p in paths)
+def listing_search(words):
+    """What a recursive Get-ChildItem reads: -Path or the first word, narrowed by -Include."""
+    rest, values, positional = words[1:], {}, []
+    while rest:
+        word = rest.pop(0)
+        if not word.startswith("-"):
+            positional.append(word)
+            continue
+        name, joined, value = word[1:].lower().partition(":")
+        match = [p for p in PS_VALUE_PARAMETERS if p.startswith(name)] if name else []
+        if len(match) == 1:
+            given = value if joined else (rest.pop(0) if rest else "")
+            values.setdefault(match[0], []).append(given)
+    def listed(key, extra):
+        return [v for item in values.get(key, []) + extra for v in item.split(",") if v]
+
+    return Search(listed("path", positional[:1]) + listed("literalpath", []),
+                  listed("include", positional[1:2]) + listed("filter", []))
 
 
-def shell_search(command, root):
-    """True when a command line runs a code search of its own inside the repo at `root`."""
-    base = root
+def shell_search(command, repo):
+    """True when a command line runs a code search of its own inside the repo."""
+    base = repo.root
     for part in re.split(r"&&|\|\||;|\n", unquote_separators(command)):
         stages = part.split("|")
         head = stages[0]
@@ -97,38 +264,48 @@ def shell_search(command, root):
         if moved:
             # The repo root is the folder such a move most likely returns to, and reading it so
             # keeps the search counted, the side that never flatters the figure.
-            # Redirects (`cd - >/dev/null`) are not the target; the first other word is.
-            words = [w for w in (moved.group(2) or "").split() if not REDIRECT.match(w)]
+            words = split_words(moved.group(2) or "")
             target = words[0] if words else None
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
-            base = root if back else resolve(" ".join(words), base)
+            base = repo.root if back else resolve(" ".join(words), base)
             continue
-        if NON_CODE.search(head):
+        if SHELL_SEARCH.search(head):
+            search = text_search(split_words(head))
+        elif PS_LISTING.search(head) and any(PS_SEARCH.search(s) for s in stages[1:]):
+            search = listing_search(split_words(head))
+        else:
             continue
-        is_search = SHELL_SEARCH.search(head) or (
-            PS_LISTING.search(head) and any(PS_SEARCH.search(s) for s in stages[1:]))
-        if is_search and not searches_outside(head, base, root):
+        if search.reads_code(base, repo):
             return True
     return False
 
 
+def tool_search(name, args):
+    """What a Grep or Glob call reads."""
+    path = str(args.get("path") or "")
+    if name == "Grep":
+        types = [args["type"]] if args.get("type") else []
+        return Search([path] if path else [], [str(args.get("glob") or "")], types)
+    pattern = str(args.get("pattern") or "")
+    # A pattern can carry its own folder: an absolute one, or a relative one under the path.
+    static = re.split(r"[*?\[{]", pattern, maxsplit=1)[0]
+    folder = os.path.dirname(static) if os.path.dirname(static) else ""
+    paths = [os.path.join(path, folder)] if folder else [path] if path else []
+    return Search(paths, [pattern])
+
+
 def classify(name, args, root=None):
-    """'research', 'fallback', 'bypass', or None for a call that is not a search.
+    """'research', 'fallback', 'bypass', or None for a call that is not a code search.
 
     `root` is the repo root as `repo_root()` gives it; by default, the folder this runs from."""
-    root = root or repo_root()
+    repo = root if isinstance(root, Repo) else Repo(root or repo_root())
     if TOOL.search(name):
         return "research"
     if name in ("Grep", "Glob"):
-        if args.get("path") and is_outside(resolve(str(args["path"]), root), root):
-            return None
-        # Grep's pattern is the search text, Glob's is the file pattern.
-        keys = ("pattern", "path") if name == "Glob" else ("path", "glob", "type")
-        target = " ".join(str(args.get(k, "")) for k in keys)
-        return None if NON_CODE.search(target) else "fallback"
+        return "fallback" if tool_search(name, args).reads_code(repo.root, repo) else None
     if name in ("Bash", "PowerShell"):
         command = args.get("command", "")
-        if shell_search(command, root):
+        if shell_search(command, repo):
             return "bypass" if BYPASS in command else "fallback"
     return None
 
@@ -165,9 +342,9 @@ def repo_root():
 
 def main():
     counts = {"research": 0, "fallback": 0, "bypass": 0}
-    root = repo_root()
+    repo = Repo(repo_root())
     for name, args in tool_calls(transcript()):
-        kind = classify(name, args, root)
+        kind = classify(name, args, repo)
         if kind:
             counts[kind] += 1
     total = counts["research"] + counts["fallback"]

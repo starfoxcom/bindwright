@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -41,9 +41,17 @@ test("searches count only inside the repo, wherever the path or a cd points", {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "bw-adherence-")));
   const root = join(base, "repo");
   const scratch = join(base, "scratch");
-  mkdirSync(join(root, "src"), { recursive: true });
+  // A folder is judged by the files git tracks in it: code, docs only, or a mix.
+  for (const file of ["src/app.py", "engine/src/x.js", "docs/guide.md", ".claude/rules/a.md",
+    ".claude/hooks/h.py", "README.md"]) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), "x\n");
+  }
+  for (const args of [["init", "-q"], ["add", "-A"]]) spawnSync("git", ["-C", root, ...args]);
   mkdirSync(scratch);
   const bash = (command) => ({ name: "Bash", args: { command } });
+  const ps = (command) => ({ name: "PowerShell", args: { command } });
+  const grep = (args) => ({ name: "Grep", args: { pattern: "x", ...args } });
   const rows = [
     ["a FindWright call", { name: "mcp__findwright__find", args: {} }, "research"],
     ["Grep with no path searches the repo", { name: "Grep", args: { pattern: "x" } }, "fallback"],
@@ -67,6 +75,40 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["popd returns to the repo", bash(`pushd "${scratch}" && ls && popd && grep -rn foo src/`), "fallback"],
     ["a marked bypass", bash("grep -rn foo src/ # FINDWRIGHT_BYPASS: regex"), "bypass"],
     ["a filter on another command's output", bash("git log | grep fix"), null],
+    // What a search reads: its file filters first, then the files and folders it names.
+    ["a pattern that names a doc file is still a pattern", bash(`rg "mod.json" engine/src`), "fallback"],
+    ["a search of folders holding only docs", bash("grep -rn x docs/ .claude/rules/"), null],
+    ["a search of a folder holding code beside docs", bash("grep -rn x .claude/hooks"), "fallback"],
+    ["a search of one doc file", bash("grep -rn x README.md"), null],
+    ["Grep on a docs folder", grep({ path: "docs" }), null],
+    ["Grep on a docs folder named in full", grep({ path: join(root, "docs") }), null],
+    ["a search of a docs folder named in full", bash(`rg x "${join(root, "docs")}"`), null],
+    ["Grep on a code folder beside docs", grep({ path: ".claude/hooks" }), "fallback"],
+    ["a negated Grep glob leaves out docs, it does not pick them", grep({ glob: "!*.md" }), "fallback"],
+    ["a negated rg glob leaves out docs", bash(`rg x -g "!*.md"`), "fallback"],
+    ["an rg glob of docs", bash(`rg x -g "*.md"`), null],
+    ["a grep include of docs", bash("grep -rn --include=*.md x ."), null],
+    ["a Grep glob of docs and data", grep({ glob: "*.{md,yml}" }), null],
+    ["a Grep glob with a code extension", grep({ glob: "*.{md,py}" }), "fallback"],
+    ["an rg type of docs", bash("rg -tmd x"), null],
+    ["an rg type of code before the pattern", bash(`rg -t dart "/login"`), "fallback"],
+    ["an option value before the pattern", bash(`rg --max-depth 2 "/api/v1"`), "fallback"],
+    ["a word option value before the pattern", bash(`rg --sort path "\\bMoney\\b"`), "fallback"],
+    ["a redirect written apart from its target", bash("grep -rn foo src 2> /dev/null"), "fallback"],
+    ["a repo folder beside a folder outside", bash(`rg foo src "${scratch}"`), "fallback"],
+    ["-e names the pattern, so the next word is a path", bash("grep -rn -e foo src"), "fallback"],
+    ["-e with only a folder outside", bash(`rg -e foo "${scratch}"`), null],
+    ["a git grep pathspec of docs", bash("git grep foo -- '*.md'"), null],
+    ["Glob of code", { name: "Glob", args: { pattern: "**/*.py" } }, "fallback"],
+    ["Glob of a docs folder", { name: "Glob", args: { pattern: "docs/**" } }, null],
+    ["Glob whose pattern points outside the repo",
+      { name: "Glob", args: { pattern: join(scratch, "**", "*.dart") } }, null],
+    ["a listing of a docs folder", ps("Get-ChildItem -Recurse -Path docs | Select-String x"), null],
+    ["a listing of a code folder", ps("Get-ChildItem -Recurse src | Select-String x"), "fallback"],
+    ["a listing that includes code", ps("Get-ChildItem -Recurse -Include *.cpp,*.json | Select-String x"),
+      "fallback"],
+    ["a listing that includes only docs", ps("Get-ChildItem -Recurse -Include *.md -Exclude *.py | sls x"), null],
+    ["an exclude says nothing of what is read", ps("Get-ChildItem -Recurse -Exclude:x.md | sls y"), "fallback"],
   ];
   try {
     const got = classifyAll(root, rows.map(([, call]) => call));
