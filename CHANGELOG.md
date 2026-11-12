@@ -13,6 +13,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- `/close-session` and `review-tiers.md` merge once every check has settled and the required ones pass, not as soon as the required ones do. `/bindwright:update` lists the project's own files that still name the version it was bound with, which it never edits (#814).
 - `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed, warning that every other clone loses its copy when it pulls that commit. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
 
 ## [v3.5.0] — 2026-11-12
