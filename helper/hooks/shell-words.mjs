@@ -43,28 +43,24 @@ function bashWord(node) {
   return dynamic(node);
 }
 
-// The grammar files words that follow a redirect's target (`>& log -F msg`) under the
-// redirect, but the shell passes them to the command as arguments.
-function redirectArguments(node) {
-  if (node.type === "heredoc_redirect") return node.childrenForFieldName("argument").map(bashWord);
-  if (node.type !== "file_redirect") return [];
-  return node.namedChildren.filter((c) => c.type !== "file_descriptor").slice(1).map(bashWord);
+// True when a redirect holds words past its own target (`>& log -F msg`, `2>&- -F msg`,
+// `<<EOF --body-file x`). Bash passes those to the command, but the grammar files them
+// under the redirect in shapes it does not keep consistent, so such a command is reported
+// unreadable rather than read with words missing.
+function holdsCommandWords(node) {
+  if (node.type === "heredoc_redirect") {
+    return node.childrenForFieldName("argument").length > 0 || node.childrenForFieldName("redirect").length > 0;
+  }
+  if (node.type === "herestring_redirect") return node.namedChildren.length > 1;
+  if (node.type !== "file_redirect") return false;
+  const targets = node.namedChildren.filter((c) => c.type !== "file_descriptor").length;
+  const closes = node.children.some((c) => c.type === ">&-" || c.type === "<&-");
+  return targets > (closes ? 0 : 1);
 }
 
 function bashCommand(node) {
-  const words = [];
-  for (const child of node.namedChildren) {
-    if (BASH_SKIP.has(child.type)) {
-      words.push(...redirectArguments(child));
-      continue;
-    }
-    words.push(child.type === "command_name" ? bashWord(child.namedChildren[0] ?? child) : bashWord(child));
-  }
-  const parent = node.parent;
-  if (parent?.type === "redirected_statement") {
-    for (const sibling of parent.namedChildren) words.push(...redirectArguments(sibling));
-  }
-  return words;
+  return node.namedChildren.filter((child) => !BASH_SKIP.has(child.type)).map((child) =>
+    child.type === "command_name" ? bashWord(child.namedChildren[0] ?? child) : bashWord(child));
 }
 
 // PowerShell: the literal value of one command element, or a dynamic marker.
@@ -122,11 +118,12 @@ export async function shellWords(shell, command) {
   const tree = parser.parse(source);
   // The bash grammar takes a backslash before CR LF as a line continuation, but bash ends
   // the command there, so it cannot be trusted on a command holding a CR.
-  const unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
+  let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
   const scoped = [];
   (function walk(node, inChild) {
+    if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     if (node.type === "command") {
       if (inChild || node.nextSibling?.type === "&") scoped.push(commands.length);
       commands.push(read(node));

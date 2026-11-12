@@ -205,11 +205,14 @@ class GuardHookTest(unittest.TestCase):
 
     # --- no-ai-attribution: attribution is denied, mentions pass ---
 
-    def assert_denied(self, result):
+    def assert_denied(self, result, because=None):
+        """A deny; with `because`, one whose reason holds that text (the file it read)."""
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(result.stdout.strip(), "expected a deny, got silence")
-        decision = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
-        self.assertEqual(decision, "deny")
+        output = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertEqual(output["permissionDecision"], "deny")
+        if because is not None:
+            self.assertIn(because, output["permissionDecisionReason"])
 
     def attr(self, command, **kw):
         return self.run_hook("no-ai-attribution", command, **kw)
@@ -474,9 +477,14 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr merge 5 -m -F "{path}"', "Bash"),
                 ('gh pr merge 5 -m --body-file="my notes/body.md"', "Bash"),
                 (f'curl -X PATCH https://api.github.com/repos/git/git -d @"{path}"', "Bash"),
-                (f'sudo -u git curl -d @"{path}" https://api.github.com/repos/o/r/issues', "Bash")):
+                (f'sudo -u git curl -d @"{path}" https://api.github.com/repos/o/r/issues', "Bash"),
+                (f'gh pr create --title t <<EOF 2>/dev/null --body-file "{path}"\nx\nEOF', "Bash"),
+                (f'gh pr create --title t 2>&- --body-file="{path}"', "Bash"),
+                (f'! git commit > log -F "{path}"', "Bash"),
+                (f'git log | gh pr comment 5 > out --body-file "{path}"', "Bash"),
+                (f'Get-Content -Path:"{path}" | gh issue create --title t --body-file -', "PowerShell")):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, tool=tool))
+                self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""
@@ -492,13 +500,15 @@ class GuardHookTest(unittest.TestCase):
         root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "sub/msg.txt": "x\n",
                                   "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
         for command in ("(cd sub; true); git commit -F msg.txt", "cd sub | true; git commit -F msg.txt",
-                        "pushd sub; popd; git commit -F msg.txt", "git -C sub -C sub commit -F msg.txt"):
+                        "pushd sub; popd; git commit -F msg.txt"):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, project=root))
+                self.assert_denied(self.attr(command, project=root), "folder named at run time")
+        flagged = os.path.join(root, "sub", "sub", "msg.txt")
+        self.assert_denied(self.attr("git -C sub -C sub commit -F msg.txt", project=root), f"found in file {flagged}")
         moved = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
         for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt"):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, project=moved))
+                self.assert_denied(self.attr(command, project=moved), "found in file")
 
     def test_without_the_helper_every_file_flag_is_read(self):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
