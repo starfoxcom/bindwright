@@ -143,6 +143,15 @@ jobs:
           grep -qE "^# pass [1-9]" node-tests.txt || { echo "::error::No engine tests ran"; exit 1; }
           grep -E "^# skipped" node-tests.txt
 
+      # The guard hooks again on Windows: Git Bash, the pipe to Node and junctions take
+      # paths there that never run on Linux. Skips are allowed, as above.
+      - name: Guard hook tests
+        if: steps.engine.outputs.present == 'true'
+        run: |
+          python -m unittest -v tools/test_guard_hooks.py 2>&1 | tee guard-tests.txt
+          grep -qE "^OK" guard-tests.txt || { echo "::error::Guard hook tests failed"; exit 1; }
+          grep -qE "^Ran [1-9][0-9]* tests? in" guard-tests.txt || { echo "::error::No guard hook tests ran"; exit 1; }
+
   # The required check: it passes only when both jobs above pass. A job that
   # needs a failed one would be skipped, and a skipped check counts as passed.
   test:
