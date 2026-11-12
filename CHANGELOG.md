@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Breaking
+
+- **The attribution guard reads commands with a real shell parser** (#821). Bindwright's helper now carries tree-sitter's bash and PowerShell grammars (`helper/parsers/`, copied unchanged with their versions and checksums), and the guard reads body files only from the words of git, gh, curl, `Invoke-RestMethod`/`Invoke-WebRequest` and `Get-Content` commands as the shell reads them. A text tool's flags (`awk -F,`, `cut -d@`, `grep -F word`), quoted text and here-docs are another command's words, so the hand-rolled quote and stage scan, which nested quotes, PowerShell's `--%` and typographic quotes could mislead into skipping a real body file, is gone. A body file named by text built at run time (`"$HOME/body.md"`), or a relative one after a `cd` to a folder built at run time, is refused. **Act on it:** without the helper or Node the guard reads every file flag in the command text, a text tool's included, so `git tag --list | awk -F.` is refused there until `/bindwright:update` installs the helper.
+
 ### Added
 
 - `/bindwright:update` lists the project's own files that still name the Bindwright version it was bound with, when it moves to a newer one; it never edits them (#814).
