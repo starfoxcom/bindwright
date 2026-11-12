@@ -33,18 +33,18 @@ When `$HOME/.bindwright/helper/node_modules/bindwright/findwright/cli.mjs` exist
 
 ## Project steps
 
-If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
+If `.bindwright/session-steps.md` lists "Extra close steps", run them now, except those marked *after the hand-off*: they run at the end, before the last message.
 
 ## Commit and PR
 
-Take the first row that matches:
+Stage the session's files by name, never `git add -A` or `git add .`. A file `git status` lists that this session did not change stays out of the commit; name it in the last message. Then take the first row that matches:
 
 | Situation | Do |
 |---|---|
 | Branch goal not finished | Commit the work. No PR. |
-| `hotfix/*` finished | PR to `main`. After it merges, open the cascade PR into `develop` (`git.md` § Cascade). Done only when the cascade merges. |
+| `hotfix/*` finished | PR to `main`. After it merges, open the cascade PR: a `chore/cascade-<name>` branch from `origin/develop` that merges `origin/main` with `--no-ff`, into `develop`. Done only when the cascade merges. |
 | `release/*` finished | Same as a hotfix: PR to `main`, tag the release commit, then cascade. |
-| Any other branch finished | Commit, open a PR to `develop`, watch the checks, merge on 🟢. |
+| Any other branch finished | Commit, open a PR to `develop`, watch the checks, merge once every required check passes. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
 
@@ -52,7 +52,7 @@ Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.
 
 After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat.
 
-Then check the three status-update triggers in `tracker.md` and post an update only when one fired.
+Then post a project status update only when this session completed a milestone or a major arc of one, changed the health colour, or changed the plan; `tracker.md` § Project status updates has the shape. Most sessions post none.
 
 ## Hand-off file
 
@@ -64,6 +64,10 @@ Rewrite `.bindwright/handoff.md`. It stays in this checkout, out of git: the fir
 - Start with: #13
 - Open question: <one line, or none>
 ```
+
+## Steps after the hand-off
+
+Run the extra close steps marked *after the hand-off*, if any: they read this session's finished work and its hand-off.
 
 ## Last message
 

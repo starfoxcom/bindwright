@@ -20,7 +20,9 @@ What is scanned, for any git write, gh write or GitHub API call:
     here-docs, here-strings and PowerShell -Body all live there.
   * Every file the command names as a message or body: -F / --file /
     --body-file / --notes-file / --template / --input / --message-file,
-    curl -d @file, PowerShell -InFile and Get-Content <file>. A file it
+    --field, curl -d @file, PowerShell -InFile and Get-Content <file>,
+    but not the -F or --file of a text tool's own stage (`awk -F,`,
+    `grep -F word`), which is a separator or a pattern. A file it
     cannot read is denied, so a typo cannot slip a body through unread.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
@@ -87,12 +89,22 @@ ATTRIBUTION = re.compile(
     re.I | re.M,
 )
 
+# A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
+# `commit-msg`) names no write.
+_WORD_START = r"(?<![\w./\\:-])"
+_WORD_END = r"(?![\w./-])"
 GIT_WRITE = re.compile(
-    r"\bgit\b[^|;&\n]*?\b(commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)\b", re.I)
+    r"\bgit\b[^|;&\n]*?" + _WORD_START
+    + r"(commit-tree|commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)"
+    + _WORD_END, re.I)
 GH_WRITE = re.compile(
-    r"\bgh\b[^|;&\n]*?\b(pr|issue|release|gist|repo)\b[^|;&\n]*?\b(create|edit|comment|review|merge|close|reopen)\b",
-    re.I)
-GH_API = re.compile(r"\bgh\b[^|;&\n]*?\bapi\b", re.I)
+    r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
+    + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
+GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
+# Text tools whose own -F or --file is a field separator or a pattern file, never a message.
+TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)\b")
+# Unquoted, any of these between a text tool and its flag means the flag is read after all.
+SHELL_SYNTAX = frozenset("<>&|;#`$(){}\\\r\n")
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 
 # Flags whose next token is a file the hook must read. `-F` is case-sensitive:
@@ -101,10 +113,11 @@ HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api
 # space or the long-option `=` (`--body-file=body.md`).
 FILE_FLAGS = re.compile(
     r"(?:(?<=\s)-F"
-    r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|-InFile))(?![\w-])"
+    r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|--field|-InFile))(?![\w-])"
     r"|(?i:Get-Content)(?:\s+(?i:-Raw|-Path|-LiteralPath)(?![\w-]))*"
     r"|(?<=\s)-d\s*@|(?i:--data(?:-binary|-raw)?)\s*@)"
-    r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'|(?P<bare>\S+))"
+    r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'"
+    r"|(?P<kv>[^\s=\"']+=@(?:\"[^\"]+\"|'[^']+'))|(?P<bare>\S+))"
 )
 SEGMENT_START = re.compile(r"[;&|\n][^;&|\n]*$")
 # Message text, not arguments: here-doc bodies and PowerShell here-strings.
@@ -157,12 +170,67 @@ def text_spans(cmd, esc):
     return spans
 
 
+def is_escaped(cmd, i, esc):
+    """True when an odd run of the shell's escape character stands right before `i`, so the
+    character there is literal: two backslashes and a newline end a bash line, one continues it."""
+    run = 0
+    while i - run - 1 >= 0 and cmd[i - run - 1] == esc:
+        run += 1
+    return run % 2 == 1
+
+
+def continues_line(cmd, i, esc):
+    """True when the newline at `i` is escaped; in PowerShell the backtick may stand before
+    its CR. In bash a backslash before a CR escapes only the CR, and the newline ends the line."""
+    if esc == "`" and i > 0 and cmd[i - 1] == "\r":
+        i -= 1
+    return is_escaped(cmd, i, esc)
+
+
+def stage_start(cmd, at, spans, esc):
+    """Where the pipeline stage holding `at` begins: after the last | ; & or newline before it
+    that sits outside quoted text and outside a closed ( ... ) or $( ... ) group. None when
+    the stage cannot be told: a ) before it has no ( to close, such as a case pattern's, or a
+    bash backtick substitution opens before it."""
+    depth = 0
+    for i in range(at - 1, -1, -1):
+        if any(s <= i < e for s, e in spans):
+            continue
+        if cmd[i] != "\n" and is_escaped(cmd, i, esc):
+            continue  # a literal character: `\(`, `\;`, `` \` ``
+        if cmd[i] == "`" and esc == "\\":
+            return None
+        if cmd[i] == ")":
+            depth += 1
+        elif cmd[i] == "(":
+            if depth == 0:
+                return i + 1
+            depth -= 1
+        elif cmd[i] in "|;&\n" and depth == 0:
+            if cmd[i] != "\n" or not continues_line(cmd, i, esc):
+                return i + 1
+    return 0 if depth == 0 else None
+
+
+def is_plain(cmd, start, end, spans):
+    """True when cmd[start:end] holds only words and quoted text: no redirect, separator,
+    substitution, comment, group or escape, any of which the stage scan cannot be sure of. A
+    stage that starts at a redirect's & or | (`>& file`, `>| file`) is no stage at all."""
+    if start >= 2 and cmd[start - 1] in "&|" and cmd[start - 2] in "<>":
+        return False
+    return not any(cmd[i] in SHELL_SYNTAX for i in range(start, end)
+                   if not any(s <= i < e for s, e in spans))
+
+
 def find_files(cmd, cwd, esc):
     spans = text_spans(cmd, esc)
     for m in FILE_FLAGS.finditer(cmd):
         if any(s <= m.start() < e for s, e in spans):
             continue
-        path = m.group("dq") or m.group("sq") or m.group("bare")
+        start = stage_start(cmd, m.start(), spans, esc)
+        if start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans):
+            continue
+        path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
         if (m.group("long") or "").lower() == "--template":

@@ -234,6 +234,7 @@ class GuardHookTest(unittest.TestCase):
         for line in (GENERATED_LINE, "Written by an AI assistant", "docs: x via " + "Cla" + "ude Code"):
             with self.subTest(line=line):
                 self.assert_denied(self.attr(f"git commit -m 'docs: x' -m '{line}'"))
+        self.assert_denied(self.attr(f"git commit-tree HEAD^{{tree}} -p HEAD -m '{GENERATED_LINE}'"))
 
     def test_session_link_and_robot_are_denied(self):
         for body in (SESSION_LINK, "Done \U0001F916", "Cla" + "ude-Session: abc"):
@@ -365,6 +366,58 @@ class GuardHookTest(unittest.TestCase):
                         "gh pr create --title t --body-file=/no/such/body.md"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command))
+
+    def test_field_body_file_is_read(self):
+        path = self.body_file(f"{GENERATED_LINE}\n")
+        for command in (f'gh api repos/o/r/issues/5/comments --field body=@"{path}"',
+                        f'gh api repos/o/r/issues/5/comments --field=body=@{path}'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command))
+        # A quoted path with a space is read whole: a clean file there passes, not "could not read".
+        spaced = os.path.join(os.path.dirname(self.body_file("Plain body.\n")), "body with space.md")
+        with open(spaced, "w", encoding="utf-8") as f:
+            f.write("Plain body.\n")
+        self.addCleanup(os.remove, spaced)
+        for command in (f'gh api repos/o/r/issues/5/comments -F body=@"{spaced}"',
+                        f"gh api repos/o/r/issues/5/comments --field body=@'{spaced}'"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
+
+    def test_file_flags_of_other_stages_are_not_read(self):
+        # Every file flag of a writing command is read, except one in a text tool's own stage.
+        path = self.body_file(f"{GENERATED_LINE}\n")
+        for command in ("git show HEAD:.claude/hooks/push-guard.py | grep -F word",
+                        "git show HEAD:.git/hooks/commit-msg | grep -F word",
+                        "git tag --list | awk -F. '{print $1}'",
+                        "gh api repos/o/r/pulls | awk -F'\\t' '{print $1}'",
+                        "gh pr create --title 'a && b; c' --body x | awk -F, '{print}'"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
+        for command, tool in (
+                (f'Get-Content "{path}" | gh issue create --title t --body-file -', "PowerShell"),
+                (f'$body = Get-Content "{path}" -Raw\ngh pr create --title t --body $body', "PowerShell"),
+                (f"gh pr create --title 'a && b' --body-file \"{path}\"", "Bash"),
+                (f'gh pr create --title x \\\n  --body-file "{path}"', "Bash"),
+                (f'gh pr create --title x `\n  --body-file "{path}"', "PowerShell"),
+                (f'git commit -m x \\\n  -F "{path}"', "Bash"),
+                (f'(git commit -F "{path}")', "Bash"),
+                (f'echo $(git tag -a v1 -F "{path}")', "Bash"),
+                (f'gh pr create --title "$(git log -1 | cut -c1-9)" -F "{path}"', "Bash"),
+                (f'gh pr create --title $(git log -1 | cut -c1-9) -F "{path}"', "Bash"),
+                (f'git commit\\\n  -F "{path}"', "Bash"),
+                (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),
+                (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),
+                (f'grep -q x f; case $y in a) git commit -F "{path}";; esac', "Bash"),
+                (f'git commit-tree HEAD^{{tree}} -p HEAD -F "{path}"', "Bash"),
+                (f'sort `git commit -F "{path}"`', "Bash"),
+                (f'grep -rn foo C:\\\\repo\\\\\ngit commit -F "{path}"', "Bash"),
+                (f'grep x f \\\r\ngit commit -F "{path}"', "Bash"),
+                (f'grep -q a\\(b f && case $y in y) git commit -F "{path}";; esac', "Bash"),
+                (f'git commit -m x >& sort.log -F "{path}"', "Bash"),
+                (f'git commit -m x >| sort.log -F "{path}"', "Bash"),
+                (f'grep x f # ends in a backslash \\\ngit commit -F "{path}"', "Bash")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool=tool))
 
     def test_read_only_commands_pass(self):
         for command in ("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"):

@@ -17,7 +17,7 @@ Applies when more than one person pushes to the repo. Everything in `git.md` sti
 
 ## Who reviews
 
-- This repo has one maintainer and no `CODEOWNERS` file. Branch protection requires zero approvals, so the AI review gates decide: a PR merges on a 🟢 routine verdict, plus a 🟢 deep verdict when a deep review was raised (`review-tiers.md`). The maintainer merges on a 🟢 gate without a separate approval.
+- This repo has one maintainer and no `CODEOWNERS` file. Branch protection requires zero approvals, so the AI review gates decide: a PR merges on a 🟢 routine verdict, plus a 🟢 deep verdict when a deep review was raised (`review-tiers.md`), once every other required check passes too. The maintainer merges on a 🟢 gate without a separate approval.
 - A PR from an external contributor also needs the maintainer to read its whole diff before it merges, on top of the AI verdicts.
 
 ## When CI is red
