@@ -22,7 +22,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     --body-file / --notes-file / --template / --input / --message-file,
     --field, curl -d @file, PowerShell -InFile and Get-Content <file>,
     but not the -F or --file of a text tool's own stage (`awk -F,`,
-    `grep -F word`), which is a separator or a pattern. A file it
+    `grep -F word`), a separator or a pattern, when nothing before it is
+    quoted, escaped or substituted; otherwise it is read too. A file it
     cannot read is denied, so a typo cannot slip a body through unread.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
@@ -289,7 +290,9 @@ def main():
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
-            deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
+            deny(f"could not read message/body file {path}: {e}. Use a literal absolute path. If it is "
+                 "a text tool's separator or pattern (awk -F, grep -F) in a command that also quotes "
+                 "or substitutes, run that pipeline as a command of its own.")
         scan_text(text, f"file {path}")
     sys.exit(0)
 
