@@ -124,6 +124,8 @@ export async function shellWords(shell, command) {
   const scoped = [];
   (function walk(node, inChild) {
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
+    // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
+    if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
     if (node.type === "command") {
       if (inChild || node.nextSibling?.type === "&") scoped.push(commands.length);
       commands.push(read(node));

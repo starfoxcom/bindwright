@@ -447,6 +447,7 @@ class GuardHookTest(unittest.TestCase):
                 ("gh api repos/o/r/issues/5/comments -F body='<details>x</details>'", "Bash"),
                 ("gh api repos/o/r/issues/5/comments -F 'body=see x=@y'", "Bash"),
                 ("env GH_TOKEN=x gh api repos/o/r/issues/5/comments -F body='<b>x</b>'", "Bash"),
+                ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
@@ -485,7 +486,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title t 2>&- --body-file="{path}"', "Bash"),
                 (f'! git commit > log -F "{path}"', "Bash"),
                 (f'git log | gh pr comment 5 > out --body-file "{path}"', "Bash"),
-                (f'Get-Content -Path:"{path}" | gh issue create --title t --body-file -', "PowerShell")):
+                (f'Get-Content -Path:"{path}" | gh issue create --title t --body-file -', "PowerShell"),
+                (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
+                ("gh api repos/o/r/issues -F 'body='\"@$f\"", "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 

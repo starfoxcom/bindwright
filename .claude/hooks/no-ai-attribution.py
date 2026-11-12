@@ -260,11 +260,11 @@ def body_file(flag, value, readers="@<"):
     text = text_of(value)
     if flag in FORM_FLAGS and "=" in text:
         field = text.split("=", 1)[1]
-        if not field[:1] or field[:1] not in readers:
+        if not field.lstrip("\"'")[:1] or field.lstrip("\"'")[:1] not in readers:
             return None
         return value if isinstance(value, dict) else field[1:]
     if flag in DATA_FLAGS:
-        if not text.lstrip("\"'").startswith(("@", "<")):
+        if not text.lstrip("\"'").startswith("@"):  # curl -d reads a file only after @
             return None
         return value if isinstance(value, dict) else text[1:]
     return value
