@@ -64,7 +64,7 @@ When `.claude/rules/versioning.md` is missing, the repo was set up before setup 
 
 For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.
 
-Then check that `.claude/settings.local.json`, the personal file that holds the allow list and this person's own switches, stays out of git. Unless `"localOnly"` is true, run `git check-ignore -q --no-index .claude/settings.local.json`; when it fails, add that path to `.gitignore`. When `git ls-files .claude/settings.local.json` prints it, say the file is committed, so everything in it is in the history, and offer `git rm --cached .claude/settings.local.json`, which stops tracking it and keeps the file on disk.
+Then check that `.claude/settings.local.json`, the personal file that holds the allow list and this person's own switches, stays out of git. Unless `"localOnly"` is true, run `git check-ignore -q --no-index .claude/settings.local.json`; when it fails, add that path to `.gitignore`. When `git ls-files .claude/settings.local.json` prints it, say the file is committed, so everything in it is in the history, and offer `git rm --cached .claude/settings.local.json`, which stops tracking it and keeps the file on disk. Say that every other clone deletes its copy when it pulls or checks out that commit, as git does for a file a commit removes, so each person copies theirs aside first and puts it back after.
 
 ## 6. Review counts
 
