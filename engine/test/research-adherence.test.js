@@ -97,6 +97,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a negated Grep glob leaves out docs, it does not pick them", grep({ glob: "!*.md" }), "fallback"],
     ["a negated rg glob leaves out docs", bash(`rg x -g "!*.md"`), "fallback"],
     ["an rg glob of docs", bash(`rg x -g "*.md"`), null],
+    ["an rg brace glob of docs", bash(`rg x -g "*.{md,txt}"`), null],
     ["a grep include of docs", bash("grep -rn --include=*.md x ."), null],
     ["a Grep glob of docs and data", grep({ glob: "*.{md,yml}" }), null],
     ["a Grep glob with a code extension", grep({ glob: "*.{md,py}" }), "fallback"],

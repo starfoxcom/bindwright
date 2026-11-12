@@ -233,7 +233,8 @@ def filter_values(value, rest):
     as several words, taken from `rest`."""
     while rest and (value.endswith(",") or rest[0].startswith(",")):
         value += rest.pop(0)
-    return [v for v in (unquote(v.strip()) for v in value.split(",")) if v]
+    # A comma inside braces belongs to the glob (`*.{md,txt}`), not the list.
+    return [v for v in (unquote(v.strip()) for v in re.split(r",(?![^{}]*\})", value)) if v]
 
 
 def read_words(rest, tool):
