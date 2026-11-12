@@ -207,8 +207,8 @@ export default {
   "evidence.merged.label": "pull requests integrados, todos pasaron por el filtro de revisión de la IA",
   "evidence.skipped.label": "no necesitaron revisión, casi todos solo de documentación, sin código que revisar",
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
-  "evidence.fixed.label": "se detuvieron de 1 a 5 rondas hasta corregir el problema",
-  "evidence.stalled.label": "tomaron 6 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
+  "evidence.fixed.label": "se detuvieron 1 o 2 rondas hasta corregir el problema",
+  "evidence.stalled.label": "tomaron 3 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
   "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión "
     + "y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",
@@ -218,12 +218,12 @@ export default {
   "evidence.firstTry": "{percent}% a la primera",
   "evidence.part.skipped": "sin revisión",
   "evidence.part.passed": "a la primera",
-  "evidence.part.fixed": "corregidos en 1 a 5 rondas",
+  "evidence.part.fixed": "corregidos en 1 o 2 rondas",
   "evidence.part.stalled": "corregidos tras investigar más a fondo",
   "evidence.legend.skipped": "no necesitaron revisión",
   "evidence.legend.passed": "pasaron la primera revisión",
-  "evidence.legend.fixed": "corregidos en 1 a 5 rondas",
-  "evidence.legend.stalled": "tomaron 6 rondas o más",
+  "evidence.legend.fixed": "corregidos en 1 o 2 rondas",
+  "evidence.legend.stalled": "tomaron 3 rondas o más",
   "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y rojo, tomaron "
     + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",

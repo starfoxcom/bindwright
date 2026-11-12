@@ -117,10 +117,10 @@ const countRows = [
     counted({ checked: 1, caught: 1, rounds: 1 })],
   ["a green routine round with a green deep summary has no red round",
     [pr([green, deepSummary("🟢 LGTM")])], counted({ checked: 1 })],
-  ["five red rounds then green is caught, not stalled", [pr([...reds(5), green])],
-    counted({ checked: 1, caught: 1, rounds: 5 })],
-  ["six red rounds then green is stalled", [pr([...reds(6), green])],
-    counted({ checked: 1, caught: 1, stalled: 1, rounds: 6 })],
+  ["two red rounds then green is caught, not stalled", [pr([...reds(2), green])],
+    counted({ checked: 1, caught: 1, rounds: 2 })],
+  ["three red rounds then green is stalled", [pr([...reds(3), green])],
+    counted({ checked: 1, caught: 1, stalled: 1, rounds: 3 })],
   ["error and request comments open no round",
     [pr([red, comment("**Claude encountered an error** while reviewing"), comment("@claude review this PR")])],
     counted({ checked: 1, caught: 1, rounds: 1 })],
@@ -336,9 +336,9 @@ test("a send the counter already counted keeps since and waits 24 hours", () => 
 test("a send carries the stalled PRs and the red rounds", () => inScene(async (s) => {
   seedState(s);
   const counter = fakeCounter(OK);
-  await sendAt(s, noon(3), fakeGh([pr([...reds(6), green])]), counter);
+  await sendAt(s, noon(3), fakeGh([pr([...reds(3), green])]), counter);
   assert.equal(counter.posts[0].body.stalled, 1);
-  assert.equal(counter.posts[0].body.rounds, 6);
+  assert.equal(counter.posts[0].body.rounds, 3);
 }));
 
 const refusals = [

@@ -9,7 +9,7 @@ Live at `https://bindwright-counter.starfoxcom.workers.dev`.
 | `POST /increment` | `{project, kind, checked, caught, deep, merged, stalled, rounds, from, to}` as JSON: `from` and `to` are the window of merges the counts cover, in epoch milliseconds | `{"ok": true}`; 409 with `coveredTo` when the window starts before the end of one already counted; or an error with 400, 413 or 429 |
 | `GET /total` | nothing | the sums of each count, the project count, projects per country and the top 10 projects by `checked`, each as its kind and counts |
 
-`stalled` counts the PRs held back by 6 or more red review rounds, and `rounds` the red review rounds summed over all checked PRs.
+`stalled` counts the PRs held back by 3 or more red review rounds, and `rounds` the red review rounds summed over all checked PRs.
 
 ## What it keeps
 

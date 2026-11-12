@@ -30,7 +30,7 @@ Each reviewer ends with one line: `🟢 LGTM` only when the review is fully clea
 
 ## After a 🔴
 
-Sort each finding against the bar before touching code. Fix what passes it, plus every other copy of the same mistake, with the smallest change and no new features, commit, and run both reviewers again on the new head. After 6 red rounds in a row, look up how others solved the same problem and simplify the design, then continue; again at every 6th red round.
+Sort each finding against the bar before touching code. Fix what passes it, plus every other copy of the same mistake, with the smallest change and no new features, commit, and run both reviewers again on the new head. After 3 red rounds in a row, look up how others solved the same problem and simplify the design, then continue; again at every 3rd red round.
 
 ## Merging
 
