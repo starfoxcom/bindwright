@@ -472,7 +472,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'"$(command -v gh)" pr create --title t --body-file "{path}"', "Bash"),
                 (f'& $git commit -F "{path}"', "PowerShell"),
                 (f'gh pr merge 5 -m -F "{path}"', "Bash"),
-                ('gh pr merge 5 -m --body-file="my notes/body.md"', "Bash")):
+                ('gh pr merge 5 -m --body-file="my notes/body.md"', "Bash"),
+                (f'curl -X PATCH https://api.github.com/repos/git/git -d @"{path}"', "Bash"),
+                (f'sudo -u git curl -d @"{path}" https://api.github.com/repos/o/r/issues', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 
