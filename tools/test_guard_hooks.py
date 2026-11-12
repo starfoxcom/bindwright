@@ -409,7 +409,10 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),
                 (f'grep -q x f; case $y in a) git commit -F "{path}";; esac', "Bash"),
                 (f'git commit-tree HEAD^{{tree}} -p HEAD -F "{path}"', "Bash"),
-                (f'sort `git commit -F "{path}"`', "Bash")):
+                (f'sort `git commit -F "{path}"`', "Bash"),
+                (f'grep -rn foo C:\\\\repo\\\\\ngit commit -F "{path}"', "Bash"),
+                (f'grep x f \\\r\ngit commit -F "{path}"', "Bash"),
+                (f'grep -q a\\(b f && case $y in y) git commit -F "{path}";; esac', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 

@@ -168,12 +168,21 @@ def text_spans(cmd, esc):
     return spans
 
 
+def is_escaped(cmd, i, esc):
+    """True when an odd run of the shell's escape character stands right before `i`, so the
+    character there is literal: two backslashes and a newline end a bash line, one continues it."""
+    run = 0
+    while i - run - 1 >= 0 and cmd[i - run - 1] == esc:
+        run += 1
+    return run % 2 == 1
+
+
 def continues_line(cmd, i, esc):
-    """True when the newline at `i` follows the shell's line-continuation character."""
-    j = i - 1
-    if j >= 0 and cmd[j] == "\r":
-        j -= 1
-    return j >= 0 and cmd[j] == esc
+    """True when the newline at `i` is escaped; in PowerShell the backtick may stand before
+    its CR. In bash a backslash before a CR escapes only the CR, and the newline ends the line."""
+    if esc == "`" and i > 0 and cmd[i - 1] == "\r":
+        i -= 1
+    return is_escaped(cmd, i, esc)
 
 
 def stage_start(cmd, at, spans, esc):
@@ -185,6 +194,8 @@ def stage_start(cmd, at, spans, esc):
     for i in range(at - 1, -1, -1):
         if any(s <= i < e for s, e in spans):
             continue
+        if cmd[i] != "\n" and is_escaped(cmd, i, esc):
+            continue  # a literal character: `\(`, `\;`, `` \` ``
         if cmd[i] == "`" and esc == "\\":
             return None
         if cmd[i] == ")":
