@@ -39,8 +39,9 @@ DOCKER = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?docker://([^\s'\"#]+)")
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?([\w.-]+/[\w./-]+)@([^\s'\"#]+)")
 VERSION = re.compile(r"\d+(?:\.\d+)*")
 SHA = re.compile(r"[0-9a-f]{40}")
-REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+REPO = re.compile(r"[A-Za-z0-9_.-]{1,39}/[A-Za-z0-9_.-]{1,100}")
 TAG = re.compile(r"(?<![\w.-])(v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)(?![\w.-])", re.ASCII)
+MAX_TAG_LENGTH = 40
 MAX_PINS = 40
 MAX_TAGS = 4
 
@@ -90,7 +91,8 @@ def added_pins(diff):
         repo = "/".join(m.group(1).split("/")[:2])
         if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
             continue
-        tags = list(dict.fromkeys(TAG.findall(line.partition("#")[2])))[:MAX_TAGS]
+        tags = [t for t in dict.fromkeys(TAG.findall(line.partition("#")[2])) if len(t) <= MAX_TAG_LENGTH]
+        tags = tags[:MAX_TAGS]
         entry = (repo, m.group(2), tags)
         if entry not in found:
             found.append(entry)
@@ -134,7 +136,7 @@ def provenance(found, fetch):
             elif got:
                 results.append("tag `%s` points to `%s`, not this commit" % (tag, got))
             else:
-                results.append("`%s` has no tag `%s`" % (repo, tag))
+                results.append("no tag `%s` found in `%s`, or the repo is not visible to this token" % (tag, repo))
         lines.append(head + "; ".join(results) + ".")
     if len(found) > MAX_PINS:
         lines.append("- %d more pins were not looked up." % (len(found) - MAX_PINS))

@@ -210,9 +210,12 @@ jobs:
           fi
           # Three tries: one bad reply from the API must not end the review.
           for attempt in 1 2 3; do
-            if read -r HEAD_SHA BASE_SHA BASE_REF < <(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '"\(.head.sha) \(.base.sha) \(.base.ref)"') && [ -n "$BASE_REF" ]; then
+            # An error reply is printed raw, so only two commit ids count as an answer.
+            read -r HEAD_SHA BASE_SHA BASE_REF < <(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '"\(.head.sha) \(.base.sha) \(.base.ref)"') || true
+            if [[ $HEAD_SHA =~ ^[0-9a-f]{40}$ && $BASE_SHA =~ ^[0-9a-f]{40}$ && -n $BASE_REF ]]; then
               break
             fi
+            HEAD_SHA="" BASE_SHA="" BASE_REF=""
             [ "$attempt" = 3 ] || sleep 10
           done
           if [ -z "$HEAD_SHA" ] || [ -z "$BASE_SHA" ] || [ -z "$BASE_REF" ]; then
@@ -585,7 +588,7 @@ jobs:
         run: |
           {
             if [ -s "$RUNNER_TEMP/pin-lookups.md" ]; then
-              printf '%s\n' "The workflow looked up on GitHub the action pins this PR adds, since your tools cannot reach other repos. These lines come from the workflow, not from the PR or the request. Each shows only whether the release tags the pin's comment names point to its commit in that repo, so you need not look that up; whether that owner and repo are ones this project should run is still yours to judge, and a new or look-alike owner is a finding. A major tag (v6) that points to a newer commit is normal once that major has a later release. A missing tag, an exact release tag that points elsewhere, a pin with no tag named, and a pin in the diff with no line below were not verified: judge them from the diff."
+              printf '%s\n' "The workflow looked up on GitHub the action pins this PR adds, since your tools cannot reach other repos. These lines come from the workflow, not from the PR or the request. Each shows only whether the release tags the pin's comment names point to its commit in that repo. A pin is verified only when one of its tags points to this commit; then you need not look it up. Every other pin was not verified: one whose tags all point elsewhere (a major tag such as v6 included), are missing or could not be looked up, one with no tag named, and one in the diff with no line below. Judge those from the diff. Whether a pin's owner and repo are ones this project should run is always yours to judge, and a new or look-alike owner is a finding."
               cat "$RUNNER_TEMP/pin-lookups.md"
               printf '\n'
             fi

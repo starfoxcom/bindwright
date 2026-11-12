@@ -148,6 +148,12 @@ class AddedPins(unittest.TestCase):
         line = "+  uses: o/r@%s  # %s\x0c+  uses: p/q@%s  # v1\n" % (NEW_SHA, many, OLD_SHA)
         self.assertEqual(pin_check.added_pins(line), [("o/r", NEW_SHA, ["v1", "v2", "v3", "v4"])])
 
+    def test_drops_overlong_tags_and_names(self):
+        long_tag = "v" + "1" * 60
+        self.assertEqual(pin_check.added_pins("+  uses: o/r@%s  # %s v2\n" % (NEW_SHA, long_tag)),
+                         [("o/r", NEW_SHA, ["v2"])])
+        self.assertEqual(pin_check.added_pins("+  uses: %s/r@%s  # v1\n" % ("o" * 40, NEW_SHA)), [])
+
 
 class Provenance(unittest.TestCase):
     """Each outcome a lookup can have, against a fake API."""
@@ -170,8 +176,8 @@ class Provenance(unittest.TestCase):
             ("matching tag", ["v1.2.0"], "tag `v1.2.0` points to this commit."),
             ("annotated tag", ["v2"], "tag `v2` points to this commit."),
             ("moved tag", ["v1"], "tag `v1` points to `%s`, not this commit." % OLD_SHA),
-            ("no such tag", ["v4"], "`o/r` has no tag `v4`."),
-            ("prefix match only", ["v3"], "`o/r` has no tag `v3`."),
+            ("no such tag", ["v4"], "no tag `v4` found in `o/r`, or the repo is not visible to this token."),
+            ("prefix match only", ["v3"], "no tag `v3` found in `o/r`, or the repo is not visible to this token."),
             ("api error", ["v9"], "tag `v9` could not be looked up (HTTP 502)."),
             ("no tag named", [], "its comment names no release tag, so there is nothing to check it against."),
         ]
