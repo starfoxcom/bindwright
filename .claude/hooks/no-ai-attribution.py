@@ -95,7 +95,8 @@ _WORD_START = r"(?<![\w./\\:-])"
 _WORD_END = r"(?![\w./-])"
 GIT_WRITE = re.compile(
     r"\bgit\b[^|;&\n]*?" + _WORD_START
-    + r"(commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)" + _WORD_END, re.I)
+    + r"(commit-tree|commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)"
+    + _WORD_END, re.I)
 GH_WRITE = re.compile(
     r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
@@ -178,11 +179,14 @@ def continues_line(cmd, i, esc):
 def stage_start(cmd, at, spans, esc):
     """Where the pipeline stage holding `at` begins: after the last | ; & or newline before it
     that sits outside quoted text and outside a closed ( ... ) or $( ... ) group. None when
-    a ) before it has no ( to close, such as a case pattern's: the stage cannot be told."""
+    the stage cannot be told: a ) before it has no ( to close, such as a case pattern's, or a
+    bash backtick substitution opens before it."""
     depth = 0
     for i in range(at - 1, -1, -1):
         if any(s <= i < e for s, e in spans):
             continue
+        if cmd[i] == "`" and esc == "\\":
+            return None
         if cmd[i] == ")":
             depth += 1
         elif cmd[i] == "(":

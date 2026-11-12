@@ -234,6 +234,7 @@ class GuardHookTest(unittest.TestCase):
         for line in (GENERATED_LINE, "Written by an AI assistant", "docs: x via " + "Cla" + "ude Code"):
             with self.subTest(line=line):
                 self.assert_denied(self.attr(f"git commit -m 'docs: x' -m '{line}'"))
+        self.assert_denied(self.attr(f"git commit-tree HEAD^{{tree}} -p HEAD -m '{GENERATED_LINE}'"))
 
     def test_session_link_and_robot_are_denied(self):
         for body in (SESSION_LINK, "Done \U0001F916", "Cla" + "ude-Session: abc"):
@@ -406,7 +407,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'git commit\\\n  -F "{path}"', "Bash"),
                 (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),
                 (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),
-                (f'grep -q x f; case $y in a) git commit -F "{path}";; esac', "Bash")):
+                (f'grep -q x f; case $y in a) git commit -F "{path}";; esac', "Bash"),
+                (f'git commit-tree HEAD^{{tree}} -p HEAD -F "{path}"', "Bash"),
+                (f'sort `git commit -F "{path}"`', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 
