@@ -369,7 +369,8 @@ class GuardHookTest(unittest.TestCase):
     def test_field_body_file_is_read(self):
         path = self.body_file(f"{GENERATED_LINE}\n")
         for command in (f'gh api repos/o/r/issues/5/comments --field body=@"{path}"',
-                        f'gh api repos/o/r/issues/5/comments --field=body=@{path}'):
+                        f'gh api repos/o/r/issues/5/comments --field=body=@{path}',
+                        f'gh api repos/o/r/issues/5/comments --field body=@"{path}"'):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command))
 
@@ -391,7 +392,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title x `\n  --body-file "{path}"', "PowerShell"),
                 (f'git commit -m x \\\n  -F "{path}"', "Bash"),
                 (f'(git commit -F "{path}")', "Bash"),
-                (f'echo $(git tag -a v1 -F "{path}")', "Bash")):
+                (f'echo $(git tag -a v1 -F "{path}")', "Bash"),
+                (f'gh pr create --title "$(git log -1 | cut -c1-9)" -F "{path}"', "Bash"),
+                (f'git commit\\\n  -F "{path}"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 
