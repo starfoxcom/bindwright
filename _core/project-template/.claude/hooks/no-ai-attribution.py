@@ -145,6 +145,9 @@ GH_MESSAGE_FLAGS = MESSAGE_FLAGS | {"-n"}  # gh's -n is --notes; git's is a swit
 # the rest of the word, or the next word (`-am msg`, `-aF msg.txt`, `-aFmsg.txt`).
 GIT_CLUSTER = re.compile(r"-(?:(?![CcStu])[A-Za-z])*?([mF])(.*)", re.S)
 ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fmsg`, `-d@body`)
+# A PowerShell word shaped like an identifier (`-Filter`, `-Force:$true`) can be a cmdlet's
+# parameter name; any other dash word (`-Fbody=@x`, `-d@body`) only a native program's flags.
+PARAMETER_NAME = re.compile(r"-[A-Za-z_]\w*:?")
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
 READ_CMDLETS = {"get-content", "gc"}
@@ -229,12 +232,13 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
+def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, parameter_names=False):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
     {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
-    never a flag."""
+    never a flag. With `parameter_names`, a word shaped like a PowerShell parameter name
+    never carries an attached value or a git cluster."""
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
@@ -242,7 +246,8 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
             message = False
             continue
         built = isinstance(word, dict)
-        cluster = None if "-m" not in message_flags or text.startswith("--") else GIT_CLUSTER.fullmatch(text)
+        named = parameter_names and PARAMETER_NAME.fullmatch(text) is not None
+        cluster = None if named or "-m" not in message_flags or text.startswith("--") else GIT_CLUSTER.fullmatch(text)
         message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
                    or (cluster is not None and cluster.groups() == ("m", "")))
         if cluster is not None and cluster.group(1) == "F":
@@ -252,7 +257,7 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
                 continue
         elif text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
-        elif text[:2] in short and len(text) > 2:
+        elif text[:2] in short and len(text) > 2 and not named:
             flag, value = text[:2], text[2:]
         elif built:
             continue
@@ -279,10 +284,10 @@ def body_file(flag, value, readers="@<"):
     return value
 
 
-def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", short=ATTACHED):
+def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", parameter_names=False):
     """Every file the words' flags in `flags` name as a body."""
     files = []
-    for flag, value in flag_values(words, short, message_flags):
+    for flag, value in flag_values(words, ATTACHED, message_flags, parameter_names):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value, readers)
@@ -343,8 +348,8 @@ def moved_folder(words, folder):
 
 
 def command_files(words, shell="bash"):
-    """(the folders `git -C` names, body files) for one command. In PowerShell a word such
-    as `-Force` or `-Filter` is a parameter name, so only git and gh get attached values."""
+    """(the folders `git -C` names, body files) for one command. In PowerShell, outside
+    git's and gh's own words, a word such as `-Force` or `-FilePath` is a parameter name."""
     name = program(words)
     if name in TEXT_TOOLS:
         return [], []
@@ -364,8 +369,8 @@ def command_files(words, shell="bash"):
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     found = [command_files(run, shell) for run in inner]
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
-    short = ATTACHED if shell == "bash" else ()
-    files = body_files(words, flags, message, readers, short) + [f for _, run_files in found for f in run_files]
+    named = shell == "powershell"
+    files = body_files(words, flags, message, readers, named) + [f for _, run_files in found for f in run_files]
     folders = next((f for f, run_files in reversed(found) if run_files), [])
     # A program built at run time (`$GIT -C sub commit ...`) may be git: its -C folders count.
     if not folders and words and not isinstance(words[0], str):

@@ -454,7 +454,9 @@ class GuardHookTest(unittest.TestCase):
                 ('gh release create v1 -n "--notes-file x is gone"', "Bash"),
                 ('gh pr comment 5 --body "--body-file=x was ignored"', "Bash"),
                 ("git grep -F needle && git commit -m x", "Bash"),
-                ("Get-ChildItem -Filter *.md -Force; git commit -m x", "PowerShell")):
+                ("Get-ChildItem -Filter *.md -Force; git commit -m x", "PowerShell"),
+                ("Write-Output git -Force -Param x; git commit -m x", "PowerShell"),
+                ("Start-Process -FilePath git -ArgumentList 'commit','-m','x' -Wait", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -491,7 +493,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
                 ("gh api repos/o/r/issues -F 'body='\"@$f\"", "Bash"),
                 (f'git commit -aF "{path}"', "Bash"),
-                (f'git commit -aF"{path}"', "Bash")):
+                (f'git commit -aF"{path}"', "Bash"),
+                (f"curl.exe https://api.github.com/repos/o/r/issues -Fbody=@{path}", "PowerShell"),
+                (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 
