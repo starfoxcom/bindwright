@@ -58,11 +58,21 @@ GREP_LONG = {
     "exclude", "exclude-dir", "exclude-from", "file", "include", "label", "max-count",
     "max-depth", "regexp",
 }
+# ag and ack read -f and -D as switches, so they share only the options all three spell alike.
+AG_ACK_SHORT = set("ABCGgm")
+AG_ACK_LONG = {"after-context", "before-context", "context", "file-search-regex", "ignore", "ignore-dir",
+               "max-count", "type"}
 # Which options name the pattern, and which narrow the files read.
 PATTERN_OPTIONS = {"e", "f", "regexp", "file"}
 GLOB_OPTIONS = {"g", "glob", "iglob", "include"}
 TYPE_OPTIONS = {"t", "type"}
 PS_VALUE_PARAMETERS = ("path", "literalpath", "include", "exclude", "filter", "depth", "attributes")
+# Get-ChildItem's switches and the common parameters that take a value; an exact name wins over a prefix.
+PS_SWITCHES = ("recurse", "file", "directory", "force", "name", "hidden", "readonly", "system",
+               "followsymlink")
+PS_COMMON_VALUES = ("erroraction", "ea", "errorvariable", "ev", "warningaction", "wa",
+                    "informationaction", "infa", "outvariable", "ov", "outbuffer", "ob",
+                    "pipelinevariable", "pv", "warningvariable", "wv", "informationvariable", "iv")
 
 
 def unquote_separators(command):
@@ -211,10 +221,10 @@ def option_value(word, words, short, long):
 
 def text_search(words):
     """What grep, rg, ag, ack or git grep reads, from the words after the command name."""
-    is_rg = words[0] in ("rg", "ag", "ack")
+    tables = {"rg": (RG_SHORT, RG_LONG), "ag": (AG_ACK_SHORT, AG_ACK_LONG), "ack": (AG_ACK_SHORT, AG_ACK_LONG)}
+    short, long = tables.get(words[0], (GREP_SHORT, GREP_LONG))
     if words[:2] == ["git", "grep"]:
         words = words[1:]
-    short, long = (RG_SHORT, RG_LONG) if is_rg else (GREP_SHORT, GREP_LONG)
     rest, positional, globs, types, has_pattern = words[1:], [], [], [], False
     while rest:
         word = rest.pop(0)
@@ -243,15 +253,32 @@ def listing_search(words):
             positional.append(word)
             continue
         name, joined, value = word[1:].lower().partition(":")
-        match = [p for p in PS_VALUE_PARAMETERS if p.startswith(name)] if name else []
-        if len(match) == 1:
-            given = value if joined else (rest.pop(0) if rest else "")
-            values.setdefault(match[0], []).append(given)
-    def listed(key, extra):
-        return [v for item in values.get(key, []) + extra for v in item.split(",") if v]
+        parameter = ps_parameter(name)
+        given = value if joined or parameter is None else (rest.pop(0) if rest else "")
+        if parameter:
+            values.setdefault(parameter, []).append(given)
 
-    return Search(listed("path", positional[:1]) + listed("literalpath", []),
-                  listed("include", positional[1:2]) + listed("filter", []))
+    def listed(key):
+        return [v for item in values.get(key, []) for v in item.split(",") if v]
+
+    named = listed("path") + listed("literalpath")
+    globs = listed("include") + listed("filter")
+    # The first word is the path only when no -Path names one; the second is the filter.
+    return Search(named or positional[:1], globs + (positional[1:2] if not named else positional[:1]))
+
+
+def ps_parameter(name):
+    """The value-taking parameter `name` spells, "" for one this count ignores, or None for a switch."""
+    if not name or name in PS_SWITCHES:
+        return None
+    if name in PS_VALUE_PARAMETERS:
+        return name
+    if name in PS_COMMON_VALUES:
+        return ""
+    if any(p.startswith(name) for p in PS_SWITCHES):
+        return None
+    match = [p for p in PS_VALUE_PARAMETERS if p.startswith(name)]
+    return match[0] if len(match) == 1 else None
 
 
 def shell_search(command, repo):
