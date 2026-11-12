@@ -383,10 +383,17 @@ class GuardHookTest(unittest.TestCase):
                         "gh pr create --title 'a && b; c' --body x | awk -F, '{print}'"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
-        for command in (f'Get-Content "{path}" | gh issue create --title t --body-file -',
-                        f"gh pr create --title 'a && b' --body-file \"{path}\""):
+        for command, tool in (
+                (f'Get-Content "{path}" | gh issue create --title t --body-file -', "PowerShell"),
+                (f'$body = Get-Content "{path}" -Raw\ngh pr create --title t --body $body', "PowerShell"),
+                (f"gh pr create --title 'a && b' --body-file \"{path}\"", "Bash"),
+                (f'gh pr create --title x \\\n  --body-file "{path}"', "Bash"),
+                (f'gh pr create --title x `\n  --body-file "{path}"', "PowerShell"),
+                (f'git commit -m x \\\n  -F "{path}"', "Bash"),
+                (f'(git commit -F "{path}")', "Bash"),
+                (f'echo $(git tag -a v1 -F "{path}")', "Bash")):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, tool="PowerShell" if "Get-" in command else "Bash"))
+                self.assert_denied(self.attr(command, tool=tool))
 
     def test_read_only_commands_pass(self):
         for command in ("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"):
