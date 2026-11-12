@@ -159,7 +159,7 @@ NO_NODE_HINT = (" The guard reads a command's structure with a parser that runs 
                 " which this computer lacks (install it to stop these refusals)," + STRICT_READ)
 UNREAD_HINT = " The guard could not read this command's structure," + STRICT_READ
 MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|push-location|pop-location)"
-                          r"(?![\w-])|\bgit\b[^|;&\n]*?\s-C(?![\w-])", re.I)
+                          r"(?![\w-])|\bgit\b[^|;&\n]*?\s(?-i:-C)(?![\w-])", re.I)  # -c sets config
 
 
 def deny(reason):

@@ -523,6 +523,9 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_denied(self.attr(command, project=root, helper=none))
         # gh's --template names a template, not a file.
         self.assert_passes(self.attr("gh issue create --title t --template bug.md", helper=none))
+        # git's lowercase -c sets config; no folder changes, so the cwd's msg.txt is read.
+        self.assert_denied(self.attr("git -c k=v commit -F sub/msg.txt", project=root, helper=none),
+                           "found in file")
 
     def test_a_wrapped_gh_keeps_its_template_name(self):
         self.assert_passes(self.attr("env GH_TOKEN=x gh issue create --title t --template bug.md"))
