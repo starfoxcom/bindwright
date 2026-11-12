@@ -30,11 +30,13 @@ What is scanned, for any git write, gh write or GitHub API call:
     or the value of -m / --body / --title is text, not a body file. After a
     `cd`, `pushd` or `Set-Location`, which may run in a child shell or fail,
     a relative path is read in every folder the command may be in; `git -C`
-    moves its own command. One after a `cd -`, or a `cd` beside a loop or a
-    function, is denied. A file it cannot read, or one named by text built at run time,
+    moves its own command. One after a `cd -`, a `cd` to a folder this
+    computer cannot find, or a `cd` beside a loop or a function, is denied.
+    A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. Without the
     helper or Node it reads every file flag in the command text instead,
-    a text tool's included.
+    a text tool's and one inside quoted text included, and denies a
+    relative body file after any `cd`, `pushd`, `Set-Location` or `git -C`.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -411,7 +413,10 @@ def parsed_files(commands, repeats, cwd, shell):
     places = [UNKNOWN] if repeats and any(program(words) in CD_COMMANDS for words in commands) else [cwd]
     for words in commands:
         if program(words) in CD_COMMANDS:
-            places += [place for place in cd_places(words, places) if place not in places]
+            # A folder this computer cannot find (`/c/...` in Git Bash, made later) cannot be
+            # checked, so a relative file after it is refused rather than read elsewhere.
+            moved = [p if p is UNKNOWN or os.path.isdir(p) else UNKNOWN for p in cd_places(words, places)]
+            places += [place for place in moved if place not in places]
             continue
         folders, files = command_files(words, shell)
         here = places

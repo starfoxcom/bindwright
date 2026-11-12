@@ -534,6 +534,7 @@ class GuardHookTest(unittest.TestCase):
         for command, tool, reason in (
                 ("cd -; git commit -F msg.txt", "Bash", hidden),
                 ("cd ~-; git commit -F msg.txt", "Bash", hidden),
+                ("cd /no/such/folder && git commit -F msg.txt", "Bash", hidden),
                 ("cd sub -ErrorAction Stop; git commit -F msg.txt", "PowerShell", hidden),
                 ("f() { git commit -F msg.txt; }; cd sub; f", "Bash", hidden),
                 ("for i in 1 2; do git commit -F msg.txt; cd sub; done", "Bash", hidden),
