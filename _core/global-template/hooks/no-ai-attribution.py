@@ -136,8 +136,10 @@ FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file read
 DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
 BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
               "-infile"} | FORM_FLAGS | DATA_FLAGS
-# The word after one of these is message text, even when it starts with a dash.
-MESSAGE_FLAGS = {"-m", "--message", "-b", "--body", "-t", "--title", "--notes", "--subject"}
+# The word after one of these is message text, even when it starts with a dash. Each
+# program has its own: `-m` is git's message but gh's `--merge` switch.
+GIT_MESSAGE_FLAGS = {"-m", "--message"}
+MESSAGE_FLAGS = {"-b", "--body", "-t", "--title", "--notes", "--subject", "--message"}
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
 READ_CMDLETS = {"get-content", "gc"}
@@ -215,19 +217,19 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def flag_values(words, short=()):
+def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
-    {"dynamic": <its text>}. A word with a space after a message flag is that message's text,
-    never a flag; a bare flag there is still one, since `-m` is also a switch (`gh pr merge -m`)."""
+    {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
+    never a flag."""
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
-        if (message and any(c.isspace() for c in text)) or not text.startswith("-"):
+        if message or not text.startswith("-"):
             message = False
             continue
-        message = text in MESSAGE_FLAGS or text.lower() == "-body"  # PowerShell names are any case
+        message = text in message_flags or text.lower() == "-body"  # PowerShell names are any case
         built = isinstance(word, dict)
         if text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
@@ -256,10 +258,10 @@ def body_file(flag, value):
     return value
 
 
-def body_files(words, flags=BODY_FLAGS):
+def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS):
     """Every file the words' flags in `flags` name as a body."""
     files = []
-    for flag, value in flag_values(words, ("-F", "-d")):
+    for flag, value in flag_values(words, ("-F", "-d"), message_flags):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value)
@@ -286,7 +288,7 @@ def git_files(words):
     i, folders = git_subcommand(words)
     if i >= len(words) or (isinstance(words[i], str) and words[i] not in GIT_WRITES):
         return folders, []
-    return folders, body_files(words[i:], GIT_FILE_FLAGS)
+    return folders, body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS)
 
 
 def get_content_files(words):
@@ -330,8 +332,11 @@ def command_files(words):
         return [], body_files(words, BODY_FLAGS - {"--template"})
     if name in READ_CMDLETS:
         return [], get_content_files(words)
-    # A wrapped git (`env A=1 git -C sub commit ...`) still runs in the folders it names.
-    wrapped = next((words[i:] for i in range(1, len(words)) if program(words[i:]) == "git"), None)
+    # A wrapped git (`env A=1 git -C sub commit ...`), or a program built at run time
+    # (`$GIT -C sub commit ...`), still runs in the folders it names.
+    built = words and not isinstance(words[0], str)
+    wrapped = words if built else next((words[i:] for i in range(1, len(words))
+                                        if program(words[i:]) == "git"), None)
     return (git_subcommand(wrapped)[1] if wrapped else []), body_files(words)
 
 

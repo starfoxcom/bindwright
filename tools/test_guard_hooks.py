@@ -466,7 +466,8 @@ class GuardHookTest(unittest.TestCase):
                 (f'$GIT commit -F "{path}"', "Bash"),
                 (f'"$(command -v gh)" pr create --title t --body-file "{path}"', "Bash"),
                 (f'& $git commit -F "{path}"', "PowerShell"),
-                (f'gh pr merge 5 -m -F "{path}"', "Bash")):
+                (f'gh pr merge 5 -m -F "{path}"', "Bash"),
+                ('gh pr merge 5 -m --body-file="my notes/body.md"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 
@@ -488,7 +489,9 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=root))
         moved = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
-        self.assert_denied(self.attr("env A=1 git -C sub commit -F msg.txt", project=moved))
+        for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=moved))
 
     def test_without_the_helper_every_file_flag_is_read(self):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
