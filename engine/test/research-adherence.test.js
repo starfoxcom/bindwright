@@ -49,8 +49,11 @@ test("searches count only inside the repo, wherever the path or a cd points", {
   }
   // No personal excludes file: it could leave a fixture file untracked.
   for (const args of [["init", "-q"], ["-c", "core.excludesFile=", "add", "-A"]]) {
-    spawnSync("git", ["-C", root, ...args]);
+    assert.equal(spawnSync("git", ["-C", root, ...args]).status, 0, `git ${args.join(" ")}`);
   }
+  // A code file git does not track: its folder holds no tracked code.
+  mkdirSync(join(root, "untracked"));
+  writeFileSync(join(root, "untracked", "y.py"), "x\n");
   mkdirSync(scratch);
   const bash = (command) => ({ name: "Bash", args: { command } });
   const ps = (command) => ({ name: "PowerShell", args: { command } });
@@ -106,6 +109,12 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["git grep's pattern with a slash is not a path outside", bash('git grep "/usr/bin/env"'), "fallback"],
     ["a number after an option may be its value", bash("rg -A 3 docs"), "fallback"],
     ["a number after an unknown option may be the pattern", bash("rg --hidden 404 src docs"), "fallback"],
+    ["a folder of untracked code is not the repo's code", bash("grep -rn x untracked/"), null],
+    ["a joined option it does not know may give the pattern", bash("ack --match=foo src docs"), "fallback"],
+    ["an abbreviated pattern option may give the pattern", bash("grep -rn --regex=foo src docs"), "fallback"],
+    ["a spaced exclude list is read whole", ps("Get-ChildItem -Recurse -Exclude *.md, *.txt | sls x"), "fallback"],
+    ["a quoted exclude list is read whole",
+      ps('Get-ChildItem -Recurse -Exclude "*.md","*.txt" | sls x'), "fallback"],
     ["a missing path inside beside one outside still counts",
       bash(`rg foo src/missing "${join(scratch, "gone")}"`), "fallback"],
     ["a value joined to its option is never the pattern", bash("rg --max-depth=2 docs"), "fallback"],

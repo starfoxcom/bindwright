@@ -236,21 +236,23 @@ def filter_values(value, rest):
 
 
 def read_words(rest, tool):
-    """(plain, globs, types, pattern_given) for a command's words after its name. Each plain word
-    is (word, kind): "joined" for an option's `=` or `:` value, "after" for a word right after an
-    option that may take one, else "plain"."""
+    """(plain, globs, types, pattern_given, has_unknown) for a command's words after its name.
+    Each plain word is (word, is_joined), is_joined for an option's `=` or `:` value. has_unknown
+    is True when an option is none the script knows: a filter, a pattern option, `--`, or a
+    cluster of short flags that take no value in `tool`."""
     plain, globs, types = [], [], []
-    pattern_given, after_option = False, False
+    pattern_given = has_unknown = False
     while rest:
         word = rest.pop(0)
         if word == "--":  # the end of the options: every word after it is plain
-            plain += [(w, "plain") for w in rest]
+            plain += [(w, False) for w in rest]
             break
         found = filter_of(word, rest, tool) if word.startswith("-") else None
         if found:
             option, value = found
+            values = filter_values(value, rest)  # an exclude list is read whole, then left out
             if option not in EXCLUDE_OPTIONS:
-                (types if option in TYPE_OPTIONS else globs).extend(filter_values(value, rest))
+                (types if option in TYPE_OPTIONS else globs).extend(values)
         elif (word in PATTERN_OPTIONS or word.split("=", 1)[0] in PATTERN_VALUE_OPTIONS) and (
                 word != "-f" or tool in PATTERN_FILE_TOOLS):
             pattern_given = True
@@ -259,31 +261,21 @@ def read_words(rest, tool):
         elif word.startswith("-"):
             joined = re.split(r"[=:]", word, maxsplit=1)
             if len(joined) == 2:
-                plain.append((joined[1], "joined"))
-            after_option = len(joined) == 1 and not takes_no_value(word, tool)
-            continue
+                plain.append((joined[1], True))
+            has_unknown = has_unknown or len(joined) == 2 or not takes_no_value(word, tool)
         else:
-            plain.append((word, "after" if after_option else "plain"))
-        after_option = False
-    return plain, globs, types, pattern_given
-
-
-def text_search_paths(plain, pattern_given):
-    """The words a text search may read as paths, or None when they cannot be told apart from
-    option values or the pattern: a word right after an option that may take a value."""
-    plain = [(word, kind) for word, kind in plain if kind != "joined"]
-    if any(kind == "after" for _, kind in plain):
-        return None
-    return [word for word, _ in (plain if pattern_given else plain[1:])]
+            plain.append((word, False))
+    return plain, globs, types, pattern_given, has_unknown
 
 
 def words_search(words, is_text_search=True):
     """What a text search or a recursive listing reads: its filters, and every word that may name a path.
 
-    A text search without `-e`, `-f` or `--files` takes its first plain word as its pattern. A word
-    the search names may be an option's value only when the option before it could take one; then
-    the words cannot be read for sure, and `Search.reads_code` judges only where the search runs and
-    what its words point at. Otherwise it keeps only the words that name a file or folder that exists."""
+    A text search is read for sure only when every option in it is one `read_words` knows; then it
+    takes its first plain word as its pattern unless `-e`, `-f` or `--files` gives one, and
+    `Search.reads_code` keeps only the words that name a file or folder that exists. With any other
+    option the words cannot be read for sure, and only where the search runs and what its words
+    point at are judged."""
     if words[:2] == ["git", "grep"]:
         words = words[1:]
     tool = words[0] if words else ""
@@ -292,11 +284,11 @@ def words_search(words, is_text_search=True):
                      for w in words[1:]], is_sure=False)
     if any(word.count('"') % 2 or word.count("'") % 2 for word in words):
         return unsure  # a quote the word does not close: `--regexp="see docs"` split at the space
-    plain, globs, types, pattern_given = read_words(words[1:], tool)
+    plain, globs, types, pattern_given, has_unknown = read_words(words[1:], tool)
     if is_text_search:
-        named = text_search_paths(plain, pattern_given)
-        if named is None:
-            return unsure
+        if has_unknown:
+            return unsure  # an option it does not know may take a value or give the pattern
+        named = [word for word, _ in plain][0 if pattern_given else 1:]
     else:
         # A PowerShell listing's comma list is several paths.
         named = [piece for word, _ in plain for piece in word.split(",") if piece]
