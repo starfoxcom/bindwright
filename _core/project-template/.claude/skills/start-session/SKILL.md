@@ -61,7 +61,7 @@ Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude 
 4. **Plan:** the ordered steps, with dependencies. Three to seven steps; split anything larger into another session.
 <!-- TOGGLE:code_host_local END -->
 <!-- TOGGLE:code_host_local:off START -->
-2. **Git status:** current branch, uncommitted changes, how far behind `{{DEV_BRANCH}}` it is, open PRs. If `{{DEV_BRANCH}}` has moved ahead, propose merging it in before resuming (`git.md` § Keep branches current).
+2. **Git status:** current branch, uncommitted changes, how far behind `{{DEV_BRANCH}}` it is, open PRs. If `{{DEV_BRANCH}}` has moved ahead, propose merging it in before resuming: `git fetch origin`, then `git merge origin/{{DEV_BRANCH}}` on the work branch.
 3. **Branch:** if the work needs a new branch, propose its name per `git.md` and ask before creating it.
 4. **Areas touched:** the directories the plan will change. Anything outside the branch's scope becomes a prerequisite branch that lands first; name it.
 5. **Plan:** the ordered steps, with dependencies. Three to seven steps; split anything larger into another session.
