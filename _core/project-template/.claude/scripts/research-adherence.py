@@ -52,6 +52,10 @@ TYPE_OPTIONS = ("-t", "--type")
 # With none of these, a text search takes its pattern as a plain word.
 PATTERN_OPTIONS = ("-e", "--regexp", "-f", "--file", "--files")
 PATTERN_VALUE_OPTIONS = ("-e", "--regexp", "-f", "--file")
+# Short flags that take no value in rg, grep, git grep, ag and ack alike, and more per tool. A word
+# after any other option may be its value, so it never decides what a search reads.
+FLAGS_WITHOUT_VALUE = "cFHhilLnosvw"
+TOOL_FLAGS_WITHOUT_VALUE = {"grep": "EIPqRrx", "rg": "IPqSUuxz"}
 
 
 def unquote_separators(command):
@@ -188,9 +192,11 @@ def split_words(head):
     return kept
 
 
-def filter_of(word, words):
+def filter_of(word, words, tool):
     """(option, value) when `word` is a filter option, taking a separate value from `words`."""
     for option in FILTER_OPTIONS:
+        if len(option) == 2 and tool != "rg":
+            continue  # `-g` and `-t` filter files only in ripgrep (`ag -t` searches all text)
         # Short options keep their case (`-T` excludes a type); long and PowerShell ones do not.
         spelled = word if len(option) == 2 else word.lower()
         if spelled == option:
@@ -202,14 +208,10 @@ def filter_of(word, words):
     return None
 
 
-def gives_pattern(word):
-    """True when `word` passes the pattern as an option, so no other word is the pattern."""
-    for option in PATTERN_OPTIONS:
-        if word == option or word.startswith(option + "="):
-            return True
-        if len(option) == 2 and word.startswith(option) and not word.startswith("--"):
-            return True
-    return False
+def takes_no_value(word, tool):
+    """True when `word` is a cluster of short flags that take no value in `tool`."""
+    flags = FLAGS_WITHOUT_VALUE + TOOL_FLAGS_WITHOUT_VALUE.get(tool, "")
+    return bool(re.fullmatch(r"-[A-Za-z]+", word)) and all(letter in flags for letter in word[1:])
 
 
 def filter_values(value, rest):
@@ -220,20 +222,23 @@ def filter_values(value, rest):
     return [v for v in (unquote(v.strip()) for v in value.split(",")) if v]
 
 
-def read_words(rest):
+def read_words(rest, tool):
     """(plain, globs, types, pattern_given) for a command's words after its name. Each plain word
     is (word, kind): "joined" for an option's `=` or `:` value, "after" for a word right after an
-    option, else "plain"."""
+    option that may take one, else "plain"."""
     plain, globs, types = [], [], []
     pattern_given, after_option = False, False
     while rest:
         word = rest.pop(0)
-        found = filter_of(word, rest) if word.startswith("-") else None
+        if word == "--":  # the end of the options: every word after it is plain
+            plain += [(w, "plain") for w in rest]
+            break
+        found = filter_of(word, rest, tool) if word.startswith("-") else None
         if found:
             option, value = found
             if option not in EXCLUDE_OPTIONS:
                 (types if option in TYPE_OPTIONS else globs).extend(filter_values(value, rest))
-        elif gives_pattern(word):
+        elif word in PATTERN_OPTIONS or word.split("=", 1)[0] in PATTERN_VALUE_OPTIONS:
             pattern_given = True
             if word in PATTERN_VALUE_OPTIONS and rest:
                 rest.pop(0)  # the pattern, or the file that holds it
@@ -241,7 +246,7 @@ def read_words(rest):
             joined = re.split(r"[=:]", word, maxsplit=1)
             if len(joined) == 2:
                 plain.append((joined[1], "joined"))
-            after_option = len(joined) == 1
+            after_option = len(joined) == 1 and not takes_no_value(word, tool)
             continue
         else:
             plain.append((word, "after" if after_option else "plain"))
@@ -249,33 +254,41 @@ def read_words(rest):
     return plain, globs, types, pattern_given
 
 
-def without_pattern(plain):
-    """The plain words less the pattern: the first one that is not an option's value, where a
-    number written right after an option counts as its value (`-A 3`)."""
-    pattern = next((i for i, (word, kind) in enumerate(plain)
-                    if kind == "plain" or (kind == "after" and not word.isdigit())), None)
-    return [entry for i, entry in enumerate(plain) if i != pattern]
+def text_search_paths(plain, pattern_given):
+    """The words a text search may read as paths, or None when they cannot be told apart from
+    option values or the pattern. A number right after an option is its value (`-A 3`)."""
+    plain = [(word, kind) for word, kind in plain
+             if kind != "joined" and not (kind == "after" and word.isdigit())]
+    if not pattern_given:
+        if plain and plain[0][1] == "after":
+            return None  # the pattern, or the value of the option before it
+        plain = plain[1:]
+    if any(kind == "after" for _, kind in plain):
+        return None
+    return [word for word, _ in plain]
 
 
 def words_search(words, is_text_search=True):
     """What a text search or a recursive listing reads: its filters, and every word that may name a path.
 
-    A text search without `-e`, `-f` or `--files` takes its pattern as its first plain word, after
-    any number written apart as an option's value (`-A 3`). Other option values written apart are
-    rare and are read as words. Of the rest, `Search.reads_code` keeps only the words that name a
-    file or folder that exists, instead of parsing each tool's options."""
+    A text search without `-e`, `-f` or `--files` takes its first plain word as its pattern. A word
+    the search names may be an option's value only when the option before it could take one; then
+    the words cannot be read for sure and the search is judged by its current folder. Of the rest,
+    `Search.reads_code` keeps only the words that name a file or folder that exists."""
     if words[:2] == ["git", "grep"]:
         words = words[1:]
-    plain, globs, types, pattern_given = read_words(words[1:])
-    if is_text_search and not pattern_given:
-        plain = without_pattern(plain)
+    tool = words[0] if words else ""
+    plain, globs, types, pattern_given = read_words(words[1:], tool)
+    if is_text_search:
+        named = text_search_paths(plain, pattern_given) or []
+    else:
+        # A PowerShell listing's comma list is several paths.
+        named = [piece for word, _ in plain for piece in word.split(",") if piece]
     paths = []
-    for word, _ in plain:
-        # A PowerShell listing's comma list is several paths; a text search's word stays whole.
-        for piece in filter(None, word.split(",") if not is_text_search else [word]):
-            # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
-            is_filter = WILDCARD.search(piece) and not re.search(r"['\"/\\]", piece)
-            (globs if is_filter else paths).append(unquote(piece))
+    for piece in named:
+        # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
+        is_filter = WILDCARD.search(piece) and not re.search(r"['\"/\\]", piece)
+        (globs if is_filter else paths).append(unquote(piece))
     return Search(paths, globs, types)
 
 
