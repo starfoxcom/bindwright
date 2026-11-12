@@ -6,6 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **Every project's `git.md` says how to size a release.** A new `## Versioning` section: a major when users must act or something they use stops working, a minor for features and kept-working default changes, a patch for fixes only; a release tool that sets the version is fed, never bypassed; otherwise every version file is bumped together and the tag follows the existing style. `/bindwright:update` brings it to existing projects (#805).
+- **Bindwright sizes its own releases by a written rule.** `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` and makes a major, features and kept-working default changes a minor, fixes only a patch. Release prep reads every entry against it first, and a test checks each release from v3.5.0 on (#805).
+
 ### Fixed
 
 - **The attribution guard reads a body file again when a command substitution comes before it.** v3.5.0 let a text tool's own file flag (`grep -f`, `sort -f`) go unread, but quotes nested inside `$( ... )`, `${ ... }` or backticks hid a separator from it, so in `gh pr create --title "$(echo "x; sort y")" --body-file body.md` the body file was taken for `sort`'s and never scanned. The skip now stays off once a double-quoted string before the flag leaves a `$(`, `${` or backtick open, where quotes may nest. A stage counts as a text tool's only when its first word is the tool's name whole, so `sort=1 git commit -F msg` reads `msg` too.
