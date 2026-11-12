@@ -39,22 +39,22 @@ test('a re-run replaces its round, and the list stays bounded', () => {
 })
 
 // Every RESEARCH_EVERY red rounds in a row the wake asks for a step back, and never in between.
-test('the research step is due at 6, 12 and 18 red rounds, and only then', () => {
-  const due = [0, 1, 5, 6, 7, 11, 12, 13, 17, 18].filter(isResearchDue)
-  expect(due).toEqual([6, 12, 18])
-  expect(RESEARCH_EVERY).toBe(6)
+test('the research step is due at 3, 6 and 9 red rounds, and only then', () => {
+  const due = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(isResearchDue)
+  expect(due).toEqual([3, 6, 9])
+  expect(RESEARCH_EVERY).toBe(3)
 })
 
 const failed = (outcome: Watch['outcome']): Watch =>
   ({ repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: { build: 'fail' }, stablePolls: 2, outcome }) as Watch
 
 test('only a red wake at a due count carries the research step', () => {
-  expect(wakeText(failed('failed'), undefined, 6)).toContain('research how the community solves this problem')
-  expect(wakeText(failed('failed'), undefined, 6)).toContain('o/r#7 has had 6 fix rounds in a row')
-  expect(wakeText(failed('failed'), undefined, 12)).toContain('has had 12 fix rounds')
-  for (const red of [0, 5, 7]) expect(wakeText(failed('failed'), undefined, red)).not.toContain('research')
-  expect(wakeText(failed('passed'), undefined, 6)).not.toContain('research')
-  expect(wakeText(failed('timeout'), undefined, 6)).not.toContain('research')
+  expect(wakeText(failed('failed'), undefined, 3)).toContain('research how the community solves this problem')
+  expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 fix rounds in a row')
+  expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 fix rounds')
+  for (const red of [0, 2, 4]) expect(wakeText(failed('failed'), undefined, red)).not.toContain('research')
+  expect(wakeText(failed('passed'), undefined, 3)).not.toContain('research')
+  expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
 
 // Nothing is refused any more: a push at any count goes through, and the count's file is no one's to guard.
@@ -70,17 +70,17 @@ test('a push at any red count is never refused', async ($, on) => {
   }
 })
 
-// The sixth red round in a row: its own settled watch makes the count six, and the wake asks for research.
-test('the wake of the sixth red round in a row asks for the research step', async ($, on) => {
+// The third red round in a row: its own settled watch makes the count three, and the wake asks for research.
+test('the wake of the third red round in a row asks for the research step', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  seed(seen, reds(5))
+  seed(seen, reds(2))
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
   expect(seen.prompts).toHaveLength(1)
   expect(seen.prompts[0]).toContain('all checks settled; failed')
-  expect(seen.prompts[0]).toContain('has had 6 fix rounds in a row')
+  expect(seen.prompts[0]).toContain('has had 3 fix rounds in a row')
 })
 
 test('/ci-watch rounds tells the count and when the next step back is due', async ($, on) => {
@@ -91,7 +91,7 @@ test('/ci-watch rounds tells the count and when the next step back is due', asyn
     ((await $.command.run({ command: 'ci-watch', args, origin: { kind: 'composer' } } as never)) as { text: string })
       .text
   expect(await ask('rounds')).toBe(
-    'o/r#7: 7 fix round(s) in a row without every check green; the next step back is due in 5.',
+    'o/r#7: 7 fix round(s) in a row without every check green; the next step back is due in 2.',
   )
   expect(await ask('rounds 7')).toContain('o/r#7: 7 fix round(s) in a row')
   expect(await ask('rounds reset 7')).toContain('/ci-watch rounds')
