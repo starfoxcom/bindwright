@@ -456,7 +456,8 @@ class GuardHookTest(unittest.TestCase):
                 ("git grep -F needle && git commit -m x", "Bash"),
                 ("Get-ChildItem -Filter *.md -Force; git commit -m x", "PowerShell"),
                 ("Write-Output git -Force -Param x; git commit -m x", "PowerShell"),
-                ("Start-Process -FilePath git -ArgumentList 'commit','-m','x' -Wait", "PowerShell")):
+                ("Start-Process -FilePath git -ArgumentList 'commit','-m','x' -Wait", "PowerShell"),
+                ('sudo git commit -am "-From now on x"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -495,7 +496,8 @@ class GuardHookTest(unittest.TestCase):
                 (f'git commit -aF "{path}"', "Bash"),
                 (f'git commit -aF"{path}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -Fbody=@{path}", "PowerShell"),
-                (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell")):
+                (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
+                ("& $git commit -Fmsg", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 

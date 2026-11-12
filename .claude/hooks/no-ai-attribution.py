@@ -238,7 +238,7 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, parameter_names=Fa
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
     {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
     never a flag. With `parameter_names`, a word shaped like a PowerShell parameter name
-    never carries an attached value or a git cluster."""
+    never carries an attached value or a git cluster's -F."""
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
@@ -247,10 +247,10 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, parameter_names=Fa
             continue
         built = isinstance(word, dict)
         named = parameter_names and PARAMETER_NAME.fullmatch(text) is not None
-        cluster = None if named or "-m" not in message_flags or text.startswith("--") else GIT_CLUSTER.fullmatch(text)
+        cluster = None if "-m" not in message_flags or text.startswith("--") else GIT_CLUSTER.fullmatch(text)
         message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
                    or (cluster is not None and cluster.groups() == ("m", "")))
-        if cluster is not None and cluster.group(1) == "F":
+        if cluster is not None and cluster.group(1) == "F" and not named:
             flag, value = "-F", cluster.group(2)
             if not value:
                 yield flag, words[i + 1] if i + 1 < len(words) else None
@@ -349,7 +349,8 @@ def moved_folder(words, folder):
 
 def command_files(words, shell="bash"):
     """(the folders `git -C` names, body files) for one command. In PowerShell, outside
-    git's and gh's own words, a word such as `-Force` or `-FilePath` is a parameter name."""
+    git's and gh's own words, a word such as `-Force` or `-FilePath` is a parameter name,
+    unless the program is built at run time and may be git."""
     name = program(words)
     if name in TEXT_TOOLS:
         return [], []
@@ -369,7 +370,7 @@ def command_files(words, shell="bash"):
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     found = [command_files(run, shell) for run in inner]
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
-    named = shell == "powershell"
+    named = shell == "powershell" and bool(words) and isinstance(words[0], str)
     files = body_files(words, flags, message, readers, named) + [f for _, run_files in found for f in run_files]
     folders = next((f for f, run_files in reversed(found) if run_files), [])
     # A program built at run time (`$GIT -C sub commit ...`) may be git: its -C folders count.
