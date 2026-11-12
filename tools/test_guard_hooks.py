@@ -368,14 +368,16 @@ class GuardHookTest(unittest.TestCase):
 
     def test_field_body_file_is_read(self):
         path = self.body_file(f"{GENERATED_LINE}\n")
+        spaced = os.path.join(os.path.dirname(path), "body with space.md")
+        shutil.copy(path, spaced)
         for command in (f'gh api repos/o/r/issues/5/comments --field body=@"{path}"',
                         f'gh api repos/o/r/issues/5/comments --field=body=@{path}',
-                        f'gh api repos/o/r/issues/5/comments --field body=@"{path}"'):
+                        f'gh api repos/o/r/issues/5/comments -F body=@"{spaced}"'):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command))
 
     def test_file_flags_of_other_stages_are_not_read(self):
-        # A flag is read only in the stage that writes, or as a Get-Content feeding it.
+        # Every file flag of a writing command is read, except one in a text tool's own stage.
         path = self.body_file(f"{GENERATED_LINE}\n")
         for command in ("git show HEAD:.claude/hooks/push-guard.py | grep -F word",
                         "git show HEAD:.git/hooks/commit-msg | grep -F word",
@@ -394,7 +396,10 @@ class GuardHookTest(unittest.TestCase):
                 (f'(git commit -F "{path}")', "Bash"),
                 (f'echo $(git tag -a v1 -F "{path}")', "Bash"),
                 (f'gh pr create --title "$(git log -1 | cut -c1-9)" -F "{path}"', "Bash"),
-                (f'git commit\\\n  -F "{path}"', "Bash")):
+                (f'git commit\\\n  -F "{path}"', "Bash"),
+                (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),
+                (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),
+                (f'grep -q x f; case $y in a) git commit -F "{path}";; esac', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 

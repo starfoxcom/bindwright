@@ -167,9 +167,18 @@ def text_spans(cmd, esc):
     return spans
 
 
-def stage_start(cmd, at, spans):
+def continues_line(cmd, i, esc):
+    """True when the newline at `i` follows the shell's line-continuation character."""
+    j = i - 1
+    if j >= 0 and cmd[j] == "\r":
+        j -= 1
+    return j >= 0 and cmd[j] == esc
+
+
+def stage_start(cmd, at, spans, esc):
     """Where the pipeline stage holding `at` begins: after the last | ; & or newline before it
-    that sits outside quoted text and outside a closed ( ... ) or $( ... ) group."""
+    that sits outside quoted text and outside a closed ( ... ) or $( ... ) group. None when
+    a ) before it has no ( to close, such as a case pattern's: the stage cannot be told."""
     depth = 0
     for i in range(at - 1, -1, -1):
         if any(s <= i < e for s, e in spans):
@@ -181,8 +190,9 @@ def stage_start(cmd, at, spans):
                 return i + 1
             depth -= 1
         elif cmd[i] in "|;&\n" and depth == 0:
-            return i + 1
-    return 0
+            if cmd[i] != "\n" or not continues_line(cmd, i, esc):
+                return i + 1
+    return 0 if depth == 0 else None
 
 
 def find_files(cmd, cwd, esc):
@@ -190,7 +200,8 @@ def find_files(cmd, cwd, esc):
     for m in FILE_FLAGS.finditer(cmd):
         if any(s <= m.start() < e for s, e in spans):
             continue
-        if TEXT_TOOL.match(cmd, stage_start(cmd, m.start(), spans)):
+        start = stage_start(cmd, m.start(), spans, esc)
+        if start is not None and TEXT_TOOL.match(cmd, start):
             continue
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
