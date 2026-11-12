@@ -8,12 +8,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
+- `/bindwright:update` lists the project's own files that still name the Bindwright version it was bound with, when it moves to a newer one; it never edits them (#814).
 - **Every project's `git.md` says how to size a release.** A new `## Versioning` section: a major when users must act or something they use stops working, a minor for features and kept-working default changes, a patch for fixes only; a release tool that sets the version is fed, never bypassed; otherwise every version file is bumped together and the tag follows the existing style. `/bindwright:update` brings it to existing projects (#805).
 - **Bindwright sizes its own releases by a written rule.** `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` and makes a major, features and kept-working default changes a minor, fixes only a patch. Release prep reads every entry against it first, and a test checks each release from v3.5.0 on (#805).
 
 ### Fixed
 
 - **The attribution guard reads a body file again when a command substitution comes before it.** v3.5.0 let a text tool's own file flag (`grep -f`, `sort -f`) go unread, but quotes nested inside `$( ... )`, `${ ... }` or backticks hid a separator from it, so in `gh pr create --title "$(echo "x; sort y")" --body-file body.md` the body file was taken for `sort`'s and never scanned. The skip now applies only when nothing before the flag is quoted, escaped or substituted (no `'`, `"`, backtick, `$` or `\`), since any of those can hide a separator from the guard's quote scan; otherwise the flag is read as a file, so `git commit -m "$(cat msg)" && git log | grep -F word` is refused and runs as two commands. A stage counts as a text tool's only when its first word is the tool's name whole, so `sort=1 git commit -F msg` reads `msg` too.
+- `/close-session` and `review-tiers.md` merge once every check has settled and the required ones pass, not as soon as the required ones do (#814).
 - `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed, warning that every other clone loses its copy when it pulls that commit. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
 
 ## [v3.5.0] — 2026-11-12

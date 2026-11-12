@@ -71,4 +71,4 @@ The gate runs the base branch's copy of `.github/scripts/review_gate.py` and `.g
 
 ## Local session's job
 
-Push, open the PR, watch the checks (see `token-efficiency.md`), and merge once the `Review gate` is 🟢 and every other required check passes. A PR whose base branch was changed, such as a stacked PR retargeted after its parent merged, starts no checks: push a commit or close and reopen it. If `needs-deep-review` appears but no deep review starts within a few minutes, report it instead of starting one yourself.
+Push, open the PR, watch the checks (see `token-efficiency.md`), and merge once every check has settled, the `Review gate` is 🟢 and every other required check passes. A PR whose base branch was changed, such as a stacked PR retargeted after its parent merged, starts no checks: push a commit or close and reopen it. If `needs-deep-review` appears but no deep review starts within a few minutes, report it instead of starting one yourself.
