@@ -159,6 +159,7 @@ class AddedPins(unittest.TestCase):
             ("unclosed quote", "+  uses: 'o/r@%s  # v1" % NEW_SHA, []),
             ("no-break space after the id", "+  uses: o/r@%s\u00a0x  # v1" % NEW_SHA, []),
             ("second word after the id", "+  uses: o/r@%s x  # v1" % NEW_SHA, []),
+            ("second word after the closing quote", "+  uses: 'o/r@%s' x  # v1" % NEW_SHA, []),
             ("dot-dot in the action path", "+  uses: o/r/../x@%s  # v1" % NEW_SHA, []),
             ("id with trailing text", "+  uses: o/r@%sz  # v1" % NEW_SHA, []),
             ("non-ASCII owner", "+  uses: ö/r@%s  # v1" % NEW_SHA, []),
