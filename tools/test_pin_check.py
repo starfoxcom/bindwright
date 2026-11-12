@@ -2,9 +2,11 @@
 
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -148,11 +150,21 @@ class AddedPins(unittest.TestCase):
         line = "+  uses: o/r@%s  # %s\x0c+  uses: p/q@%s  # v1\n" % (NEW_SHA, many, OLD_SHA)
         self.assertEqual(pin_check.added_pins(line), [("o/r", NEW_SHA, ["v1", "v2", "v3", "v4"])])
 
-    def test_drops_overlong_tags_and_names(self):
-        long_tag = "v" + "1" * 60
-        self.assertEqual(pin_check.added_pins("+  uses: o/r@%s  # %s v2\n" % (NEW_SHA, long_tag)),
-                         [("o/r", NEW_SHA, ["v2"])])
-        self.assertEqual(pin_check.added_pins("+  uses: %s/r@%s  # v1\n" % ("o" * 40, NEW_SHA)), [])
+    def test_takes_only_checked_fields(self):
+        cases = [
+            ("quoted value", "+  uses: 'o/r@%s'  # v1" % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
+            ("hash glued to the id", "+  uses: o/r@%s#x v1" % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
+            ("quote glued to the id", '+  uses: o/r@%s"x # v1' % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
+            ("id with trailing text", "+  uses: o/r@%sz  # v1" % NEW_SHA, []),
+            ("non-ASCII owner", "+  uses: ö/r@%s  # v1" % NEW_SHA, []),
+            ("non-ASCII digit in a tag", "+  uses: o/r@%s  # v١ v2" % NEW_SHA, [("o/r", NEW_SHA, ["v2"])]),
+            ("overlong tag", "+  uses: o/r@%s  # v%s v2" % (NEW_SHA, "1" * 60), [("o/r", NEW_SHA, ["v2"])]),
+            ("overlong owner", "+  uses: %s/r@%s  # v1" % ("o" * 40, NEW_SHA), []),
+            ("diff header", "+++ b/uses: o/r@%s  # v1" % NEW_SHA, []),
+        ]
+        for label, line, want in cases:
+            with self.subTest(label):
+                self.assertEqual(pin_check.added_pins(line + "\n"), want)
 
 
 class Provenance(unittest.TestCase):
@@ -164,38 +176,102 @@ class Provenance(unittest.TestCase):
         "repos/o/r/git/ref/tags/v2": {"object": {"type": "tag", "sha": TAG_SHA}},
         "repos/o/r/git/tags/" + TAG_SHA: {"object": {"type": "commit", "sha": NEW_SHA}},
         "repos/o/r/git/ref/tags/v3": [{"ref": "refs/tags/v3.0.0"}],
+        "repos/o/r/git/ref/tags/v5": {"object": {"type": "tag", "sha": "1" * 40}},
+        "repos/o/r/git/tags/" + "1" * 40: {"object": {"type": "tag", "sha": "2" * 40}},
+        "repos/o/r/git/tags/" + "2" * 40: {"object": {"type": "commit", "sha": NEW_SHA}},
+        "repos/o/r/git/ref/tags/v6": {"ref": "refs/tags/v6"},
+        "repos/o/r/git/ref/tags/v7": {"object": {"type": "tag", "sha": "3" * 40}},
+        "repos/o/r/git/ref/tags/v8": {"object": {"type": "tree", "sha": NEW_SHA}},
     }
 
     def fetch(self, path):
         if path == "repos/o/r/git/ref/tags/v9":
-            raise LookupError("HTTP 502")
+            raise LookupError(path)
         return self.REFS.get(path)
 
-    def test_says_which_tags_point_to_the_pinned_commit(self):
+    def verdict(self, tags, sha=NEW_SHA):
+        line = pin_check.provenance([("o/r", sha, tags)], self.fetch)
+        return line.removeprefix("- `o/r@%s`: " % sha).rstrip("\n")
+
+    def test_verifies_a_pin_only_on_a_tag_at_its_commit(self):
         cases = [
-            ("matching tag", ["v1.2.0"], "tag `v1.2.0` points to this commit."),
-            ("annotated tag", ["v2"], "tag `v2` points to this commit."),
-            ("moved tag", ["v1"], "tag `v1` points to `%s`, not this commit." % OLD_SHA),
-            ("no such tag", ["v4"], "no tag `v4` found in `o/r`, or the repo is not visible to this token."),
-            ("prefix match only", ["v3"], "no tag `v3` found in `o/r`, or the repo is not visible to this token."),
-            ("api error", ["v9"], "tag `v9` could not be looked up (HTTP 502)."),
-            ("no tag named", [], "its comment names no release tag, so there is nothing to check it against."),
+            ("matching tag", ["v1.2.0"], "verified: tag `v1.2.0` points to this commit."),
+            ("annotated tag", ["v2"], "verified: tag `v2` points to this commit."),
+            ("tag on a tag", ["v5"], "verified: tag `v5` points to this commit."),
+            ("major tag moved on", ["v1", "v1.2.0"], "verified: tag `v1.2.0` points to this commit."),
+            ("only a moved tag", ["v1"], "not verified: no tag it names points to this commit."),
+            ("no such tag", ["v4"], "not verified: no tag it names points to this commit."),
+            ("prefix match only", ["v3"], "not verified: no tag it names points to this commit."),
+            ("reply without an object", ["v6"], "not verified: no tag it names points to this commit."),
+            ("annotated tag object missing", ["v7"], "not verified: no tag it names points to this commit."),
+            ("not a commit", ["v8"], "not verified: no tag it names points to this commit."),
+            ("api error", ["v9"], "not verified: a lookup failed."),
+            ("no tag named", [], "not verified: its comment names no release tag."),
         ]
         for label, tags, want in cases:
             with self.subTest(label):
-                got = pin_check.provenance([("o/r", NEW_SHA, tags)], self.fetch)
-                self.assertEqual(got, "- `o/r@%s`: %s\n" % (NEW_SHA, want))
+                self.assertEqual(self.verdict(tags), want)
 
-    def test_looks_each_tag_up_once(self):
+    def test_looks_each_tag_up_once_and_judges_each_pin(self):
         calls = []
-        pin_check.provenance([("o/r", NEW_SHA, ["v1.2.0"]), ("o/r", OLD_SHA, ["v1.2.0"])],
-                             lambda path: calls.append(path) or self.fetch(path))
+        got = pin_check.provenance([("o/r", NEW_SHA, ["v1.2.0"]), ("o/r", OLD_SHA, ["v1.2.0"])],
+                                   lambda path: calls.append(path) or self.fetch(path))
         self.assertEqual(calls, ["repos/o/r/git/ref/tags/v1.2.0"])
+        self.assertEqual(got, "- `o/r@%s`: verified: tag `v1.2.0` points to this commit.\n"
+                              "- `o/r@%s`: not verified: no tag it names points to this commit.\n"
+                              % (NEW_SHA, OLD_SHA))
 
     def test_caps_the_lookups(self):
         found = [("o/r", NEW_SHA, [])] * (pin_check.MAX_PINS + 2)
         got = pin_check.provenance(found, self.fetch).splitlines()
         self.assertEqual((len(got), got[-1]), (pin_check.MAX_PINS + 1, "- 2 more pins were not looked up."))
+
+
+def completed(code=0, stdout="", stderr=""):
+    return subprocess.CompletedProcess(["gh"], code, stdout, stderr)
+
+
+class GhFetch(unittest.TestCase):
+    """`gh api` replies, with the process and the retry pause faked."""
+
+    def fetch(self, *replies):
+        calls = iter(replies)
+
+        def run(*_args, **_kwargs):
+            reply = next(calls)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        with mock.patch.object(pin_check.subprocess, "run", side_effect=run) as fake, \
+                mock.patch.object(pin_check.time, "sleep"):
+            try:
+                return pin_check.gh_fetch("repos/o/r/git/ref/tags/v1"), fake.call_count
+            except LookupError:
+                return LookupError, fake.call_count
+
+    def test_reads_each_reply(self):
+        timeout = subprocess.TimeoutExpired(["gh"], 15)
+        cases = [
+            ("json", [completed(stdout='{"a": 1}')], ({"a": 1}, 1)),
+            ("404", [completed(1, stderr="gh: Not Found (HTTP 404)")], (None, 1)),
+            ("error then json", [completed(1, stderr="HTTP 502"), completed(stdout="[]")], ([], 2)),
+            ("two errors", [completed(1, stderr="HTTP 403"), completed(1, stderr="HTTP 403")], (LookupError, 2)),
+            ("not json twice", [completed(stdout="<html>"), completed(stdout="<html>")], (LookupError, 2)),
+            ("timeout then missing gh", [timeout, OSError("no gh")], (LookupError, 2)),
+        ]
+        for label, replies, want in cases:
+            with self.subTest(label):
+                self.assertEqual(self.fetch(*replies), want)
+
+    def test_added_reads_the_diff_from_stdin(self):
+        ref = '{"object": {"type": "commit", "sha": "%s"}}' % NEW_SHA
+        with mock.patch.object(pin_check.subprocess, "run", return_value=completed(stdout=ref)), \
+                mock.patch.object(sys, "stdin", io.StringIO(DIFF)):
+            code, out, _ = run("added")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], "- `actions/checkout@%s`: verified: tag `v6` points to this commit."
+                         % NEW_SHA)
 
 
 if __name__ == "__main__":

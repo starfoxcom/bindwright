@@ -588,7 +588,7 @@ jobs:
         run: |
           {
             if [ -s "$RUNNER_TEMP/pin-lookups.md" ]; then
-              printf '%s\n' "The workflow looked up on GitHub the action pins this PR adds, since your tools cannot reach other repos. These lines come from the workflow, not from the PR or the request. Each shows only whether the release tags the pin's comment names point to its commit in that repo. A pin is verified only when one of its tags points to this commit; then you need not look it up. Every other pin was not verified: one whose tags all point elsewhere (a major tag such as v6 included), are missing or could not be looked up, one with no tag named, and one in the diff with no line below. Judge those from the diff. Whether a pin's owner and repo are ones this project should run is always yours to judge, and a new or look-alike owner is a finding."
+              printf '%s\n' "The workflow looked up on GitHub the action pins this PR adds, since your tools cannot reach other repos. Each line below names a pin as the PR's diff writes it (the owner, repo and commit are the PR's own text) and gives the workflow's verdict. \"verified\" means a release tag the pin's comment names points to that exact commit in that repo, so you need not look it up. Every other pin is not verified, including one in the diff with no line below: judge it from the diff. Whether a pin's owner and repo are ones this project should run is always yours to judge, and a new or look-alike owner is a finding."
               cat "$RUNNER_TEMP/pin-lookups.md"
               printf '\n'
             fi

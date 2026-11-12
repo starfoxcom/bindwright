@@ -23,8 +23,9 @@ the PR adds, since the reviewer's own tools cannot reach other repos:
 
     git diff BASE...HEAD -- '*.yml' '*.yaml' | pin_check.py added
 
-Prints a Markdown line per added pin saying which tags its comment names point
-to its commit, or nothing when the diff adds no pin.
+Prints a Markdown line per added pin, verified when a release tag its comment
+names points to its commit and not verified otherwise, or nothing when the
+diff adds no pin.
 """
 
 import json
@@ -44,6 +45,7 @@ TAG = re.compile(r"(?<![\w.-])(v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)(?![\w.-])", re
 MAX_TAG_LENGTH = 40
 MAX_PINS = 40
 MAX_TAGS = 4
+MAX_PEELS = 3
 
 
 def _tuple(version):
@@ -100,44 +102,44 @@ def added_pins(diff):
 
 
 def tag_commit(repo, tag, fetch):
-    """The commit a release tag points to, following an annotated tag; None when
-    the repo has no such tag. `fetch(path)` returns the API's JSON, or None on 404."""
-    ref = fetch("repos/%s/git/ref/tags/%s" % (repo, tag))
-    obj = ref.get("object") if isinstance(ref, dict) else None
-    if isinstance(obj, dict) and obj.get("type") == "tag" and SHA.fullmatch(str(obj.get("sha"))):
-        tag_obj = fetch("repos/%s/git/tags/%s" % (repo, obj["sha"]))
-        obj = tag_obj.get("object") if isinstance(tag_obj, dict) else None
-    sha = obj.get("sha") if isinstance(obj, dict) else None
-    return sha if isinstance(sha, str) and SHA.fullmatch(sha) else None
+    """The commit a release tag points to, peeling annotated tags; None when the
+    tag is missing or does not end at a commit. `fetch(path)` returns the API's
+    JSON, or None on 404."""
+    obj = _object(fetch("repos/%s/git/ref/tags/%s" % (repo, tag)))
+    for _ in range(MAX_PEELS):
+        if not obj or obj["type"] != "tag":
+            break
+        obj = _object(fetch("repos/%s/git/tags/%s" % (repo, obj["sha"])))
+    return obj["sha"] if obj and obj["type"] == "commit" else None
+
+
+def _object(reply):
+    """A reply's `object` as {"type", "sha"} when its id is a full commit-style id, else None."""
+    obj = reply.get("object") if isinstance(reply, dict) else None
+    if isinstance(obj, dict) and isinstance(obj.get("sha"), str) and SHA.fullmatch(obj["sha"]):
+        return {"type": obj.get("type"), "sha": obj["sha"]}
+    return None
 
 
 def provenance(found, fetch):
-    """A Markdown line per added pin saying which named tags point to its commit.
-    Each (repo, tag) is looked up once, however many pins name it."""
+    """A Markdown line per added pin with the workflow's verdict: verified when a
+    release tag its comment names points to its commit. Each (repo, tag) is
+    looked up once, however many pins name it."""
     lines, cache = [], {}
     for repo, sha, tags in found[:MAX_PINS]:
-        head = "- `%s@%s`: " % (repo, sha)
-        if not tags:
-            lines.append(head + "its comment names no release tag, so there is nothing to check it against.")
-            continue
-        results = []
+        verdict = "not verified: its comment names no release tag" if not tags else ""
         for tag in tags:
             if (repo, tag) not in cache:
                 try:
                     cache[repo, tag] = tag_commit(repo, tag, fetch)
-                except LookupError as e:
-                    cache[repo, tag] = e
-            got = cache[repo, tag]
-            if isinstance(got, LookupError):
-                results.append("tag `%s` could not be looked up (%s)" % (tag, got))
-                continue
-            if got == sha:
-                results.append("tag `%s` points to this commit" % tag)
-            elif got:
-                results.append("tag `%s` points to `%s`, not this commit" % (tag, got))
-            else:
-                results.append("no tag `%s` found in `%s`, or the repo is not visible to this token" % (tag, repo))
-        lines.append(head + "; ".join(results) + ".")
+                except LookupError:
+                    cache[repo, tag] = LookupError
+            if cache[repo, tag] == sha:
+                verdict = "verified: tag `%s` points to this commit" % tag
+                break
+            if cache[repo, tag] is LookupError:
+                verdict = "not verified: a lookup failed"
+        lines.append("- `%s@%s`: %s." % (repo, sha, verdict or "not verified: no tag it names points to this commit"))
     if len(found) > MAX_PINS:
         lines.append("- %d more pins were not looked up." % (len(found) - MAX_PINS))
     return "".join(line + "\n" for line in lines)
@@ -148,22 +150,18 @@ def gh_fetch(path):
     for attempt in range(2):
         try:
             out = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=15)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            error = type(e).__name__
-        else:
-            if out.returncode == 0:
-                try:
-                    return json.loads(out.stdout)
-                except ValueError:
-                    error = "a reply that is not JSON"
-            elif "HTTP 404" in out.stderr:
-                return None
-            else:
-                last = (out.stderr.strip().splitlines() or ["gh exited %d" % out.returncode])[-1]
-                error = last.replace("`", "'")[:200]
+        except (OSError, subprocess.TimeoutExpired):
+            out = None
+        if out is not None and out.returncode == 0:
+            try:
+                return json.loads(out.stdout)
+            except ValueError:
+                pass
+        elif out is not None and "HTTP 404" in out.stderr:
+            return None
         if attempt == 0:
             time.sleep(3)
-    raise LookupError(error)
+    raise LookupError(path)
 
 
 def behind(found, cli, action_sha):
