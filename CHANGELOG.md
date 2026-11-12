@@ -6,9 +6,26 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.5.0] — 2026-11-12
+
+v3.5.0 pins every workflow action to a commit, makes the attribution guard stop refusing ordinary commands, reads a repo's default branch at setup, and fixes how the session-close search count reads a command.
+
+v3.3.0 should have been a major release: it renamed `/session-start` and `/session-close` without keeping the old names, replaced tokensave with FindWright, and removed the `architecture-graph` template. `/bindwright:update` moves a project across, but anything outside the project that typed or named the old commands needs the new ones. Releases from here on follow a written versioning rule (#805).
+
+### Changed
+
+- **Every workflow action is pinned to a commit** (#800, #801). The templates and the live workflows name each action by its commit, with the release in a comment, so a moved tag can never change what a run executes. The weekly pin check also lists any action a workflow uses by a tag or branch, a `docker://` image without a digest included, and keeps its issue open until every one is pinned.
+- **A trunk-based project's review runs on `main` alone** (#801). The review workflow's branch list no longer names a development branch the project does not have.
+- **The merge waits on every required check** (#803). `review-tiers.md` and `/close-session` merge once the `Review gate` is 🟢 and every other check the branch requires passes, not on the gate alone. The gate-recovery steps name each older check a project may require (`Evaluate review outcome`, and `Claude On-Demand` under `checks: two`), and put each back with the setup script's `--require`, confirmed with the same flags. A PR whose base branch changed starts no checks: the rule says to push a commit or close and reopen it.
+
 ### Fixed
 
-- **The close-session search count judges a search by what it reads.** `research-adherence.py` takes a search's file filters (globs, types, `-Include`) when it has any, otherwise only the files and folders it names that exist on disk, and a folder by the files git tracks in it. Before, it scanned the whole command for doc words, so a pattern such as `"mod.json"`, an option value, a redirect or a comment could be read as a path or a doc, a negated glob (`!*.md`) as a doc search, and `docs/` as code; each left searches out of the count or counted docs as code (#791).
+- **The attribution guard reads every message file of a write and refuses nothing else** (#798). A file flag in a text tool's own stage (`awk -F`, `grep -f`, `sort`) is no longer read as a message file, while a flag on a continued line, after a `case` branch or after a `$( … )` group is read as before. `--field`, and a quoted `key=@"path with a space"`, are read too.
+- **Setup reads the repo's default branch** (#799). When GitHub's default branch is `develop`, the rules say so (`"devIsDefault": true`); with a setup code it says when the code and the repo disagree.
+- **`/start-session` and `/close-session` spell out the merge-in and cascade steps** (#799) instead of pointing at `git.md` sections an adopted project may not have. `/close-session` stages the session's files by name and leaves a file it did not change out of the commit, naming it in the last message.
+- **The first offline close keeps `.bindwright/pending-tracker.md` out of every commit** (#799), as it does for the hand-off file.
+- A slow mod test no longer fails the Windows runner at the default 5 s (#804).
+- **The close-session search count judges a search by what it reads.** `research-adherence.py` takes a search's file filters (globs, types, `-Include`) when it has any, otherwise only the files and folders it names that exist on disk, and a folder by the files git tracks in it. A command with an option the script does not know is read as unsure and counts unless it runs outside the repo and names nothing inside it. Before, it scanned the whole command for doc words, so a pattern such as `"mod.json"`, an option value, a redirect or a comment could be read as a path or a doc, a negated glob (`!*.md`) as a doc search, and `docs/` as code; each left searches out of the count or counted docs as code (#791, #796).
 - `/close-session` states the three status-update triggers itself, since a project's `tracker.md` may defer them to another file, and runs an extra close step marked *after the hand-off* last, so a board check or a public mirror reads the session's final state. `clean-code.md`'s issue-link exception names the issue's title where a project check bans issue numbers in code (#791).
 
 ## [v3.4.0] — 2026-11-11
