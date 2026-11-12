@@ -22,9 +22,10 @@ What is scanned, for any git write, gh write or GitHub API call:
     --body-file / --notes-file / --template / --input / --message-file,
     --field, curl -d @file, PowerShell -InFile and Get-Content <file>,
     but not the -F or --file of a text tool's own stage (`awk -F,`,
-    `grep -F word`), a separator or a pattern, when nothing before it is
-    quoted, escaped or substituted; otherwise it is read too. A file it
-    cannot read is denied, so a typo cannot slip a body through unread.
+    `grep -F word`) that names no existing file, a separator or a pattern,
+    when nothing before it is quoted, escaped or substituted. A file of that
+    name is read whatever stage the flag seems to sit in. A file it cannot
+    read is denied, so a typo cannot slip a body through unread.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
 
@@ -103,7 +104,7 @@ GH_WRITE = re.compile(
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 # Text tools whose own -F or --file is a field separator or a pattern file, never a message.
-TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)(?:\.exe)?(?=\s|$)")
+TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)(?i:\.exe)?(?=\s|$)")
 # Unquoted, any of these between a text tool and its flag means the flag is read after all.
 SHELL_SYNTAX = frozenset("<>&|;#`$(){}\\\r\n")
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
@@ -242,9 +243,8 @@ def find_files(cmd, cwd, esc):
         if any(s <= m.start() < e for s, e in spans):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
-        if (start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans)
-                and is_bare(cmd[:m.start()], esc)):
-            continue
+        text_tools = (start is not None and TEXT_TOOL.match(cmd, start)
+                      and is_plain(cmd, start, m.start(), spans) and is_bare(cmd[:m.start()], esc))
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
@@ -265,6 +265,8 @@ def find_files(cmd, cwd, esc):
             cd = re.search(r"(?:^|&&|;)\s*cd\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", cmd)
             base = next((g for g in cd.groups() if g), cwd) if cd else cwd
             path = os.path.join(base.strip("\"'"), path)
+        if text_tools and not os.path.isfile(path):
+            continue  # a separator or pattern; a file of that name is read whoever's flag it is
         yield path
 
 

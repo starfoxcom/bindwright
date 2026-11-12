@@ -394,7 +394,9 @@ class GuardHookTest(unittest.TestCase):
                         "git commit -m wip && git log | grep -F needle"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
-        self.assert_passes(self.attr("git tag --list | grep.exe -F v1", tool="PowerShell"))
+        for command in ("git tag --list | grep.exe -F v1", "git tag --list | grep.EXE -F v1"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, tool="PowerShell"))
         # A PowerShell path's backslash is no escape there, so the stage is still trusted.
         self.assert_passes(self.attr("cd C:\\repo; git tag --list | awk -F. '{print $1}'", tool="PowerShell"))
         for command, tool in (
@@ -418,6 +420,12 @@ class GuardHookTest(unittest.TestCase):
                 # Quotes before a text tool's flag make its stage unreadable, so the flag is read
                 # too: `needle` is no file, and the command is refused.
                 ('git commit -m "$(cat msg.txt)" && git log | grep -F needle', "Bash"),
+                ("gh pr create --title 'a && b; c' --body x | awk -F, '{print}'", "Bash"),
+                ("gh pr create --title “a; sort b” --body-file missing.md", "PowerShell"),
+                ("gh pr create --title $t; sort -F missing.md", "PowerShell"),
+                # A file that exists is read whichever stage its flag seems to sit in.
+                (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
+                (f"git tag --list | grep -F {path}", "PowerShell"),
                 (f'git commit\\\n  -F "{path}"', "Bash"),
                 (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),
                 (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),
