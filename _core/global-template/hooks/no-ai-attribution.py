@@ -161,10 +161,15 @@ def text_spans(cmd, esc):
         q = cmd[i]
         if q in "'\"":
             j = i + 1
+            # Bash's $'...' takes backslash escapes, as a double-quoted string does.
+            escapes = q == '"' or (esc == "\\" and i > 0 and cmd[i - 1] == "$"
+                                   and not is_escaped(cmd, i - 1, esc))
             while j < n and cmd[j] != q:
-                j += 2 if q == '"' and cmd[j] == esc else 1
+                j += 2 if escapes and cmd[j] == esc else 1
             spans.append((i, j + 1))
             i = j + 1
+        elif q == esc:
+            i += 2  # an escaped quote outside quotes is a literal: 'it'\''s stays one string
         else:
             i += 1
     return spans
