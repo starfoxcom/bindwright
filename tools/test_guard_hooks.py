@@ -409,6 +409,7 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title "$(echo "x; sort y")" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "`echo "x; sort y"`" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
+                (f'sort=1 git commit -F "{path}"', "Bash"),
                 (f'git commit\\\n  -F "{path}"', "Bash"),
                 (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),
                 (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),

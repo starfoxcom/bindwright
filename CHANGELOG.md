@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **The attribution guard reads a body file again when a command substitution comes before it.** v3.5.0 let a text tool's own file flag (`grep -f`, `sort -f`) go unread, but quotes nested inside `$( ... )`, `${ ... }` or backticks hid a separator from it, so in `gh pr create --title "$(echo "x; sort y")" --body-file body.md` the body file was taken for `sort`'s and never scanned. The skip now stays off once a double-quoted string before the flag leaves a `$(`, `${` or backtick open, where quotes may nest.
+- **The attribution guard reads a body file again when a command substitution comes before it.** v3.5.0 let a text tool's own file flag (`grep -f`, `sort -f`) go unread, but quotes nested inside `$( ... )`, `${ ... }` or backticks hid a separator from it, so in `gh pr create --title "$(echo "x; sort y")" --body-file body.md` the body file was taken for `sort`'s and never scanned. The skip now stays off once a double-quoted string before the flag leaves a `$(`, `${` or backtick open, where quotes may nest. A stage counts as a text tool's only when its first word is the tool's name whole, so `sort=1 git commit -F msg` reads `msg` too.
 - `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed, warning that every other clone loses its copy when it pulls that commit. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
 
 ## [v3.5.0] — 2026-11-12
