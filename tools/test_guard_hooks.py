@@ -534,8 +534,10 @@ class GuardHookTest(unittest.TestCase):
                 ("f() { git commit -F msg.txt; }; cd sub; f", "Bash", hidden),
                 ("for i in 1 2; do git commit -F msg.txt; cd sub; done", "Bash", hidden),
                 ("switch (1,2) { default { git commit -F msg.txt; Set-Location sub } }", "PowerShell", hidden),
-                ("class A { static [void] M() { git commit -F msg.txt } }; cd sub; [A]::M()", "PowerShell", hidden),
-                ("Get-Item x -ErrorAction Stop; git commit -F msg.txt; trap { cd sub; continue }", "PowerShell", hidden),
+                ("class A { static [void] M() { git commit -F msg.txt } }; cd sub; [A]::M()",
+                 "PowerShell", hidden),
+                ("Get-Item x -ErrorAction Stop; git commit -F msg.txt; trap { cd sub; continue }",
+                 "PowerShell", hidden),
                 ("git -C - commit -F msg.txt", "Bash", os.path.join(clean, "-", "msg.txt"))):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool, project=clean), reason)
