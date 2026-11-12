@@ -394,6 +394,7 @@ class GuardHookTest(unittest.TestCase):
                         "git commit -m wip && git log | grep -F needle"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
+        self.assert_passes(self.attr("git tag --list | grep.exe -F v1", tool="PowerShell"))
         # A PowerShell path's backslash is no escape there, so the stage is still trusted.
         self.assert_passes(self.attr("cd C:\\repo; git tag --list | awk -F. '{print $1}'", tool="PowerShell"))
         for command, tool in (

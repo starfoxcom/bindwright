@@ -103,7 +103,7 @@ GH_WRITE = re.compile(
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 # Text tools whose own -F or --file is a field separator or a pattern file, never a message.
-TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)(?=\s|$)")
+TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)(?:\.exe)?(?=\s|$)")
 # Unquoted, any of these between a text tool and its flag means the flag is read after all.
 SHELL_SYNTAX = frozenset("<>&|;#`$(){}\\\r\n")
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
@@ -298,7 +298,7 @@ def main():
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path. If it is "
                  "a text tool's separator or pattern (awk -F, grep -F) in a command that also quotes, "
-                 "escapes or substitutes, run that pipeline as a command of its own.")
+                 "escapes or substitutes, run the text tool as a command of its own, reading saved output.")
         scan_text(text, f"file {path}")
     sys.exit(0)
 
