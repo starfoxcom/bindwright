@@ -7,8 +7,10 @@ result.
 
 Run from the repo root: python -m unittest tools/test_guard_hooks.py
 """
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -16,6 +18,7 @@ import unittest
 import warnings
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HELPER = os.path.join(REPO, "helper")
 LAUNCHER = os.path.join(REPO, ".claude", "hooks", "run-hook.sh")
 SETTINGS = os.path.join(REPO, ".claude", "settings.json")
 # Built from pieces so this file's text never reads as a force push to the
@@ -66,8 +69,9 @@ class GuardHookTest(unittest.TestCase):
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
 
-    def run_hook(self, name, command, project=REPO, tool="Bash", path=None):
-        env = dict(os.environ, HOME=self.home, CLAUDE_PROJECT_DIR=project)
+    def run_hook(self, name, command, project=REPO, tool="Bash", path=None, helper=HELPER):
+        # The guard parses commands with the helper setup installs; here, the repo's own copy.
+        env = dict(os.environ, HOME=self.home, CLAUDE_PROJECT_DIR=project, BINDWRIGHT_HELPER=helper)
         env.pop("USERPROFILE", None)
         if path is not None:
             env["PATH"] = path
@@ -421,6 +425,44 @@ class GuardHookTest(unittest.TestCase):
                 (f'grep x f # ends in a backslash \\\ngit commit -F "{path}"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
+
+    def test_parser_reads_each_command_as_the_shell_does(self):
+        path = self.body_file(f"{GENERATED_LINE}\n")
+        for command, tool in (
+                ("gh api repos/o/r/pulls --jq '.[].title' | grep -F word", "Bash"),
+                ("git tag --list 'v*' | grep -F v3", "Bash"),
+                ('git commit -m "$(cat msg.txt)" && git log | grep -F needle', "Bash"),
+                ("git tag --list | cut -d@ -f1", "Bash"),
+                ("git commit -m x && grep -rn -- --body-file .github/", "Bash"),
+                ('git commit -m "see --body-file nowhere.md"', "Bash"),
+                ("git commit -m x 2>&1 | grep -F x", "Bash"),
+                ("git tag --list | Select-String -Pattern v3; sort -F x", "PowerShell")):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, tool=tool))
+        for command, tool in (
+                (f'gh pr create --title "$(echo "x; sort y")" --body-file "{path}"', "Bash"),
+                (f'gh pr create --title "`echo "x; sort y"`" --body-file "{path}"', "Bash"),
+                (f'gh pr create --title "${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
+                (f'sort=1 git commit -F "{path}"', "Bash"),
+                (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
+                (f"gh pr create --title “a; sort b” --body-file {path}", "PowerShell"),
+                ("gh pr create --title t --body-file \"$HOME/body.md\"", "Bash"),
+                ('cd "$(git rev-parse --show-toplevel)"; git commit -F msg.txt', "Bash")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool=tool))
+
+    def test_without_the_helper_every_file_flag_is_read(self):
+        result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
+        self.assert_denied(result)
+        self.assertIn("/bindwright:update", json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_vendored_parsers_match_their_recorded_hashes(self):
+        with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
+            rows = re.findall(r"^\| `([^`]+)` \|.*\| `([0-9a-f]{64})` \|$", fh.read(), re.M)
+        self.assertEqual(len(rows), 4)
+        for name, digest in rows:
+            with self.subTest(name), open(os.path.join(HELPER, "parsers", name), "rb") as fh:
+                self.assertEqual(hashlib.sha256(fh.read()).hexdigest(), digest)
 
     def test_read_only_commands_pass(self):
         for command in ("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"):

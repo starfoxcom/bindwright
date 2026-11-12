@@ -18,19 +18,25 @@ the repo's own name, a human Co-Authored-By.
 What is scanned, for any git write, gh write or GitHub API call:
   * The full command text: inline -m / --body / --title / --notes values,
     here-docs, here-strings and PowerShell -Body all live there.
-  * Every file the command names as a message or body: -F / --file /
-    --body-file / --notes-file / --template / --input / --message-file,
-    --field, curl -d @file, PowerShell -InFile and Get-Content <file>,
-    but not the -F or --file of a text tool's own stage (`awk -F,`,
-    `grep -F word`), which is a separator or a pattern. A file it
-    cannot read is denied, so a typo cannot slip a body through unread.
-    A flag named inside quoted text, a here-doc or a here-string is a
-    mention in a message, not an argument, and names no file.
+  * Every file a git write, gh, curl, Invoke-RestMethod/WebRequest or
+    Get-Content command names as a message or body (-F / --file /
+    --template for git; --body-file / --notes-file / --input / -F and
+    --field key=@file for gh; -d @file and -F key=@file for curl; -InFile;
+    Get-Content's path). Bindwright's helper parses the command the way
+    the shell does (tree-sitter, `hooks/shell-words.mjs`), so a text tool's
+    own flags (`awk -F,`, `grep -F word`) and a flag inside quoted text, a
+    here-doc or a here-string are another command's words, not a body
+    file. `cd`, `Set-Location` and `git -C` set the folder a relative path
+    resolves from. A file it cannot read, or one named by text built at
+    run time, is denied, so a typo cannot slip a body through unread.
+    Without the helper or Node it reads every file flag in the command
+    text instead, a text tool's included.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
-pass unread: text the shell builds at run time ($VAR, $(...), backticks,
-eval), a body piped in on stdin, a message reused from another commit
+pass unread: message text the shell builds at run time ($VAR, $(...),
+backticks, eval), a body file the command itself writes, a body piped in
+on stdin, a message reused from another commit
 (-C / --reuse-message), flags that skip git's own hooks, and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
@@ -46,6 +52,8 @@ exit 0 otherwise. Never blocks read-only commands.
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 
 # Obfuscation-tolerant: optional zero-width / separator chars between letters.
@@ -101,16 +109,12 @@ GH_WRITE = re.compile(
     r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
-# Text tools whose own -F or --file is a field separator or a pattern file, never a message.
-TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)\b")
-# Unquoted, any of these between a text tool and its flag means the flag is read after all.
-SHELL_SYNTAX = frozenset("<>&|;#`$(){}\\\r\n")
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 
-# Flags whose next token is a file the hook must read. `-F` is case-sensitive:
-# a lowercase `-f` is `git tag -f` (force) or `gh pr create -f` (fill). Long
-# flags match whole (`--filename` is not `--file`). The value may follow a
-# space or the long-option `=` (`--body-file=body.md`).
+# Without the parser: flags whose next token is a file the hook must read. `-F`
+# is case-sensitive: a lowercase `-f` is `git tag -f` (force) or `gh pr create
+# -f` (fill). Long flags match whole (`--filename` is not `--file`). The value
+# may follow a space or the long-option `=` (`--body-file=body.md`).
 FILE_FLAGS = re.compile(
     r"(?:(?<=\s)-F"
     r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|--field|-InFile))(?![\w-])"
@@ -119,11 +123,21 @@ FILE_FLAGS = re.compile(
     r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'"
     r"|(?P<kv>[^\s=\"']+=@(?:\"[^\"]+\"|'[^']+'))|(?P<bare>\S+))"
 )
-SEGMENT_START = re.compile(r"[;&|\n][^;&|\n]*$")
-# Message text, not arguments: here-doc bodies and PowerShell here-strings.
-HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_]\w*)\1[^\n]*\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
-HERESTRING = re.compile(r"@(['\"])[ \t]*\n.*?\n\1@", re.S)
 PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
+
+# With the parser: the programs whose words can name a body file, by lowercase
+# name without `.exe`, and the flags whose value is one.
+GIT_WRITES = {"commit", "commit-tree", "merge", "tag", "notes"}
+GIT_FILE_FLAGS = {"-F", "--file", "--template"}
+GH_FILE_FLAGS = {"-F", "--body-file", "--notes-file", "--input", "--field"}
+CURL_DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw", "-F", "--form"}
+WEB_CMDLETS = {"invoke-restmethod", "invoke-webrequest", "irm", "iwr"}
+READ_CMDLETS = {"get-content", "gc"}
+CD_COMMANDS = {"cd", "chdir", "pushd", "set-location", "sl", "push-location"}
+UNKNOWN = object()  # a folder the command switches to at run time
+STRICT_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it) or Node, the guard cannot"
+               " read the command's structure, so it reads every file flag, a text tool's (awk -F,"
+               " grep -F) included: run that tool as a command of its own.")
 
 
 def deny(reason):
@@ -146,104 +160,149 @@ def strip_paths(text):
     return PATH_TOKEN.sub("<path>", text)
 
 
-def text_spans(cmd, esc):
-    """Spans of quoted strings, here-doc bodies and here-strings: text a
-    message carries, where a flag name is a mention, not an argument. `esc`
-    is the shell's escape character inside double quotes: `\\` in bash, a
-    backtick in PowerShell."""
-    spans = [m.span() for m in HEREDOC.finditer(cmd)] + [m.span() for m in HERESTRING.finditer(cmd)]
-    i, n = 0, len(cmd)
-    while i < n:
-        inside = next((e for s, e in spans if s <= i < e), None)
-        if inside is not None:
-            i = inside
+def helper_dir():
+    """Bindwright's helper, which carries the shell parser: setup installs it per computer."""
+    return os.environ.get("BINDWRIGHT_HELPER") or os.path.join(
+        os.path.expanduser("~"), ".bindwright", "helper", "node_modules", "bindwright")
+
+
+def parse(cmd, shell):
+    """Each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
+    or None when the parser is missing, fails or meets syntax it cannot read."""
+    script = os.path.join(helper_dir(), "hooks", "shell-words.mjs")
+    node = shutil.which("node")
+    if not node or not os.path.isfile(script):
+        return None
+    try:
+        out = subprocess.run([node, script, shell], input=cmd, capture_output=True,
+                             text=True, encoding="utf-8", timeout=20)
+        data = json.loads(out.stdout) if out.returncode == 0 else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
+        return None
+    return data["commands"]
+
+
+def program(words):
+    name = words[0] if words and isinstance(words[0], str) else ""
+    name = os.path.basename(name.replace("\\", "/")).lower()
+    return name[:-4] if name.endswith(".exe") else name
+
+
+def flag_values(words, short=()):
+    """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
+    and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`)."""
+    for i, word in enumerate(words):
+        if not isinstance(word, str) or not word.startswith("-"):
             continue
-        q = cmd[i]
-        if q in "'\"":
-            j = i + 1
-            # Bash's $'...' takes backslash escapes, as a double-quoted string does.
-            escapes = q == '"' or (esc == "\\" and i > 0 and cmd[i - 1] == "$"
-                                   and not is_escaped(cmd, i - 1, esc))
-            while j < n and cmd[j] != q:
-                j += 2 if escapes and cmd[j] == esc else 1
-            spans.append((i, j + 1))
-            i = j + 1
-        elif q == esc:
-            i += 2  # an escaped quote outside quotes is a literal: 'it'\''s stays one string
+        following = words[i + 1] if i + 1 < len(words) else None
+        if word.startswith("--") and "=" in word:
+            yield tuple(word.split("=", 1))
+        elif word[:2] in short and len(word) > 2:
+            yield word[:2], word[2:]
         else:
+            yield word, following
+
+
+def git_files(words):
+    """Body files of a git write, and the folder `git -C` points at (or None)."""
+    folder, i = None, 1
+    while i < len(words) and isinstance(words[i], str) and words[i].startswith("-"):
+        if words[i] in ("-C", "-c") and i + 1 < len(words):
+            folder = words[i + 1] if words[i] == "-C" else folder
             i += 1
-    return spans
+        i += 1
+    if i >= len(words) or words[i] not in GIT_WRITES:
+        return folder, []
+    rest = words[i:]
+    return folder, [v for f, v in flag_values(rest, ("-F",)) if f in GIT_FILE_FLAGS and v is not None]
 
 
-def is_escaped(cmd, i, esc):
-    """True when an odd run of the shell's escape character stands right before `i`, so the
-    character there is literal: two backslashes and a newline end a bash line, one continues it."""
-    run = 0
-    while i - run - 1 >= 0 and cmd[i - run - 1] == esc:
-        run += 1
-    return run % 2 == 1
-
-
-def continues_line(cmd, i, esc):
-    """True when the newline at `i` is escaped; in PowerShell the backtick may stand before
-    its CR. In bash a backslash before a CR escapes only the CR, and the newline ends the line."""
-    if esc == "`" and i > 0 and cmd[i - 1] == "\r":
-        i -= 1
-    return is_escaped(cmd, i, esc)
-
-
-def stage_start(cmd, at, spans, esc):
-    """Where the pipeline stage holding `at` begins: after the last | ; & or newline before it
-    that sits outside quoted text and outside a closed ( ... ) or $( ... ) group. None when
-    the stage cannot be told: a ) before it has no ( to close, such as a case pattern's, or a
-    bash backtick substitution opens before it."""
-    depth = 0
-    for i in range(at - 1, -1, -1):
-        if any(s <= i < e for s, e in spans):
+def gh_files(words):
+    files = []
+    for flag, value in flag_values(words, ("-F",)):
+        if flag not in GH_FILE_FLAGS or value is None:
             continue
-        if cmd[i] != "\n" and is_escaped(cmd, i, esc):
-            continue  # a literal character: `\(`, `\;`, `` \` ``
-        if cmd[i] == "`" and esc == "\\":
-            return None
-        if cmd[i] == ")":
-            depth += 1
-        elif cmd[i] == "(":
-            if depth == 0:
-                return i + 1
-            depth -= 1
-        elif cmd[i] in "|;&\n" and depth == 0:
-            if cmd[i] != "\n" or not continues_line(cmd, i, esc):
-                return i + 1
-    return 0 if depth == 0 else None
+        if flag in ("-F", "--field") and isinstance(value, str) and "=" in value:
+            if "=@" in value:  # gh api -F key=@file; key=value is a plain field
+                files.append(value.split("=@", 1)[1])
+        elif flag != "--field":
+            files.append(value)
+    return files
 
 
-def is_plain(cmd, start, end, spans):
-    """True when cmd[start:end] holds only words and quoted text: no redirect, separator,
-    substitution, comment, group or escape, any of which the stage scan cannot be sure of. A
-    stage that starts at a redirect's & or | (`>& file`, `>| file`) is no stage at all."""
-    if start >= 2 and cmd[start - 1] in "&|" and cmd[start - 2] in "<>":
-        return False
-    return not any(cmd[i] in SHELL_SYNTAX for i in range(start, end)
-                   if not any(s <= i < e for s, e in spans))
+def curl_files(words):
+    files = []
+    for flag, value in flag_values(words, ("-d", "-F")):
+        if flag in CURL_DATA_FLAGS and isinstance(value, str):
+            at = value.split("=", 1)[1] if "=" in value and flag in ("-F", "--form") else value
+            if at.startswith(("@", "<")):
+                files.append(at[1:])
+    return files
 
 
-def find_files(cmd, cwd, esc):
-    spans = text_spans(cmd, esc)
+def cmdlet_files(name, words):
+    if name in WEB_CMDLETS:
+        return [v for f, v in flag_values(words) if isinstance(f, str) and f.lower() == "-infile" and v]
+    files = [v for f, v in flag_values(words) if isinstance(f, str)
+             and f.lower() in ("-path", "-literalpath") and v is not None]
+    positional = [w for w in words[1:] if not (isinstance(w, str) and w.startswith("-"))]
+    return files or positional[:1]
+
+
+def resolve(value, folder):
+    """The path to read, or an error saying why it cannot be told before the command runs."""
+    if isinstance(value, dict):
+        return None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
+    path = os.path.expanduser(value)
+    if os.path.isabs(path):
+        return path, None
+    if folder is UNKNOWN:
+        return None, f"a relative body file {value} after a change to a folder named at run time"
+    return os.path.join(folder, path), None
+
+
+def moved_folder(words, folder):
+    """The folder after a `cd`-style command: UNKNOWN when its target is built at run time."""
+    if len(words) < 2:
+        return os.path.expanduser("~")
+    target = words[-1]
+    if not isinstance(target, str) or target == "-" or folder is UNKNOWN:
+        return UNKNOWN
+    return os.path.join(folder, os.path.expanduser(target))
+
+
+def parsed_files(commands, cwd):
+    """(path, error) for every body file the parsed commands name, in order."""
+    folder = cwd
+    for words in commands:
+        name = program(words)
+        if name in CD_COMMANDS:
+            folder = moved_folder(words, folder)
+            continue
+        here, files = folder, []
+        if name == "git":
+            git_folder, files = git_files(words)
+            if git_folder is not None:
+                here = moved_folder(["cd", git_folder], folder)
+        elif name == "gh":
+            files = gh_files(words)
+        elif name == "curl":
+            files = curl_files(words)
+        elif name in WEB_CMDLETS or name in READ_CMDLETS:
+            files = cmdlet_files(name, words)
+        for value in files:
+            if value != "-":
+                yield resolve(value, here)
+
+
+def strict_files(cmd, cwd):
+    """Without the parser: every file flag in the command text, a text tool's included."""
     for m in FILE_FLAGS.finditer(cmd):
-        if any(s <= m.start() < e for s, e in spans):
-            continue
-        start = stage_start(cmd, m.start(), spans, esc)
-        if start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans):
-            continue
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
-        if (m.group("long") or "").lower() == "--template":
-            # A file for `git commit`; a template name or repository for gh.
-            before = cmd[:m.start()]
-            seg = SEGMENT_START.search(before)
-            if not re.search(r"\bgit\b", before[seg.start():] if seg else before, re.I):
-                continue
         if "=" in path:            # gh -F key=value / key=@file
             if "=@" not in path:
                 continue
@@ -251,11 +310,7 @@ def find_files(cmd, cwd, esc):
             if path == "-":        # key=@- reads stdin
                 continue
         path = os.path.expanduser(path.strip("\"'"))
-        if not os.path.isabs(path):
-            cd = re.search(r"(?:^|&&|;)\s*cd\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", cmd)
-            base = next((g for g in cd.groups() if g), cwd) if cd else cwd
-            path = os.path.join(base.strip("\"'"), path)
-        yield path
+        yield (path if os.path.isabs(path) else os.path.join(cwd, path)), None
 
 
 def scan_text(text, where):
@@ -276,17 +331,20 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    esc = "`" if data.get("tool_name") == "PowerShell" else "\\"
     if not cmd or not (GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
                        or HTTP_GH.search(cmd)):
         sys.exit(0)
 
     scan_text(cmd, "the command text")
-    for path in find_files(cmd, cwd, esc):
+    commands = parse(cmd, "powershell" if data.get("tool_name") == "PowerShell" else "bash")
+    hint = "" if commands is not None else STRICT_HINT
+    for path, error in (parsed_files(commands, cwd) if commands is not None else strict_files(cmd, cwd)):
+        if error:
+            deny(f"could not tell which file holds {error}. Use a literal absolute path.")
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
-            deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
+            deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.{hint}")
         scan_text(text, f"file {path}")
     sys.exit(0)
 
