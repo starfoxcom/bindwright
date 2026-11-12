@@ -133,7 +133,11 @@ GH_FILE_FLAGS = {"-F", "--body-file", "--notes-file", "--input", "--field"}
 CURL_DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw", "-F", "--form"}
 WEB_CMDLETS = {"invoke-restmethod", "invoke-webrequest", "irm", "iwr"}
 READ_CMDLETS = {"get-content", "gc"}
-CD_COMMANDS = {"cd", "chdir", "pushd", "set-location", "sl", "push-location"}
+GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
+                     "--super-prefix", "--attr-source"}
+READERS = {"git", "gh", "curl"} | WEB_CMDLETS | READ_CMDLETS
+POP_COMMANDS = {"popd", "pop-location"}
+CD_COMMANDS = {"cd", "chdir", "pushd", "set-location", "sl", "push-location"} | POP_COMMANDS
 UNKNOWN = object()  # a folder the command switches to at run time
 STRICT_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it) or Node, the guard cannot"
                " read the command's structure, so it reads every file flag, a text tool's (awk -F,"
@@ -168,55 +172,86 @@ def helper_dir():
 
 def parse(cmd, shell):
     """Each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    or None when the parser is missing, fails or meets syntax it cannot read."""
+    each paired with whether it runs in a child shell; None when the parser is missing,
+    fails or meets syntax it cannot read."""
     script = os.path.join(helper_dir(), "hooks", "shell-words.mjs")
     node = shutil.which("node")
     if not node or not os.path.isfile(script):
         return None
     try:
-        out = subprocess.run([node, script, shell], input=cmd, capture_output=True,
-                             text=True, encoding="utf-8", timeout=20)
-        data = json.loads(out.stdout) if out.returncode == 0 else None
+        # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
+        out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
+                             capture_output=True, timeout=20)
+        data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
         return None
-    return data["commands"]
+    scoped = set(data.get("scoped") or ())
+    return [(words, i in scoped) for i, words in enumerate(data["commands"])]
+
+
+def text_of(word):
+    """A word's literal value, or the source text of one the shell builds at run time."""
+    return word if isinstance(word, str) else str(word.get("dynamic", ""))
 
 
 def program(words):
-    name = words[0] if words and isinstance(words[0], str) else ""
-    name = os.path.basename(name.replace("\\", "/")).lower()
+    if not words or not isinstance(words[0], str):
+        return ""
+    name = os.path.basename(words[0].replace("\\", "/")).lower()
     return name[:-4] if name.endswith(".exe") else name
+
+
+def unwrapped(words):
+    """The words from the program a wrapper runs (`env A=1 git ...`, `sudo gh ...`,
+    `xargs curl ...`) onward, or the words as they are."""
+    for i in range(len(words)):
+        if program(words[i:]) in READERS:
+            return words[i:]
+    return words
 
 
 def flag_values(words, short=()):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
-    and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`)."""
+    and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
+    value attached to its flag in a word built at run time (`--file=$F`) comes back as
+    {"dynamic": <its text>}."""
     for i, word in enumerate(words):
-        if not isinstance(word, str) or not word.startswith("-"):
+        text = text_of(word)
+        if not text.startswith("-"):
             continue
-        following = words[i + 1] if i + 1 < len(words) else None
-        if word.startswith("--") and "=" in word:
-            yield tuple(word.split("=", 1))
-        elif word[:2] in short and len(word) > 2:
-            yield word[:2], word[2:]
+        built = isinstance(word, dict)
+        if text.startswith("--") and "=" in text:
+            flag, value = text.split("=", 1)
+        elif text[:2] in short and len(text) > 2:
+            flag, value = text[:2], text[2:]
+        elif built:
+            continue
         else:
-            yield word, following
+            yield word, words[i + 1] if i + 1 < len(words) else None
+            continue
+        yield flag, {"dynamic": value} if built else value
 
 
-def git_files(words):
-    """Body files of a git write, and the folder `git -C` points at (or None)."""
+def git_subcommand(words):
+    """(index of git's subcommand, the folder `git -C` points at or None)."""
     folder, i = None, 1
-    while i < len(words) and isinstance(words[i], str) and words[i].startswith("-"):
-        if words[i] in ("-C", "-c") and i + 1 < len(words):
+    while i < len(words) and text_of(words[i]).startswith("-"):
+        if isinstance(words[i], str) and words[i] in GIT_VALUE_OPTIONS and i + 1 < len(words):
             folder = words[i + 1] if words[i] == "-C" else folder
             i += 1
         i += 1
-    if i >= len(words) or words[i] not in GIT_WRITES:
+    return i, folder
+
+
+def git_files(words):
+    """Body files of a git write, and the folder `git -C` points at (or None). When the
+    subcommand is built at run time (`git $OPTS commit`), every file flag after it is read."""
+    i, folder = git_subcommand(words)
+    if i >= len(words) or (isinstance(words[i], str) and words[i] not in GIT_WRITES):
         return folder, []
-    rest = words[i:]
-    return folder, [v for f, v in flag_values(rest, ("-F",)) if f in GIT_FILE_FLAGS and v is not None]
+    return folder, [v for f, v in flag_values(words[i:], ("-F",)) if f in GIT_FILE_FLAGS and v is not None]
 
 
 def gh_files(words):
@@ -224,10 +259,11 @@ def gh_files(words):
     for flag, value in flag_values(words, ("-F",)):
         if flag not in GH_FILE_FLAGS or value is None:
             continue
-        if flag in ("-F", "--field") and isinstance(value, str) and "=" in value:
-            if "=@" in value:  # gh api -F key=@file; key=value is a plain field
-                files.append(value.split("=@", 1)[1])
-        elif flag != "--field":
+        text = text_of(value)
+        if flag in ("-F", "--field") and "=" in text:
+            if "=@" in text:  # gh api -F key=@file; key=value is a plain field
+                files.append(value if isinstance(value, dict) else text.split("=@", 1)[1])
+        elif flag != "--field" or isinstance(value, dict):
             files.append(value)
     return files
 
@@ -235,10 +271,12 @@ def gh_files(words):
 def curl_files(words):
     files = []
     for flag, value in flag_values(words, ("-d", "-F")):
-        if flag in CURL_DATA_FLAGS and isinstance(value, str):
-            at = value.split("=", 1)[1] if "=" in value and flag in ("-F", "--form") else value
-            if at.startswith(("@", "<")):
-                files.append(at[1:])
+        if flag not in CURL_DATA_FLAGS or value is None:
+            continue
+        text = text_of(value)
+        at = text.split("=", 1)[1] if "=" in text and flag in ("-F", "--form") else text
+        if at.lstrip("\"'").startswith(("@", "<")):
+            files.append(value if isinstance(value, dict) else at[1:])
     return files
 
 
@@ -264,34 +302,41 @@ def resolve(value, folder):
 
 
 def moved_folder(words, folder):
-    """The folder after a `cd`-style command: UNKNOWN when its target is built at run time."""
-    if len(words) < 2:
-        return os.path.expanduser("~")
-    target = words[-1]
-    if not isinstance(target, str) or target == "-" or folder is UNKNOWN:
+    """The folder after a `cd`-style command: UNKNOWN when the text cannot tell it (a
+    target built at run time, `cd -`, no target, or a return to a saved folder)."""
+    targets = [w for w in words[1:] if not text_of(w).startswith("-")]
+    if program(words) in POP_COMMANDS or not targets or folder is UNKNOWN:
         return UNKNOWN
-    return os.path.join(folder, os.path.expanduser(target))
+    if not isinstance(targets[-1], str):
+        return UNKNOWN
+    return os.path.join(folder, os.path.expanduser(targets[-1]))
+
+
+def command_files(words):
+    """(the folder `git -C` points at or None, body files) for one command."""
+    name = program(words)
+    if name == "git":
+        return git_files(words)
+    if name == "gh":
+        return None, gh_files(words)
+    if name == "curl":
+        return None, curl_files(words)
+    if name in WEB_CMDLETS or name in READ_CMDLETS:
+        return None, cmdlet_files(name, words)
+    return None, []
 
 
 def parsed_files(commands, cwd):
     """(path, error) for every body file the parsed commands name, in order."""
     folder = cwd
-    for words in commands:
-        name = program(words)
-        if name in CD_COMMANDS:
-            folder = moved_folder(words, folder)
+    for words, in_child_shell in commands:
+        if program(words) in CD_COMMANDS:
+            # A child shell's `cd` leaves the outer folder as it was, but its own later
+            # commands run in the new one, so neither can be told from here.
+            folder = UNKNOWN if in_child_shell else moved_folder(words, folder)
             continue
-        here, files = folder, []
-        if name == "git":
-            git_folder, files = git_files(words)
-            if git_folder is not None:
-                here = moved_folder(["cd", git_folder], folder)
-        elif name == "gh":
-            files = gh_files(words)
-        elif name == "curl":
-            files = curl_files(words)
-        elif name in WEB_CMDLETS or name in READ_CMDLETS:
-            files = cmdlet_files(name, words)
+        git_folder, files = command_files(unwrapped(words))
+        here = folder if git_folder is None else moved_folder(["cd", git_folder], folder)
         for value in files:
             if value != "-":
                 yield resolve(value, here)

@@ -436,7 +436,9 @@ class GuardHookTest(unittest.TestCase):
                 ("git commit -m x && grep -rn -- --body-file .github/", "Bash"),
                 ('git commit -m "see --body-file nowhere.md"', "Bash"),
                 ("git commit -m x 2>&1 | grep -F x", "Bash"),
-                ("git tag --list | Select-String -Pattern v3; sort -F x", "PowerShell")):
+                ("git tag --list | Select-String -Pattern v3; sort -F x", "PowerShell"),
+                ('git --git-dir="$D" commit -m x', "Bash"),
+                ('gh api repos/o/r/issues -F "title=$T"', "Bash")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -447,9 +449,29 @@ class GuardHookTest(unittest.TestCase):
                 (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
                 (f"gh pr create --title “a; sort b” --body-file {path}", "PowerShell"),
                 ("gh pr create --title t --body-file \"$HOME/body.md\"", "Bash"),
-                ('cd "$(git rev-parse --show-toplevel)"; git commit -F msg.txt', "Bash")):
+                ('cd "$(git rev-parse --show-toplevel)"; git commit -F msg.txt', "Bash"),
+                (f'git --git-dir .git commit -F "{path}"', "Bash"),
+                (f'git $OPTS commit -F "{path}"', "Bash"),
+                ('gh pr create --title t --body-file="$HOME/body.md"', "Bash"),
+                ('curl -d @"$f" https://api.github.com/repos/o/r/issues', "Bash"),
+                (f'env A=1 git commit -F "{path}"', "Bash"),
+                (f'sudo gh pr create --title t --body-file "{path}"', "Bash"),
+                (f'gh pr create --title t <<EOF --body-file "{path}"\nx\nEOF', "Bash"),
+                (f'& "C:\\Program Files\\Git\\cmd\\git.exe" commit -F "{path}"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
+
+    def test_folder_left_by_a_child_shell_or_popd_is_not_guessed(self):
+        # The commit reads the root's msg.txt; guessing `sub` would scan the clean copy there.
+        root = self.temp_project(("run-hook.sh", "no-ai-attribution.py"))
+        os.makedirs(os.path.join(root, "sub"))
+        for name, text in (("msg.txt", f"{GENERATED_LINE}\n"), (os.path.join("sub", "msg.txt"), "x\n")):
+            with open(os.path.join(root, name), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        for command in ("(cd sub; true); git commit -F msg.txt", "cd sub | true; git commit -F msg.txt",
+                        "pushd sub; popd; git commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=root))
 
     def test_without_the_helper_every_file_flag_is_read(self):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
