@@ -219,11 +219,12 @@ def flag_values(words, short=()):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
-    {"dynamic": <its text>}. A message flag's value is text, never a flag."""
+    {"dynamic": <its text>}. A word with a space after a message flag is that message's text,
+    never a flag; a bare flag there is still one, since `-m` is also a switch (`gh pr merge -m`)."""
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
-        if message or not text.startswith("-"):
+        if (message and any(c.isspace() for c in text)) or not text.startswith("-"):
             message = False
             continue
         message = text in MESSAGE_FLAGS or text.lower() == "-body"  # PowerShell names are any case
@@ -329,7 +330,9 @@ def command_files(words):
         return [], body_files(words, BODY_FLAGS - {"--template"})
     if name in READ_CMDLETS:
         return [], get_content_files(words)
-    return [], body_files(words)
+    # A wrapped git (`env A=1 git -C sub commit ...`) still runs in the folders it names.
+    wrapped = next((words[i:] for i in range(1, len(words)) if program(words[i:]) == "git"), None)
+    return (git_subcommand(wrapped)[1] if wrapped else []), body_files(words)
 
 
 def parsed_files(commands, cwd):
