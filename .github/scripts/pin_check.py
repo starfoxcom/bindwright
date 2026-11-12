@@ -46,6 +46,7 @@ MAX_TAG_LENGTH = 40
 MAX_PINS = 40
 MAX_TAGS = 4
 MAX_PEELS = 3
+SEPARATORS = " \t\r"
 
 
 def _tuple(version):
@@ -83,13 +84,14 @@ def floating(name, text):
 
 def ends_value(text, m):
     """True when the YAML value ends right after the commit id: at the line's end, before
-    whitespace, or at the closing quote of a quoted value. A glued `#x` or quote is part
-    of the ref the runner uses, so that ref is not the commit."""
+    one of YAML's separators (space, tab, CR), or at the closing quote of a quoted value.
+    Anything glued on (`#x`, a quote, a no-break space) is part of the ref the runner uses,
+    so that ref is not the commit."""
     rest = text[m.end(2):]
     opened = text[m.start(1) - 1] if text[m.start(1) - 1] in "'\"" else ""
     if opened:
-        return rest[:1] == opened and (len(rest) == 1 or rest[1].isspace())
-    return not rest or rest[0].isspace()
+        return rest[:1] == opened and (len(rest) == 1 or rest[1] in SEPARATORS)
+    return not rest or rest[0] in SEPARATORS
 
 
 def added_pins(diff):
