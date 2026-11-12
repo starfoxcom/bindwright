@@ -55,7 +55,9 @@ PATTERN_VALUE_OPTIONS = ("-e", "--regexp", "-f", "--file")
 # Short flags that take no value in rg, grep, git grep, ag and ack alike, and more per tool. A word
 # after any other option may be its value, so it never decides what a search reads.
 FLAGS_WITHOUT_VALUE = "cFHhilLnosvw"
-TOOL_FLAGS_WITHOUT_VALUE = {"grep": "EIPqRrx", "rg": "IPqSUuxz"}
+TOOL_FLAGS_WITHOUT_VALUE = {"grep": "EIPqRrx", "rg": "IPqSUuxz", "ag": "f"}
+# Only these take a pattern file after `-f`: in ag it follows links, in ack it lists files.
+PATTERN_FILE_TOOLS = ("grep", "rg")
 
 
 def unquote_separators(command):
@@ -238,7 +240,8 @@ def read_words(rest, tool):
             option, value = found
             if option not in EXCLUDE_OPTIONS:
                 (types if option in TYPE_OPTIONS else globs).extend(filter_values(value, rest))
-        elif word in PATTERN_OPTIONS or word.split("=", 1)[0] in PATTERN_VALUE_OPTIONS:
+        elif (word in PATTERN_OPTIONS or word.split("=", 1)[0] in PATTERN_VALUE_OPTIONS) and (
+                word != "-f" or tool in PATTERN_FILE_TOOLS):
             pattern_given = True
             if word in PATTERN_VALUE_OPTIONS and rest:
                 rest.pop(0)  # the pattern, or the file that holds it
@@ -278,6 +281,10 @@ def words_search(words, is_text_search=True):
     if words[:2] == ["git", "grep"]:
         words = words[1:]
     tool = words[0] if words else ""
+    if any(word.count('"') % 2 or word.count("'") % 2 for word in words):
+        # A quote the word does not close (`--regexp="see docs"` splits at the space): the words
+        # cannot be read for sure, so the search is judged by its current folder.
+        return Search()
     plain, globs, types, pattern_given = read_words(words[1:], tool)
     if is_text_search:
         named = text_search_paths(plain, pattern_given) or []
