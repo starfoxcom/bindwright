@@ -515,9 +515,16 @@ class GuardHookTest(unittest.TestCase):
         root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "sub/msg.txt": "x\n",
                                   "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
         for command in ("(cd sub; true); git commit -F msg.txt", "cd sub | true; git commit -F msg.txt",
-                        "pushd sub; popd; git commit -F msg.txt"):
+                        "pushd sub; popd; git commit -F msg.txt", "{ cd sub; true; } & git commit -F msg.txt",
+                        "cd sub && true & git commit -F msg.txt"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=root), "folder named at run time")
+        # An absolute target names the folder again, whatever came before it.
+        absolute = root.replace("\\", "/")
+        for command in (f'(cd sub; true); cd "{absolute}"; git commit -F msg.txt',
+                        f'pushd sub; popd; git -C "{absolute}" commit -F msg.txt'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=root), "found in file")
         flagged = os.path.join(root, "sub", "sub", "msg.txt")
         self.assert_denied(self.attr("git -C sub -C sub commit -F msg.txt", project=root), f"found in file {flagged}")
         moved = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})

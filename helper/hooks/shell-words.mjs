@@ -126,11 +126,13 @@ export async function shellWords(shell, command) {
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
+    // Whatever ends in `&` (a command, a list, a group) runs as a background job.
+    const child = inChild || node.nextSibling?.type === "&"
+      || (shell === "bash" && BASH_CHILD_SHELLS.has(node.type));
     if (node.type === "command") {
-      if (inChild || node.nextSibling?.type === "&") scoped.push(commands.length);
+      if (child) scoped.push(commands.length);
       commands.push(read(node));
     }
-    const child = inChild || (shell === "bash" && BASH_CHILD_SHELLS.has(node.type));
     for (const c of node.namedChildren) walk(c, child);
   })(tree.rootNode, false);
   return { error: unreadable, commands, scoped };

@@ -338,13 +338,15 @@ def resolve(value, folder):
 
 def moved_folder(words, folder):
     """The folder after a `cd`-style command: UNKNOWN when the text cannot tell it (a
-    target built at run time, `cd -`, no target, or a return to a saved folder)."""
+    target built at run time, `cd -`, no target, a return to a saved folder, or a relative
+    target from a folder that is already unknown)."""
     targets = [w for w in words[1:] if not text_of(w).startswith("-")]
-    if program(words) in POP_COMMANDS or not targets or folder is UNKNOWN:
+    if program(words) in POP_COMMANDS or not targets or not isinstance(targets[-1], str):
         return UNKNOWN
-    if not isinstance(targets[-1], str):
-        return UNKNOWN
-    return os.path.join(folder, os.path.expanduser(targets[-1]))
+    target = os.path.expanduser(targets[-1])
+    if os.path.isabs(target):
+        return target
+    return UNKNOWN if folder is UNKNOWN else os.path.join(folder, target)
 
 
 def command_files(words, shell="bash"):
