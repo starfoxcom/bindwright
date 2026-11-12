@@ -12,9 +12,10 @@ search is judged by what it reads: its file filters (globs, types,
 folder by the files git tracks in it. A search that reads only docs, logs
 or data files, a filter on another command's output (`... | grep x`), and
 a search of folders outside the repo (a scratchpad, a package cache),
-which the code-research tool has no index for, are not counted. When a
-word cannot be read for sure, the search stays counted, the side that
-never flatters the figure.
+which the code-research tool has no index for, are not counted. When the
+words cannot be read for sure, the search counts unless it runs outside
+the repo and names nothing inside it, the side that never flatters the
+figure.
 """
 import glob
 import json
@@ -152,8 +153,10 @@ class Repo:
 class Search:
     """What one search reads: the paths it names, and the globs and types that narrow its files."""
 
-    def __init__(self, paths=(), globs=(), types=()):
+    def __init__(self, paths=(), globs=(), types=(), is_sure=True):
         self.paths = list(paths)
+        # False when the words cannot be told apart: then only where the search runs is judged.
+        self.is_sure = is_sure
         # A negated glob (`!*.md`) leaves files out; it never says what the search reads.
         globs = [g for g in map(unquote, globs) if g]
         self.globs = [g for g in globs if not g.startswith("!") and not is_wide(g)]
@@ -162,6 +165,11 @@ class Search:
     def reads_code(self, base, repo):
         """True when the search reads code inside the repo, with paths read from `base`."""
         named = [resolve(p, base) for p in self.paths]
+        if not self.is_sure:
+            # Counted unless it runs outside the repo and no word it names lies inside it.
+            return not is_outside(base, repo.root) or any(
+                not is_outside(p, repo.root) for p, word in zip(named, self.paths)
+                if os.path.exists(p) or re.search(r"[/\\]", word))
         paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))] or [base]
         inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
@@ -276,18 +284,19 @@ def words_search(words, is_text_search=True):
 
     A text search without `-e`, `-f` or `--files` takes its first plain word as its pattern. A word
     the search names may be an option's value only when the option before it could take one; then
-    the words cannot be read for sure and the search is judged by its current folder. Of the rest,
-    `Search.reads_code` keeps only the words that name a file or folder that exists."""
+    the words cannot be read for sure, and `Search.reads_code` judges only where the search runs and
+    what its words point at. Otherwise it keeps only the words that name a file or folder that exists."""
     if words[:2] == ["git", "grep"]:
         words = words[1:]
     tool = words[0] if words else ""
+    unsure = Search([unquote(re.split(r"[=:]", w, maxsplit=1)[-1]) for w in words[1:]], is_sure=False)
     if any(word.count('"') % 2 or word.count("'") % 2 for word in words):
-        # A quote the word does not close (`--regexp="see docs"` splits at the space): the words
-        # cannot be read for sure, so the search is judged by its current folder.
-        return Search()
+        return unsure  # a quote the word does not close: `--regexp="see docs"` split at the space
     plain, globs, types, pattern_given = read_words(words[1:], tool)
     if is_text_search:
-        named = text_search_paths(plain, pattern_given) or []
+        named = text_search_paths(plain, pattern_given)
+        if named is None:
+            return unsure
     else:
         # A PowerShell listing's comma list is several paths.
         named = [piece for word, _ in plain for piece in word.split(",") if piece]
