@@ -6,10 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
 - **The deep review gets each new action pin looked up on GitHub** (#819). Its reviewer's tools cannot reach other repos, so a PR that pinned actions by commit was blocked on provenance it could not check, with no defect found. The deep review workflow now looks up the release tags each added pin's comment names (`# v6 (v6.1.0)`) and puts which of them point to the pinned commit in the reviewer's brief, using the base branch's `pin_check.py added`. A failed lookup leaves the result out and never fails the review.
-- The deep review's first API call, which reads the PR's head and base commits, tries three times, so one bad reply from GitHub no longer ends the review.
+
+### Fixed
+
+- The deep review's first API call, which reads the PR's head and base commits, tries three times and takes only two commit ids as an answer, so one bad reply from GitHub no longer ends the review.
 
 ## [v3.5.0] — 2026-11-12
 
