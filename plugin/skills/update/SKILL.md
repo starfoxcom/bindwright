@@ -58,8 +58,6 @@ A settled conflict does not come back: the update already recorded today's templ
 
 Files that were `added`, or merged from new text, can hold placeholders setup fills (`{{TEST_COMMAND}}` and the rest). Search those files for `{{` and fill each placeholder the way setup's step 4 says, reading the repo first and asking only what it cannot answer. Then check that every command and path the new text names exists in the repo.
 
-When `.claude/rules/versioning.md` is missing, the repo was set up before setup wrote one: follow setup's versioning step (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 6, **Versioning**). It asks only when it finds no versioning, and a skip there is remembered.
-
 ## 5. Offer the removals
 
 For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.

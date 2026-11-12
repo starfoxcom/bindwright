@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **Setup gives each project a versioning rule that fits it.** It reads the repo's `VERSION` file, manifest version field, tags, changelog and release tooling (release-please, semantic-release, changesets), then writes `.claude/rules/versioning.md`, a file no update touches: what makes a major, minor or patch for that kind of project, which files to bump and how to tag, or only how to feed the release tool when one sets the version. With no versioning found, it asks whether to start (a `VERSION` file at `0.1.0`) or skip, and remembers a skip. `/bindwright:update` runs the step for projects set up before it (#805).
+- **Every project's `git.md` says how to size a release.** A new `## Versioning` section: a major when users must act or something they use stops working, a minor for features and kept-working default changes, a patch for fixes only; a release tool that sets the version is fed, never bypassed; otherwise every version file is bumped together and the tag follows the existing style. `/bindwright:update` brings it to existing projects (#805).
 - **Bindwright sizes its own releases by a written rule.** `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` and makes a major, features and kept-working default changes a minor, fixes only a patch. Release prep reads every entry against it first, and a test checks each release from v3.5.0 on (#805).
 
 ### Fixed
