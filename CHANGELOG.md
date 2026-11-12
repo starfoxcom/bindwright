@@ -12,7 +12,7 @@ v3.3.1 fixes how `/bindwright:update` treats a project that owns a session skill
 
 ### Fixed
 
-- A project that lists `.claude/skills/session-close/SKILL.md` or `.claude/skills/session-start/SKILL.md` in `.bindwright/owned` keeps only its own copy, and the update keeps that file's base under the old name. Once the project removes the line, the next update moves its copy to the new name, edits included. In v3.3.0 the update recorded the new name as written, so after the line was removed it reported the skill as deleted and never added it.
+- A project that lists `.claude/skills/session-close/SKILL.md` or `.claude/skills/session-start/SKILL.md` in `.bindwright/owned` keeps only its own copy, and the update keeps that file's base under the old name. Once the project removes the line, the next update moves its copy to the new name, edits included. The same holds when the claim covers both names, such as a `.claude/skills/` line. In v3.3.0 the update recorded the new name as written, so after the line was removed it reported the skill as deleted and never added it. A project that already ran v3.3.0's update with such a line gets the new skill added once the line is removed, next to its own copy under the old name, which it then moves or deletes by hand.
 
 ## [v3.3.0] — 2026-11-11
 
