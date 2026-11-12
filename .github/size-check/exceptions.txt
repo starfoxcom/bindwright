@@ -31,3 +31,10 @@ helper/findwright/store.mjs|line_length|-|vendored from FindWright (exception 1)
 helper/findwright/store.mjs|ccn|listFiles|vendored from FindWright (exception 1)
 helper/findwright/store.mjs|function|listFiles|vendored from FindWright (exception 1)
 engine/test/research-adherence.test.js|function|(anonymous)|test battery: the table of search commands and their counts (exception 3)
+
+# Vendored code (exception 1): the shell parser library, copied unchanged (helper/parsers/SOURCE.md).
+helper/parsers/web-tree-sitter.js|file|-|vendored: web-tree-sitter, copied unchanged (exception 1)
+helper/parsers/web-tree-sitter.js|line_length|-|vendored: web-tree-sitter, copied unchanged (exception 1)
+helper/parsers/web-tree-sitter.js|function|*|vendored: web-tree-sitter, copied unchanged (exception 1)
+helper/parsers/web-tree-sitter.js|params|*|vendored: web-tree-sitter, copied unchanged (exception 1)
+helper/parsers/web-tree-sitter.js|ccn|*|vendored: web-tree-sitter, copied unchanged (exception 1)
