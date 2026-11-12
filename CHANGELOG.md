@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Breaking
+
+- **`/bindwright:runners` is now `/bindwright:local-runners`** (#831). The skill's bare name took `/runners` from the runners mod, so the CLI refused the mod's own command at session start and its row never showed. **Act on it:** type `/bindwright:local-runners` to set up local CI runners; `/runners` is the mod's command again.
+
 ### Fixed
 
 - The deep review's pin lookup verifies a pin only when nothing but a comment follows the commit id and no part of the action's path is `.` or `..`, so `o/r@<id> x` and `o/r/../x@<id>` are no longer reported as verified.

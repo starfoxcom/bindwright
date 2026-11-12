@@ -20,7 +20,7 @@ Then open a session in your project's folder and run `/bindwright:setup`. The fi
 - `/bindwright:update` brings a set-up repo up to the plugin's current templates and keeps your edits.
 - `/bindwright:remove` takes the setup back out of a repo and the extras out of your config folder, keeping every file you changed, and ends with how to uninstall the plugin; `/bindwright:remove computer` does only the config folder.
 - `/bindwright:export` records which extras the team expects; `/bindwright:join` brings a teammate's machine in line after cloning.
-- `/bindwright:runners` checks your computer and the repo's CI, recommends how many local CI runners to set up (or none), and installs the ones you pick.
+- `/bindwright:local-runners` checks your computer and the repo's CI, recommends how many local CI runners to set up (or none), and installs the ones you pick.
 - `/bindwright:review-trial` compares models for the repo's AI review on its own merged pull requests, within what your plan includes, shows the cost before anything runs, and recommends whether to change the review settings.
 
 When a session starts with `/start-session`, a notice says at most once a day when the repo or the plugin is behind.
