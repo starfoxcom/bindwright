@@ -11,6 +11,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 - `/bindwright:update` lists the project's own files that still name the Bindwright version it was bound with, when it moves to a newer one; it never edits them (#814).
 - **Every project's `git.md` says how to size a release.** A new `## Versioning` section: a major when users must act or something they use stops working, a minor for features and kept-working default changes, a patch for fixes only; a release tool that sets the version is fed, never bypassed; otherwise every version file is bumped together and the tag follows the existing style. `/bindwright:update` brings it to existing projects (#805).
 - **Bindwright sizes its own releases by a written rule.** `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` and makes a major, features and kept-working default changes a minor, fixes only a patch. Release prep reads every entry against it first, and a test checks each release from v3.5.0 on (#805).
+- **The deep review gets each new action pin looked up on GitHub** (#819). Its reviewer's tools cannot reach other repos, so a PR that pinned actions by commit was blocked on provenance it could not check, with no defect found. The deep review workflow now looks up the release tags each added pin's comment names (`# v6 (v6.1.0)`) and puts which of them point to the pinned commit in the reviewer's brief, using the base branch's `pin_check.py added`. A failed lookup leaves the result out and never fails the review.
 
 ### Fixed
 
@@ -18,6 +19,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 - The attribution guard reads an escaped quote outside quotes as a literal, so the shell's apostrophe idiom (`'it'\''s done'`) no longer throws its quote pairing out of step and makes a later `--body-file` look like quoted text, and a `$'...'` string reads its backslash escapes the way bash does; every release through v3.5.0 skipped that file (#816).
 - `/close-session` and `review-tiers.md` merge once every check has settled and the required ones pass, not as soon as the required ones do (#814).
 - `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed, warning that every other clone loses its copy when it pulls that commit. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
+- The deep review's first API call, which reads the PR's head and base commits, tries three times and takes only two commit ids as an answer, so one bad reply from GitHub no longer ends the review.
 
 ## [v3.5.0] — 2026-11-12
 
