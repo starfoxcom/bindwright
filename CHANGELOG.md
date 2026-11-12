@@ -6,6 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **Setup gives each project a versioning rule that fits it.** It reads the repo's `VERSION` file, manifest version field, tags, changelog and release tooling (release-please, semantic-release, changesets), then writes a `## Versioning` section into `.claude/rules/git.md`, kept across updates: what makes a major, minor or patch for that kind of project, which files to bump and how to tag, or only how to feed the release tool when one sets the version. With no versioning found, it asks whether to start. `/bindwright:update` offers the step to projects set up before it (#805).
+- **Bindwright sizes its own releases by a written rule.** `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` and makes a major, features and kept-working default changes a minor, fixes only a patch. Release prep reads every entry against it first, and a test checks each release from v3.5.0 on (#805).
+
 ## [v3.5.0] — 2026-11-12
 
 v3.5.0 pins every workflow action to a commit, makes the attribution guard stop refusing ordinary commands, reads a repo's default branch at setup, and fixes how the session-close search count reads a command.
