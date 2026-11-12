@@ -94,7 +94,7 @@ When `$HOME/.bindwright/helper/node_modules/bindwright/findwright/cli.mjs` exist
 <!-- TOGGLE:code_research:findwright END -->
 ## Project steps
 
-If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
+If `.bindwright/session-steps.md` lists "Extra close steps", run them now, except those marked *after the hand-off*: they run at the end, before the last message.
 
 <!-- TOGGLE:code_host_local:off START -->
 ## Commit and PR
@@ -143,7 +143,7 @@ Commit the session's work as one save point, or one per finished piece, with the
 
 After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat.
 
-Then check the three status-update triggers in `tracker.md` and post an update only when one fired.
+Then post a project status update only when this session completed a milestone or a major arc of one, changed the health colour, or changed the plan; `tracker.md` § Project status updates has the shape. Most sessions post none.
 
 <!-- TOGGLE:public_roadmap START -->
 Last, bring the public roadmap in line (`tracker.md` § Public roadmap): run `python3 .github/scripts/public_roadmap.py check` (`python` on Windows), fix what it lists in the issues' public summaries, then run it with `push`.
@@ -163,6 +163,10 @@ Rewrite `.bindwright/handoff.md`. It stays in this checkout, out of git: the fir
 ```
 
 <!-- TOGGLE:handoff_file END -->
+
+## Steps after the hand-off
+
+Run the extra close steps marked *after the hand-off*, if any: they read this session's finished work and its hand-off.
 
 ## Last message
 
