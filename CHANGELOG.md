@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **The bind no longer writes the personal settings file.** The shipped allow list moves from `.claude/settings.local.json` into the committed `.claude/settings.json`, beside the deny list, so every teammate's sessions get it and the template is valid JSON as written. Setup adds the project's own lint, type-check and test commands to that list. `settings.local.json` stays personal: setup and `/bindwright:update` make sure `.gitignore` lists it, and update offers `git rm --cached` when a repo has it committed, since anything a person allows by hand lands in that file (#809).
+
 ## [v3.5.0] — 2026-11-12
 
 v3.5.0 pins every workflow action to a commit, makes the attribution guard stop refusing ordinary commands, reads a repo's default branch at setup, and fixes how the session-close search count reads a command.

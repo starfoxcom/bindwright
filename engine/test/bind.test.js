@@ -281,8 +281,9 @@ const denyMatcher = (files) => {
 
 test("the deny list blocks force pushes but allows --force-with-lease", async () => {
   const files = await run(defaults());
-  const settings = settingsOf(files, ".claude/settings.local.json");
-  assert.equal(settings.permissions.deny, undefined, "the local settings carry no deny list");
+  // The personal settings file is never written: a repo that does not ignore it would commit it.
+  assert.ok(![...files.keys()].some((p) => p.endsWith("settings.local.json")), "the bind writes no personal settings");
+  const settings = settingsOf(files, `${STAGING}.claude/settings.json`);
   // The matcher must reproduce the docs' own example table before it judges our rules.
   for (const [rule, yes, no] of [
     ["npm run *", ["npm run build", "npm run test --watch", "npm run"], ["npm install"]],
@@ -433,9 +434,7 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
   atHome.advanced.hookLocation = "home";
   const homeFiles = await run(atHome);
   assert.ok(![...homeFiles.keys()].some((p) => p.startsWith(".claude/hooks/")), "home location ships no project hooks");
-  assert.equal(JSON.parse(homeFiles.get(`${STAGING}.claude/settings.json`)).hooks, undefined, "home location registers no project hooks");
-  assert.equal(JSON.parse((await run(defaults())).get(".claude/settings.local.json").replace(/\{\{[A-Z0-9_]+\}\}/g, "")).hooks,
-    undefined, "the local settings never register hooks");
+  assert.equal(settingsOf(homeFiles, `${STAGING}.claude/settings.json`).hooks, undefined, "home location registers no project hooks");
 
   // A stack command the setup allows must never be `git push`: it would approve force pushes.
   assert.match(lf("plugin/skills/setup/SKILL.md"), /Never add a rule for `git push` or a bare `git`/);
@@ -963,7 +962,7 @@ test("guard hooks and settings follow the hook location and the attribution guar
       const label = `${hookLocation}/${attributionGuard ? "guard" : "no guard"}`;
       assertClean(files);
       const repoHooks = hookLocation === "repo";
-      const settings = JSON.parse(files.get(settingsPath));
+      const settings = settingsOf(files, settingsPath);
       assert.equal(settings.$schema, "https://json.schemastore.org/claude-code-settings.json", label);
       assert.equal("attribution" in settings, attributionGuard, `${label}: attribution settings`);
       if (attributionGuard) assert.deepEqual(settings.attribution, { commit: "", pr: "", sessionUrl: false }, label);

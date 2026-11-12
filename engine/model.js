@@ -74,7 +74,7 @@ export const LICENSES = {
 // Filled later by the tailoring step, which reads the user's repo.
 export const DEFERRED = new Set([
   "ONE_LINE_DESCRIPTION", "LANGUAGE_AND_FRAMEWORK", "CONVERSATION_LANGUAGE", "CODE_LANGUAGE",
-  "LINT_COMMAND", "TYPECHECK_COMMAND", "TEST_COMMAND", "STACK_COMMANDS_ALLOWLIST",
+  "LINT_COMMAND", "TYPECHECK_COMMAND", "TEST_COMMAND",
   "LEAD_USER", "TEAM_OR_USER",
 ]);
 

@@ -62,6 +62,8 @@ Files that were `added`, or merged from new text, can hold placeholders setup fi
 
 For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.
 
+When `.claude/settings.local.json` shows up in either list, its shipped permissions now live in `.claude/settings.json`; in `removed_edited` the file stays, since it holds this person's own switches. Unless `"localOnly"` is true, check `git check-ignore -q .claude/settings.local.json`; when it fails, add that path to `.gitignore`, and when `git ls-files .claude/settings.local.json` prints it, say the file is committed and anything personal in it is in the history, and offer `git rm --cached .claude/settings.local.json`, which stops tracking it and keeps the file on disk.
+
 ## 6. Review counts
 
 When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and its batch question when the history check calls for it, and save the answers the same way.
