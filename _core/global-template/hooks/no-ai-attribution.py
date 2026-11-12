@@ -22,18 +22,19 @@ What is scanned, for any git write, gh write or GitHub API call:
     --body-file / --notes-file / --template / --input / --message-file,
     --field, curl -d @file, PowerShell -InFile and Get-Content <file>,
     but not the -F or --file of a text tool's own stage (`awk -F,`,
-    `grep -F word`) that names no existing file, a separator or a pattern,
-    when nothing before it is quoted, escaped or substituted. A file of that
-    name, found from the working folder or the command's first `cd`, is read
-    whatever stage the flag seems to sit in. A file it cannot read is
-    denied, so a typo cannot slip a body through unread.
+    `grep -F word`) that names no existing file: a separator or a pattern.
+    A file of that name, found from the working folder or the command's
+    first `cd`, is read whatever stage the flag seems to sit in, so a shell
+    form the stage scan misreads cannot hide a body file already on disk.
+    A file it cannot read is denied, so a typo cannot slip a body through
+    unread.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
 pass unread: text the shell builds at run time ($VAR, $(...), backticks,
-eval), a body piped in on stdin, a message reused from another commit
+eval), a body file the command itself writes, a body piped in on stdin, a message reused from another commit
 (-C / --reuse-message), flags that skip git's own hooks, and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
@@ -230,14 +231,6 @@ def is_plain(cmd, start, end, spans):
                    if not any(s <= i < e for s, e in spans))
 
 
-def is_bare(text, esc):
-    """True when `text` holds no quote, substitution, expansion or the shell's escape character
-    (`esc`). Those are what can hide a separator from the flat quote scan (nested quotes, the
-    '\\'' idiom), and telling them apart takes a shell parser, so a stage is trusted only in a
-    command free of them. A PowerShell path's backslash is plain text there."""
-    return not any(c in text for c in "'\"`$‘’‚‛“”„" + esc)
-
-
 def find_files(cmd, cwd, esc):
     spans = text_spans(cmd, esc)
     for m in FILE_FLAGS.finditer(cmd):
@@ -245,7 +238,7 @@ def find_files(cmd, cwd, esc):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
         text_tools = (start is not None and TEXT_TOOL.match(cmd, start)
-                      and is_plain(cmd, start, m.start(), spans) and is_bare(cmd[:m.start()], esc))
+                      and is_plain(cmd, start, m.start(), spans))
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
@@ -300,8 +293,8 @@ def main():
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path. If it is "
-                 "a text tool's separator or pattern (awk -F, grep -F) in a command that also quotes, "
-                 "escapes or substitutes, run the text tool as a command of its own, reading saved output.")
+                 "a text tool's separator or pattern (awk -F, grep -F), run the text tool as a command "
+                 "of its own, reading saved output.")
         scan_text(text, f"file {path}" + (
             ", read because a file has the name a text tool's -F or --file gives; if that is a pattern, "
             "run the text tool as a command of its own, reading saved output" if text_tool else ""))
