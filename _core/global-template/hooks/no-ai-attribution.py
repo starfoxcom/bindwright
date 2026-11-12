@@ -231,16 +231,21 @@ def is_plain(cmd, start, end, spans):
                    if not any(s <= i < e for s, e in spans))
 
 
+def is_text_tool_flag(cmd, m, spans, esc):
+    """True when the flag `m` is -F or --file in a stage the scan reads as a text tool's own:
+    the only flags that can be a separator or pattern. Every other flag is a file to read."""
+    if not (m.group(0).startswith("-F") or (m.group("long") or "").lower() == "--file"):
+        return False
+    start = stage_start(cmd, m.start(), spans, esc)
+    return bool(start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans))
+
+
 def find_files(cmd, cwd, esc):
     spans = text_spans(cmd, esc)
     for m in FILE_FLAGS.finditer(cmd):
         if any(s <= m.start() < e for s, e in spans):
             continue
-        start = stage_start(cmd, m.start(), spans, esc)
-        # Only -F and --file can be a text tool's separator or pattern; every other flag is read.
-        own_flag = m.group(0).startswith("-F") or (m.group("long") or "").lower() == "--file"
-        text_tools = (own_flag and start is not None and TEXT_TOOL.match(cmd, start)
-                      and is_plain(cmd, start, m.start(), spans))
+        text_tools = is_text_tool_flag(cmd, m, spans, esc)
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
