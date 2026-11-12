@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- **The close-session search count judges a search by what it reads.** `research-adherence.py` takes a search's file filters (globs, types, `-Include`) when it has any, otherwise only the files and folders it names that exist on disk, and a folder by the files git tracks in it. Before, it scanned the whole command for doc words, so a pattern such as `"mod.json"`, an option value, a redirect or a comment could be read as a path or a doc, a negated glob (`!*.md`) as a doc search, and `docs/` as code; each left searches out of the count or counted docs as code (#791).
 - `/close-session` states the three status-update triggers itself, since a project's `tracker.md` may defer them to another file, and runs an extra close step marked *after the hand-off* last, so a board check or a public mirror reads the session's final state. `clean-code.md`'s issue-link exception names the issue's title where a project check bans issue numbers in code (#791).
 
 ## [v3.4.0] — 2026-11-11
