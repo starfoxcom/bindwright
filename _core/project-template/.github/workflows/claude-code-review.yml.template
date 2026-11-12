@@ -40,7 +40,12 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+<!-- TOGGLE:branching_model_gitflow START -->
     branches: [{{DEV_BRANCH}}, {{MAIN_BRANCH}}]
+<!-- TOGGLE:branching_model_gitflow END -->
+<!-- TOGGLE:branching_model_gitflow:off START -->
+    branches: [{{MAIN_BRANCH}}]
+<!-- TOGGLE:branching_model_gitflow:off END -->
 
 concurrency:
   # Cancel in-flight reviews when a newer commit lands on the same PR.
@@ -85,7 +90,7 @@ jobs:
       # The gate's script and settings come from the base branch (or the
       # default branch, below): a PR must not be able to change how its own
       # review is judged.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
@@ -105,7 +110,7 @@ jobs:
             echo "fallback=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         if: steps.source.outputs.fallback == 'true'
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -196,7 +201,7 @@ jobs:
       # The gate's script and settings from Init's commit (the base, or the
       # default branch's tip): which paths always get a review is a gate
       # setting, so a PR cannot change it for itself.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           ref: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
           path: .review-gate
@@ -276,7 +281,7 @@ jobs:
             rm -rf "$GITHUB_WORKSPACE/.git"
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -380,7 +385,7 @@ jobs:
             rm -rf "$GITHUB_WORKSPACE/.git"
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         if: needs.init-gate.outputs.prescreen_dir != ''
         with:
           fetch-depth: 0
@@ -645,7 +650,7 @@ jobs:
       # shares: that reviewer gets this job's read-only token only through its
       # environment, for its gh reads. The fetches here are anonymous on a public repo; the
       # review action sets up its own auth.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -665,7 +670,7 @@ jobs:
           git rm -rq --cached --ignore-unmatch . && git reset -q --hard
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6 (v6.3.0)
         with:
           python-version: "3.11"
 
@@ -1726,7 +1731,7 @@ jobs:
       checks: write
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6 (v6.3.0)
         with:
           python-version: "3.11"
 
@@ -2209,7 +2214,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: rm -rf .review-gate
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         id: gate-files
         with:
           ref: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
