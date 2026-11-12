@@ -9,7 +9,7 @@
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -137,7 +137,9 @@ export async function shellWords(shell, command) {
   return { error: unreadable, commands, scoped };
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Node gives this module its real path, symlinks resolved, so the path it was started by is
+// resolved too before the two are compared.
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) {
   const shell = process.argv[2];
   if (!GRAMMARS[shell]) {
     console.error("usage: node shell-words.mjs bash|powershell < command");

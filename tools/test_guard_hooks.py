@@ -512,6 +512,19 @@ class GuardHookTest(unittest.TestCase):
         # gh's --template names a template, not a file.
         self.assert_passes(self.attr("gh issue create --title t --template bug.md", helper=none))
 
+    def test_a_wrapped_gh_keeps_its_template_name(self):
+        self.assert_passes(self.attr("env GH_TOKEN=x gh issue create --title t --template bug.md"))
+
+    def test_parser_runs_from_a_helper_reached_through_a_symlink(self):
+        link = os.path.join(self.home, "helper-link")
+        try:
+            os.symlink(HELPER, link, target_is_directory=True)
+        except OSError:
+            # Windows without the symlink right: a junction needs none, and Node resolves it too.
+            subprocess.run(["cmd", "/c", "mklink", "/J", link, HELPER], check=True, capture_output=True)
+        # `awk -F.` is read only by the strict fallback, so a pass means the parser ran.
+        self.assert_passes(self.attr("git tag --list | awk -F. '{print $1}'", helper=link))
+
     def test_unreadable_command_names_the_cause(self):
         result = self.attr("git commit -m x \\\r\n -F missing.md")
         self.assert_denied(result)

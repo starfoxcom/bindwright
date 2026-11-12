@@ -342,14 +342,16 @@ def command_files(words):
         return [], body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS)
     if name in READ_CMDLETS:
         return [], get_content_files(words)
-    # A wrapped git (`env A=1 git -C sub commit ...`), or a program built at run time
-    # (`$GIT -C sub commit ...`), still runs in the folders it names.
-    built = words and not isinstance(words[0], str)
-    wrapped = words if built else next((words[i:] for i in range(1, len(words))
-                                        if program(words[i:]) == "git"), None)
-    if not wrapped:
-        return [], body_files(words)
-    return git_subcommand(wrapped)[1], body_files(words, BODY_FLAGS, MESSAGE_FLAGS | GIT_MESSAGE_FLAGS)
+    # A wrapped git or gh (`env A=1 git -C sub commit ...`, `sudo gh ...`) keeps its own
+    # rules; a wrapper's argument can look like one (`sudo -u git gh ...`), so each is tried.
+    inner = [i for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
+    if inner:
+        found = [command_files(words[i:]) for i in inner]
+        folders = next((f for f, files in reversed(found) if files), [])
+        return folders, [file for _, files in found for file in files]
+    # A program built at run time (`$GIT -C sub commit ...`) may be git: its -C folders count.
+    built = bool(words) and not isinstance(words[0], str)
+    return (git_subcommand(words)[1] if built else []), body_files(words)
 
 
 def parsed_files(commands, cwd):
