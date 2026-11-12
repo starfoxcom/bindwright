@@ -49,6 +49,9 @@ FILTER_OPTIONS = ("-g", "--glob", "--iglob", "--include", "-t", "--type", "-incl
 # Their values leave files out; they never say what the search reads.
 EXCLUDE_OPTIONS = ("--exclude", "--exclude-dir", "-exclude")
 TYPE_OPTIONS = ("-t", "--type")
+# With none of these, a text search takes its pattern as a plain word.
+PATTERN_OPTIONS = ("-e", "--regexp", "-f", "--file", "--files")
+PATTERN_VALUE_OPTIONS = ("-e", "--regexp", "-f", "--file")
 
 
 def unquote_separators(command):
@@ -143,8 +146,9 @@ class Repo:
 class Search:
     """What one search reads: the paths it names, and the globs and types that narrow its files."""
 
-    def __init__(self, paths=(), globs=(), types=()):
+    def __init__(self, paths=(), globs=(), types=(), first_may_be_pattern=False):
         self.paths = list(paths)
+        self.first_may_be_pattern = first_may_be_pattern
         # A negated glob (`!*.md`) leaves files out; it never says what the search reads.
         globs = [g for g in map(unquote, globs) if g]
         self.globs = [g for g in globs if not g.startswith("!") and not is_wide(g)]
@@ -153,7 +157,10 @@ class Search:
     def reads_code(self, base, repo):
         """True when the search reads code inside the repo, with paths read from `base`."""
         named = [resolve(p, base) for p in self.paths]
-        paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))] or [base]
+        paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))]
+        if not paths or (self.first_may_be_pattern and paths == named[:1]):
+            # A lone first word may be the pattern (`rg docs`), and then the search reads `base`.
+            paths.append(base)
         inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
             return False
@@ -187,26 +194,43 @@ def split_words(head):
 
 def filter_of(word, words):
     """(option, value) when `word` is a filter option, taking a separate value from `words`."""
-    lower = word.lower()
     for option in FILTER_OPTIONS:
-        if lower == option:
+        # Short options keep their case (`-T` excludes a type); long and PowerShell ones do not.
+        spelled = word if len(option) == 2 else word.lower()
+        if spelled == option:
             return option, words.pop(0) if words else ""
-        if lower.startswith(option) and lower[len(option):len(option) + 1] in ("=", ":"):
+        if spelled.startswith(option) and spelled[len(option):len(option) + 1] in ("=", ":"):
             return option, word[len(option) + 1:]
-        if len(option) == 2 and lower.startswith(option) and option[1] in "gt" and word[1] == option[1]:
+        if len(option) == 2 and spelled.startswith(option):
             return option, word[2:]
     return None
 
 
-def words_search(words):
+def gives_pattern(word):
+    """True when `word` passes the pattern as an option, so no other word is the pattern."""
+    for option in PATTERN_OPTIONS:
+        if word == option or word.startswith(option + "="):
+            return True
+        if len(option) == 2 and word.startswith(option) and not word.startswith("--"):
+            return True
+    return False
+
+
+def words_search(words, is_text_search=True):
     """What a text search or a recursive listing reads: its filters, and every word that may name a path.
 
     Patterns, option values and stray tokens rarely name a file or folder that exists, so
     `Search.reads_code` keeps only the words that do, instead of parsing each tool's options."""
     rest, paths, globs, types = words[1:], [], [], []
+    pattern_given = False
     while rest:
         word = rest.pop(0)
         found = filter_of(word, rest) if word.startswith("-") else None
+        if not found and gives_pattern(word):
+            pattern_given = True
+            if word in PATTERN_VALUE_OPTIONS and rest:
+                rest.pop(0)  # the pattern, or the file that holds it
+            continue
         if found:
             option, value = found
             # A PowerShell list (`"*.md","*.py"`, `*.md, *.py`) arrives as several words.
@@ -222,7 +246,7 @@ def words_search(words):
             # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
             is_filter = WILDCARD.search(piece) and not re.search(r"['\"/\\]", piece)
             (globs if is_filter else paths).append(unquote(piece))
-    return Search(paths, globs, types)
+    return Search(paths, globs, types, first_may_be_pattern=is_text_search and not pattern_given)
 
 
 def shell_search(command, repo):
@@ -240,9 +264,10 @@ def shell_search(command, repo):
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
             base = repo.root if back else resolve(" ".join(words), base)
             continue
-        if SHELL_SEARCH.search(head) or (
-                PS_LISTING.search(head) and any(PS_SEARCH.search(s) for s in stages[1:])):
+        if SHELL_SEARCH.search(head):
             search = words_search(split_words(head))
+        elif PS_LISTING.search(head) and any(PS_SEARCH.search(s) for s in stages[1:]):
+            search = words_search(split_words(head), is_text_search=False)
         else:
             continue
         if search.reads_code(base, repo):

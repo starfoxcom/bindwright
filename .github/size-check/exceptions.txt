@@ -30,3 +30,4 @@ helper/findwright/server.mjs|line_length|-|vendored from FindWright (exception 1
 helper/findwright/store.mjs|line_length|-|vendored from FindWright (exception 1)
 helper/findwright/store.mjs|ccn|listFiles|vendored from FindWright (exception 1)
 helper/findwright/store.mjs|function|listFiles|vendored from FindWright (exception 1)
+engine/test/research-adherence.test.js|function|(anonymous)|test battery: the table of search commands and their counts (exception 3)
