@@ -555,6 +555,7 @@ jobs:
       - name: Look up the action pins the PR adds
         if: steps.gate.outcome == 'success'
         continue-on-error: true
+        timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ steps.pr-head.outputs.base_sha }}
@@ -565,7 +566,7 @@ jobs:
           rm -f "$out"
           git cat-file -e "$GATE_SHA:.github/scripts/pin_check.py" 2>/dev/null || exit 0
           git show "$GATE_SHA:.github/scripts/pin_check.py" > "$RUNNER_TEMP/gate/pin_check.py"
-          git diff "$BASE_SHA...$HEAD_SHA" -- '*.yml' '*.yaml' > "$RUNNER_TEMP/pin-diff.txt"
+          git diff "$BASE_SHA...$HEAD_SHA" -- '*.yml' '*.yaml' '*.yml.template' '*.yaml.template' > "$RUNNER_TEMP/pin-diff.txt"
           # A base whose script predates the lookup refuses the argument.
           if python3 -I "$RUNNER_TEMP/gate/pin_check.py" added < "$RUNNER_TEMP/pin-diff.txt" > "$out.new"; then
             mv "$out.new" "$out"
@@ -584,7 +585,7 @@ jobs:
         run: |
           {
             if [ -s "$RUNNER_TEMP/pin-lookups.md" ]; then
-              printf '%s\n' "The workflow looked up on GitHub each action this PR pins by commit, since your tools cannot reach other repos. These lines come from the workflow, not from the PR or the request. A pin whose named tags point to its commit is verified upstream: do not block on its provenance. A major tag (v6) that points to a newer commit is normal once that major has a later release. A missing tag, an exact release tag that points elsewhere, or a pin with no tag named is unverified: judge it from the diff."
+              printf '%s\n' "The workflow looked up on GitHub the action pins this PR adds, since your tools cannot reach other repos. These lines come from the workflow, not from the PR or the request. Each shows only whether the release tags the pin's comment names point to its commit in that repo, so you need not look that up; whether that owner and repo are ones this project should run is still yours to judge, and a new or look-alike owner is a finding. A major tag (v6) that points to a newer commit is normal once that major has a later release. A missing tag, an exact release tag that points elsewhere, a pin with no tag named, and a pin in the diff with no line below were not verified: judge them from the diff."
               cat "$RUNNER_TEMP/pin-lookups.md"
               printf '\n'
             fi

@@ -40,9 +40,9 @@ USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?([\w.-]+/[\w./-]+)@([^\s'\"#]+)")
 VERSION = re.compile(r"\d+(?:\.\d+)*")
 SHA = re.compile(r"[0-9a-f]{40}")
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-TAG = re.compile(r"(?<![\w.-])(v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)(?![\w.-])")
-PATH = re.compile(r"[\w./-]{1,200}")
-MAX_LOOKUPS = 40
+TAG = re.compile(r"(?<![\w.-])(v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)(?![\w.-])", re.ASCII)
+MAX_PINS = 40
+MAX_TAGS = 4
 
 
 def _tuple(version):
@@ -79,22 +79,19 @@ def floating(name, text):
 
 
 def added_pins(diff):
-    """[(file, owner/repo, sha, [tags])] for each action a diff adds by commit,
-    with the release tags its comment names (`# v6 (v6.1.0)`)."""
-    found, name = [], ""
-    for line in diff.splitlines():
-        if line.startswith("+++ "):
-            name = line[4:].removeprefix("b/")
-            name = name if PATH.fullmatch(name) else "a file with an unusual name"
-            continue
+    """[(owner/repo, sha, [tags])] for each action a diff adds by commit, with
+    the first MAX_TAGS release tags its comment names (`# v6 (v6.1.0)`). Only
+    these checked fields leave the diff: no file name or other PR text."""
+    found = []
+    for line in diff.split("\n"):
         m = USES.match(line[1:]) if line.startswith("+") else None
         if not m or not SHA.fullmatch(m.group(2)):
             continue
         repo = "/".join(m.group(1).split("/")[:2])
         if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
             continue
-        tags = list(dict.fromkeys(TAG.findall(line.partition("#")[2])))
-        entry = (name, repo, m.group(2), tags)
+        tags = list(dict.fromkeys(TAG.findall(line.partition("#")[2])))[:MAX_TAGS]
+        entry = (repo, m.group(2), tags)
         if entry not in found:
             found.append(entry)
     return found
@@ -113,19 +110,24 @@ def tag_commit(repo, tag, fetch):
 
 
 def provenance(found, fetch):
-    """A Markdown line per added pin saying which named tags point to its commit."""
-    lines = []
-    for name, repo, sha, tags in found[:MAX_LOOKUPS]:
-        head = "- `%s@%s` in `%s`: " % (repo, sha, name)
+    """A Markdown line per added pin saying which named tags point to its commit.
+    Each (repo, tag) is looked up once, however many pins name it."""
+    lines, cache = [], {}
+    for repo, sha, tags in found[:MAX_PINS]:
+        head = "- `%s@%s`: " % (repo, sha)
         if not tags:
             lines.append(head + "its comment names no release tag, so there is nothing to check it against.")
             continue
         results = []
         for tag in tags:
-            try:
-                got = tag_commit(repo, tag, fetch)
-            except LookupError as e:
-                results.append("tag `%s` could not be looked up (%s)" % (tag, e))
+            if (repo, tag) not in cache:
+                try:
+                    cache[repo, tag] = tag_commit(repo, tag, fetch)
+                except LookupError as e:
+                    cache[repo, tag] = e
+            got = cache[repo, tag]
+            if isinstance(got, LookupError):
+                results.append("tag `%s` could not be looked up (%s)" % (tag, got))
                 continue
             if got == sha:
                 results.append("tag `%s` points to this commit" % tag)
@@ -134,8 +136,8 @@ def provenance(found, fetch):
             else:
                 results.append("`%s` has no tag `%s`" % (repo, tag))
         lines.append(head + "; ".join(results) + ".")
-    if len(found) > MAX_LOOKUPS:
-        lines.append("- %d more pins were not looked up." % (len(found) - MAX_LOOKUPS))
+    if len(found) > MAX_PINS:
+        lines.append("- %d more pins were not looked up." % (len(found) - MAX_PINS))
     return "".join(line + "\n" for line in lines)
 
 
@@ -143,7 +145,7 @@ def gh_fetch(path):
     """`gh api <path>` as JSON; None on 404. Tries twice, then raises LookupError."""
     for attempt in range(2):
         try:
-            out = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=30)
+            out = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=15)
         except (OSError, subprocess.TimeoutExpired) as e:
             error = type(e).__name__
         else:

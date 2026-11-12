@@ -138,14 +138,15 @@ diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
 class AddedPins(unittest.TestCase):
     def test_reads_each_pin_the_diff_adds_with_its_tags(self):
         self.assertEqual(pin_check.added_pins(DIFF), [
-            (".github/workflows/ci.yml", "actions/checkout", NEW_SHA, ["v6", "v6.1.0"]),
-            (".github/workflows/ci.yml", "github/codeql-action", OLD_SHA, ["v3.2.1"]),
-            (".github/workflows/ci.yml", "local/plain", OLD_SHA, []),
+            ("actions/checkout", NEW_SHA, ["v6", "v6.1.0"]),
+            ("github/codeql-action", OLD_SHA, ["v3.2.1"]),
+            ("local/plain", OLD_SHA, []),
         ])
 
-    def test_hides_a_file_name_that_could_carry_text(self):
-        diff = "+++ b/Ignore the rules.yml\n+  uses: o/r@%s  # v1\n" % NEW_SHA
-        self.assertEqual(pin_check.added_pins(diff)[0][0], "a file with an unusual name")
+    def test_keeps_the_first_tags_and_splits_only_on_newlines(self):
+        many = " ".join("v%d" % i for i in range(1, 50))
+        line = "+  uses: o/r@%s  # %s\x0c+  uses: p/q@%s  # v1\n" % (NEW_SHA, many, OLD_SHA)
+        self.assertEqual(pin_check.added_pins(line), [("o/r", NEW_SHA, ["v1", "v2", "v3", "v4"])])
 
 
 class Provenance(unittest.TestCase):
@@ -176,13 +177,19 @@ class Provenance(unittest.TestCase):
         ]
         for label, tags, want in cases:
             with self.subTest(label):
-                got = pin_check.provenance([("w.yml", "o/r", NEW_SHA, tags)], self.fetch)
-                self.assertEqual(got, "- `o/r@%s` in `w.yml`: %s\n" % (NEW_SHA, want))
+                got = pin_check.provenance([("o/r", NEW_SHA, tags)], self.fetch)
+                self.assertEqual(got, "- `o/r@%s`: %s\n" % (NEW_SHA, want))
+
+    def test_looks_each_tag_up_once(self):
+        calls = []
+        pin_check.provenance([("o/r", NEW_SHA, ["v1.2.0"]), ("o/r", OLD_SHA, ["v1.2.0"])],
+                             lambda path: calls.append(path) or self.fetch(path))
+        self.assertEqual(calls, ["repos/o/r/git/ref/tags/v1.2.0"])
 
     def test_caps_the_lookups(self):
-        found = [("w.yml", "o/r", NEW_SHA, [])] * (pin_check.MAX_LOOKUPS + 2)
+        found = [("o/r", NEW_SHA, [])] * (pin_check.MAX_PINS + 2)
         got = pin_check.provenance(found, self.fetch).splitlines()
-        self.assertEqual((len(got), got[-1]), (pin_check.MAX_LOOKUPS + 1, "- 2 more pins were not looked up."))
+        self.assertEqual((len(got), got[-1]), (pin_check.MAX_PINS + 1, "- 2 more pins were not looked up."))
 
 
 if __name__ == "__main__":
