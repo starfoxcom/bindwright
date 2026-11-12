@@ -444,6 +444,8 @@ class GuardHookTest(unittest.TestCase):
                 ("git tag --list | Select-String -Pattern v3; sort -F x", "PowerShell"),
                 ('git --git-dir="$D" commit -m x', "Bash"),
                 ('gh api repos/o/r/issues -F "title=$T"', "Bash"),
+                ("gh api repos/o/r/issues/5/comments -F body='<details>x</details>'", "Bash"),
+                ("gh api repos/o/r/issues/5/comments -F 'body=see x=@y'", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),

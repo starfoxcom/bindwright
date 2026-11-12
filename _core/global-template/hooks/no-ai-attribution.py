@@ -253,14 +253,16 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
         yield flag, {"dynamic": value} if built else value
 
 
-def body_file(flag, value):
-    """The file a body flag's value names, a run-time word whose file cannot be told, or None."""
+def body_file(flag, value, readers="@<"):
+    """The file a body flag's value names, a run-time word whose file cannot be told, or None.
+    A form field reads a file when its value, after the first `=`, starts with one of
+    `readers`: `@` for gh, `@` or `<` for curl."""
     text = text_of(value)
     if flag in FORM_FLAGS and "=" in text:
-        at = re.search(r"=[@<]", text)
-        if not at:
+        field = text.split("=", 1)[1]
+        if not field[:1] or field[:1] not in readers:
             return None
-        return value if isinstance(value, dict) else text[at.end():]
+        return value if isinstance(value, dict) else field[1:]
     if flag in DATA_FLAGS:
         if not text.lstrip("\"'").startswith(("@", "<")):
             return None
@@ -268,13 +270,13 @@ def body_file(flag, value):
     return value
 
 
-def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS):
+def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<"):
     """Every file the words' flags in `flags` name as a body."""
     files = []
     for flag, value in flag_values(words, ("-F", "-d"), message_flags):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
-            found = body_file(name, value)
+            found = body_file(name, value, readers)
             if found is not None:
                 files.append(found)
     return files
@@ -339,7 +341,7 @@ def command_files(words):
     if name == "git":
         return git_files(words)
     if name == "gh":
-        return [], body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS)
+        return [], body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS, "@")
     if name in READ_CMDLETS:
         return [], get_content_files(words)
     # Every flag is read. A word naming git or gh may be a wrapped program (`env A=1 git -C
