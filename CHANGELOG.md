@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The close-session search count reads each search the way the tool does.** `research-adherence.py` judges a search by its file filters (globs, types, `-Include`) when it has any, otherwise by the files and folders it names, and a folder by the files git tracks in it. Before, it scanned the whole command for doc words, so a pattern such as `"mod.json"` or a value after `-t`, `--max-depth` or `--sort` was read as a path or a doc, a negated glob (`!*.md`) as a doc search, `docs/` and `.claude/rules/` as code, a spaced redirect target as a path, and a PowerShell `-Include *.cpp,*.json` as docs; each left searches out of the count or counted docs as code (#791).
+
 ## [v3.4.0] — 2026-11-11
 
 v3.4.0 has a PR stop to rethink after 3 red review rounds instead of 6, and fixes the repo links in a bound README and issue form.
