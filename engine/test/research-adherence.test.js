@@ -48,7 +48,9 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     writeFileSync(join(root, file), "x\n");
   }
   // No personal excludes file: it could leave a fixture file untracked.
-  for (const args of [["init", "-q"], ["-c", "core.excludesFile=", "add", "-A"]]) spawnSync("git", ["-C", root, ...args]);
+  for (const args of [["init", "-q"], ["-c", "core.excludesFile=", "add", "-A"]]) {
+    spawnSync("git", ["-C", root, ...args]);
+  }
   mkdirSync(scratch);
   const bash = (command) => ({ name: "Bash", args: { command } });
   const ps = (command) => ({ name: "PowerShell", args: { command } });
