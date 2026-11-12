@@ -341,7 +341,8 @@ def resolve(value, places):
         yield path, None
     elif not places or UNKNOWN in places:
         yield None, (f"a relative body file {value} after a folder change the command text cannot tell"
-                     " (such as `cd -` or a target built at run time, or a `cd` beside a loop or a function)")
+                     " (such as `cd -`, a target built at run time or a folder this computer cannot find,"
+                     " or a `cd` beside a loop or a function)")
     else:
         paths = [os.path.join(place, path) for place in places]
         yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
@@ -413,9 +414,13 @@ def parsed_files(commands, repeats, cwd, shell):
     places = [UNKNOWN] if repeats and any(program(words) in CD_COMMANDS for words in commands) else [cwd]
     for words in commands:
         if program(words) in CD_COMMANDS:
-            # A folder this computer cannot find (`/c/...` in Git Bash, made later) cannot be
-            # checked, so a relative file after it is refused rather than read elsewhere.
-            moved = [p if p is UNKNOWN or os.path.isdir(p) else UNKNOWN for p in cd_places(words, places)]
+            # A `cd` that fails from one place leaves the shell where it was, so a missing
+            # folder is dropped; when no place holds it (`/c/...` in Git Bash, a folder made
+            # later), the folder cannot be checked, so a relative file after it is refused.
+            named = cd_places(words, places)
+            moved = [p for p in named if p is UNKNOWN or os.path.isdir(p)]
+            if named and not moved:
+                moved = [UNKNOWN]
             places += [place for place in moved if place not in places]
             continue
         folders, files = command_files(words, shell)

@@ -558,6 +558,10 @@ class GuardHookTest(unittest.TestCase):
         for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=moved), "found in file")
+        # A second relative `cd` that fails from the first folder leaves the shell where it was.
+        nested = self.project_with({"msg.txt": "x\n", "a/msg.txt": "x\n", "a/b/msg.txt": f"{GENERATED_LINE}\n"})
+        self.assert_denied(self.attr("cd a && cd b && git commit -F msg.txt", project=nested),
+                           f"found in file {os.path.join(nested, 'a', 'b', 'msg.txt')}")
 
     def test_without_the_helper_every_file_flag_is_read(self):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
