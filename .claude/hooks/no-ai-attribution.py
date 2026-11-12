@@ -353,7 +353,8 @@ def command_files(words):
     flags = BODY_FLAGS - {"--template"} if "gh" in names else BODY_FLAGS
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     found = [command_files(run) for run in inner]
-    files = body_files(words, flags, message) + [file for _, run_files in found for file in run_files]
+    readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
+    files = body_files(words, flags, message, readers) + [file for _, run_files in found for file in run_files]
     folders = next((f for f, run_files in reversed(found) if run_files), [])
     # A program built at run time (`$GIT -C sub commit ...`) may be git: its -C folders count.
     if not folders and words and not isinstance(words[0], str):

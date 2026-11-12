@@ -446,6 +446,7 @@ class GuardHookTest(unittest.TestCase):
                 ('gh api repos/o/r/issues -F "title=$T"', "Bash"),
                 ("gh api repos/o/r/issues/5/comments -F body='<details>x</details>'", "Bash"),
                 ("gh api repos/o/r/issues/5/comments -F 'body=see x=@y'", "Bash"),
+                ("env GH_TOKEN=x gh api repos/o/r/issues/5/comments -F body='<b>x</b>'", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
