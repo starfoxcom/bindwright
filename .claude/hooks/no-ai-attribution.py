@@ -233,7 +233,7 @@ def is_bare(text, esc):
     (`esc`). Those are what can hide a separator from the flat quote scan (nested quotes, the
     '\\'' idiom), and telling them apart takes a shell parser, so a stage is trusted only in a
     command free of them. A PowerShell path's backslash is plain text there."""
-    return not any(c in text for c in "'\"`$" + esc)
+    return not any(c in text for c in "'\"`$‘’‚‛“”„" + esc)
 
 
 def find_files(cmd, cwd, esc):
