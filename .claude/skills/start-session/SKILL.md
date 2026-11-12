@@ -34,7 +34,7 @@ Last, Bindwright's own check. In `plugins/installed_plugins.json` in the Claude 
 ## 3. Report, in this order
 
 1. **Project status:** current focus, open work, blockers.
-2. **Git status:** current branch, uncommitted changes, how far behind `develop` it is, open PRs. If `develop` has moved ahead, propose merging it in before resuming (`git.md` § Keep branches current).
+2. **Git status:** current branch, uncommitted changes, how far behind `develop` it is, open PRs. If `develop` has moved ahead, propose merging it in before resuming: `git fetch origin`, then `git merge origin/develop` on the work branch.
 3. **Branch:** if the work needs a new branch, propose its name per `git.md` and ask before creating it.
 4. **Areas touched:** the directories the plan will change. Anything outside the branch's scope becomes a prerequisite branch that lands first; name it.
 5. **Plan:** the ordered steps, with dependencies. Three to seven steps; split anything larger into another session.

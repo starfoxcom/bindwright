@@ -37,12 +37,12 @@ If `.bindwright/session-steps.md` lists "Extra close steps", run them now, excep
 
 ## Commit and PR
 
-Take the first row that matches:
+Stage the session's files by name, never `git add -A` or `git add .`. A file `git status` lists that this session did not change stays out of the commit; name it in the last message. Then take the first row that matches:
 
 | Situation | Do |
 |---|---|
 | Branch goal not finished | Commit the work. No PR. |
-| `hotfix/*` finished | PR to `main`. After it merges, open the cascade PR into `develop` (`git.md` § Cascade). Done only when the cascade merges. |
+| `hotfix/*` finished | PR to `main`. After it merges, open the cascade PR: a `chore/cascade-<name>` branch from `origin/develop` that merges `origin/main` with `--no-ff`, into `develop`. Done only when the cascade merges. |
 | `release/*` finished | Same as a hotfix: PR to `main`, tag the release commit, then cascade. |
 | Any other branch finished | Commit, open a PR to `develop`, watch the checks, merge once every required check passes. |
 
