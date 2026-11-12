@@ -46,6 +46,7 @@ MAX_TAG_LENGTH = 40
 MAX_PINS = 40
 MAX_TAGS = 4
 MAX_PEELS = 3
+SEPARATORS = " \t\r"
 
 
 def _tuple(version):
@@ -81,6 +82,18 @@ def floating(name, text):
     return found
 
 
+def ends_value(text, m):
+    """True when the YAML value ends right after the commit id: at the line's end, before
+    one of YAML's separators (space, tab, CR), or at the closing quote of a quoted value.
+    Anything glued on (`#x`, a quote, a no-break space) is part of the ref the runner uses,
+    so that ref is not the commit."""
+    rest = text[m.end(2):]
+    opened = text[m.start(1) - 1] if text[m.start(1) - 1] in "'\"" else ""
+    if opened:
+        return rest[:1] == opened and (len(rest) == 1 or rest[1] in SEPARATORS)
+    return not rest or rest[0] in SEPARATORS
+
+
 def added_pins(diff):
     """[(owner/repo, sha, [tags])] for each action a diff adds by commit, with
     the first MAX_TAGS release tags its comment names (`# v6 (v6.1.0)`). Only
@@ -88,7 +101,7 @@ def added_pins(diff):
     found = []
     for line in diff.split("\n"):
         m = USES.match(line[1:]) if line.startswith("+") else None
-        if not m or not SHA.fullmatch(m.group(2)):
+        if not m or not SHA.fullmatch(m.group(2)) or not ends_value(line[1:], m):
             continue
         repo = "/".join(m.group(1).split("/")[:2])
         if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
