@@ -20,7 +20,7 @@ One row per project: a random 32-character id the plugin makes once per repo, th
 All in `src/rules.js`:
 
 - Each count is a whole number from 0 to 500 per send, except `rounds`, which goes up to 25 000 (500 PRs at 50 rounds each).
-- `caught` and `deep` never exceed `checked`. `stalled` never exceeds `caught`. `rounds` is at least `caught`, at least 6 for each `stalled` PR, and 0 when `caught` is 0.
+- `caught` and `deep` never exceed `checked`. `stalled` never exceeds `caught`. `rounds` is at least `caught`, at least 3 for each `stalled` PR, and 0 when `caught` is 0.
 - A send with `checked`, `caught`, `deep` and `merged` all 0 is refused as nothing to add.
 - A project sends at most once every 20 hours, and a window that overlaps one already counted is refused, so a send whose answer was lost and is sent again never counts twice.
 - At most 200 new projects a day across all senders.
