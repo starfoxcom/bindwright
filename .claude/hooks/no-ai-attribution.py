@@ -27,9 +27,10 @@ What is scanned, for any git write, gh write or GitHub API call:
     `xargs`) and one whose program is built at run time included, except
     a text tool's (`awk -F,`, `grep -F word`), git's outside a write, and
     gh's `--template`. A flag inside quoted text, a here-doc, a here-string
-    or the value of -m / --body / --title is text, not a body file. `cd`,
-    `Set-Location` and `git -C` set the folder a relative path resolves
-    from. A file it cannot read, or one named by text built at run time,
+    or the value of -m / --body / --title is text, not a body file. After a
+    `cd`, `pushd` or `Set-Location`, which may run in a child shell or fail,
+    a relative path is read in every folder the command may be in; `git -C`
+    moves its own command. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. Without the
     helper or Node it reads every file flag in the command text instead,
     a text tool's included.
@@ -154,8 +155,9 @@ READ_CMDLETS = {"get-content", "gc"}
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
                      "--super-prefix", "--attr-source"}
 POP_COMMANDS = {"popd", "pop-location"}
-CD_COMMANDS = {"cd", "chdir", "pushd", "set-location", "sl", "push-location"} | POP_COMMANDS
-UNKNOWN = object()  # a folder the command switches to at run time
+PUSH_COMMANDS = {"pushd", "push-location"}
+CD_COMMANDS = {"cd", "chdir", "set-location", "sl"} | PUSH_COMMANDS | POP_COMMANDS
+UNKNOWN = object()  # a folder named by text the shell builds at run time
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
 STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
                " as a command of its own.")
@@ -200,8 +202,8 @@ def parser_script():
 
 def parse(cmd, shell):
     """Each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    each paired with whether it runs in a child shell, and "". When the parser is missing,
-    fails or meets syntax it cannot read: None, and the hint that says which."""
+    and "". When the parser is missing, fails or meets syntax it cannot read: None, and the
+    hint that says which."""
     node, script = shutil.which("node"), parser_script()
     if not node:
         return None, NO_NODE_HINT
@@ -216,8 +218,7 @@ def parse(cmd, shell):
         return None, UNREAD_HINT
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
         return None, UNREAD_HINT
-    scoped = set(data.get("scoped") or ())
-    return [(words, i in scoped) for i, words in enumerate(data["commands"])], ""
+    return data["commands"], ""
 
 
 def text_of(word):
@@ -324,29 +325,38 @@ def get_content_files(words):
     return files or positional[:1]
 
 
-def resolve(value, folder):
-    """The path to read, or an error saying why it cannot be told before the command runs."""
+def resolve(value, places):
+    """(path, error) for each file a body flag's value may name, or an error saying why it
+    cannot be told before the command runs. A relative file is read in each of `places`
+    that holds it, or in the first when none does."""
     if isinstance(value, dict):
-        return None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
+        yield None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
+        return
     path = os.path.expanduser(value)
     if os.path.isabs(path):
-        return path, None
-    if folder is UNKNOWN:
-        return None, f"a relative body file {value} after a change to a folder named at run time"
-    return os.path.join(folder, path), None
+        yield path, None
+    elif UNKNOWN in places:
+        yield None, f"a relative body file {value} after a change to a folder named at run time"
+    else:
+        paths = [os.path.join(place, path) for place in places]
+        yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
 
 
-def moved_folder(words, folder):
-    """The folder after a `cd`-style command: UNKNOWN when the text cannot tell it (a
-    target built at run time, `cd -`, no target, a return to a saved folder, or a relative
-    target from a folder that is already unknown)."""
+def cd_places(words, places):
+    """The folders a `cd`-style command may move to from any of `places`: none for a return
+    to a folder already seen (`popd`, `cd -`, a bare `pushd`), home for a bare `cd`, and
+    UNKNOWN for a target built at run time."""
     targets = [w for w in words[1:] if not text_of(w).startswith("-")]
-    if program(words) in POP_COMMANDS or not targets or not isinstance(targets[-1], str):
-        return UNKNOWN
+    if program(words) in POP_COMMANDS or "-" in [text_of(w) for w in words[1:]]:
+        return []
+    if not targets:
+        return [] if program(words) in PUSH_COMMANDS else [os.path.expanduser("~")]
+    if not isinstance(targets[-1], str):
+        return [UNKNOWN]
     target = os.path.expanduser(targets[-1])
     if os.path.isabs(target):
-        return target
-    return UNKNOWN if folder is UNKNOWN else os.path.join(folder, target)
+        return [target]
+    return [UNKNOWN if place is UNKNOWN else os.path.join(place, target) for place in places]
 
 
 def command_files(words, shell="bash"):
@@ -382,21 +392,21 @@ def command_files(words, shell="bash"):
 
 
 def parsed_files(commands, cwd, shell):
-    """(path, error) for every body file the parsed commands name, in order."""
-    folder = cwd
-    for words, in_child_shell in commands:
+    """(path, error) for every body file the parsed commands name, in order. A `cd` may run
+    in a child shell (a subshell, a pipeline, a background job) or fail, so the shell may be
+    in any folder one named so far; `git -C` moves only its own command."""
+    places = [cwd]
+    for words in commands:
         if program(words) in CD_COMMANDS:
-            # A child shell's `cd` leaves the outer folder as it was, but its own later
-            # commands run in the new one, so neither can be told from here.
-            folder = UNKNOWN if in_child_shell else moved_folder(words, folder)
+            places += [place for place in cd_places(words, places) if place not in places]
             continue
         folders, files = command_files(words, shell)
-        here = folder
+        here = places
         for target in folders:
-            here = moved_folder(["cd", target], here)
+            here = cd_places(["cd", target], here)
         for value in files:
             if value != "-":
-                yield resolve(value, here)
+                yield from resolve(value, here)
 
 
 def strict_files(cmd, cwd):

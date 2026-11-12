@@ -3,9 +3,8 @@
 //   node shell-words.mjs bash|powershell < command
 //
 // Prints one JSON object: {"error": <the parse hit syntax it could not read>, "commands":
-// [[word, ...], ...], "scoped": [index, ...]}, commands in source order, nested ones (inside
-// $( ... ) or a pipeline) included; "scoped" lists the commands bash runs in a child shell
-// (a subshell, a substitution, a pipeline or a background job). A word is a string, or
+// [[word, ...], ...]}, commands in source order, nested ones (inside $( ... ) or a
+// pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
@@ -24,8 +23,6 @@ function dynamic(node) {
 const BASH_SKIP = new Set(["variable_assignment", "file_redirect", "heredoc_redirect", "herestring_redirect"]);
 const BASH_RUNTIME = new Set(["simple_expansion", "expansion", "command_substitution",
   "process_substitution", "arithmetic_expansion"]);
-// Bash runs these in a child shell, so a `cd` inside them leaves the outer folder as it was.
-const BASH_CHILD_SHELLS = new Set(["subshell", "command_substitution", "process_substitution", "pipeline"]);
 
 function bashWord(node) {
   if (node.type === "word" || node.type === "number") {
@@ -121,21 +118,14 @@ export async function shellWords(shell, command) {
   let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
-  const scoped = [];
-  (function walk(node, inChild) {
+  (function walk(node) {
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
-    // Whatever ends in `&` (a command, a list, a group) runs as a background job.
-    const child = inChild || node.nextSibling?.type === "&"
-      || (shell === "bash" && BASH_CHILD_SHELLS.has(node.type));
-    if (node.type === "command") {
-      if (child) scoped.push(commands.length);
-      commands.push(read(node));
-    }
-    for (const c of node.namedChildren) walk(c, child);
-  })(tree.rootNode, false);
-  return { error: unreadable, commands, scoped };
+    if (node.type === "command") commands.push(read(node));
+    for (const c of node.namedChildren) walk(c);
+  })(tree.rootNode);
+  return { error: unreadable, commands };
 }
 
 // Node gives this module its real path, symlinks resolved, so the path it was started by is

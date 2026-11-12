@@ -511,14 +511,21 @@ class GuardHookTest(unittest.TestCase):
         return root
 
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
-        # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy.
+        # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy. A `cd` in a
+        # child shell, or one that fails, leaves git in the first folder, so it is read there too.
         root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "sub/msg.txt": "x\n",
                                   "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
+        outer = os.path.join(root, "msg.txt")
         for command in ("(cd sub; true); git commit -F msg.txt", "cd sub | true; git commit -F msg.txt",
                         "pushd sub; popd; git commit -F msg.txt", "{ cd sub; true; } & git commit -F msg.txt",
-                        "cd sub && true & git commit -F msg.txt"):
+                        "cd sub && true & git commit -F msg.txt", "cd sub; git commit -F msg.txt"):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, project=root), "folder named at run time")
+                self.assert_denied(self.attr(command, project=root), f"found in file {outer}")
+        clean = self.project_with({"msg.txt": "x\n", "sub/other.txt": "x\n"})
+        for command in ("(cd sub && true); git commit -F msg.txt", "pushd sub; popd; git commit -F msg.txt",
+                        "cd -; cd; git commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, project=clean))
         # An absolute target names the folder again, whatever came before it.
         absolute = root.replace("\\", "/")
         for command in (f'(cd sub; true); cd "{absolute}"; git commit -F msg.txt',
