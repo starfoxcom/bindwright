@@ -54,7 +54,7 @@ Maintainer-only. Follows Gitflow:
 2. Bump `VERSION` (e.g. `v2.1.0`).
 3. Promote the `[Unreleased]` entries in `CHANGELOG.md` to a dated `[vX.Y.Z]` section, and run `node engine/cli.js --update .` so this repo's own bind record (`.bindwright/pristine.json`) carries the new version; otherwise `/bindwright:doctor` reports the repo as behind.
 4. Commit, then run `python tools/pack_plugin.py --marketplace` and commit `.claude-plugin/marketplace.json` on its own: it pins the SHA-256 of the plugin zip built from that commit, so it comes last.
-5. Open PR `release/vX.Y.Z → main` and merge on a green gate with `--merge` (a true merge commit, so the tag's files match the pin).
+5. Open PR `release/vX.Y.Z → main` and merge with `--merge` once the gate is green and every other required check passes (a true merge commit, so the tag's files match the pin).
 6. Tag `vX.Y.Z` on the merge commit, push the tag, and publish a GitHub release from it (`gh release create vX.Y.Z --notes-file <file>`). `release-plugin.yml` rebuilds the zip and the helper files (`bindwright-X.Y.Z.tgz` and `bindwright-X.Y.Z-py3-none-any.whl`, whose SHA-256 the zip's `helper.json` pins) from the tag, refuses them if the zip's SHA-256 differs from the pin in `main`'s marketplace file, attaches all three to the release and updates the `plugin` branch the plugin directory follows. If it refuses, fix the pin on `main` with a hotfix and run it again for the same release (`gh workflow run release-plugin.yml -f tag=vX.Y.Z`); never move a published tag. Never build or attach a zip by hand.
 7. Cascade `main` into `develop` (`.claude/rules/git.md` § Cascade). Pages redeploys from `main` on its own.
 
