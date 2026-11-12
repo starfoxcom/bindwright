@@ -457,19 +457,27 @@ class GuardHookTest(unittest.TestCase):
                 (f'env A=1 git commit -F "{path}"', "Bash"),
                 (f'sudo gh pr create --title t --body-file "{path}"', "Bash"),
                 (f'gh pr create --title t <<EOF --body-file "{path}"\nx\nEOF', "Bash"),
-                (f'& "C:\\Program Files\\Git\\cmd\\git.exe" commit -F "{path}"', "PowerShell")):
+                (f'& "C:\\Program Files\\Git\\cmd\\git.exe" commit -F "{path}"', "PowerShell"),
+                (f'sudo -u git gh pr create --title t --body-file "{path}"', "Bash"),
+                (f'Invoke-RestMethod -Uri https://api.github.com/x -InFile:"{path}"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 
-    def test_folder_left_by_a_child_shell_or_popd_is_not_guessed(self):
-        # The commit reads the root's msg.txt; guessing `sub` would scan the clean copy there.
+    def project_with(self, files):
+        """A throwaway project with the guard and the given {relative path: text} files."""
         root = self.temp_project(("run-hook.sh", "no-ai-attribution.py"))
-        os.makedirs(os.path.join(root, "sub"))
-        for name, text in (("msg.txt", f"{GENERATED_LINE}\n"), (os.path.join("sub", "msg.txt"), "x\n")):
+        for name, text in files.items():
+            os.makedirs(os.path.dirname(os.path.join(root, name)), exist_ok=True)
             with open(os.path.join(root, name), "w", encoding="utf-8") as fh:
                 fh.write(text)
+        return root
+
+    def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
+        # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy.
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "sub/msg.txt": "x\n",
+                                  "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
         for command in ("(cd sub; true); git commit -F msg.txt", "cd sub | true; git commit -F msg.txt",
-                        "pushd sub; popd; git commit -F msg.txt"):
+                        "pushd sub; popd; git commit -F msg.txt", "git -C sub -C sub commit -F msg.txt"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=root))
 
@@ -477,6 +485,22 @@ class GuardHookTest(unittest.TestCase):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
         self.assert_denied(result)
         self.assertIn("/bindwright:update", json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_without_the_helper_a_moved_folder_is_not_guessed(self):
+        none = os.path.join(self.home, "none")
+        root = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
+        for command in ("cd sub && git commit -F msg.txt", "git -C sub commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=root, helper=none))
+        # gh's --template names a template, not a file.
+        self.assert_passes(self.attr("gh issue create --title t --template bug.md", helper=none))
+
+    def test_unreadable_command_names_the_cause(self):
+        result = self.attr("git commit -m x \\\r\n -F missing.md")
+        self.assert_denied(result)
+        reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("could not read this command's structure", reason)
+        self.assertNotIn("/bindwright:update", reason)
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:

@@ -139,9 +139,13 @@ READERS = {"git", "gh", "curl"} | WEB_CMDLETS | READ_CMDLETS
 POP_COMMANDS = {"popd", "pop-location"}
 CD_COMMANDS = {"cd", "chdir", "pushd", "set-location", "sl", "push-location"} | POP_COMMANDS
 UNKNOWN = object()  # a folder the command switches to at run time
-STRICT_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it) or Node, the guard cannot"
-               " read the command's structure, so it reads every file flag, a text tool's (awk -F,"
-               " grep -F) included: run that tool as a command of its own.")
+STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
+               " as a command of its own.")
+NO_PARSER_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it) or Node, the guard"
+                  " cannot read the command's structure," + STRICT_READ)
+UNREAD_HINT = " The guard could not read this command's structure," + STRICT_READ
+MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|push-location|pop-location)"
+                          r"(?![\w-])|\bgit\b[^|;&\n]*?\s-C(?![\w-])", re.I)
 
 
 def deny(reason):
@@ -172,23 +176,23 @@ def helper_dir():
 
 def parse(cmd, shell):
     """Each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    each paired with whether it runs in a child shell; None when the parser is missing,
-    fails or meets syntax it cannot read."""
+    each paired with whether it runs in a child shell, and "". When the parser is missing,
+    fails or meets syntax it cannot read: None, and the hint that says which."""
     script = os.path.join(helper_dir(), "hooks", "shell-words.mjs")
     node = shutil.which("node")
     if not node or not os.path.isfile(script):
-        return None
+        return None, NO_PARSER_HINT
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
                              capture_output=True, timeout=20)
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None
+        return None, UNREAD_HINT
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
-        return None
+        return None, UNREAD_HINT
     scoped = set(data.get("scoped") or ())
-    return [(words, i in scoped) for i, words in enumerate(data["commands"])]
+    return [(words, i in scoped) for i, words in enumerate(data["commands"])], ""
 
 
 def text_of(word):
@@ -203,13 +207,11 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def unwrapped(words):
-    """The words from the program a wrapper runs (`env A=1 git ...`, `sudo gh ...`,
-    `xargs curl ...`) onward, or the words as they are."""
-    for i in range(len(words)):
-        if program(words[i:]) in READERS:
-            return words[i:]
-    return words
+def reader_runs(words):
+    """The words from each program a body file could reach (git, gh, curl, a cmdlet) onward:
+    a wrapper runs one (`env A=1 git ...`, `sudo -u git gh ...`, `xargs curl ...`), and a
+    wrapper's own argument can look like one, so every such word is tried."""
+    return [words[i:] for i in range(len(words)) if program(words[i:]) in READERS]
 
 
 def flag_values(words, short=()):
@@ -235,23 +237,24 @@ def flag_values(words, short=()):
 
 
 def git_subcommand(words):
-    """(index of git's subcommand, the folder `git -C` points at or None)."""
-    folder, i = None, 1
+    """(index of git's subcommand, the folders its `-C` options name, in order)."""
+    folders, i = [], 1
     while i < len(words) and text_of(words[i]).startswith("-"):
         if isinstance(words[i], str) and words[i] in GIT_VALUE_OPTIONS and i + 1 < len(words):
-            folder = words[i + 1] if words[i] == "-C" else folder
+            if words[i] == "-C":
+                folders.append(words[i + 1])
             i += 1
         i += 1
-    return i, folder
+    return i, folders
 
 
 def git_files(words):
-    """Body files of a git write, and the folder `git -C` points at (or None). When the
-    subcommand is built at run time (`git $OPTS commit`), every file flag after it is read."""
-    i, folder = git_subcommand(words)
+    """The folders `git -C` names, and the body files of a git write. When the subcommand
+    is built at run time (`git $OPTS commit`), every file flag after it is read."""
+    i, folders = git_subcommand(words)
     if i >= len(words) or (isinstance(words[i], str) and words[i] not in GIT_WRITES):
-        return folder, []
-    return folder, [v for f, v in flag_values(words[i:], ("-F",)) if f in GIT_FILE_FLAGS and v is not None]
+        return folders, []
+    return folders, [v for f, v in flag_values(words[i:], ("-F",)) if f in GIT_FILE_FLAGS and v is not None]
 
 
 def gh_files(words):
@@ -313,17 +316,17 @@ def moved_folder(words, folder):
 
 
 def command_files(words):
-    """(the folder `git -C` points at or None, body files) for one command."""
+    """(the folders `git -C` names, body files) for one command."""
     name = program(words)
     if name == "git":
         return git_files(words)
     if name == "gh":
-        return None, gh_files(words)
+        return [], gh_files(words)
     if name == "curl":
-        return None, curl_files(words)
+        return [], curl_files(words)
     if name in WEB_CMDLETS or name in READ_CMDLETS:
-        return None, cmdlet_files(name, words)
-    return None, []
+        return [], cmdlet_files(name, words)
+    return [], []
 
 
 def parsed_files(commands, cwd):
@@ -335,19 +338,29 @@ def parsed_files(commands, cwd):
             # commands run in the new one, so neither can be told from here.
             folder = UNKNOWN if in_child_shell else moved_folder(words, folder)
             continue
-        git_folder, files = command_files(unwrapped(words))
-        here = folder if git_folder is None else moved_folder(["cd", git_folder], folder)
-        for value in files:
-            if value != "-":
-                yield resolve(value, here)
+        for run in reader_runs(words):
+            folders, files = command_files(run)
+            here = folder
+            for target in folders:
+                here = moved_folder(["cd", target], here)
+            for value in files:
+                if value != "-":
+                    yield resolve(value, here)
 
 
 def strict_files(cmd, cwd):
-    """Without the parser: every file flag in the command text, a text tool's included."""
+    """Without the parser: every file flag in the command text, a text tool's included. A
+    relative file after a folder change (`cd`, `git -C`) cannot be placed, so it is refused."""
+    moved = MOVES_FOLDER.search(cmd) is not None
     for m in FILE_FLAGS.finditer(cmd):
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
+        if (m.group("long") or "").lower() == "--template":
+            # A file for `git commit`; a template name or repository for gh.
+            stage = cmd[max(cmd.rfind(c, 0, m.start()) for c in ";&|\n") + 1:m.start()]
+            if not re.search(r"\bgit\b", stage, re.I):
+                continue
         if "=" in path:            # gh -F key=value / key=@file
             if "=@" not in path:
                 continue
@@ -355,7 +368,12 @@ def strict_files(cmd, cwd):
             if path == "-":        # key=@- reads stdin
                 continue
         path = os.path.expanduser(path.strip("\"'"))
-        yield (path if os.path.isabs(path) else os.path.join(cwd, path)), None
+        if os.path.isabs(path):
+            yield path, None
+        elif moved:
+            yield None, f"a relative body file {path} after a change of folder"
+        else:
+            yield os.path.join(cwd, path), None
 
 
 def scan_text(text, where):
@@ -381,11 +399,10 @@ def main():
         sys.exit(0)
 
     scan_text(cmd, "the command text")
-    commands = parse(cmd, "powershell" if data.get("tool_name") == "PowerShell" else "bash")
-    hint = "" if commands is not None else STRICT_HINT
+    commands, hint = parse(cmd, "powershell" if data.get("tool_name") == "PowerShell" else "bash")
     for path, error in (parsed_files(commands, cwd) if commands is not None else strict_files(cmd, cwd)):
         if error:
-            deny(f"could not tell which file holds {error}. Use a literal absolute path.")
+            deny(f"could not tell which file holds {error}. Use a literal absolute path.{hint}")
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:

@@ -112,7 +112,7 @@ function psCommand(node) {
 }
 
 export async function shellWords(shell, command) {
-  const { Parser, Language } = await import(pathToFileURL(path.join(PARSERS, "web-tree-sitter.js")).href);
+  const { Parser, Language } = await import(pathToFileURL(path.join(PARSERS, "web-tree-sitter.mjs")).href);
   await Parser.init({ locateFile: (name) => path.join(PARSERS, name) });
   const parser = new Parser();
   parser.setLanguage(await Language.load(path.join(PARSERS, GRAMMARS[shell])));
