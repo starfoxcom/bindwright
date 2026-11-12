@@ -99,7 +99,7 @@ If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
 <!-- TOGGLE:code_host_local:off START -->
 ## Commit and PR
 
-Take the first row that matches:
+Stage the session's files by name, never `git add -A` or `git add .`, and stop to ask when `git status` lists a file this session did not change. Then take the first row that matches:
 
 | Situation | Do |
 |---|---|
@@ -118,7 +118,7 @@ Take the first row that matches:
 <!-- TOGGLE:github_actions_paths_ignore_auto_merge:off END -->
 <!-- TOGGLE:tracker:file END -->
 <!-- TOGGLE:branching_model_gitflow START -->
-| `hotfix/*` finished | PR to `{{MAIN_BRANCH}}`. After it merges, open the cascade PR into `{{DEV_BRANCH}}` (`git.md` § Cascade). Done only when the cascade merges. |
+| `hotfix/*` finished | PR to `{{MAIN_BRANCH}}`. After it merges, open the cascade PR: a `chore/cascade-<name>` branch from `origin/{{DEV_BRANCH}}` that merges `origin/{{MAIN_BRANCH}}` with `--no-ff`, into `{{DEV_BRANCH}}`. Done only when the cascade merges. |
 | `release/*` finished | Same as a hotfix: PR to `{{MAIN_BRANCH}}`, tag the release commit, then cascade. |
 <!-- TOGGLE:branching_model_gitflow END -->
 <!-- TOGGLE:ci_checks START -->
@@ -135,7 +135,7 @@ Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.
 <!-- TOGGLE:code_host_local START -->
 ## Save point
 
-Commit the session's work as one save point, or one per finished piece, with the message format in `git.md`. The project lives only on this computer: nothing is pushed, and there is no pull request.
+Commit the session's work as one save point, or one per finished piece, with the message format in `git.md`. Stage the files by name, never `git add -A` or `git add .`, and stop to ask when `git status` lists a file this session did not change. The project lives only on this computer: nothing is pushed, and there is no pull request.
 <!-- TOGGLE:code_host_local END -->
 
 <!-- TOGGLE:tracker:github START -->
