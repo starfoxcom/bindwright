@@ -96,6 +96,17 @@ class Main(unittest.TestCase):
         self.assertEqual(run("--cli", "2.1.280", "--action-sha", OLD_SHA, "--action-version", "v1.0.213", self.path),
                          (0, "", ""))
 
+    def test_an_action_used_by_a_tag_is_listed(self):
+        with open(self.path, "a", encoding="utf-8") as fh:
+            fh.write("      - uses: actions/checkout@v6\n      - uses: ./local-action\n"
+                     "      - uses: actions/setup-python@" + OLD_SHA + "  # v6\n"
+                     "      - uses: docker://alpine:3.20\n"
+                     "      - uses: 'docker://alpine@sha256:" + "0" * 64 + "'\n")
+        _, out, _ = run("--cli", "2.1.280", "--action-sha", OLD_SHA, "--action-version", "v1.0.213", self.path)
+        self.assertEqual(out, "- Action `actions/checkout@v6` at `%s:11` is not pinned to a commit\n"
+                              "- Action `docker://alpine:3.20` at `%s:14` is not pinned to a commit\n"
+                              % (self.path, self.path))
+
     def test_bad_arguments_and_missing_files_fail(self):
         for argv in ([], ["--cli", "2.1.300", "--action-sha", OLD_SHA, "--action-version", "v1"],
                      ["--cli", "latest", "--action-sha", OLD_SHA, "--action-version", "v1", self.path],
