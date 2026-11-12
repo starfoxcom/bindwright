@@ -439,6 +439,22 @@ test("a project that owns the old skill path keeps only its own copy", needsPyth
   }
 });
 
+test("a renamed skill deleted under a folder claim stays deleted once the claim is dropped", needsPython, async () => {
+  const [[, closeTo]] = Object.entries(RENAMES);
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const repo = await makeRepo((r) => {
+      rmSync(r.at(dirname(closeTo)), { recursive: true, force: true });
+      r.write(".bindwright/owned", ".claude/skills/\n");
+    });
+    const run = () => JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    run();
+    rmSync(repo.at(".bindwright/owned"));
+    const after = run();
+    assert.ok(after.deleted.includes(closeTo) && !existsSync(repo.at(closeTo)), `${cmd}: ${JSON.stringify(after)}`);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+});
+
 test("a move into a path the project owns is not made, and the old file is reported", needsPython, async () => {
   const [[closeFrom, closeTo], [startFrom, startTo]] = Object.entries(RENAMES);
   const outs = [];
