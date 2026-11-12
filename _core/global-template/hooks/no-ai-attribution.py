@@ -25,7 +25,7 @@ What is scanned, for any git write, gh write or GitHub API call:
     (tree-sitter, `hooks/shell-words.mjs`), so each flag belongs to one
     command. Every command's flags are read, a wrapper's (`env`, `sudo`,
     `xargs`) and one whose program is built at run time included, except
-    a text tool's (`awk -F,`, `grep -F word`), git's outside a write, and
+    a text tool's (`awk -F,`, `grep -F word`), git's in a read (`git log -F`), and
     gh's `--template`. A flag inside quoted text, a here-doc, a here-string
     or the value of -m / --body / --title is text, not a body file. After a
     `cd`, `pushd` or `Set-Location`, which may run in a child shell or fail,
@@ -132,9 +132,11 @@ FILE_FLAGS = re.compile(
 PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
 
 # With the parser: every command's file flags are read, except a text tool's, git's
-# outside a write and gh's `--template` (a template name). A program built at run time,
+# in a read (where -F or --file means something else) and gh's `--template` (a template
+# name). Any other git subcommand, an alias included, is read as a write. A program built at run time,
 # a wrapper (`env`, `sudo`, `xargs`) or any other program has its flags read.
-GIT_WRITES = {"commit", "commit-tree", "merge", "tag", "notes"}
+GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "reflog", "diff", "blame",
+             "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
 FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
 DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
@@ -314,10 +316,10 @@ def git_subcommand(words):
 
 
 def git_files(words):
-    """The folders `git -C` names, and the body files of a git write. When the subcommand
-    is built at run time (`git $OPTS commit`), every file flag after it is read."""
+    """The folders `git -C` names, and the body files of any subcommand but a read. When the
+    subcommand is built at run time (`git $OPTS commit`), every file flag after it is read."""
     i, folders = git_subcommand(words)
-    if i >= len(words) or (isinstance(words[i], str) and words[i] not in GIT_WRITES):
+    if i >= len(words) or (isinstance(words[i], str) and words[i] in GIT_READS):
         return folders, []
     return folders, body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS)
 
@@ -325,6 +327,15 @@ def git_files(words):
 def git_reads(words):
     """([the folders its `git -C` options name], body files) for a git command."""
     folders, files = git_files(words)
+    i = git_subcommand(words)[0]
+    if i < len(words) and not isinstance(words[i], str):
+        folders = [*folders, words[i]]  # a run-time word where git's options go may hold -C
+    return as_chains((folders, files))
+
+
+def as_chains(read):
+    """A (folders, files) read as ([its folder chain], files)."""
+    folders, files = read
     return [folders] if folders else [], files
 
 
@@ -401,10 +412,17 @@ def command_files(words, shell="bash"):
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
     names = {program(run) for run in inner}
     found = [command_files(run, shell) for run in inner]
-    # A program built at run time, or an array's words, may be git's: they are read with git's
-    # rules too (`-aF msg`), and git's -m stays off the outer read, where gh's -m is a switch.
-    if words and not isinstance(words[0], str):
-        found.append(git_reads(["git", "commit", *words[1:]] if is_array(words) else ["git", *words[1:]]))
+    # A program built at run time (`$GIT`, `env $GIT`), or an array's words, may be git's: the
+    # words after it are read with git's rules too (`-aF msg`), and git's -m stays off the
+    # outer read, where gh's -m is a switch. An array holding `-C` moves git to a folder the
+    # words cannot place.
+    if is_array(words):
+        found.append(as_chains(git_files(["git", "commit", *words[1:]])))
+        if "-C" in words[1:]:
+            found.append(([[words[0]]], []))
+    else:
+        found += [as_chains(git_files(["git", *words[i + 1:]])) for i, word in enumerate(words)
+                  if not isinstance(word, str)]
     flags = BODY_FLAGS - {"--template"} if "gh" in names else BODY_FLAGS
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
