@@ -14,7 +14,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- `review-tiers.md`'s gate recovery passes `--branch` for a protected branch `setup-review-gate.sh` does not cover by default, such as `main` where `develop` is the default branch.
+- `review-tiers.md`'s gate recovery restores the PR's own base branch with `setup-review-gate.sh --branch <base>`; the script's defaults (the default branch and `develop`) left out `main` where `develop` is the default branch.
 - `/close-session` and `review-tiers.md` merge once every check has settled and the required ones pass, not as soon as the required ones do (#814).
 - `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed, warning that every other clone loses its copy when it pulls that commit. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
 
