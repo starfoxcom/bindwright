@@ -44,7 +44,7 @@ Take the first row that matches:
 | Branch goal not finished | Commit the work. No PR. |
 | `hotfix/*` finished | PR to `main`. After it merges, open the cascade PR into `develop` (`git.md` § Cascade). Done only when the cascade merges. |
 | `release/*` finished | Same as a hotfix: PR to `main`, tag the release commit, then cascade. |
-| Any other branch finished | Commit, open a PR to `develop`, watch the checks, merge on 🟢. |
+| Any other branch finished | Commit, open a PR to `develop`, watch the checks, merge once every required check passes. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
 

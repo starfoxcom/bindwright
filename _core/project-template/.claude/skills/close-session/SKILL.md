@@ -122,7 +122,7 @@ Take the first row that matches:
 | `release/*` finished | Same as a hotfix: PR to `{{MAIN_BRANCH}}`, tag the release commit, then cascade. |
 <!-- TOGGLE:branching_model_gitflow END -->
 <!-- TOGGLE:ci_checks START -->
-| Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge on 🟢. |
+| Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge once every required check passes. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
 <!-- TOGGLE:ci_checks END -->
