@@ -18,19 +18,21 @@ the repo's own name, a human Co-Authored-By.
 What is scanned, for any git write, gh write or GitHub API call:
   * The full command text: inline -m / --body / --title / --notes values,
     here-docs, here-strings and PowerShell -Body all live there.
-  * Every file a git write, gh, curl, Invoke-RestMethod/WebRequest or
-    Get-Content command names as a message or body (-F / --file /
-    --template for git; --body-file / --notes-file / --input / -F and
-    --field key=@file for gh; -d @file and -F key=@file for curl; -InFile;
-    Get-Content's path). Bindwright's helper parses the command the way
-    the shell does (tree-sitter, `hooks/shell-words.mjs`), so a text tool's
-    own flags (`awk -F,`, `grep -F word`) and a flag inside quoted text, a
-    here-doc or a here-string are another command's words, not a body
-    file. `cd`, `Set-Location` and `git -C` set the folder a relative path
-    resolves from. A file it cannot read, or one named by text built at
-    run time, is denied, so a typo cannot slip a body through unread.
-    Without the helper or Node it reads every file flag in the command
-    text instead, a text tool's included.
+  * Every file a command names with a body flag (-F / --file / --template
+    for a git write; --body-file / --notes-file / --input / -F and
+    --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
+    path). Bindwright's helper parses the command the way the shell does
+    (tree-sitter, `hooks/shell-words.mjs`), so each flag belongs to one
+    command. Every command's flags are read, a wrapper's (`env`, `sudo`,
+    `xargs`) and one whose program is built at run time included, except
+    a text tool's (`awk -F,`, `grep -F word`), git's outside a write, and
+    gh's `--template`. A flag inside quoted text, a here-doc, a here-string
+    or the value of -m / --body / --title is text, not a body file. `cd`,
+    `Set-Location` and `git -C` set the folder a relative path resolves
+    from. A file it cannot read, or one named by text built at run time,
+    is denied, so a typo cannot slip a body through unread. Without the
+    helper or Node it reads every file flag in the command text instead,
+    a text tool's included.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -125,20 +127,26 @@ FILE_FLAGS = re.compile(
 )
 PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
 
-# With the parser: the programs whose words can name a body file, by lowercase
-# name without `.exe`, and the flags whose value is one.
+# With the parser: every command's file flags are read, except a text tool's, git's
+# outside a write and gh's `--template` (a template name). A program built at run time,
+# a wrapper (`env`, `sudo`, `xargs`) or any other program has its flags read.
 GIT_WRITES = {"commit", "commit-tree", "merge", "tag", "notes"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
-GH_FILE_FLAGS = {"-F", "--body-file", "--notes-file", "--input", "--field"}
-CURL_DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw", "-F", "--form"}
-WEB_CMDLETS = {"invoke-restmethod", "invoke-webrequest", "irm", "iwr"}
+FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
+DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
+BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
+              "-infile"} | FORM_FLAGS | DATA_FLAGS
+# The word after one of these is message text, even when it starts with a dash.
+MESSAGE_FLAGS = {"-m", "--message", "-b", "--body", "-t", "--title", "--notes", "--subject"}
+TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
+              "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
 READ_CMDLETS = {"get-content", "gc"}
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
                      "--super-prefix", "--attr-source"}
-READERS = {"git", "gh", "curl"} | WEB_CMDLETS | READ_CMDLETS
 POP_COMMANDS = {"popd", "pop-location"}
 CD_COMMANDS = {"cd", "chdir", "pushd", "set-location", "sl", "push-location"} | POP_COMMANDS
 UNKNOWN = object()  # a folder the command switches to at run time
+PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
 STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
                " as a command of its own.")
 NO_PARSER_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it) or Node, the guard"
@@ -185,7 +193,7 @@ def parse(cmd, shell):
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
-                             capture_output=True, timeout=20)
+                             capture_output=True, timeout=PARSE_SECONDS)
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return None, UNREAD_HINT
@@ -207,22 +215,18 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def reader_runs(words):
-    """The words from each program a body file could reach (git, gh, curl, a cmdlet) onward:
-    a wrapper runs one (`env A=1 git ...`, `sudo -u git gh ...`, `xargs curl ...`), and a
-    wrapper's own argument can look like one, so every such word is tried."""
-    return [words[i:] for i in range(len(words)) if program(words[i:]) in READERS]
-
-
 def flag_values(words, short=()):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
-    {"dynamic": <its text>}."""
+    {"dynamic": <its text>}. A message flag's value is text, never a flag."""
+    message = False
     for i, word in enumerate(words):
         text = text_of(word)
-        if not text.startswith("-"):
+        if message or not text.startswith("-"):
+            message = False
             continue
+        message = text in MESSAGE_FLAGS or text.lower() == "-body"  # PowerShell names are any case
         built = isinstance(word, dict)
         if text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
@@ -234,6 +238,33 @@ def flag_values(words, short=()):
             yield word, words[i + 1] if i + 1 < len(words) else None
             continue
         yield flag, {"dynamic": value} if built else value
+
+
+def body_file(flag, value):
+    """The file a body flag's value names, a run-time word whose file cannot be told, or None."""
+    text = text_of(value)
+    if flag in FORM_FLAGS and "=" in text:
+        at = re.search(r"=[@<]", text)
+        if not at:
+            return None
+        return value if isinstance(value, dict) else text[at.end():]
+    if flag in DATA_FLAGS:
+        if not text.lstrip("\"'").startswith(("@", "<")):
+            return None
+        return value if isinstance(value, dict) else text[1:]
+    return value
+
+
+def body_files(words, flags=BODY_FLAGS):
+    """Every file the words' flags in `flags` name as a body."""
+    files = []
+    for flag, value in flag_values(words, ("-F", "-d")):
+        name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
+        if isinstance(name, str) and name in flags and value is not None:
+            found = body_file(name, value)
+            if found is not None:
+                files.append(found)
+    return files
 
 
 def git_subcommand(words):
@@ -254,38 +285,10 @@ def git_files(words):
     i, folders = git_subcommand(words)
     if i >= len(words) or (isinstance(words[i], str) and words[i] not in GIT_WRITES):
         return folders, []
-    return folders, [v for f, v in flag_values(words[i:], ("-F",)) if f in GIT_FILE_FLAGS and v is not None]
+    return folders, body_files(words[i:], GIT_FILE_FLAGS)
 
 
-def gh_files(words):
-    files = []
-    for flag, value in flag_values(words, ("-F",)):
-        if flag not in GH_FILE_FLAGS or value is None:
-            continue
-        text = text_of(value)
-        if flag in ("-F", "--field") and "=" in text:
-            if "=@" in text:  # gh api -F key=@file; key=value is a plain field
-                files.append(value if isinstance(value, dict) else text.split("=@", 1)[1])
-        elif flag != "--field" or isinstance(value, dict):
-            files.append(value)
-    return files
-
-
-def curl_files(words):
-    files = []
-    for flag, value in flag_values(words, ("-d", "-F")):
-        if flag not in CURL_DATA_FLAGS or value is None:
-            continue
-        text = text_of(value)
-        at = text.split("=", 1)[1] if "=" in text and flag in ("-F", "--form") else text
-        if at.lstrip("\"'").startswith(("@", "<")):
-            files.append(value if isinstance(value, dict) else at[1:])
-    return files
-
-
-def cmdlet_files(name, words):
-    if name in WEB_CMDLETS:
-        return [v for f, v in flag_values(words) if isinstance(f, str) and f.lower() == "-infile" and v]
+def get_content_files(words):
     files = [v for f, v in flag_values(words) if isinstance(f, str)
              and f.lower() in ("-path", "-literalpath") and v is not None]
     positional = [w for w in words[1:] if not (isinstance(w, str) and w.startswith("-"))]
@@ -318,15 +321,15 @@ def moved_folder(words, folder):
 def command_files(words):
     """(the folders `git -C` names, body files) for one command."""
     name = program(words)
+    if name in TEXT_TOOLS:
+        return [], []
     if name == "git":
         return git_files(words)
     if name == "gh":
-        return [], gh_files(words)
-    if name == "curl":
-        return [], curl_files(words)
-    if name in WEB_CMDLETS or name in READ_CMDLETS:
-        return [], cmdlet_files(name, words)
-    return [], []
+        return [], body_files(words, BODY_FLAGS - {"--template"})
+    if name in READ_CMDLETS:
+        return [], get_content_files(words)
+    return [], body_files(words)
 
 
 def parsed_files(commands, cwd):
@@ -338,14 +341,13 @@ def parsed_files(commands, cwd):
             # commands run in the new one, so neither can be told from here.
             folder = UNKNOWN if in_child_shell else moved_folder(words, folder)
             continue
-        for run in reader_runs(words):
-            folders, files = command_files(run)
-            here = folder
-            for target in folders:
-                here = moved_folder(["cd", target], here)
-            for value in files:
-                if value != "-":
-                    yield resolve(value, here)
+        folders, files = command_files(words)
+        here = folder
+        for target in folders:
+            here = moved_folder(["cd", target], here)
+        for value in files:
+            if value != "-":
+                yield resolve(value, here)
 
 
 def strict_files(cmd, cwd):

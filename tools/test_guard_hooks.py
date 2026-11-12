@@ -438,7 +438,10 @@ class GuardHookTest(unittest.TestCase):
                 ("git commit -m x 2>&1 | grep -F x", "Bash"),
                 ("git tag --list | Select-String -Pattern v3; sort -F x", "PowerShell"),
                 ('git --git-dir="$D" commit -m x', "Bash"),
-                ('gh api repos/o/r/issues -F "title=$T"', "Bash")):
+                ('gh api repos/o/r/issues -F "title=$T"', "Bash"),
+                ('git commit -m "-F is now parsed"', "Bash"),
+                ('gh pr comment 5 --body "--body-file=x was ignored"', "Bash"),
+                ("git grep -F needle && git commit -m x", "Bash")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -459,7 +462,10 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title t <<EOF --body-file "{path}"\nx\nEOF', "Bash"),
                 (f'& "C:\\Program Files\\Git\\cmd\\git.exe" commit -F "{path}"', "PowerShell"),
                 (f'sudo -u git gh pr create --title t --body-file "{path}"', "Bash"),
-                (f'Invoke-RestMethod -Uri https://api.github.com/x -InFile:"{path}"', "PowerShell")):
+                (f'Invoke-RestMethod -Uri https://api.github.com/x -InFile:"{path}"', "PowerShell"),
+                (f'$GIT commit -F "{path}"', "Bash"),
+                (f'"$(command -v gh)" pr create --title t --body-file "{path}"', "Bash"),
+                (f'& $git commit -F "{path}"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 
