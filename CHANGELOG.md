@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v3.6.0] — 2026-11-12
+
 ### Added
 
 - `/bindwright:update` lists the project's own files that still name the Bindwright version it was bound with, when it moves to a newer one; it never edits them (#814).
