@@ -17,10 +17,22 @@ Pins it reads:
 
 It also lists every action a workflow uses by a tag or branch instead of a
 commit (`uses: actions/checkout@v6`): a tag can be moved to other code.
+
+The deep review runs it on a PR's diff to look up, on GitHub, each action pin
+the PR adds, since the reviewer's own tools cannot reach other repos:
+
+    git diff BASE...HEAD -- '*.yml' '*.yaml' | pin_check.py added
+
+Prints a Markdown line per added pin, verified when a release tag its comment
+names points to its commit and not verified otherwise, or nothing when the
+diff adds no pin.
 """
 
+import json
 import re
+import subprocess
 import sys
+import time
 
 CLI = re.compile(r'^\s*(?:CLI_VERSION|PINNED_VERSION):\s*"?(\d+(?:\.\d+)*)"?\s*(?:#.*)?$')
 ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s*anthropics/claude-code-action@([0-9a-f]{40})\b(?:\s*#\s*(.*))?$")
@@ -28,6 +40,13 @@ DOCKER = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?docker://([^\s'\"#]+)")
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?([\w.-]+/[\w./-]+)@([^\s'\"#]+)")
 VERSION = re.compile(r"\d+(?:\.\d+)*")
 SHA = re.compile(r"[0-9a-f]{40}")
+REPO = re.compile(r"[A-Za-z0-9_.-]{1,39}/[A-Za-z0-9_.-]{1,100}")
+TAG = re.compile(r"(?<![\w.-])(v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)(?![\w.-])", re.ASCII)
+MAX_TAG_LENGTH = 40
+MAX_PINS = 40
+MAX_TAGS = 4
+MAX_PEELS = 3
+SEPARATORS = " \t\r"
 
 
 def _tuple(version):
@@ -63,6 +82,101 @@ def floating(name, text):
     return found
 
 
+def ends_value(text, m):
+    """True when the YAML value ends right after the commit id: at the line's end, before
+    one of YAML's separators (space, tab, CR), or at the closing quote of a quoted value.
+    Anything glued on (`#x`, a quote, a no-break space) is part of the ref the runner uses,
+    so that ref is not the commit."""
+    rest = text[m.end(2):]
+    opened = text[m.start(1) - 1] if text[m.start(1) - 1] in "'\"" else ""
+    if opened:
+        return rest[:1] == opened and (len(rest) == 1 or rest[1] in SEPARATORS)
+    return not rest or rest[0] in SEPARATORS
+
+
+def added_pins(diff):
+    """[(owner/repo, sha, [tags])] for each action a diff adds by commit, with
+    the first MAX_TAGS release tags its comment names (`# v6 (v6.1.0)`). Only
+    these checked fields leave the diff: no file name or other PR text."""
+    found = []
+    for line in diff.split("\n"):
+        m = USES.match(line[1:]) if line.startswith("+") else None
+        if not m or not SHA.fullmatch(m.group(2)) or not ends_value(line[1:], m):
+            continue
+        repo = "/".join(m.group(1).split("/")[:2])
+        if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
+            continue
+        tags = [t for t in dict.fromkeys(TAG.findall(line.partition("#")[2])) if len(t) <= MAX_TAG_LENGTH]
+        tags = tags[:MAX_TAGS]
+        entry = (repo, m.group(2), tags)
+        if entry not in found:
+            found.append(entry)
+    return found
+
+
+def tag_commit(repo, tag, fetch):
+    """The commit a release tag points to, peeling annotated tags; None when the
+    tag is missing or does not end at a commit. `fetch(path)` returns the API's
+    JSON, or None on 404."""
+    obj = _object(fetch("repos/%s/git/ref/tags/%s" % (repo, tag)))
+    for _ in range(MAX_PEELS):
+        if not obj or obj["type"] != "tag":
+            break
+        obj = _object(fetch("repos/%s/git/tags/%s" % (repo, obj["sha"])))
+    return obj["sha"] if obj and obj["type"] == "commit" else None
+
+
+def _object(reply):
+    """A reply's `object` as {"type", "sha"} when its id is a full commit-style id, else None."""
+    obj = reply.get("object") if isinstance(reply, dict) else None
+    if isinstance(obj, dict) and isinstance(obj.get("sha"), str) and SHA.fullmatch(obj["sha"]):
+        return {"type": obj.get("type"), "sha": obj["sha"]}
+    return None
+
+
+def provenance(found, fetch):
+    """A Markdown line per added pin with the workflow's verdict: verified when a
+    release tag its comment names points to its commit. Each (repo, tag) is
+    looked up once, however many pins name it."""
+    lines, cache = [], {}
+    for repo, sha, tags in found[:MAX_PINS]:
+        verdict = "not verified: its comment names no release tag" if not tags else ""
+        for tag in tags:
+            if (repo, tag) not in cache:
+                try:
+                    cache[repo, tag] = tag_commit(repo, tag, fetch)
+                except LookupError:
+                    cache[repo, tag] = LookupError
+            if cache[repo, tag] == sha:
+                verdict = "verified: tag `%s` points to this commit" % tag
+                break
+            if cache[repo, tag] is LookupError:
+                verdict = "not verified: a lookup failed"
+        lines.append("- `%s@%s`: %s." % (repo, sha, verdict or "not verified: no tag it names points to this commit"))
+    if len(found) > MAX_PINS:
+        lines.append("- %d more pins were not looked up." % (len(found) - MAX_PINS))
+    return "".join(line + "\n" for line in lines)
+
+
+def gh_fetch(path):
+    """`gh api <path>` as JSON; None on 404. Tries twice, then raises LookupError."""
+    for attempt in range(2):
+        try:
+            out = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired):
+            out = None
+        if out is not None and out.returncode == 0:
+            try:
+                return json.loads(out.stdout)
+            except ValueError:
+                pass
+        elif out is not None and "HTTP 404" in out.stderr:
+            return None
+        if attempt == 0:
+            time.sleep(3)
+    raise LookupError(path)
+
+
 def behind(found, cli, action_sha):
     """The pins older than the newest CLI or not on the newest action commit,
     grouped by pinned value: [(kind, label, [places])] in first-seen order."""
@@ -93,6 +207,9 @@ def _option(args, name):
 
 def main(argv):
     args = list(argv)
+    if args == ["added"]:
+        sys.stdout.write(provenance(added_pins(sys.stdin.read()), gh_fetch))
+        return 0
     try:
         cli = _option(args, "--cli")
         sha = _option(args, "--action-sha")
