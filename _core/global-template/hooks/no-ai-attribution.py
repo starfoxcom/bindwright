@@ -223,16 +223,12 @@ def is_plain(cmd, start, end, spans):
 
 
 def quotes_may_nest(cmd, spans, end):
-    """True when a double-quoted span before `end` leaves a `(`, `{` or backtick open, as
-    `"$(echo "` or `"${T:-"` does: quotes nest inside a substitution or an expansion, so the
-    flat spans after it cannot tell its separators from real stage boundaries."""
-    for s, e in spans:
-        text = cmd[s:e]
-        if s < end and text.startswith('"') and (
-                text.count("(") > text.count(")") or text.count("{") > text.count("}")
-                or text.count("`") % 2):
-            return True
-    return False
+    """True when a double-quoted span before `end` holds a `$(`, `${` or backtick: quotes may
+    nest inside it, so the flat spans after it cannot tell its separators from real stage
+    boundaries. Telling a closed substitution from an open one takes a shell parser, so any
+    one counts, and the file is read."""
+    return any(s < end and cmd[s] == '"' and any(t in cmd[s:e] for t in ("$(", "${", "`"))
+               for s, e in spans)
 
 
 def find_files(cmd, cwd, esc):
