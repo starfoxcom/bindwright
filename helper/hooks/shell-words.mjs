@@ -3,8 +3,9 @@
 //   node shell-words.mjs bash|powershell < command
 //
 // Prints one JSON object: {"error": <the parse hit syntax it could not read>, "commands":
-// [[word, ...], ...]}, commands in source order, nested ones (inside $( ... ) or a
-// pipeline) included. A word is a string, or
+// [[word, ...], ...], "repeats": <a loop or a function may run them out of source order>},
+// commands in source order, nested ones (inside $( ... ) or a pipeline) included. A word
+// is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
@@ -23,6 +24,14 @@ function dynamic(node) {
 const BASH_SKIP = new Set(["variable_assignment", "file_redirect", "heredoc_redirect", "herestring_redirect"]);
 const BASH_RUNTIME = new Set(["simple_expansion", "expansion", "command_substitution",
   "process_substitution", "arithmetic_expansion"]);
+
+// A loop, a function or a script block may run its commands again, or later than where
+// they are written.
+const REPEATS = {
+  bash: new Set(["function_definition", "for_statement", "c_style_for_statement", "while_statement"]),
+  powershell: new Set(["function_statement", "foreach_statement", "for_statement", "while_statement",
+    "do_statement", "script_block_expression"]),
+};
 
 function bashWord(node) {
   if (node.type === "word" || node.type === "number") {
@@ -118,14 +127,16 @@ export async function shellWords(shell, command) {
   let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
+  let repeats = false;
   (function walk(node) {
+    if (REPEATS[shell].has(node.type)) repeats = true;
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
     if (node.type === "command") commands.push(read(node));
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
-  return { error: unreadable, commands };
+  return { error: unreadable, commands, repeats };
 }
 
 // Node gives this module its real path, symlinks resolved, so the path it was started by is

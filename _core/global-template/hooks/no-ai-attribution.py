@@ -30,7 +30,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     or the value of -m / --body / --title is text, not a body file. After a
     `cd`, `pushd` or `Set-Location`, which may run in a child shell or fail,
     a relative path is read in every folder the command may be in; `git -C`
-    moves its own command. A file it cannot read, or one named by text built at run time,
+    moves its own command. One after a `cd -`, or a `cd` beside a loop or a
+    function, is denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. Without the
     helper or Node it reads every file flag in the command text instead,
     a text tool's included.
@@ -157,7 +158,7 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
 POP_COMMANDS = {"popd", "pop-location"}
 PUSH_COMMANDS = {"pushd", "push-location"}
 CD_COMMANDS = {"cd", "chdir", "set-location", "sl"} | PUSH_COMMANDS | POP_COMMANDS
-UNKNOWN = object()  # a folder named by text the shell builds at run time
+UNKNOWN = object()  # a folder the command text cannot tell
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
 STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
                " as a command of its own.")
@@ -201,9 +202,9 @@ def parser_script():
 
 
 def parse(cmd, shell):
-    """Each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    and "". When the parser is missing, fails or meets syntax it cannot read: None, and the
-    hint that says which."""
+    """(each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
+    whether a loop or a function may run them out of source order), and "". When the parser
+    is missing, fails or meets syntax it cannot read: None, and the hint that says which."""
     node, script = shutil.which("node"), parser_script()
     if not node:
         return None, NO_NODE_HINT
@@ -218,7 +219,7 @@ def parse(cmd, shell):
         return None, UNREAD_HINT
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
         return None, UNREAD_HINT
-    return data["commands"], ""
+    return (data["commands"], bool(data.get("repeats"))), ""
 
 
 def text_of(word):
@@ -335,28 +336,36 @@ def resolve(value, places):
     path = os.path.expanduser(value)
     if os.path.isabs(path):
         yield path, None
-    elif UNKNOWN in places:
-        yield None, f"a relative body file {value} after a change to a folder named at run time"
+    elif not places or UNKNOWN in places:
+        yield None, (f"a relative body file {value} after a folder change the command text cannot tell"
+                     " (a target built at run time, `cd -`, or a `cd` beside a loop or a function)")
     else:
         paths = [os.path.join(place, path) for place in places]
         yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
 
 
+def joined(target, places):
+    """The folders a folder name reaches from any of `places`; UNKNOWN for one built at run time."""
+    if not isinstance(target, str):
+        return [UNKNOWN]
+    path = os.path.expanduser(target)
+    if os.path.isabs(path):
+        return [path]
+    return [UNKNOWN if place is UNKNOWN else os.path.join(place, path) for place in places]
+
+
 def cd_places(words, places):
     """The folders a `cd`-style command may move to from any of `places`: none for a return
-    to a folder already seen (`popd`, `cd -`, a bare `pushd`), home for a bare `cd`, and
-    UNKNOWN for a target built at run time."""
+    to a folder this command pushed (`popd`, a bare `pushd`), home for a bare `cd`, and
+    UNKNOWN for `cd -`, whose folder the command text does not hold."""
     targets = [w for w in words[1:] if not text_of(w).startswith("-")]
-    if program(words) in POP_COMMANDS or "-" in [text_of(w) for w in words[1:]]:
+    if program(words) in POP_COMMANDS:
         return []
+    if "-" in [text_of(w) for w in words[1:]]:
+        return [UNKNOWN]
     if not targets:
         return [] if program(words) in PUSH_COMMANDS else [os.path.expanduser("~")]
-    if not isinstance(targets[-1], str):
-        return [UNKNOWN]
-    target = os.path.expanduser(targets[-1])
-    if os.path.isabs(target):
-        return [target]
-    return [UNKNOWN if place is UNKNOWN else os.path.join(place, target) for place in places]
+    return joined(targets[-1], places)
 
 
 def command_files(words, shell="bash"):
@@ -391,11 +400,12 @@ def command_files(words, shell="bash"):
     return folders, files
 
 
-def parsed_files(commands, cwd, shell):
+def parsed_files(commands, repeats, cwd, shell):
     """(path, error) for every body file the parsed commands name, in order. A `cd` may run
     in a child shell (a subshell, a pipeline, a background job) or fail, so the shell may be
-    in any folder one named so far; `git -C` moves only its own command."""
-    places = [cwd]
+    in any folder one named so far; `git -C` moves only its own command. A loop or a function
+    can run a later `cd` before an earlier write, so beside one any `cd` makes the folder unknown."""
+    places = [UNKNOWN] if repeats and any(program(words) in CD_COMMANDS for words in commands) else [cwd]
     for words in commands:
         if program(words) in CD_COMMANDS:
             places += [place for place in cd_places(words, places) if place not in places]
@@ -403,7 +413,7 @@ def parsed_files(commands, cwd, shell):
         folders, files = command_files(words, shell)
         here = places
         for target in folders:
-            here = cd_places(["cd", target], here)
+            here = joined(target, here)
         for value in files:
             if value != "-":
                 yield from resolve(value, here)
@@ -461,8 +471,8 @@ def main():
 
     scan_text(cmd, "the command text")
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
-    commands, hint = parse(cmd, shell)
-    for path, error in (parsed_files(commands, cwd, shell) if commands is not None else strict_files(cmd, cwd)):
+    parsed, hint = parse(cmd, shell)
+    for path, error in (parsed_files(*parsed, cwd, shell) if parsed is not None else strict_files(cmd, cwd)):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.{hint}")
         try:

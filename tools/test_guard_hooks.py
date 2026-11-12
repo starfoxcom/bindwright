@@ -523,9 +523,15 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_denied(self.attr(command, project=root), f"found in file {outer}")
         clean = self.project_with({"msg.txt": "x\n", "sub/other.txt": "x\n"})
         for command in ("(cd sub && true); git commit -F msg.txt", "pushd sub; popd; git commit -F msg.txt",
-                        "cd -; cd; git commit -F msg.txt"):
+                        "cd; git commit -F msg.txt"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, project=clean))
+        # `cd -` goes to a folder the text does not hold; a loop or a function can run a later
+        # `cd` first; git takes `-C -` as a folder named `-`.
+        for command in ("cd -; git commit -F msg.txt", "f() { git commit -F msg.txt; }; cd sub; f",
+                        "for i in 1 2; do git commit -F msg.txt; cd sub; done", "git -C - commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=clean))
         # An absolute target names the folder again, whatever came before it.
         absolute = root.replace("\\", "/")
         for command in (f'(cd sub; true); cd "{absolute}"; git commit -F msg.txt',
