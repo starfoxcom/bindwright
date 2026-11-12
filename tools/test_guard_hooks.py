@@ -547,7 +547,8 @@ class GuardHookTest(unittest.TestCase):
                  "PowerShell", hidden),
                 ("Get-Item x -ErrorAction Stop; git commit -F msg.txt; trap { cd sub; continue }",
                  "PowerShell", hidden),
-                ("git -C - commit -F msg.txt", "Bash", os.path.join(clean, "-", "msg.txt"))):
+                ("git -C - commit -F msg.txt", "Bash", hidden),
+                ('opts=(-F msg.txt); sudo git -C sub commit "${opts[@]}"', "Bash", hidden)):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool, project=clean), reason)
         # An absolute target names the folder again, whatever came before it.
@@ -560,7 +561,8 @@ class GuardHookTest(unittest.TestCase):
         self.assert_denied(self.attr("git -C sub -C sub commit -F msg.txt", project=root), f"found in file {flagged}")
         moved = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
         for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt",
-                        '"$WRAP" "$ARG" git -C sub commit -F msg.txt'):
+                        '"$WRAP" "$ARG" git -C sub commit -F msg.txt',
+                        "env A=1 git -C sub merge feature/gh -F msg.txt"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=moved), "found in file")
         # A command held in an array runs wherever it is used, so its relative file is refused.

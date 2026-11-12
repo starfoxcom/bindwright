@@ -29,8 +29,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     gh's `--template`. A flag inside quoted text, a here-doc, a here-string
     or the value of -m / --body / --title is text, not a body file. After a
     `cd`, `pushd` or `Set-Location`, which may run in a child shell or fail,
-    a relative path is read in every folder the command may be in; `git -C`
-    moves its own command. One after a `cd -`, a `cd` to a folder this
+    a relative path is read in every folder the command may be in, each
+    folder its `git -C` names included. One after a `cd -`, a `cd` to a folder this
     computer cannot find, or a `cd` beside a loop or a function, is denied.
     A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. Without the
@@ -322,6 +322,12 @@ def git_files(words):
     return folders, body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS)
 
 
+def git_reads(words):
+    """([the folders its `git -C` options name], body files) for a git command."""
+    folders, files = git_files(words)
+    return [folders] if folders else [], files
+
+
 def get_content_files(words):
     files = [v for f, v in flag_values(words) if isinstance(f, str)
              and f.lower() in ("-path", "-literalpath") and v is not None]
@@ -375,14 +381,15 @@ def cd_places(words, places):
 
 
 def command_files(words, shell="bash"):
-    """(the folders `git -C` names, body files) for one command. In PowerShell, outside
+    """(the `git -C` folder chains its reads name, body files) for one command, which may
+    run in any folder those chains reach. In PowerShell, outside
     git's and gh's own words, a word such as `-Force` or `-FilePath` is a parameter name,
     unless the program is built at run time and may be git."""
     name = program(words)
     if name in TEXT_TOOLS:
         return [], []
     if name == "git":
-        return git_files(words)
+        return git_reads(words)
     if name == "gh":
         return [], body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS, "@")
     if name in READ_CMDLETS:
@@ -393,27 +400,36 @@ def command_files(words, shell="bash"):
     # --template, git's -m) are taken off the outer read.
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
     names = {program(run) for run in inner}
+    found = [command_files(run, shell) for run in inner]
     # A program built at run time, or an array's words, may be git's: they are read with git's
-    # rules too (`-aF msg`), adding files only, and git's -m stays off the outer read, where
-    # gh's -m is a switch.
-    built = bool(words) and not isinstance(words[0], str)
-    maybe_git = ([], [])
-    if built:
-        maybe_git = git_files(["git", "commit", *words[1:]] if is_array(words) else ["git", *words[1:]])
+    # rules too (`-aF msg`), and git's -m stays off the outer read, where gh's -m is a switch.
+    if words and not isinstance(words[0], str):
+        found.append(git_reads(["git", "commit", *words[1:]] if is_array(words) else ["git", *words[1:]]))
     flags = BODY_FLAGS - {"--template"} if "gh" in names else BODY_FLAGS
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
-    found = [command_files(run, shell) for run in inner]
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
     named = shell == "powershell" and bool(words) and isinstance(words[0], str)
     files = body_files(words, flags, message, readers, named) + [f for _, run_files in found for f in run_files]
-    files += maybe_git[1]
-    # A wrapped git's own -C names the folder; only without one does the possible git's count.
-    folders = next((f for f, run_files in reversed(found) if run_files), None)
-    if folders is None:
-        folders = maybe_git[0] if maybe_git[1] else []
-    if not folders and built:
-        folders = git_subcommand(words)[1]
-    return folders, files
+    return [chain for chains, _ in found for chain in chains], files
+
+
+def reachable(named):
+    """The folders in `named` this computer can find; UNKNOWN when it finds none of them, as
+    for a Git Bash path (`/c/...`) or a folder made later, which cannot be checked."""
+    found = [place for place in named if place is UNKNOWN or os.path.isdir(place)]
+    return found if found or not named else [UNKNOWN]
+
+
+def command_places(chains, places):
+    """Every folder one command may run in: each folder its `git -C` chains reach from
+    `places`, first, then each of `places`."""
+    here = []
+    for chain in chains:
+        reached = places
+        for target in chain:
+            reached = reachable(joined(target, reached))
+        here += [place for place in reached if place not in here]
+    return here + [place for place in places if place not in here]
 
 
 def is_array(words):
@@ -424,26 +440,20 @@ def is_array(words):
 def parsed_files(commands, repeats, cwd, shell):
     """(path, error) for every body file the parsed commands name, in order. A `cd` may run
     in a child shell (a subshell, a pipeline, a background job) or fail, so the shell may be
-    in any folder one named so far; `git -C` moves only its own command. A loop or a function
-    can run a later `cd` before an earlier write, so beside one any `cd` makes the folder unknown."""
+    in any folder one named so far, and each command also in any folder its `git -C` reaches.
+    A loop or a function can run a later `cd` before an earlier write, so beside one any `cd`
+    makes the folder unknown."""
     places = [UNKNOWN] if repeats and any(program(words) in CD_COMMANDS for words in commands) else [cwd]
     # An array's words run where the command that uses them runs, after any folder change.
     moves = any(program(words) in CD_COMMANDS or command_files(words, shell)[0] for words in commands)
     for words in commands:
         if program(words) in CD_COMMANDS:
             # A `cd` that fails from one place leaves the shell where it was, so a missing
-            # folder is dropped; when no place holds it (`/c/...` in Git Bash, a folder made
-            # later), the folder cannot be checked, so a relative file after it is refused.
-            named = cd_places(words, places)
-            moved = [p for p in named if p is UNKNOWN or os.path.isdir(p)]
-            if named and not moved:
-                moved = [UNKNOWN]
-            places += [place for place in moved if place not in places]
+            # folder is dropped.
+            places += [place for place in reachable(cd_places(words, places)) if place not in places]
             continue
-        folders, files = command_files(words, shell)
-        here = [UNKNOWN] if moves and is_array(words) else places
-        for target in folders:
-            here = joined(target, here)
+        chains, files = command_files(words, shell)
+        here = [UNKNOWN] if moves and is_array(words) else command_places(chains, places)
         for value in files:
             if value != "-":
                 yield from resolve(value, here)
