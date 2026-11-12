@@ -8,4 +8,4 @@ Run after the git checks, before the report.
 
 ## Extra close steps
 
-Run just before the commit.
+Run just before the commit. Mark a step *after the hand-off* when it reads this session's finished work and hand-off (a board check, a public mirror): it runs last instead.
