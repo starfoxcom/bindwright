@@ -390,8 +390,8 @@ class GuardHookTest(unittest.TestCase):
                         "git show HEAD:.git/hooks/commit-msg | grep -F word",
                         "git tag --list | awk -F. '{print $1}'",
                         "gh api repos/o/r/pulls | awk -F'\\t' '{print $1}'",
-                        "gh pr create --title 'a && b; c' --body x | awk -F, '{print}'",
-                        "git commit -m 'fix (wip' && git log | grep -F needle"):
+                        "gh pr create --title t --body x | awk -F, '{print}'",
+                        "git commit -m wip && git log | grep -F needle"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
         for command, tool in (
@@ -412,8 +412,8 @@ class GuardHookTest(unittest.TestCase):
                 (f'sort=1 git commit -F "{path}"', "Bash"),
                 (f'gh pr create --title "a) $(echo "x; sort y")" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "}} ${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
-                # A substitution in double quotes makes the stages after it unreadable, so a text
-                # tool's own flag there is read too: `needle` is no file, and the command is refused.
+                # Quotes before a text tool's flag make its stage unreadable, so the flag is read
+                # too: `needle` is no file, and the command is refused.
                 ('git commit -m "$(cat msg.txt)" && git log | grep -F needle', "Bash"),
                 (f'git commit\\\n  -F "{path}"', "Bash"),
                 (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),

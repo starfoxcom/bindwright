@@ -222,13 +222,11 @@ def is_plain(cmd, start, end, spans):
                    if not any(s <= i < e for s, e in spans))
 
 
-def quotes_may_nest(cmd, spans, end):
-    """True when a double-quoted span before `end` holds a `$(`, `${` or backtick: quotes may
-    nest inside it, so the flat spans after it cannot tell its separators from real stage
-    boundaries. Telling a closed substitution from an open one takes a shell parser, so any
-    one counts, and the file is read."""
-    return any(s < end and cmd[s] == '"' and any(t in cmd[s:e] for t in ("$(", "${", "`"))
-               for s, e in spans)
+def is_bare(text):
+    """True when `text` holds no quote, escape, substitution or expansion. Those are what can
+    hide a separator from the flat quote scan (nested quotes, the '\\'' idiom), and telling
+    them apart takes a shell parser, so a stage is trusted only in a command free of them."""
+    return not any(c in text for c in "'\"`$\\")
 
 
 def find_files(cmd, cwd, esc):
@@ -238,7 +236,7 @@ def find_files(cmd, cwd, esc):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
         if (start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans)
-                and not quotes_may_nest(cmd, spans, m.start())):
+                and is_bare(cmd[:m.start()])):
             continue
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
