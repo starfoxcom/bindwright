@@ -4,7 +4,8 @@
 # PR's result. This run says
 # when those pins fall behind: it looks up the newest CLI release and the
 # commit the action's v1 tag points to, and keeps one issue listing every pin
-# that is behind, closed again once all are current. It can also be started by
+# that is behind and every action used by a tag instead of a commit, closed
+# again once all are current. It can also be started by
 # hand from the Actions tab.
 
 name: Pin check
@@ -68,7 +69,7 @@ jobs:
             --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")
           if [ -z "$stale" ]; then
             if [ -n "$number" ]; then
-              gh issue close "$number" --repo "$REPO" --comment "Every pin is current again. Run: $RUN_URL"
+              gh issue close "$number" --repo "$REPO" --comment "Every pin is current and every action is pinned by commit. Run: $RUN_URL"
             fi
             exit 0
           fi
