@@ -403,19 +403,56 @@ test("a renamed skill whose staged copy is still unsettled keeps its old base", 
 
 test("a project that owns the old skill path keeps only its own copy", needsPython, async () => {
   const [[closeFrom, closeTo]] = Object.entries(RENAMES);
-  const outs = [];
+  const claims = [
+    ["the old path", closeFrom, true],
+    ["the whole skills folder", ".claude/skills/", true],
+    ["the old path, its base already lost", closeFrom, false],
+  ];
+  for (const [claim, line, keptBase] of claims) {
+    const outs = [];
+    for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+      const where = `${cmd}, ${claim}`;
+      const repo = await makeRepo((r) => {
+        beforeRename(r);
+        r.write(".bindwright/owned", `${line}\n`);
+        if (!keptBase) {
+          r.pristine.files[closeTo] = r.pristine.files[closeFrom];
+          delete r.pristine.files[closeFrom];
+        }
+      });
+      const run = () => JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+      const out = run();
+      assert.ok(out.owned.includes(closeTo) && out.owned.includes(closeFrom) === keptBase, where);
+      assert.ok(existsSync(repo.at(closeFrom)) && !existsSync(repo.at(closeTo)), where);
+      outs.push(out);
+      // Once the project drops its claim, the skill arrives: moved with the
+      // project's edits when the base was kept, added beside its copy when not.
+      rmSync(repo.at(".bindwright/owned"));
+      const after = run();
+      const moved = after.renamed.some(([from, to]) => from === closeFrom && to === closeTo);
+      assert.equal(moved, keptBase, where);
+      assert.ok(keptBase ? !existsSync(repo.at(closeFrom)) : after.added.includes(closeTo), where);
+      assert.ok(existsSync(repo.at(closeTo)), where);
+      rmSync(repo.at(""), { recursive: true, force: true });
+    }
+    if (outs.length === 2) assert.deepEqual(outs[1], outs[0], `the two engines report alike, ${claim}`);
+  }
+});
+
+test("a renamed skill deleted under a folder claim stays deleted once the claim is dropped", needsPython, async () => {
+  const [[, closeTo]] = Object.entries(RENAMES);
   for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
     const repo = await makeRepo((r) => {
-      beforeRename(r);
-      r.write(".bindwright/owned", `${closeFrom}\n`);
+      rmSync(r.at(dirname(closeTo)), { recursive: true, force: true });
+      r.write(".bindwright/owned", ".claude/skills/\n");
     });
-    const out = JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
-    assert.ok(out.owned.includes(closeFrom) && out.owned.includes(closeTo), cmd);
-    assert.ok(existsSync(repo.at(closeFrom)) && !existsSync(repo.at(closeTo)), cmd);
-    outs.push(out);
+    const run = () => JSON.parse(spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" }).stdout);
+    run();
+    rmSync(repo.at(".bindwright/owned"));
+    const after = run();
+    assert.ok(after.deleted.includes(closeTo) && !existsSync(repo.at(closeTo)), `${cmd}: ${JSON.stringify(after)}`);
     rmSync(repo.at(""), { recursive: true, force: true });
   }
-  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
 });
 
 test("a move into a path the project owns is not made, and the old file is reported", needsPython, async () => {
