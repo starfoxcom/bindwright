@@ -58,7 +58,7 @@ A settled conflict does not come back: the update already recorded today's templ
 
 Files that were `added`, or merged from new text, can hold placeholders setup fills (`{{TEST_COMMAND}}` and the rest). Search those files for `{{` and fill each placeholder the way setup's step 4 says, reading the repo first and asking only what it cannot answer. Then check that every command and path the new text names exists in the repo.
 
-When `.claude/rules/git.md` exists and has no `## Versioning` section, the repo was set up before setup wrote one: offer setup's versioning step (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 6, **Versioning**) and follow it on a yes.
+When `.claude/rules/versioning.md` is missing, the repo was set up before setup wrote one: follow setup's versioning step (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 6, **Versioning**). It asks only when it finds no versioning, and a skip there is remembered.
 
 ## 5. Offer the removals
 

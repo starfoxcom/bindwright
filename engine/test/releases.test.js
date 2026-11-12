@@ -245,6 +245,9 @@ test("every release from v3.5.0 on is sized by the versioning rule", () => {
     const sections = [...release.text.matchAll(/^### (.+)$/gm)].map((m) => m[1].trim());
     const label = `v${release.version} after v${previous.version}`;
     assert.equal(sections.includes("Breaking"), size === "major", `${label}: a Breaking section means a major`);
+    if (size === "minor") {
+      assert.ok(sections.some((s) => s === "Added" || s === "Changed"), `${label}: a minor adds or changes something`);
+    }
     if (size === "patch") {
       assert.ok(sections.every((s) => s === "Fixed" || s === "Security"), `${label}: a patch holds only fixes`);
     }

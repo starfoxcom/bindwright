@@ -71,13 +71,7 @@ bindwright/
 
 ## Versioning
 
-[SemVer](https://semver.org/).
-
-- **Major:** a breaking change to the saved answers (`.bindwright/project.json`) or to the files a set-up project depends on.
-- **Minor:** a new setting, tool option, mod or command, fully backward-compatible.
-- **Patch:** bug fixes, copy edits and design polish without behavior change.
-
-See [CHANGELOG.md](CHANGELOG.md) for what shipped when.
+[SemVer](https://semver.org/), sized by what users must do: [CONTRIBUTING.md § Versioning](CONTRIBUTING.md#versioning) holds the rule. See [CHANGELOG.md](CHANGELOG.md) for what shipped when.
 
 ## Privacy
 
