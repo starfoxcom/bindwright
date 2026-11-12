@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **A PR stops to rethink after 3 red review rounds, not 6.** `review-tiers.md` and `local-review.md` tell the session to research how others solved the problem and simplify after 3 red rounds in a row, and again at every 3rd, so a stuck PR changes course much sooner. The review counts mark a PR as stalled at 3 red rounds, and the counter accepts them from 3 rounds per stalled PR; the page reads "took 3 rounds or more". Counts sent before this release used 6, so the page's stalled share grows as projects update. `/bindwright:update` brings the rule to existing projects.
+
 ### Fixed
 
 - The bound README's clone command and the issue form's discussions link use the repo URL whole, as setup saves it; they read `https://github.com/https://github.com/...` before. A project with GitHub Actions but no AI review no longer gets a `git.md` pointer to `review-tiers.md`, a file it does not have (#788).
