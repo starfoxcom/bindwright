@@ -93,6 +93,16 @@ Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `to
 
 ---
 
+## Versioning
+
+Size each release by what its users must do:
+
+- **Major:** they must act, or something they use stops working: a command, option or API removed or renamed with no old name kept, a file or save format that old data cannot load, a raised minimum OS, runtime or tool version.
+- **Minor:** new features, or changed defaults that keep everything working.
+- **Patch:** fixes only.
+
+When a release tool sets the version and the tag, feed it the way its configuration reads and never bump or tag by hand. Otherwise bump every file that carries the version together, and tag the release commit in the style the existing tags use. With a changelog, each change a user must act on goes under `### Breaking`. A project that does not version its releases skips this section.
+
 ## Dead code does not ship
 
 Code with no remaining caller is deleted in the same PR that orphaned it. Check with the project's lint or dead-code tool, then judge the result: a symbol reached only through reflection, dependency injection, bindings or serialization is not dead. If a tool reports a false positive, record the exception where the tool reads it instead of silencing the tool.

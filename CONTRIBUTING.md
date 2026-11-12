@@ -46,12 +46,22 @@ The page lives in `page/`: plain HTML, CSS and JavaScript modules, no build step
 - **English text lives in the HTML.** Every other language has a dictionary in `page/i18n/`; after changing English text, add the key to each one and regenerate the translated pages with `node tools/page_languages.mjs`.
 - **Tests:** `node --test engine/test/page-*.test.js`.
 
+## Versioning
+
+Bindwright follows [SemVer](https://semver.org/). A release's size comes from what its users have to do:
+
+- **Major:** a user must act, or something they type or rely on stops working: a command or skill renamed or removed with no old name kept, a setup answer or file format that needs migrating, a tool swapped for another, a raised minimum CLI, Node or Python version. Each such entry goes under `### Breaking` in the changelog, saying what to do.
+- **Minor:** new features, or changed defaults that keep everything working (`### Added`, `### Changed`).
+- **Patch:** fixes only (`### Fixed`, `### Security`).
+
+A rename keeps the old name working for one major where it can, so the change lands as a minor and the removal as the next major. `engine/test/releases.test.js` checks every release from v3.5.0 on against these rules.
+
 ## Releasing a new version
 
 Maintainer-only. Follows Gitflow:
 
-1. Branch `release/vX.Y.Z` from `develop`.
-2. Bump `VERSION` (e.g. `v2.1.0`).
+1. Read every `[Unreleased]` entry against § Versioning: anything a user must act on moves under `### Breaking`. The sections then set the version: `### Breaking` makes it a major, `### Added` or `### Changed` a minor, only `### Fixed` or `### Security` a patch.
+2. Branch `release/vX.Y.Z` from `develop` and bump `VERSION` (e.g. `v2.1.0`).
 3. Promote the `[Unreleased]` entries in `CHANGELOG.md` to a dated `[vX.Y.Z]` section, and run `node engine/cli.js --update .` so this repo's own bind record (`.bindwright/pristine.json`) carries the new version; otherwise `/bindwright:doctor` reports the repo as behind.
 4. Commit, then run `python tools/pack_plugin.py --marketplace` and commit `.claude-plugin/marketplace.json` on its own: it pins the SHA-256 of the plugin zip built from that commit, so it comes last.
 5. Open PR `release/vX.Y.Z → main` and merge with `--merge` once the gate is green and every other required check passes (a true merge commit, so the tag's files match the pin).

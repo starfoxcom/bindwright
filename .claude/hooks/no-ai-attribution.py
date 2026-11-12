@@ -161,13 +161,29 @@ def text_spans(cmd, esc):
         q = cmd[i]
         if q in "'\"":
             j = i + 1
+            escapes = q == '"' or (esc == "\\" and opens_ansi_c(cmd, i))
             while j < n and cmd[j] != q:
-                j += 2 if q == '"' and cmd[j] == esc else 1
+                j += 2 if escapes and cmd[j] == esc else 1
             spans.append((i, j + 1))
             i = j + 1
+        elif q == esc:
+            i += 2  # an escaped quote outside quotes is a literal: 'it'\''s stays one string
         else:
             i += 1
     return spans
+
+
+def opens_ansi_c(cmd, i):
+    """True when the quote at `i` opens bash's $'...', which takes backslash escapes. Bash
+    reads `$$` as a parameter first, so only the odd `$` of a run opens one, and an escaped
+    first `$` is a literal."""
+    start = i
+    while start > 0 and cmd[start - 1] == "$":
+        start -= 1
+    run = i - start
+    if run and is_escaped(cmd, start, "\\"):
+        run -= 1
+    return run % 2 == 1
 
 
 def is_escaped(cmd, i, esc):

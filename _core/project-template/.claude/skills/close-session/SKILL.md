@@ -122,7 +122,7 @@ Stage the session's files by name, never `git add -A` or `git add .`. A file `gi
 | `release/*` finished | Same as a hotfix: PR to `{{MAIN_BRANCH}}`, tag the release commit, then cascade. |
 <!-- TOGGLE:branching_model_gitflow END -->
 <!-- TOGGLE:ci_checks START -->
-| Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge once every required check passes. |
+| Any other branch finished | Commit, open a PR to `{{DEV_BRANCH}}`, watch the checks, merge once every check has settled and the required ones pass. |
 
 Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.md`; watching checks is in `token-efficiency.md`. Run each post-merge command as its own call.
 <!-- TOGGLE:ci_checks END -->

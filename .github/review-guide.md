@@ -13,7 +13,7 @@ The project's own part of the review prompt. Both review tiers read this file fr
 3. **Hook safety**: `_core/project-template/.claude/hooks/**` runs on every user's machine. Any Bash / shell / Python edit there must be cross-platform (Linux/macOS/Windows-Git-Bash), POSIX-portable, and never assume a specific PATH or interpreter.
 4. **The page (`page/`)**: its file preview runs `engine/bind.js` on the real `_core/` files, never a hand-made copy. English text lives in the HTML; a change to it adds the same key to every other language's dictionary in `page/i18n/` and regenerates the translated pages with `node tools/page_languages.mjs`.
 5. **Setup defaults and questions (`engine/model.js`, `plugin/skills/setup/SKILL.md`)**: every default answer must be defensible, and each question must say what it changes on the computer or in the project.
-6. **Versioning policy**: major/minor/patch matches the rules in `CHANGELOG.md`. New setting or tool option = minor. Bug fix / copy edit = patch. Breaking schema change = major.
+6. **Versioning policy**: the `[Unreleased]` entry's section matches `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` (a major), a new feature or a changed default that keeps working under `### Added` or `### Changed` (a minor), a fix under `### Fixed` (a patch).
 7. **No AI-attribution markers**: per `_core/project-template/.claude/rules/git.md`, never `Co-Authored-By: Claude`, never "Generated with Claude Code" footers, never claude.com links in PR bodies or commit messages.
 
 ## Also escalate when the diff includes

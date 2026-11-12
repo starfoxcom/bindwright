@@ -56,11 +56,13 @@ A settled conflict does not come back: the update already recorded today's templ
 
 ## 4. Fill and check the new text
 
-Files that were `added`, or merged from new text, can hold placeholders setup fills (`{{TEST_COMMAND}}` and the rest). Search those files for `{{` and fill each placeholder the way setup's step 4 says, reading the repo first and asking only what it cannot answer. Then check that every command and path the new text names exists in the repo.
+Files that were `added`, or merged from new text, can hold placeholders setup fills (`{{TEST_COMMAND}}` and the rest). Search those files for `{{` and fill each placeholder the way setup's step 4 says, reading the repo first and asking only what it cannot answer. Then check that every command and path the new text names exists in the repo. Last, when the `from` that `--releases-since` printed in step 2 is an `x.y.z` version older than its `to`, search the repo's tracked files outside `.bindwright/` for it (`git grep -nF "<from>" -- ':!.bindwright'`) and list each hit that names Bindwright's version for the user to update; the update never edits the project's own docs. Skip the search for any other `from`.
 
 ## 5. Offer the removals
 
 For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.
+
+Then check that `.claude/settings.local.json`, the personal file that holds the allow list and this person's own switches, stays out of git. Unless `"localOnly"` is true, run `git check-ignore -q --no-index .claude/settings.local.json`; when it fails, add that path to `.gitignore`. When `git ls-files .claude/settings.local.json` prints it, say the file is committed, so everything in it is in the history, and offer `git rm --cached .claude/settings.local.json`, which stops tracking it and keeps the file on disk. Say that every other clone deletes its copy when it pulls or checks out that commit, as git does for a file a commit removes, so each person copies theirs aside first and puts it back after.
 
 ## 6. Review counts
 
