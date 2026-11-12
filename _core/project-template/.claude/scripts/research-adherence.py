@@ -146,9 +146,8 @@ class Repo:
 class Search:
     """What one search reads: the paths it names, and the globs and types that narrow its files."""
 
-    def __init__(self, paths=(), globs=(), types=(), first_may_be_pattern=False):
+    def __init__(self, paths=(), globs=(), types=()):
         self.paths = list(paths)
-        self.first_may_be_pattern = first_may_be_pattern
         # A negated glob (`!*.md`) leaves files out; it never says what the search reads.
         globs = [g for g in map(unquote, globs) if g]
         self.globs = [g for g in globs if not g.startswith("!") and not is_wide(g)]
@@ -157,10 +156,7 @@ class Search:
     def reads_code(self, base, repo):
         """True when the search reads code inside the repo, with paths read from `base`."""
         named = [resolve(p, base) for p in self.paths]
-        paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))]
-        if not paths or (self.first_may_be_pattern and paths == named[:1]):
-            # A lone first word may be the pattern (`rg docs`), and then the search reads `base`.
-            paths.append(base)
+        paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))] or [base]
         inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
             return False
@@ -216,37 +212,71 @@ def gives_pattern(word):
     return False
 
 
-def words_search(words, is_text_search=True):
-    """What a text search or a recursive listing reads: its filters, and every word that may name a path.
+def filter_values(value, rest):
+    """The values of one filter option; a PowerShell list (`"*.md","*.py"`, `*.md, *.py`) arrives
+    as several words, taken from `rest`."""
+    while rest and (value.endswith(",") or rest[0].startswith(",")):
+        value += rest.pop(0)
+    return [v for v in (unquote(v.strip()) for v in value.split(",")) if v]
 
-    Patterns, option values and stray tokens rarely name a file or folder that exists, so
-    `Search.reads_code` keeps only the words that do, instead of parsing each tool's options."""
-    rest, paths, globs, types = words[1:], [], [], []
-    pattern_given = False
+
+def read_words(rest):
+    """(plain, globs, types, pattern_given) for a command's words after its name. Each plain word
+    is (word, kind): "joined" for an option's `=` or `:` value, "after" for a word right after an
+    option, else "plain"."""
+    plain, globs, types = [], [], []
+    pattern_given, after_option = False, False
     while rest:
         word = rest.pop(0)
         found = filter_of(word, rest) if word.startswith("-") else None
-        if not found and gives_pattern(word):
+        if found:
+            option, value = found
+            if option not in EXCLUDE_OPTIONS:
+                (types if option in TYPE_OPTIONS else globs).extend(filter_values(value, rest))
+        elif gives_pattern(word):
             pattern_given = True
             if word in PATTERN_VALUE_OPTIONS and rest:
                 rest.pop(0)  # the pattern, or the file that holds it
+        elif word.startswith("-"):
+            joined = re.split(r"[=:]", word, maxsplit=1)
+            if len(joined) == 2:
+                plain.append((joined[1], "joined"))
+            after_option = len(joined) == 1
             continue
-        if found:
-            option, value = found
-            # A PowerShell list (`"*.md","*.py"`, `*.md, *.py`) arrives as several words.
-            while rest and (value.endswith(",") or rest[0].startswith(",")):
-                value += rest.pop(0)
-            pieces = [unquote(v.strip()) for v in value.split(",")]
-            if option not in EXCLUDE_OPTIONS:
-                (types if option in TYPE_OPTIONS else globs).extend(v for v in pieces if v)
-            continue
-        if word.startswith("-"):
-            word = re.split(r"[=:]", word, maxsplit=1)[1] if re.search(r"[=:]", word) else ""
-        for piece in filter(None, word.split(",")):
+        else:
+            plain.append((word, "after" if after_option else "plain"))
+        after_option = False
+    return plain, globs, types, pattern_given
+
+
+def without_pattern(plain):
+    """The plain words less the pattern: the first one that is not an option's value, where a
+    number written right after an option counts as its value (`-A 3`)."""
+    pattern = next((i for i, (word, kind) in enumerate(plain)
+                    if kind == "plain" or (kind == "after" and not word.isdigit())), None)
+    return [entry for i, entry in enumerate(plain) if i != pattern]
+
+
+def words_search(words, is_text_search=True):
+    """What a text search or a recursive listing reads: its filters, and every word that may name a path.
+
+    A text search without `-e`, `-f` or `--files` takes its pattern as its first plain word, after
+    any number written apart as an option's value (`-A 3`). Other option values written apart are
+    rare and are read as words. Of the rest, `Search.reads_code` keeps only the words that name a
+    file or folder that exists, instead of parsing each tool's options."""
+    if words[:2] == ["git", "grep"]:
+        words = words[1:]
+    plain, globs, types, pattern_given = read_words(words[1:])
+    if is_text_search and not pattern_given:
+        plain = without_pattern(plain)
+    paths = []
+    for word, _ in plain:
+        # A PowerShell listing's comma list is several paths; a text search's word stays whole.
+        for piece in filter(None, word.split(",") if not is_text_search else [word]):
             # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
             is_filter = WILDCARD.search(piece) and not re.search(r"['\"/\\]", piece)
             (globs if is_filter else paths).append(unquote(piece))
-    return Search(paths, globs, types, first_may_be_pattern=is_text_search and not pattern_given)
+    return Search(paths, globs, types)
 
 
 def shell_search(command, repo):
