@@ -24,6 +24,7 @@ import sys
 
 CLI = re.compile(r'^\s*(?:CLI_VERSION|PINNED_VERSION):\s*"?(\d+(?:\.\d+)*)"?\s*(?:#.*)?$')
 ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s*anthropics/claude-code-action@([0-9a-f]{40})\b(?:\s*#\s*(.*))?$")
+DOCKER = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?docker://([^\s'\"#]+)")
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?([\w.-]+/[\w./-]+)@([^\s'\"#]+)")
 VERSION = re.compile(r"\d+(?:\.\d+)*")
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -55,6 +56,10 @@ def floating(name, text):
         m = USES.match(line)
         if m and not SHA.fullmatch(m.group(2)):
             found.append("`%s@%s` at `%s:%d`" % (m.group(1), m.group(2), name, n))
+            continue
+        m = DOCKER.match(line)
+        if m and "@sha256:" not in m.group(1):
+            found.append("`docker://%s` at `%s:%d`" % (m.group(1), name, n))
     return found
 
 
