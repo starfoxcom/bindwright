@@ -74,6 +74,12 @@ def _moves_for(theirs_all, pristine, read_repo, owned):
     return moves
 
 
+def _owned_old_path(path, pristine, owned, read_repo):
+    """The old path a renamed file is owned through; see ownedOldPath in update.js."""
+    return next((o for o, n in RENAMES.items() if n == path and is_owned(o, owned)
+                 and (o in pristine["files"] or read_repo(o) is not None) and read_repo(path) is None), None)
+
+
 def plan_update(rendered, pristine, read_repo, owned, merge, version):
     theirs_all = repo_files(rendered)
     paths = sorted(set(pristine["files"]) | set(theirs_all), key=_code_units)
@@ -87,9 +93,13 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
             continue
         old = moves.get(path)
         base, theirs = pristine["files"].get(old or path), theirs_all.get(path)
-        if is_owned(path, owned):
+        owned_old = _owned_old_path(path, pristine, owned, read_repo)
+        if owned_old is not None or is_owned(path, owned):
             result["owned"].append(path)
-            if theirs is not None:
+            if owned_old is not None:
+                if owned_old in pristine["files"]:
+                    files[owned_old] = pristine["files"][owned_old]
+            elif theirs is not None:
                 files[path] = theirs
             continue
         ours = read_repo(old or path)
@@ -221,10 +231,13 @@ def run_update(root, bind_with, version, state_json):
     refuse_links(root, [path for path, _ in plan["write"]] + [PRISTINE] + fresh_staged + plan["remove"])
     skipped = [path[len(STAGING):] for path, _ in plan["stage"] if os.path.lexists(at(path))]
     files = plan["pristine"]["files"]
+    renamed_from = {new: old for old, new in RENAMES.items()}
     for path in skipped:
         # The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.
-        if path in pristine["files"]:
-            files[path] = pristine["files"][path]
+        # A renamed file's base is still under its old name.
+        base = path if path in pristine["files"] else renamed_from.get(path)
+        if base in pristine["files"]:
+            files[path] = pristine["files"][base]
         else:
             files.pop(path, None)
     for path, text in plan["write"]:
