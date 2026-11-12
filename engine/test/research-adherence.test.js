@@ -120,6 +120,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["an unsure search from a docs folder counts", bash("cd docs && rg --no-heading foo ../src"), "fallback"],
     ["a split quote outside that names repo code counts",
       bash(`cd "${scratch}" && rg "don't" "${join(root, "src")}"`), "fallback"],
+    ["a folder outside that is gone is still outside", bash(`rg foo "${join(scratch, "gone", "src")}"`), null],
     ["an unsure search outside that names nothing inside is not counted",
       bash(`cd "${scratch}" && rg --hidden foo`), null],
     ["ack's -f takes no value", bash("ack -f src docs"), "fallback"],

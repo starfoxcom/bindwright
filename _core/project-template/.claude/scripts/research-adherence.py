@@ -170,7 +170,10 @@ class Search:
             return not is_outside(base, repo.root) or any(
                 not is_outside(p, repo.root) for p, word in zip(named, self.paths)
                 if os.path.exists(p) or re.search(r"[/\\]", word))
-        paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))] or [base]
+        # A path outside the repo counts as named even once it is gone (a deleted temp clone).
+        paths = [p for p, word in zip(named, self.paths)
+                 if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
+                 or (re.search(r"[/\\]", word) and is_outside(p, repo.root))] or [base]
         inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
             return False
@@ -289,7 +292,9 @@ def words_search(words, is_text_search=True):
     if words[:2] == ["git", "grep"]:
         words = words[1:]
     tool = words[0] if words else ""
-    unsure = Search([unquote(re.split(r"[=:]", w, maxsplit=1)[-1]) for w in words[1:]], is_sure=False)
+    # An option's joined value is cut from it; any other word stays whole (`D:\proj\src`).
+    unsure = Search([unquote(re.split(r"[=:]", w, maxsplit=1)[-1] if w.startswith("-") else w)
+                     for w in words[1:]], is_sure=False)
     if any(word.count('"') % 2 or word.count("'") % 2 for word in words):
         return unsure  # a quote the word does not close: `--regexp="see docs"` split at the space
     plain, globs, types, pattern_given = read_words(words[1:], tool)
