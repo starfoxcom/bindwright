@@ -96,7 +96,7 @@ async function run(request, { store, rateLimiter, time = NOON }) {
 
 test("checkSend accepts a valid send and refuses each bad field", () => {
   assert.equal(checkSend(send()).ok, true);
-  assert.equal(checkSend(send({ caught: 2, stalled: 1, rounds: 6 })).ok, true, "a stalled PR");
+  assert.equal(checkSend(send({ caught: 2, stalled: 1, rounds: 3 })).ok, true, "a stalled PR");
   const refused = [
     ["not an object", []],
     ["unknown field", send({ repo: "secret" })],
@@ -114,7 +114,7 @@ test("checkSend accepts a valid send and refuses each bad field", () => {
     ["window as text", send({ to: String(NOON) })],
     ["stalled above caught", send({ caught: 1, stalled: 2, rounds: 12 })],
     ["rounds fewer than caught", send({ caught: 2, rounds: 1 })],
-    ["rounds fewer than six per stalled PR", send({ caught: 2, stalled: 2, rounds: 11 })],
+    ["rounds fewer than three per stalled PR", send({ caught: 2, stalled: 2, rounds: 5 })],
     ["rounds above their cap", send({ rounds: MAX_ROUNDS_PER_SEND + 1 })],
     ["rounds with caught at 0", send({ caught: 0, deep: 0, rounds: 1 })],
   ];

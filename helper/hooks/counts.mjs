@@ -38,7 +38,7 @@ const MAX_PER_COUNT = BATCH_CAP;
 // Room for 500 PRs at a 50-round ceiling each: the most red rounds one send carries.
 export const MAX_ROUNDS = BATCH_CAP * 50;
 // Red review rounds that stall a PR: the review rules stop to research a simpler way.
-export const STALL_ROUNDS = 6;
+export const STALL_ROUNDS = 3;
 // GitHub search returns at most this many results for one query. The listings ask for all of
 // them, so a history past BATCH_CAP is visible as past it.
 const SEARCH_LIMIT = 1000;

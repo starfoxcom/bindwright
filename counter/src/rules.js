@@ -27,7 +27,7 @@ export const MAX_PER_SEND = 500;
 export const MAX_ROUNDS_PER_SEND = MAX_PER_SEND * 50;
 
 /** Red review rounds at which a PR counts as stalled: the review rules stop to research a simpler way. */
-export const STALL_ROUNDS = 6;
+export const STALL_ROUNDS = 3;
 
 /** A project may send again only this long after its last accepted send. */
 export const MIN_SEND_GAP_IN_MILLISECONDS = 20 * 60 * 60 * 1000;
