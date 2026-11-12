@@ -559,9 +559,12 @@ class GuardHookTest(unittest.TestCase):
         flagged = os.path.join(root, "sub", "sub", "msg.txt")
         self.assert_denied(self.attr("git -C sub -C sub commit -F msg.txt", project=root), f"found in file {flagged}")
         moved = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
-        for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt"):
+        for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt",
+                        '"$WRAP" "$ARG" git -C sub commit -F msg.txt'):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=moved), "found in file")
+        # A command held in an array runs wherever it is used, so its relative file is refused.
+        self.assert_denied(self.attr('cmd=(git -C sub commit -F msg.txt); "${cmd[@]}"', project=moved))
         # A second relative `cd` that fails from the first folder leaves the shell where it was.
         nested = self.project_with({"msg.txt": "x\n", "a/msg.txt": "x\n", "a/b/msg.txt": f"{GENERATED_LINE}\n"})
         self.assert_denied(self.attr("cd a && cd b && git commit -F msg.txt", project=nested),

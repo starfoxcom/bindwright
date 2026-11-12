@@ -393,19 +393,25 @@ def command_files(words, shell="bash"):
     # --template, git's -m) are taken off the outer read.
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
     names = {program(run) for run in inner}
-    if words and not isinstance(words[0], str):
-        # A program built at run time, or an array's words, may be git's: read them with git's
-        # rules too (`-aF msg`), but keep git's -m off the outer read, where gh's -m is a switch.
-        inner.append(["git", "commit", *words[1:]] if is_array(words) else ["git", *words[1:]])
+    # A program built at run time, or an array's words, may be git's: they are read with git's
+    # rules too (`-aF msg`), adding files only, and git's -m stays off the outer read, where
+    # gh's -m is a switch.
+    built = bool(words) and not isinstance(words[0], str)
+    maybe_git = ([], [])
+    if built:
+        maybe_git = git_files(["git", "commit", *words[1:]] if is_array(words) else ["git", *words[1:]])
     flags = BODY_FLAGS - {"--template"} if "gh" in names else BODY_FLAGS
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     found = [command_files(run, shell) for run in inner]
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
     named = shell == "powershell" and bool(words) and isinstance(words[0], str)
     files = body_files(words, flags, message, readers, named) + [f for _, run_files in found for f in run_files]
-    folders = next((f for f, run_files in reversed(found) if run_files), [])
-    # A program built at run time (`$GIT -C sub commit ...`) may be git: its -C folders count.
-    if not folders and words and not isinstance(words[0], str):
+    files += maybe_git[1]
+    # A wrapped git's own -C names the folder; only without one does the possible git's count.
+    folders = next((f for f, run_files in reversed(found) if run_files), None)
+    if folders is None:
+        folders = maybe_git[0] if maybe_git[1] else []
+    if not folders and built:
         folders = git_subcommand(words)[1]
     return folders, files
 
