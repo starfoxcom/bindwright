@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
-- **A PR stops to rethink after 3 red review rounds, not 6.** `review-tiers.md` and `local-review.md` tell the session to research how others solved the problem and simplify after 3 red rounds in a row, and again at every 3rd, so a stuck PR changes course much sooner. The review counts mark a PR as stalled at 3 red rounds, and the counter accepts them from 3 rounds per stalled PR; the page reads "took 3 rounds or more". Counts sent before this release used 6, so the page's stalled share grows as projects update. `/bindwright:update` brings the rule to existing projects.
+- **A PR stops to rethink after 3 red review rounds, not 6.** `review-tiers.md` and `local-review.md` tell the session to research how others solved the problem and simplify after 3 red rounds in a row, and again at every 3rd, so a stuck PR changes course much sooner. The `ci-watch` mod asks for that step back on the same rounds (3, 6, 9, and so on). The review counts mark a PR as stalled at 3 red rounds, and the counter accepts them from 3 rounds per stalled PR; the page reads "took 3 rounds or more", and fixed PRs "1 or 2 rounds". Counts sent before this release used 6, so the page's stalled share grows as projects update. `/bindwright:update` brings the rule to existing projects.
 
 ### Fixed
 
