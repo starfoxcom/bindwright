@@ -168,7 +168,12 @@ The base branch requires approvals from people. On `gh pr create`, pass `--revie
 <!-- TOGGLE:pr_reviewers END -->
 
 <!-- TOGGLE:github_actions START -->
+<!-- TOGGLE:github_actions_routine_review START -->
 Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `token-efficiency.md`.
+<!-- TOGGLE:github_actions_routine_review END -->
+<!-- TOGGLE:github_actions_routine_review:off START -->
+CI watching lives in `token-efficiency.md`.
+<!-- TOGGLE:github_actions_routine_review:off END -->
 <!-- TOGGLE:github_actions END -->
 
 ---

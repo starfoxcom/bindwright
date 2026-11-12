@@ -13,7 +13,7 @@
 ```bash
 <!-- TOGGLE:code_host_local:off START -->
 # Clone
-git clone https://github.com/{{REPO_URL}}.git
+git clone {{REPO_URL}}.git
 cd $(basename {{REPO_URL}})
 
 <!-- TOGGLE:code_host_local:off END -->

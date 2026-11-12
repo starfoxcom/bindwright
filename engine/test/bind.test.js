@@ -1007,6 +1007,24 @@ test("bound guard hooks are the canonical files, unrendered", async () => {
   }
 });
 
+test("the repo URL is used whole, and git.md names review-tiers.md only with AI review", async () => {
+  const a = defaults();
+  a.project.repoUrl = "https://github.com/me/thing";
+  const on = await run(a);
+  const readme = on.get("README.md") ?? on.get(`${STAGING}README.md`);
+  assert.ok(readme.includes("git clone https://github.com/me/thing.git"), readme);
+  assert.ok(on.get(".github/ISSUE_TEMPLATE/config.yml").includes("url: https://github.com/me/thing/discussions"));
+  for (const [path, text] of on) assert.ok(!text.includes("github.com/https:"), path);
+  assert.ok(on.get(".claude/rules/git.md").includes("`review-tiers.md`"));
+  a.advanced.aiReview = false;
+  a.advanced.deepEscalation = false;
+  const off = await run(a);
+  assertClean(off);
+  assert.ok(!off.has(".claude/rules/review-tiers.md"));
+  assert.ok(!off.get(".claude/rules/git.md").includes("review-tiers.md"));
+  assert.ok(off.get(".claude/rules/git.md").includes("CI watching lives in `token-efficiency.md`."));
+});
+
 test("the tracker decides where the hand-off lives", async () => {
   const github = await run(defaults());
   assertClean(github);

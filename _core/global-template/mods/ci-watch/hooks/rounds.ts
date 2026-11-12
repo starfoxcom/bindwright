@@ -1,12 +1,12 @@
 // The fix-round count: how many pushed rounds in a row a PR has had whose checks did not all pass (both
-// reviews included). Every RESEARCH_EVERY of them (6, 12, 18, ...), the red wake asks for a step back:
+// reviews included). Every RESEARCH_EVERY of them (3, 6, 9, ...), the red wake asks for a step back:
 // research how others solve the problem, simplify, then go on. Nothing is refused. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
 // counted. Pure, no engine access.
 
-export const RESEARCH_EVERY = 6
+export const RESEARCH_EVERY = 3
 
 /** One settled watch of a PR's pushed head: whether a check failed. */
 export type Round = { sha: string; red: boolean }
@@ -34,7 +34,7 @@ export function redStreak(pr: PrRounds | undefined): number {
  * spared by the sweep (it is named by no session). */
 export const ROUNDS_FILE = 'rounds.json'
 
-/** Whether a red streak this long calls for the research step: at 6, 12, 18, ... */
+/** Whether a red streak this long calls for the research step: at 3, 6, 9, ... */
 export const isResearchDue = (red: number) => red > 0 && red % RESEARCH_EVERY === 0
 
 export function researchText(pr: string, red: number): string {
