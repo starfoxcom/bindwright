@@ -390,7 +390,8 @@ class GuardHookTest(unittest.TestCase):
                         "git show HEAD:.git/hooks/commit-msg | grep -F word",
                         "git tag --list | awk -F. '{print $1}'",
                         "gh api repos/o/r/pulls | awk -F'\\t' '{print $1}'",
-                        "gh pr create --title 'a && b; c' --body x | awk -F, '{print}'"):
+                        "gh pr create --title 'a && b; c' --body x | awk -F, '{print}'",
+                        'git commit -m "$(cat msg.txt)" && git log | grep -F needle'):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
         for command, tool in (
@@ -407,6 +408,7 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title "$(sh -c "git log --format=%s -1 | sed s/x/y/")" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "$(echo "x; sort y")" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "`echo "x; sort y"`" --body-file "{path}"', "Bash"),
+                (f'gh pr create --title "${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
                 (f'git commit\\\n  -F "{path}"', "Bash"),
                 (f'gh release create v1 --title t \\\n  join.zip --notes-file "{path}"', "Bash"),
                 (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),

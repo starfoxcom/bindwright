@@ -222,10 +222,17 @@ def is_plain(cmd, start, end, spans):
                    if not any(s <= i < e for s, e in spans))
 
 
-def has_substitution(text):
-    """True when a command substitution opens in `text`. Quotes nest inside one, so the flat
-    quote spans cannot tell its separators from real stage boundaries."""
-    return "$(" in text or "`" in text
+def quotes_may_nest(cmd, spans, end):
+    """True when a double-quoted span before `end` leaves a `(`, `{` or backtick open, as
+    `"$(echo "` or `"${T:-"` does: quotes nest inside a substitution or an expansion, so the
+    flat spans after it cannot tell its separators from real stage boundaries."""
+    for s, e in spans:
+        text = cmd[s:e]
+        if s < end and text.startswith('"') and (
+                text.count("(") > text.count(")") or text.count("{") > text.count("}")
+                or text.count("`") % 2):
+            return True
+    return False
 
 
 def find_files(cmd, cwd, esc):
@@ -235,7 +242,7 @@ def find_files(cmd, cwd, esc):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
         if (start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans)
-                and not has_substitution(cmd[:m.start()])):
+                and not quotes_may_nest(cmd, spans, m.start())):
             continue
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
