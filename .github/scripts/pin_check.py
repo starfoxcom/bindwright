@@ -81,6 +81,17 @@ def floating(name, text):
     return found
 
 
+def ends_value(text, m):
+    """True when the YAML value ends right after the commit id: at the line's end, before
+    whitespace, or at the closing quote of a quoted value. A glued `#x` or quote is part
+    of the ref the runner uses, so that ref is not the commit."""
+    rest = text[m.end(2):]
+    opened = text[m.start(1) - 1] if text[m.start(1) - 1] in "'\"" else ""
+    if opened:
+        return rest[:1] == opened and (len(rest) == 1 or rest[1].isspace())
+    return not rest or rest[0].isspace()
+
+
 def added_pins(diff):
     """[(owner/repo, sha, [tags])] for each action a diff adds by commit, with
     the first MAX_TAGS release tags its comment names (`# v6 (v6.1.0)`). Only
@@ -88,7 +99,7 @@ def added_pins(diff):
     found = []
     for line in diff.split("\n"):
         m = USES.match(line[1:]) if line.startswith("+") else None
-        if not m or not SHA.fullmatch(m.group(2)):
+        if not m or not SHA.fullmatch(m.group(2)) or not ends_value(line[1:], m):
             continue
         repo = "/".join(m.group(1).split("/")[:2])
         if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):

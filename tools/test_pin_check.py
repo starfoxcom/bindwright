@@ -153,8 +153,10 @@ class AddedPins(unittest.TestCase):
     def test_takes_only_checked_fields(self):
         cases = [
             ("quoted value", "+  uses: 'o/r@%s'  # v1" % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
-            ("hash glued to the id", "+  uses: o/r@%s#x v1" % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
-            ("quote glued to the id", '+  uses: o/r@%s"x # v1' % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
+            ("hash glued to the id", "+  uses: o/r@%s#x v1" % NEW_SHA, []),
+            ("quote glued to the id", '+  uses: o/r@%s"x # v1' % NEW_SHA, []),
+            ("double-quoted value", '+  uses: "o/r@%s"  # v1' % NEW_SHA, [("o/r", NEW_SHA, ["v1"])]),
+            ("unclosed quote", "+  uses: 'o/r@%s  # v1" % NEW_SHA, []),
             ("id with trailing text", "+  uses: o/r@%sz  # v1" % NEW_SHA, []),
             ("non-ASCII owner", "+  uses: ö/r@%s  # v1" % NEW_SHA, []),
             ("non-ASCII digit in a tag", "+  uses: o/r@%s  # v١ v2" % NEW_SHA, [("o/r", NEW_SHA, ["v2"])]),
