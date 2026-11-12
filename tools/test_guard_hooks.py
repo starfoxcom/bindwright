@@ -528,10 +528,17 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_passes(self.attr(command, project=clean))
         # `cd -` goes to a folder the text does not hold; a loop or a function can run a later
         # `cd` first; git takes `-C -` as a folder named `-`.
-        for command in ("cd -; git commit -F msg.txt", "f() { git commit -F msg.txt; }; cd sub; f",
-                        "for i in 1 2; do git commit -F msg.txt; cd sub; done", "git -C - commit -F msg.txt"):
+        hidden = "the command text cannot tell"
+        for command, tool, reason in (
+                ("cd -; git commit -F msg.txt", "Bash", hidden),
+                ("f() { git commit -F msg.txt; }; cd sub; f", "Bash", hidden),
+                ("for i in 1 2; do git commit -F msg.txt; cd sub; done", "Bash", hidden),
+                ("switch (1,2) { default { git commit -F msg.txt; Set-Location sub } }", "PowerShell", hidden),
+                ("class A { static [void] M() { git commit -F msg.txt } }; cd sub; [A]::M()", "PowerShell", hidden),
+                ("Get-Item x -ErrorAction Stop; git commit -F msg.txt; trap { cd sub; continue }", "PowerShell", hidden),
+                ("git -C - commit -F msg.txt", "Bash", os.path.join(clean, "-", "msg.txt"))):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, project=clean))
+                self.assert_denied(self.attr(command, tool=tool, project=clean), reason)
         # An absolute target names the folder again, whatever came before it.
         absolute = root.replace("\\", "/")
         for command in (f'(cd sub; true); cd "{absolute}"; git commit -F msg.txt',

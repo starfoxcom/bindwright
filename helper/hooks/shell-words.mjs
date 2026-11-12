@@ -30,7 +30,7 @@ const BASH_RUNTIME = new Set(["simple_expansion", "expansion", "command_substitu
 const REPEATS = {
   bash: new Set(["function_definition", "for_statement", "c_style_for_statement", "while_statement"]),
   powershell: new Set(["function_statement", "foreach_statement", "for_statement", "while_statement",
-    "do_statement", "script_block_expression"]),
+    "do_statement", "switch_statement", "trap_statement", "class_method_definition", "script_block_expression"]),
 };
 
 function bashWord(node) {
