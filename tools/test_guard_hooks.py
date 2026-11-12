@@ -443,6 +443,10 @@ class GuardHookTest(unittest.TestCase):
                 (f'grep x f # ends in a backslash \\\ngit commit -F "{path}"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
+        # A pattern that names a file is read, and the refusal says why that file was read.
+        result = self.attr(f"git tag --list | grep -F {path}", tool="PowerShell")
+        reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("a text tool's -F or --file", reason)
 
     def test_read_only_commands_pass(self):
         for command in ("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"):

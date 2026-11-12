@@ -24,8 +24,9 @@ What is scanned, for any git write, gh write or GitHub API call:
     but not the -F or --file of a text tool's own stage (`awk -F,`,
     `grep -F word`) that names no existing file, a separator or a pattern,
     when nothing before it is quoted, escaped or substituted. A file of that
-    name is read whatever stage the flag seems to sit in. A file it cannot
-    read is denied, so a typo cannot slip a body through unread.
+    name, found from the working folder or the command's first `cd`, is read
+    whatever stage the flag seems to sit in. A file it cannot read is
+    denied, so a typo cannot slip a body through unread.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
 
@@ -267,7 +268,7 @@ def find_files(cmd, cwd, esc):
             path = os.path.join(base.strip("\"'"), path)
         if text_tools and not os.path.isfile(path):
             continue  # a separator or pattern; a file of that name is read whoever's flag it is
-        yield path
+        yield path, text_tools
 
 
 def scan_text(text, where):
@@ -294,14 +295,16 @@ def main():
         sys.exit(0)
 
     scan_text(cmd, "the command text")
-    for path in find_files(cmd, cwd, esc):
+    for path, text_tool in find_files(cmd, cwd, esc):
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path. If it is "
                  "a text tool's separator or pattern (awk -F, grep -F) in a command that also quotes, "
                  "escapes or substitutes, run the text tool as a command of its own, reading saved output.")
-        scan_text(text, f"file {path}")
+        scan_text(text, f"file {path}" + (
+            ", read because a file has the name a text tool's -F or --file gives; if that is a pattern, "
+            "run the text tool as a command of its own, reading saved output" if text_tool else ""))
     sys.exit(0)
 
 
