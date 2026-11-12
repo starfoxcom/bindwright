@@ -412,6 +412,8 @@ class GuardHookTest(unittest.TestCase):
                 (f"gh pr create --title 'it'\\''s done' --body-file \"{path}\"", "Bash"),
                 (f"gh pr create --title $'a\\'b' --body-file \"{path}\"", "Bash"),
                 (f"gh pr create --title $'a\\'b\\'c' --body-file \"{path}\"", "Bash"),
+                (f"gh pr create --title $$'a\\' --body-file \"{path}\"", "Bash"),
+                (f"gh pr create --title \\$$'a\\'b' --body-file \"{path}\"", "Bash"),
                 (f'sort `git commit -F "{path}"`', "Bash"),
                 (f'grep -rn foo C:\\\\repo\\\\\ngit commit -F "{path}"', "Bash"),
                 (f'grep x f \\\r\ngit commit -F "{path}"', "Bash"),
