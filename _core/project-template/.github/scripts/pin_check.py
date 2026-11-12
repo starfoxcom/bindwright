@@ -14,6 +14,9 @@ Pins it reads:
   `PINNED_VERSION: "2.1.299"`;
 - the review action's commit: `uses: anthropics/claude-code-action@<sha>`, with
   the version it names in the comment after it.
+
+It also lists every action a workflow uses by a tag or branch instead of a
+commit (`uses: actions/checkout@v6`): a tag can be moved to other code.
 """
 
 import re
@@ -21,6 +24,8 @@ import sys
 
 CLI = re.compile(r'^\s*(?:CLI_VERSION|PINNED_VERSION):\s*"?(\d+(?:\.\d+)*)"?\s*(?:#.*)?$')
 ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s*anthropics/claude-code-action@([0-9a-f]{40})\b(?:\s*#\s*(.*))?$")
+DOCKER = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?docker://([^\s'\"#]+)")
+USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?([\w.-]+/[\w./-]+)@([^\s'\"#]+)")
 VERSION = re.compile(r"\d+(?:\.\d+)*")
 SHA = re.compile(r"[0-9a-f]{40}")
 
@@ -41,6 +46,20 @@ def pins(name, text):
         if m:
             label = (m.group(2) or "").strip() or m.group(1)[:12]
             found.append(("action", m.group(1), label, "%s:%d" % (name, n)))
+    return found
+
+
+def floating(name, text):
+    """["owner/repo@ref at file:line"] for every action used by a ref that is not a commit."""
+    found = []
+    for n, line in enumerate(text.splitlines(), 1):
+        m = USES.match(line)
+        if m and not SHA.fullmatch(m.group(2)):
+            found.append("`%s@%s` at `%s:%d`" % (m.group(1), m.group(2), name, n))
+            continue
+        m = DOCKER.match(line)
+        if m and "@sha256:" not in m.group(1):
+            found.append("`docker://%s` at `%s:%d`" % (m.group(1), name, n))
     return found
 
 
@@ -80,14 +99,17 @@ def main(argv):
         version = _option(args, "--action-version")
         if not VERSION.fullmatch(cli) or not SHA.fullmatch(sha) or not args:
             raise ValueError("usage: pin_check.py --cli X.Y.Z --action-sha SHA --action-version V FILE...")
-        found = []
+        found, unpinned = [], []
         for name in args:
             with open(name, encoding="utf-8") as fh:
-                found += pins(name, fh.read())
+                text = fh.read()
+            found += pins(name, text)
+            unpinned += floating(name, text)
     except (ValueError, OSError) as e:
         print("pin_check: %s" % e, file=sys.stderr)
         return 1
     sys.stdout.write(report(behind(found, cli, sha), cli, version))
+    sys.stdout.write("".join("- Action %s is not pinned to a commit\n" % u for u in unpinned))
     return 0
 
 
