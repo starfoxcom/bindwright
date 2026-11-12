@@ -170,10 +170,10 @@ class Search:
             return not is_outside(base, repo.root) or any(
                 not is_outside(p, repo.root) for p, word in zip(named, self.paths)
                 if os.path.exists(p) or re.search(r"[/\\]", word))
-        # A path outside the repo counts as named even once it is gone (a deleted temp clone).
+        # A word with a folder in it is a named path even once it is gone (a deleted temp clone).
         paths = [p for p, word in zip(named, self.paths)
                  if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
-                 or (re.search(r"[/\\]", word) and is_outside(p, repo.root))] or [base]
+                 or re.search(r"[/\\]", word)] or [base]
         inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
             return False
@@ -270,16 +270,11 @@ def read_words(rest, tool):
 
 def text_search_paths(plain, pattern_given):
     """The words a text search may read as paths, or None when they cannot be told apart from
-    option values or the pattern. A number right after an option is its value (`-A 3`)."""
-    plain = [(word, kind) for word, kind in plain
-             if kind != "joined" and not (kind == "after" and word.isdigit())]
-    if not pattern_given:
-        if plain and plain[0][1] == "after":
-            return None  # the pattern, or the value of the option before it
-        plain = plain[1:]
+    option values or the pattern: a word right after an option that may take a value."""
+    plain = [(word, kind) for word, kind in plain if kind != "joined"]
     if any(kind == "after" for _, kind in plain):
         return None
-    return [word for word, _ in plain]
+    return [word for word, _ in (plain if pattern_given else plain[1:])]
 
 
 def words_search(words, is_text_search=True):
