@@ -92,7 +92,7 @@ ATTRIBUTION = re.compile(
 # A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
 # `commit-msg`) names no write.
 _WORD_START = r"(?<![\w./\\:-])"
-_WORD_END = r"(?![\w./\\-])"
+_WORD_END = r"(?![\w./-])"
 GIT_WRITE = re.compile(
     r"\bgit\b[^|;&\n]*?" + _WORD_START
     + r"(commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)" + _WORD_END, re.I)
@@ -113,7 +113,8 @@ FILE_FLAGS = re.compile(
     r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|--field|-InFile))(?![\w-])"
     r"|(?i:Get-Content)(?:\s+(?i:-Raw|-Path|-LiteralPath)(?![\w-]))*"
     r"|(?<=\s)-d\s*@|(?i:--data(?:-binary|-raw)?)\s*@)"
-    r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'|(?P<bare>\S+))"
+    r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'"
+    r"|(?P<kv>[^\s=\"']+=@(?:\"[^\"]+\"|'[^']+'))|(?P<bare>\S+))"
 )
 SEGMENT_START = re.compile(r"[;&|\n][^;&|\n]*$")
 # Message text, not arguments: here-doc bodies and PowerShell here-strings.
@@ -168,9 +169,18 @@ def text_spans(cmd, esc):
 
 def stage_start(cmd, at, spans):
     """Where the pipeline stage holding `at` begins: after the last | ; & or newline before it
-    that sits outside quoted text."""
+    that sits outside quoted text and outside a closed ( ... ) or $( ... ) group."""
+    depth = 0
     for i in range(at - 1, -1, -1):
-        if cmd[i] in "|;&\n" and not any(s <= i < e for s, e in spans):
+        if any(s <= i < e for s, e in spans):
+            continue
+        if cmd[i] == ")":
+            depth += 1
+        elif cmd[i] == "(":
+            if depth == 0:
+                return i + 1
+            depth -= 1
+        elif cmd[i] in "|;&\n" and depth == 0:
             return i + 1
     return 0
 
@@ -182,7 +192,7 @@ def find_files(cmd, cwd, esc):
             continue
         if TEXT_TOOL.match(cmd, stage_start(cmd, m.start(), spans)):
             continue
-        path = m.group("dq") or m.group("sq") or m.group("bare")
+        path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
             continue
         if (m.group("long") or "").lower() == "--template":
