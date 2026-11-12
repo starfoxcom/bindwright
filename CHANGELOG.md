@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- The deep review's pin lookup verifies a pin only when nothing but a comment follows the commit id and no part of the action's path is `.` or `..`, so `o/r@<id> x` and `o/r/../x@<id>` are no longer reported as verified.
+
 ## [v3.6.0] — 2026-11-12
 
 ### Added

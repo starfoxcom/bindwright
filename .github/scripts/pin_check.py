@@ -83,15 +83,18 @@ def floating(name, text):
 
 
 def ends_value(text, m):
-    """True when the YAML value ends right after the commit id: at the line's end, before
-    one of YAML's separators (space, tab, CR), or at the closing quote of a quoted value.
-    Anything glued on (`#x`, a quote, a no-break space) is part of the ref the runner uses,
-    so that ref is not the commit."""
+    """True when the YAML value ends right after the commit id (or the closing quote of a
+    quoted value), with only YAML's separators (space, tab, CR) and a `#` comment after it.
+    Anything else on the line (`#x` glued on, a no-break space, a second word) is part of
+    the ref the runner uses, so that ref is not the commit."""
     rest = text[m.end(2):]
     opened = text[m.start(1) - 1] if text[m.start(1) - 1] in "'\"" else ""
     if opened:
-        return rest[:1] == opened and (len(rest) == 1 or rest[1] in SEPARATORS)
-    return not rest or rest[0] in SEPARATORS
+        if rest[:1] != opened:
+            return False
+        rest = rest[1:]
+    after = rest.lstrip(SEPARATORS)
+    return not after or (after.startswith("#") and len(after) < len(rest))
 
 
 def added_pins(diff):
@@ -104,7 +107,7 @@ def added_pins(diff):
         if not m or not SHA.fullmatch(m.group(2)) or not ends_value(line[1:], m):
             continue
         repo = "/".join(m.group(1).split("/")[:2])
-        if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
+        if not REPO.fullmatch(repo) or any(p in (".", "..") for p in m.group(1).split("/")):
             continue
         tags = [t for t in dict.fromkeys(TAG.findall(line.partition("#")[2])) if len(t) <= MAX_TAG_LENGTH]
         tags = tags[:MAX_TAGS]
