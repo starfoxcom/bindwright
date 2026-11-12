@@ -85,7 +85,7 @@ test("a trunk project's routine review runs on its one branch", async () => {
   const trunk = structuredClone(OWN);
   trunk.advanced = { ...trunk.advanced, branching: "trunk" };
   const review = (await bound(trunk)).get(".github/workflows/claude-code-review.yml");
-  assert.match(review, /^ {4}branches: \[main, main\]$/m);
+  assert.match(review, /^ {4}branches: \[main\]$/m);
 });
 
 test("without AI review no gate file is bound", async () => {
