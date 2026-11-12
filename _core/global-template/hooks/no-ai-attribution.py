@@ -393,6 +393,10 @@ def command_files(words, shell="bash"):
     # --template, git's -m) are taken off the outer read.
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
     names = {program(run) for run in inner}
+    if words and not isinstance(words[0], str):
+        # A program built at run time, or an array's words, may be git's: read them with git's
+        # rules too (`-aF msg`), but keep git's -m off the outer read, where gh's -m is a switch.
+        inner.append(["git", "commit", *words[1:]] if is_array(words) else ["git", *words[1:]])
     flags = BODY_FLAGS - {"--template"} if "gh" in names else BODY_FLAGS
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     found = [command_files(run, shell) for run in inner]
@@ -406,12 +410,19 @@ def command_files(words, shell="bash"):
     return folders, files
 
 
+def is_array(words):
+    """Whether these words are a bash array's, which a later command uses wherever it runs."""
+    return bool(words) and isinstance(words[0], dict) and words[0].get("array") is True
+
+
 def parsed_files(commands, repeats, cwd, shell):
     """(path, error) for every body file the parsed commands name, in order. A `cd` may run
     in a child shell (a subshell, a pipeline, a background job) or fail, so the shell may be
     in any folder one named so far; `git -C` moves only its own command. A loop or a function
     can run a later `cd` before an earlier write, so beside one any `cd` makes the folder unknown."""
     places = [UNKNOWN] if repeats and any(program(words) in CD_COMMANDS for words in commands) else [cwd]
+    # An array's words run where the command that uses them runs, after any folder change.
+    moves = any(program(words) in CD_COMMANDS or command_files(words, shell)[0] for words in commands)
     for words in commands:
         if program(words) in CD_COMMANDS:
             # A `cd` that fails from one place leaves the shell where it was, so a missing
@@ -424,7 +435,7 @@ def parsed_files(commands, repeats, cwd, shell):
             places += [place for place in moved if place not in places]
             continue
         folders, files = command_files(words, shell)
-        here = places
+        here = [UNKNOWN] if moves and is_array(words) else places
         for target in folders:
             here = joined(target, here)
         for value in files:

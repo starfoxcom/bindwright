@@ -5,7 +5,8 @@
 // Prints one JSON object: {"error": <the parse hit syntax it could not read>, "commands":
 // [[word, ...], ...], "repeats": <a loop or a function may run them out of source order>},
 // commands in source order, nested ones (inside $( ... ) or a pipeline) included, and each
-// bash array's words as a command whose program is built at run time. A word
+// bash array's words as a command whose program is built at run time, its first word
+// marked "array": true. A word
 // is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
@@ -137,7 +138,9 @@ export async function shellWords(shell, command) {
     if (node.type === "command") commands.push(read(node));
     // An array's words reach a command later (`gh pr create "${args[@]}"`), so they are read
     // as a command whose program is built at run time.
-    if (shell === "bash" && node.type === "array") commands.push([dynamic(node), ...node.namedChildren.map(bashWord)]);
+    if (shell === "bash" && node.type === "array") {
+      commands.push([{ ...dynamic(node), array: true }, ...node.namedChildren.map(bashWord)]);
+    }
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
   return { error: unreadable, commands, repeats };

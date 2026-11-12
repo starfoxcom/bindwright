@@ -497,6 +497,8 @@ class GuardHookTest(unittest.TestCase):
                 (f'git commit -aF"{path}"', "Bash"),
                 (f'args=(\n  --title "feat: x"\n  --body-file "{path}"\n)\ngh pr create "${{args[@]}}"', "Bash"),
                 (f'declare -a opts=(-F "{path}"); git commit "${{opts[@]}}"', "Bash"),
+                (f'opts=(-aF "{path}"); git commit "${{opts[@]}}"', "Bash"),
+                (f'$GIT commit -aF "{path}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -Fbody=@{path}", "PowerShell"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
                 ("& $git commit -Fmsg", "PowerShell")):
@@ -534,6 +536,8 @@ class GuardHookTest(unittest.TestCase):
         for command, tool, reason in (
                 ("cd -; git commit -F msg.txt", "Bash", hidden),
                 ("cd ~-; git commit -F msg.txt", "Bash", hidden),
+                ('args=(-F msg.txt); cd sub; git commit "${args[@]}"', "Bash", hidden),
+                ('opts=(-F msg.txt); git -C sub commit "${opts[@]}"', "Bash", hidden),
                 ("cd /no/such/folder && git commit -F msg.txt", "Bash", hidden),
                 ("cd sub -ErrorAction Stop; git commit -F msg.txt", "PowerShell", hidden),
                 ("f() { git commit -F msg.txt; }; cd sub; f", "Bash", hidden),
