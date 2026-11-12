@@ -17,10 +17,21 @@ Pins it reads:
 
 It also lists every action a workflow uses by a tag or branch instead of a
 commit (`uses: actions/checkout@v6`): a tag can be moved to other code.
+
+The deep review runs it on a PR's diff to look up, on GitHub, each action pin
+the PR adds, since the reviewer's own tools cannot reach other repos:
+
+    git diff BASE...HEAD -- '*.yml' '*.yaml' | pin_check.py added
+
+Prints a Markdown line per added pin saying which tags its comment names point
+to its commit, or nothing when the diff adds no pin.
 """
 
+import json
 import re
+import subprocess
 import sys
+import time
 
 CLI = re.compile(r'^\s*(?:CLI_VERSION|PINNED_VERSION):\s*"?(\d+(?:\.\d+)*)"?\s*(?:#.*)?$')
 ACTION = re.compile(r"^\s*(?:-\s+)?uses:\s*anthropics/claude-code-action@([0-9a-f]{40})\b(?:\s*#\s*(.*))?$")
@@ -28,6 +39,10 @@ DOCKER = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?docker://([^\s'\"#]+)")
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?([\w.-]+/[\w./-]+)@([^\s'\"#]+)")
 VERSION = re.compile(r"\d+(?:\.\d+)*")
 SHA = re.compile(r"[0-9a-f]{40}")
+REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+TAG = re.compile(r"(?<![\w.-])(v\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)(?![\w.-])")
+PATH = re.compile(r"[\w./-]{1,200}")
+MAX_LOOKUPS = 40
 
 
 def _tuple(version):
@@ -63,6 +78,90 @@ def floating(name, text):
     return found
 
 
+def added_pins(diff):
+    """[(file, owner/repo, sha, [tags])] for each action a diff adds by commit,
+    with the release tags its comment names (`# v6 (v6.1.0)`)."""
+    found, name = [], ""
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            name = line[4:].removeprefix("b/")
+            name = name if PATH.fullmatch(name) else "a file with an unusual name"
+            continue
+        m = USES.match(line[1:]) if line.startswith("+") else None
+        if not m or not SHA.fullmatch(m.group(2)):
+            continue
+        repo = "/".join(m.group(1).split("/")[:2])
+        if not REPO.fullmatch(repo) or any(p in (".", "..") for p in repo.split("/")):
+            continue
+        tags = list(dict.fromkeys(TAG.findall(line.partition("#")[2])))
+        entry = (name, repo, m.group(2), tags)
+        if entry not in found:
+            found.append(entry)
+    return found
+
+
+def tag_commit(repo, tag, fetch):
+    """The commit a release tag points to, following an annotated tag; None when
+    the repo has no such tag. `fetch(path)` returns the API's JSON, or None on 404."""
+    ref = fetch("repos/%s/git/ref/tags/%s" % (repo, tag))
+    obj = ref.get("object") if isinstance(ref, dict) else None
+    if isinstance(obj, dict) and obj.get("type") == "tag" and SHA.fullmatch(str(obj.get("sha"))):
+        tag_obj = fetch("repos/%s/git/tags/%s" % (repo, obj["sha"]))
+        obj = tag_obj.get("object") if isinstance(tag_obj, dict) else None
+    sha = obj.get("sha") if isinstance(obj, dict) else None
+    return sha if isinstance(sha, str) and SHA.fullmatch(sha) else None
+
+
+def provenance(found, fetch):
+    """A Markdown line per added pin saying which named tags point to its commit."""
+    lines = []
+    for name, repo, sha, tags in found[:MAX_LOOKUPS]:
+        head = "- `%s@%s` in `%s`: " % (repo, sha, name)
+        if not tags:
+            lines.append(head + "its comment names no release tag, so there is nothing to check it against.")
+            continue
+        results = []
+        for tag in tags:
+            try:
+                got = tag_commit(repo, tag, fetch)
+            except LookupError as e:
+                results.append("tag `%s` could not be looked up (%s)" % (tag, e))
+                continue
+            if got == sha:
+                results.append("tag `%s` points to this commit" % tag)
+            elif got:
+                results.append("tag `%s` points to `%s`, not this commit" % (tag, got))
+            else:
+                results.append("`%s` has no tag `%s`" % (repo, tag))
+        lines.append(head + "; ".join(results) + ".")
+    if len(found) > MAX_LOOKUPS:
+        lines.append("- %d more pins were not looked up." % (len(found) - MAX_LOOKUPS))
+    return "".join(line + "\n" for line in lines)
+
+
+def gh_fetch(path):
+    """`gh api <path>` as JSON; None on 404. Tries twice, then raises LookupError."""
+    for attempt in range(2):
+        try:
+            out = subprocess.run(["gh", "api", path], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            error = type(e).__name__
+        else:
+            if out.returncode == 0:
+                try:
+                    return json.loads(out.stdout)
+                except ValueError:
+                    error = "a reply that is not JSON"
+            elif "HTTP 404" in out.stderr:
+                return None
+            else:
+                last = (out.stderr.strip().splitlines() or ["gh exited %d" % out.returncode])[-1]
+                error = last.replace("`", "'")[:200]
+        if attempt == 0:
+            time.sleep(3)
+    raise LookupError(error)
+
+
 def behind(found, cli, action_sha):
     """The pins older than the newest CLI or not on the newest action commit,
     grouped by pinned value: [(kind, label, [places])] in first-seen order."""
@@ -93,6 +192,9 @@ def _option(args, name):
 
 def main(argv):
     args = list(argv)
+    if args == ["added"]:
+        sys.stdout.write(provenance(added_pins(sys.stdin.read()), gh_fetch))
+        return 0
     try:
         cli = _option(args, "--cli")
         sha = _option(args, "--action-sha")
