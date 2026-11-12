@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Breaking
+
+- **The attribution guard reads commands with a real shell parser** (#821). Bindwright's helper now carries tree-sitter's bash and PowerShell grammars (`helper/parsers/`, copied unchanged with their versions and checksums), and the guard reads each command's body flags as the shell reads them: every command's, a wrapper's (`env`, `sudo`, `xargs`) and one whose program is built at run time and the words of a bash array (`args=(…)`, passed on later as `"${args[@]}"`) included, except a text tool's (`awk -F,`, `cut -d@`, `grep -F word`), git's outside a write and gh's `--template`. Quoted text, here-docs and the value of `-m`, `--body` or `--title` are text, not flags, so the hand-rolled quote and stage scan, which nested quotes, PowerShell's `--%` and typographic quotes could mislead into skipping a real body file, is gone. A body file named by text built at run time (`"$HOME/body.md"`), or a relative one after a `cd` to a folder built at run time, is refused. A `cd` may run in a child shell (a subshell, a pipeline, a background job) or fail, so after one a relative body file is read in every folder the command may be in; after a `cd -` (or `~-`), a `cd` to a folder this computer cannot find, or a `cd` beside a loop or a function, which can run out of the order it is written in, a relative body file is refused. **Act on it:** the parser runs on Node 18 or later. Without Node, or before `/bindwright:update` installs the new helper, the guard reads every file flag in the command text, a text tool's and one inside quoted text or a here-doc included, so `git tag --list | awk -F.` is refused there, and it refuses a relative body file after any `cd`, `pushd`, `Set-Location` or `git -C`, so name body files by absolute path there; install Node 18 or later on a Python-only computer.
+
 ### Fixed
 
 - The deep review's pin lookup verifies a pin only when nothing but a comment follows the commit id and no part of the action's path is `.` or `..`, so `o/r@<id> x` and `o/r/../x@<id>` are no longer reported as verified.
