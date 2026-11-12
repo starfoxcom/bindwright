@@ -422,6 +422,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'sort=1 git commit -F "{path}"', "Bash"),
                 (f'gh pr create --title "a) $(echo "x; sort y")" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "}} ${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
+                # A body flag is never a text tool's, so a path the guard cannot find is refused.
+                ('gh pr create --title "$(echo "x; sort y")" --body-file "$HOME/body.md"', "Bash"),
+                ("gh release create v1 --notes x; sort --notes-file /tmp/missing-notes.md", "Bash"),
                 # Not a text tool's stage, so a missing file is refused as unreadable.
                 ("sort=1 git commit -F missing.md", "Bash"),
                 ("sort.txt -F missing.md; git commit -m x", "Bash"),

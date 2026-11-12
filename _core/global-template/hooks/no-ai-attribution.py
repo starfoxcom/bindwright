@@ -22,12 +22,12 @@ What is scanned, for any git write, gh write or GitHub API call:
     --body-file / --notes-file / --template / --input / --message-file,
     --field, curl -d @file, PowerShell -InFile and Get-Content <file>,
     but not the -F or --file of a text tool's own stage (`awk -F,`,
-    `grep -F word`) that names no existing file: a separator or a pattern.
-    A file of that name, found from the working folder or the command's
-    first `cd`, is read whatever stage the flag seems to sit in, so a shell
-    form the stage scan misreads cannot hide a body file already on disk.
-    A file it cannot read is denied, so a typo cannot slip a body through
-    unread.
+    `grep -F word`) that names no file the guard finds (from the working
+    folder or the command's first `cd`): a separator or a pattern. A file it
+    finds is read whatever stage the flag seems to sit in. Every other flag
+    above is always read, and a file it cannot read is denied, so a typo
+    cannot slip a body through unread. Left open: a -F or --file whose path
+    the guard resolves differently from the shell, in a stage it misreads.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
 
@@ -237,7 +237,9 @@ def find_files(cmd, cwd, esc):
         if any(s <= m.start() < e for s, e in spans):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
-        text_tools = (start is not None and TEXT_TOOL.match(cmd, start)
+        # Only -F and --file can be a text tool's separator or pattern; every other flag is read.
+        own_flag = m.group(0).startswith("-F") or (m.group("long") or "").lower() == "--file"
+        text_tools = (own_flag and start is not None and TEXT_TOOL.match(cmd, start)
                       and is_plain(cmd, start, m.start(), spans))
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
