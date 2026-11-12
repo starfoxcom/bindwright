@@ -155,7 +155,8 @@ class Search:
 
     def __init__(self, paths=(), globs=(), types=(), is_sure=True):
         self.paths = list(paths)
-        # False when the words cannot be told apart: then only where the search runs is judged.
+        # False when the words cannot be told apart: then only where the search runs and what
+        # its words point at are judged.
         self.is_sure = is_sure
         # A negated glob (`!*.md`) leaves files out; it never says what the search reads.
         globs = [g for g in map(unquote, globs) if g]
@@ -237,15 +238,15 @@ def filter_values(value, rest):
 
 def read_words(rest, tool):
     """(plain, globs, types, pattern_given, has_unknown) for a command's words after its name.
-    Each plain word is (word, is_joined), is_joined for an option's `=` or `:` value. has_unknown
-    is True when an option is none the script knows: a filter, a pattern option, `--`, or a
-    cluster of short flags that take no value in `tool`."""
+    The plain words include an option's `=` or `:` value. has_unknown is True when an option is
+    none the script knows: a filter, a pattern option, `--`, or a cluster of short flags that take
+    no value in `tool`."""
     plain, globs, types = [], [], []
     pattern_given = has_unknown = False
     while rest:
         word = rest.pop(0)
         if word == "--":  # the end of the options: every word after it is plain
-            plain += [(w, False) for w in rest]
+            plain += rest
             break
         found = filter_of(word, rest, tool) if word.startswith("-") else None
         if found:
@@ -261,10 +262,10 @@ def read_words(rest, tool):
         elif word.startswith("-"):
             joined = re.split(r"[=:]", word, maxsplit=1)
             if len(joined) == 2:
-                plain.append((joined[1], True))
+                plain.append(joined[1])
             has_unknown = has_unknown or len(joined) == 2 or not takes_no_value(word, tool)
         else:
-            plain.append((word, False))
+            plain.append(word)
     return plain, globs, types, pattern_given, has_unknown
 
 
@@ -288,10 +289,10 @@ def words_search(words, is_text_search=True):
     if is_text_search:
         if has_unknown:
             return unsure  # an option it does not know may take a value or give the pattern
-        named = [word for word, _ in plain][0 if pattern_given else 1:]
+        named = plain[0 if pattern_given else 1:]
     else:
         # A PowerShell listing's comma list is several paths.
-        named = [piece for word, _ in plain for piece in word.split(",") if piece]
+        named = [piece for word in plain for piece in word.split(",") if piece]
     paths = []
     for piece in named:
         # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
