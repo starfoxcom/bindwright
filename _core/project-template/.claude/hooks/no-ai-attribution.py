@@ -162,10 +162,15 @@ def text_spans(cmd, esc):
         q = cmd[i]
         if q in "'\"":
             j = i + 1
+            # Bash's $'...' takes backslash escapes, as a double-quoted string does.
+            escapes = q == '"' or (esc == "\\" and i > 0 and cmd[i - 1] == "$"
+                                   and not is_escaped(cmd, i - 1, esc))
             while j < n and cmd[j] != q:
-                j += 2 if q == '"' and cmd[j] == esc else 1
+                j += 2 if escapes and cmd[j] == esc else 1
             spans.append((i, j + 1))
             i = j + 1
+        elif q == esc:
+            i += 2  # an escaped quote outside quotes is a literal: 'it'\''s stays one string
         else:
             i += 1
     return spans
@@ -223,11 +228,12 @@ def is_plain(cmd, start, end, spans):
                    if not any(s <= i < e for s, e in spans))
 
 
-def is_bare(text):
-    """True when `text` holds no quote, escape, substitution or expansion. Those are what can
-    hide a separator from the flat quote scan (nested quotes, the '\\'' idiom), and telling
-    them apart takes a shell parser, so a stage is trusted only in a command free of them."""
-    return not any(c in text for c in "'\"`$\\")
+def is_bare(text, esc):
+    """True when `text` holds no quote, substitution, expansion or the shell's escape character
+    (`esc`). Those are what can hide a separator from the flat quote scan (nested quotes, the
+    '\\'' idiom), and telling them apart takes a shell parser, so a stage is trusted only in a
+    command free of them. A PowerShell path's backslash is plain text there."""
+    return not any(c in text for c in "'\"`$" + esc)
 
 
 def find_files(cmd, cwd, esc):
@@ -237,7 +243,7 @@ def find_files(cmd, cwd, esc):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
         if (start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans)
-                and is_bare(cmd[:m.start()])):
+                and is_bare(cmd[:m.start()], esc)):
             continue
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
@@ -291,8 +297,8 @@ def main():
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path. If it is "
-                 "a text tool's separator or pattern (awk -F, grep -F) in a command that also quotes "
-                 "or substitutes, run that pipeline as a command of its own.")
+                 "a text tool's separator or pattern (awk -F, grep -F) in a command that also quotes, "
+                 "escapes or substitutes, run that pipeline as a command of its own.")
         scan_text(text, f"file {path}")
     sys.exit(0)
 

@@ -394,6 +394,8 @@ class GuardHookTest(unittest.TestCase):
                         "git commit -m wip && git log | grep -F needle"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
+        # A PowerShell path's backslash is no escape there, so the stage is still trusted.
+        self.assert_passes(self.attr("cd C:\\repo; git tag --list | awk -F. '{print $1}'", tool="PowerShell"))
         for command, tool in (
                 (f'Get-Content "{path}" | gh issue create --title t --body-file -', "PowerShell"),
                 (f'$body = Get-Content "{path}" -Raw\ngh pr create --title t --body $body', "PowerShell"),
@@ -420,6 +422,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh release create v1 --title t `\r\n  sort.txt --notes-file "{path}"', "PowerShell"),
                 (f'grep -q x f; case $y in a) git commit -F "{path}";; esac', "Bash"),
                 (f'git commit-tree HEAD^{{tree}} -p HEAD -F "{path}"', "Bash"),
+                (f"gh pr create --title 'it'\\''s done' --body-file \"{path}\"", "Bash"),
+                (f"gh pr create --title $'a\\'b' --body-file \"{path}\"", "Bash"),
+                (f"gh pr create --title $'a\\'b\\'c' --body-file \"{path}\"", "Bash"),
                 (f'sort `git commit -F "{path}"`', "Bash"),
                 (f'grep -rn foo C:\\\\repo\\\\\ngit commit -F "{path}"', "Bash"),
                 (f'grep x f \\\r\ngit commit -F "{path}"', "Bash"),
