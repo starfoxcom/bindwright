@@ -90,6 +90,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a search of a folder holding code beside docs", bash("grep -rn x .claude/hooks"), "fallback"],
     ["a search of one doc file", bash("grep -rn x README.md"), null],
     ["Grep on a docs folder", grep({ path: "docs" }), null],
+    ["a Grep type that is not text is still read", grep({ type: ["py"] }), "fallback"],
     ["Grep on a docs folder named in full", grep({ path: join(root, "docs") }), null],
     ["a search of a docs folder named in full", bash(`rg x "${join(root, "docs")}"`), null],
     ["Grep on a code folder beside docs", grep({ path: ".claude/hooks" }), "fallback"],

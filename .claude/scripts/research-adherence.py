@@ -331,7 +331,7 @@ def tool_search(name, args):
     """What a Grep or Glob call reads."""
     path = str(args.get("path") or "")
     if name == "Grep":
-        types = [args["type"]] if args.get("type") else []
+        types = [str(args["type"])] if args.get("type") else []
         return Search([path] if path else [], [str(args.get("glob") or "")], types)
     pattern = str(args.get("pattern") or "")
     # A pattern can carry its own folder: an absolute one, or a relative one under the path.
