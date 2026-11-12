@@ -104,10 +104,12 @@ def is_wide(name):
 
 
 def is_code_name(name):
-    """True when a file name or glob can match a code file: any extension it can end in is not a doc's."""
+    """True when a file name or glob can match a code file, one whose extension is not a doc's."""
     name = unquote(name).rstrip("/\\")
     braces = re.search(r"\{([^}]*)\}$", name)
-    endings = [name[:braces.start()] + part for part in braces.group(1).split(",")] if braces else [name]
+    endings = [name]
+    if braces:
+        endings = [name[:braces.start()] + part for part in braces.group(1).split(",")]
     for ending in endings:
         extension = ending.rsplit(".", 1)[-1].lower() if "." in os.path.basename(ending) else ""
         if extension not in NON_CODE_EXTENSIONS:
@@ -116,9 +118,10 @@ def is_code_name(name):
 
 
 def tracked_files(root):
-    """The repo's tracked files, absolute and case-folded; every file under it when git cannot list them."""
+    """The tracked files, absolute and case-folded; every file there when git cannot list them."""
     try:
-        listed = subprocess.run(["git", "-C", root, "ls-files", "-z"], capture_output=True, check=True).stdout
+        command = ["git", "-C", root, "ls-files", "-z"]
+        listed = subprocess.run(command, capture_output=True, check=True).stdout
         names = [n for n in listed.decode("utf-8", "replace").split("\0") if n]
     except (OSError, subprocess.CalledProcessError):
         names = []
@@ -129,7 +132,7 @@ def tracked_files(root):
 
 
 class Repo:
-    """The repo a search is judged against: its root and, read once on first need, its code files."""
+    """The repo a search is judged against: its root and, read once when needed, its code files."""
 
     def __init__(self, root):
         self.root = root
@@ -156,7 +159,8 @@ class Search:
     def __init__(self, paths=(), globs=(), types=()):
         self.paths = list(paths)
         # A negated glob (`!*.md`) leaves files out; it never says what the search reads.
-        self.globs = [g for g in map(unquote, globs) if g and not g.startswith("!") and not is_wide(g)]
+        globs = [g for g in map(unquote, globs) if g]
+        self.globs = [g for g in globs if not g.startswith("!") and not is_wide(g)]
         self.types = [unquote(t).lower() for t in types]
 
     def reads_code(self, base, repo):
@@ -166,7 +170,8 @@ class Search:
         if not inside:
             return False
         if self.globs or self.types:
-            return any(is_code_name(g) for g in self.globs) or any(t not in NON_CODE_TYPES for t in self.types)
+            return (any(is_code_name(g) for g in self.globs)
+                    or any(t not in NON_CODE_TYPES for t in self.types))
         return any(repo.holds_code(p) for p in inside)
 
 
@@ -190,7 +195,7 @@ def split_words(head):
 
 
 def option_value(word, words, short, long):
-    """The (name, value) of the option `word` starts, taking the next word from `words` when it holds the value."""
+    """The (name, value) of the option in `word`; a separate value is taken from `words`."""
     if word.startswith("--"):
         name, joined, value = word[2:].partition("=")
         if joined or name not in long:
@@ -230,7 +235,7 @@ def text_search(words):
 
 
 def listing_search(words):
-    """What a recursive Get-ChildItem reads: -Path (or the first word), filtered by -Include and -Filter."""
+    """What a recursive Get-ChildItem reads: -Path or the first word, narrowed by -Include."""
     rest, values, positional = words[1:], {}, []
     while rest:
         word = rest.pop(0)
@@ -240,7 +245,8 @@ def listing_search(words):
         name, joined, value = word[1:].lower().partition(":")
         match = [p for p in PS_VALUE_PARAMETERS if p.startswith(name)] if name else []
         if len(match) == 1:
-            values.setdefault(match[0], []).append(value if joined else (rest.pop(0) if rest else ""))
+            given = value if joined else (rest.pop(0) if rest else "")
+            values.setdefault(match[0], []).append(given)
     def listed(key, extra):
         return [v for item in values.get(key, []) + extra for v in item.split(",") if v]
 
@@ -278,12 +284,14 @@ def tool_search(name, args):
     """What a Grep or Glob call reads."""
     path = str(args.get("path") or "")
     if name == "Grep":
-        return Search([path] if path else [], [str(args.get("glob") or "")], [args["type"]] if args.get("type") else [])
+        types = [args["type"]] if args.get("type") else []
+        return Search([path] if path else [], [str(args.get("glob") or "")], types)
     pattern = str(args.get("pattern") or "")
     # A pattern can carry its own folder: an absolute one, or a relative one under the path.
     static = re.split(r"[*?\[{]", pattern, maxsplit=1)[0]
     folder = os.path.dirname(static) if os.path.dirname(static) else ""
-    return Search([os.path.join(path, folder) if folder else path] if path or folder else [], [pattern])
+    paths = [os.path.join(path, folder)] if folder else [path] if path else []
+    return Search(paths, [pattern])
 
 
 def classify(name, args, root=None):
