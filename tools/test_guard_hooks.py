@@ -366,6 +366,28 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command))
 
+    def test_field_body_file_is_read(self):
+        path = self.body_file(f"{GENERATED_LINE}\n")
+        for command in (f'gh api repos/o/r/issues/5/comments --field body=@"{path}"',
+                        f'gh api repos/o/r/issues/5/comments --field=body=@{path}'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command))
+
+    def test_file_flags_of_other_stages_are_not_read(self):
+        # A flag is read only in the stage that writes, or as a Get-Content feeding it.
+        path = self.body_file(f"{GENERATED_LINE}\n")
+        for command in ("git show HEAD:.claude/hooks/push-guard.py | grep -F word",
+                        "git show HEAD:.git/hooks/commit-msg | grep -F word",
+                        "git tag --list | awk -F. '{print $1}'",
+                        "gh api repos/o/r/pulls | awk -F'\\t' '{print $1}'",
+                        "gh pr create --title 'a && b; c' --body x | awk -F, '{print}'"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
+        for command in (f'Get-Content "{path}" | gh issue create --title t --body-file -',
+                        f"gh pr create --title 'a && b' --body-file \"{path}\""):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool="PowerShell" if "Get-" in command else "Bash"))
+
     def test_read_only_commands_pass(self):
         for command in ("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"):
             with self.subTest(command=command):

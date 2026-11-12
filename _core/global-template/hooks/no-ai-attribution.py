@@ -18,9 +18,12 @@ the repo's own name, a human Co-Authored-By.
 What is scanned, for any git write, gh write or GitHub API call:
   * The full command text: inline -m / --body / --title / --notes values,
     here-docs, here-strings and PowerShell -Body all live there.
-  * Every file the command names as a message or body: -F / --file /
-    --body-file / --notes-file / --template / --input / --message-file,
-    curl -d @file, PowerShell -InFile and Get-Content <file>. A file it
+  * Every file a writing stage of a pipeline names as a message or body:
+    -F / --file / --field / --body-file / --notes-file / --template /
+    --input / --message-file, curl -d @file, PowerShell -InFile, and a
+    Get-Content <file> anywhere in that pipeline. Stages split at | ; & &&
+    || and newlines outside quoted text, so an `awk -F,` elsewhere is no
+    message file, and a quoted `&` in a title splits nothing. A file it
     cannot read is denied, so a typo cannot slip a body through unread.
     A flag named inside quoted text, a here-doc or a here-string is a
     mention in a message, not an argument, and names no file.
@@ -87,13 +90,17 @@ ATTRIBUTION = re.compile(
     re.I | re.M,
 )
 
+# Each is matched against one pipeline stage. A subcommand is a whole word between spaces, so a
+# path such as `.claude/hooks/push-guard.py` or `commit-msg` names none.
 GIT_WRITE = re.compile(
-    r"\bgit\b[^|;&\n]*?\b(commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)\b", re.I)
+    r"\bgit\b.*?(?<=\s)(commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)(?=\s|$)",
+    re.I | re.S)
 GH_WRITE = re.compile(
-    r"\bgh\b[^|;&\n]*?\b(pr|issue|release|gist|repo)\b[^|;&\n]*?\b(create|edit|comment|review|merge|close|reopen)\b",
-    re.I)
-GH_API = re.compile(r"\bgh\b[^|;&\n]*?\bapi\b", re.I)
-HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
+    r"\bgh\b.*?(?<=\s)(pr|issue|release|gist|repo)\s.*?(?<=\s)"
+    r"(create|edit|comment|review|merge|close|reopen)(?=\s|$)", re.I | re.S)
+GH_API = re.compile(r"\bgh\b.*?(?<=\s)api(?=\s|$)", re.I | re.S)
+HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b.*api\.github\.com", re.I | re.S)
+WRITES = (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH)
 
 # Flags whose next token is a file the hook must read. `-F` is case-sensitive:
 # a lowercase `-f` is `git tag -f` (force) or `gh pr create -f` (fill). Long
@@ -101,8 +108,8 @@ HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api
 # space or the long-option `=` (`--body-file=body.md`).
 FILE_FLAGS = re.compile(
     r"(?:(?<=\s)-F"
-    r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|-InFile))(?![\w-])"
-    r"|(?i:Get-Content)(?:\s+(?i:-Raw|-Path|-LiteralPath)(?![\w-]))*"
+    r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|--field|-InFile))(?![\w-])"
+    r"|(?P<content>(?i:Get-Content))(?:\s+(?i:-Raw|-Path|-LiteralPath)(?![\w-]))*"
     r"|(?<=\s)-d\s*@|(?i:--data(?:-binary|-raw)?)\s*@)"
     r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'|(?P<bare>\S+))"
 )
@@ -157,10 +164,46 @@ def text_spans(cmd, esc):
     return spans
 
 
-def find_files(cmd, cwd, esc):
-    spans = text_spans(cmd, esc)
+def pipelines(cmd, spans):
+    """The command's pipelines, each a list of (start, end) stages, split at separators outside
+    quoted text: `;`, `&`, `&&`, `||` and newlines end a pipeline, a lone `|` ends a stage."""
+    lines, stages, start, i, n = [], [], 0, 0, len(cmd)
+    while i < n:
+        inside = next((e for s, e in spans if s <= i < e), None)
+        if inside is not None:
+            i = inside
+            continue
+        pair = cmd[i:i + 2]
+        if pair in ("&&", "||") or cmd[i] in ";&\n":
+            lines.append(stages + [(start, i)])
+            stages, start = [], i + (2 if pair in ("&&", "||") else 1)
+            i = start
+        elif cmd[i] == "|":
+            stages.append((start, i))
+            start = i = i + 1
+        else:
+            i += 1
+    lines.append(stages + [(start, n)])
+    return lines
+
+
+def write_flags(cmd, lines):
+    """Pairs each pipeline with which of its stages write: [(stages, [bool, ...]), ...]."""
+    return [(line, [any(w.search(cmd[s:e]) for w in WRITES) for s, e in line]) for line in lines]
+
+
+def reads_file(m, staged):
+    """True when a file flag sits in a writing stage, or is a Get-Content feeding one."""
+    for line, writes in staged:
+        for (s, e), writes_here in zip(line, writes):
+            if s <= m.start() <= e:
+                return writes_here or (bool(m.group("content")) and any(writes))
+    return True
+
+
+def find_files(cmd, cwd, esc, spans, staged):
     for m in FILE_FLAGS.finditer(cmd):
-        if any(s <= m.start() < e for s, e in spans):
+        if any(s <= m.start() < e for s, e in spans) or not reads_file(m, staged):
             continue
         path = m.group("dq") or m.group("sq") or m.group("bare")
         if not path or path == "-":
@@ -204,12 +247,13 @@ def main():
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
     esc = "`" if data.get("tool_name") == "PowerShell" else "\\"
-    if not cmd or not (GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
-                       or HTTP_GH.search(cmd)):
+    spans = text_spans(cmd, esc)
+    staged = write_flags(cmd, pipelines(cmd, spans))
+    if not any(any(writes) for _, writes in staged):
         sys.exit(0)
 
     scan_text(cmd, "the command text")
-    for path in find_files(cmd, cwd, esc):
+    for path in find_files(cmd, cwd, esc, spans, staged):
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
