@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- The bound README's clone command and the issue form's discussions link use the repo URL whole, as setup saves it; they read `https://github.com/https://github.com/...` before. A project with GitHub Actions but no AI review no longer gets a `git.md` pointer to `review-tiers.md`, a file it does not have (#788).
+
 ## [v3.3.1] — 2026-11-11
 
 v3.3.1 fixes how `/bindwright:update` treats a project that owns a session skill under its old name.
