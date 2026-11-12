@@ -140,6 +140,8 @@ BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-fil
 # program has its own: `-m` is git's message but gh's `--merge` switch.
 GIT_MESSAGE_FLAGS = {"-m", "--message"}
 MESSAGE_FLAGS = {"-b", "--body", "-t", "--title", "--notes", "--subject", "--message"}
+GH_MESSAGE_FLAGS = MESSAGE_FLAGS | {"-n"}  # gh's -n is --notes; git's is a switch
+GIT_CLUSTER = re.compile(r"-[A-EG-Za-z]+m")  # `-am`: switches, then -m with the next word
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
 READ_CMDLETS = {"get-content", "gc"}
@@ -151,8 +153,10 @@ UNKNOWN = object()  # a folder the command switches to at run time
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
 STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
                " as a command of its own.")
-NO_PARSER_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it) or Node, the guard"
-                  " cannot read the command's structure," + STRICT_READ)
+NO_HELPER_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it), the guard cannot"
+                  " read the command's structure," + STRICT_READ)
+NO_NODE_HINT = (" The guard reads a command's structure with a parser that runs on Node 18 or later,"
+                " which this computer lacks (install it to stop these refusals)," + STRICT_READ)
 UNREAD_HINT = " The guard could not read this command's structure," + STRICT_READ
 MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|push-location|pop-location)"
                           r"(?![\w-])|\bgit\b[^|;&\n]*?\s-C(?![\w-])", re.I)
@@ -178,20 +182,25 @@ def strip_paths(text):
     return PATH_TOKEN.sub("<path>", text)
 
 
-def helper_dir():
-    """Bindwright's helper, which carries the shell parser: setup installs it per computer."""
-    return os.environ.get("BINDWRIGHT_HELPER") or os.path.join(
-        os.path.expanduser("~"), ".bindwright", "helper", "node_modules", "bindwright")
+def parser_script():
+    """The shell parser in Bindwright's helper, which setup installs per computer with npm
+    or pip; None when neither copy is there."""
+    helper = os.path.join(os.path.expanduser("~"), ".bindwright", "helper")
+    folders = [os.environ.get("BINDWRIGHT_HELPER")] if os.environ.get("BINDWRIGHT_HELPER") else [
+        os.path.join(helper, "node_modules", "bindwright"), os.path.join(helper, "python", "bindwright")]
+    scripts = [os.path.join(folder, "hooks", "shell-words.mjs") for folder in folders]
+    return next((script for script in scripts if os.path.isfile(script)), None)
 
 
 def parse(cmd, shell):
     """Each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
     each paired with whether it runs in a child shell, and "". When the parser is missing,
     fails or meets syntax it cannot read: None, and the hint that says which."""
-    script = os.path.join(helper_dir(), "hooks", "shell-words.mjs")
-    node = shutil.which("node")
-    if not node or not os.path.isfile(script):
-        return None, NO_PARSER_HINT
+    node, script = shutil.which("node"), parser_script()
+    if not node:
+        return None, NO_NODE_HINT
+    if not script:
+        return None, NO_HELPER_HINT
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
@@ -229,7 +238,8 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
         if message or not text.startswith("-"):
             message = False
             continue
-        message = text in message_flags or text.lower() == "-body"  # PowerShell names are any case
+        message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
+                   or ("-m" in message_flags and GIT_CLUSTER.fullmatch(text) is not None))
         built = isinstance(word, dict)
         if text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
@@ -329,7 +339,7 @@ def command_files(words):
     if name == "git":
         return git_files(words)
     if name == "gh":
-        return [], body_files(words, BODY_FLAGS - {"--template"})
+        return [], body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS)
     if name in READ_CMDLETS:
         return [], get_content_files(words)
     # A wrapped git (`env A=1 git -C sub commit ...`), or a program built at run time
@@ -337,7 +347,9 @@ def command_files(words):
     built = words and not isinstance(words[0], str)
     wrapped = words if built else next((words[i:] for i in range(1, len(words))
                                         if program(words[i:]) == "git"), None)
-    return (git_subcommand(wrapped)[1] if wrapped else []), body_files(words)
+    if not wrapped:
+        return [], body_files(words)
+    return git_subcommand(wrapped)[1], body_files(words, BODY_FLAGS, MESSAGE_FLAGS | GIT_MESSAGE_FLAGS)
 
 
 def parsed_files(commands, cwd):

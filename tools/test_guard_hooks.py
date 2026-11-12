@@ -442,6 +442,9 @@ class GuardHookTest(unittest.TestCase):
                 ('git --git-dir="$D" commit -m x', "Bash"),
                 ('gh api repos/o/r/issues -F "title=$T"', "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
+                ('git commit -am "-F is now parsed"', "Bash"),
+                ('env A=1 git commit -m "--file=x is gone"', "Bash"),
+                ('gh release create v1 -n "--notes-file x is gone"', "Bash"),
                 ('gh pr comment 5 --body "--body-file=x was ignored"', "Bash"),
                 ("git grep -F needle && git commit -m x", "Bash")):
             with self.subTest(command=command):
