@@ -20,7 +20,7 @@ v3.3.0 should have been a major release: it renamed `/session-start` and `/sessi
 
 ### Fixed
 
-- **The attribution guard reads every message file of a write and refuses nothing else** (#798). A file flag in a text tool's own stage (`awk -F`, `grep -f`, `sort`) is no longer read as a message file, while a flag on a continued line, after a `case` branch or after a `$( … )` group is read as before. `--field`, and a quoted `key=@"path with a space"`, are read too.
+- **The attribution guard reads every message file of a write and refuses nothing else** (#798). A file flag in a text tool's own stage (`awk -F`, `grep -F`, `sort`) is no longer read as a message file, while a flag on a continued line, after a `case` branch, inside backticks or after a `$( … )` group is read as before, and `git commit-tree` stays a write. `--field`, and a quoted `key=@"path with a space"`, are read too.
 - **Setup reads the repo's default branch** (#799). When GitHub's default branch is `develop`, the rules say so (`"devIsDefault": true`); with a setup code it says when the code and the repo disagree.
 - **`/start-session` and `/close-session` spell out the merge-in and cascade steps** (#799) instead of pointing at `git.md` sections an adopted project may not have. `/close-session` stages the session's files by name and leaves a file it did not change out of the commit, naming it in the last message.
 - **The first offline close keeps `.bindwright/pending-tracker.md` out of every commit** (#799), as it does for the hand-off file.
