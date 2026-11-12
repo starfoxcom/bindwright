@@ -74,6 +74,9 @@ test("searches count only inside the repo, wherever the path or a cd points", {
       bash(`cd "${scratch}" && cd - >/dev/null && grep -rn foo src/`), "fallback"],
     ["popd returns to the repo", bash(`pushd "${scratch}" && ls && popd && grep -rn foo src/`), "fallback"],
     ["a marked bypass", bash("grep -rn foo src/ # FINDWRIGHT_BYPASS: regex"), "bypass"],
+    ["a comment after a docs search names no path", bash("grep -rn x docs/ # check the guide"), null],
+    ["a marked search of a folder outside",
+      bash(`rg foo "${scratch}" # FINDWRIGHT_BYPASS: outside the repo`), null],
     ["a filter on another command's output", bash("git log | grep fix"), null],
     // What a search reads: its file filters first, then the files and folders it names.
     ["a pattern that names a doc file is still a pattern", bash(`rg "mod.json" engine/src`), "fallback"],

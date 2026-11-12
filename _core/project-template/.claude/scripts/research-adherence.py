@@ -186,7 +186,8 @@ class Search:
 
 
 def split_words(head):
-    """The words of one command, with quotes kept; redirects and their targets dropped."""
+    """The words of one command, with quotes kept; redirects, their targets and a trailing
+    comment (a bypass marker) dropped."""
     # Not POSIX mode, which reads a backslash as an escape and would turn D:\scratch into
     # D:scratch; quotes stay on the words, and resolve() strips them.
     try:
@@ -195,6 +196,8 @@ def split_words(head):
         words = head.split()
     kept, skip_next = [], False
     for word in words:
+        if word.startswith("#"):
+            break
         if skip_next:
             skip_next = False
         elif BARE_REDIRECT.match(word):
