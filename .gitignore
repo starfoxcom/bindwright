@@ -38,3 +38,6 @@ yarn.lock
 
 # Claude Code agent worktrees — created by parallel review fan-outs, local-only
 .claude/worktrees/
+
+# Personal CLI settings (each person's own permissions and mod switches)
+.claude/settings.local.json

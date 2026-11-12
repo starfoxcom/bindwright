@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
+
 ## [v3.5.0] — 2026-11-12
 
 v3.5.0 pins every workflow action to a commit, makes the attribution guard stop refusing ordinary commands, reads a repo's default branch at setup, and fixes how the session-close search count reads a command.
