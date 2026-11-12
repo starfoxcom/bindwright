@@ -64,6 +64,8 @@ When `.claude/rules/versioning.md` is missing, the repo was set up before setup 
 
 For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.
 
+Then check that `.claude/settings.local.json`, the personal file that holds the allow list and this person's own switches, stays out of git. Unless `"localOnly"` is true, run `git check-ignore -q --no-index .claude/settings.local.json`; when it fails, add that path to `.gitignore`. When `git ls-files .claude/settings.local.json` prints it, say the file is committed, so everything in it is in the history, and offer `git rm --cached .claude/settings.local.json`, which stops tracking it and keeps the file on disk.
+
 ## 6. Review counts
 
 When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and its batch question when the history check calls for it, and save the answers the same way.

@@ -11,6 +11,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 - **Setup gives each project a versioning rule that fits it.** It reads the repo's `VERSION` file, manifest version field, tags, changelog and release tooling (release-please, semantic-release, changesets), then writes `.claude/rules/versioning.md`, a file no update touches: what makes a major, minor or patch for that kind of project, which files to bump and how to tag, or only how to feed the release tool when one sets the version. With no versioning found, it asks whether to start (a `VERSION` file at `0.1.0`) or skip, and remembers a skip. `/bindwright:update` runs the step for projects set up before it (#805).
 - **Bindwright sizes its own releases by a written rule.** `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` and makes a major, features and kept-working default changes a minor, fixes only a patch. Release prep reads every entry against it first, and a test checks each release from v3.5.0 on (#805).
 
+### Fixed
+
+- `/bindwright:update` makes sure `.gitignore` lists `.claude/settings.local.json`, the personal file that holds the allow list and each person's own switches, and offers `git rm --cached` when a repo has it committed. Setup already did the first; a repo set up before it, or one whose `.gitignore` lost the line, could commit the file with everything added to it (#809).
+
 ## [v3.5.0] — 2026-11-12
 
 v3.5.0 pins every workflow action to a commit, makes the attribution guard stop refusing ordinary commands, reads a repo's default branch at setup, and fixes how the session-close search count reads a command.
