@@ -157,6 +157,7 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
                      "--super-prefix", "--attr-source"}
 POP_COMMANDS = {"popd", "pop-location"}
 PUSH_COMMANDS = {"pushd", "push-location"}
+SAVED_FOLDER = re.compile(r"~[+-]|~\d")  # bash's previous, current or stacked folder
 CD_COMMANDS = {"cd", "chdir", "set-location", "sl"} | PUSH_COMMANDS | POP_COMMANDS
 UNKNOWN = object()  # a folder the command text cannot tell
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
@@ -338,7 +339,7 @@ def resolve(value, places):
         yield path, None
     elif not places or UNKNOWN in places:
         yield None, (f"a relative body file {value} after a folder change the command text cannot tell"
-                     " (a target built at run time, `cd -`, or a `cd` beside a loop or a function)")
+                     " (such as `cd -` or a target built at run time, or a `cd` beside a loop or a function)")
     else:
         paths = [os.path.join(place, path) for place in places]
         yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
@@ -357,11 +358,13 @@ def joined(target, places):
 def cd_places(words, places):
     """The folders a `cd`-style command may move to from any of `places`: none for a return
     to a folder this command pushed (`popd`, a bare `pushd`), home for a bare `cd`, and
-    UNKNOWN for `cd -`, whose folder the command text does not hold."""
+    UNKNOWN for a saved folder the command text does not hold (`cd -`, `~-`, `~+`, `~2`) or
+    for more than one target word (`cd sub -ErrorAction Stop`)."""
     targets = [w for w in words[1:] if not text_of(w).startswith("-")]
     if program(words) in POP_COMMANDS:
         return []
-    if "-" in [text_of(w) for w in words[1:]]:
+    saved = any(SAVED_FOLDER.match(text_of(w)) for w in targets)
+    if saved or len(targets) > 1 or "-" in [text_of(w) for w in words[1:]]:
         return [UNKNOWN]
     if not targets:
         return [] if program(words) in PUSH_COMMANDS else [os.path.expanduser("~")]
