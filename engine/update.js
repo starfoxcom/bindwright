@@ -59,6 +59,16 @@ function movesFor(theirsAll, pristine, { readRepo, owned }) {
   return moves;
 }
 
+// The old path a renamed file is owned through: the project owns that path and
+// still has it (a file there, or the base the bind last wrote), and the repo has
+// nothing at the new one. The template then adds no second copy, and the new path
+// is not recorded as written, so the file arrives once the claim is dropped: moved
+// when the old path's base is kept, added when it is not.
+function ownedOldPath(path, { pristine, owned, readRepo }) {
+  return Object.keys(RENAMES).find((old) => RENAMES[old] === path && isOwned(old, owned)
+    && (old in pristine.files || readRepo(old) !== null) && readRepo(path) === null);
+}
+
 function decide(path, { ours, base, theirs }, merge) {
   if (theirs === undefined) {
     if (ours === null) return ["deleted"];
@@ -95,9 +105,12 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
     const from = moves.get(path);
     const base = pristine.files[from ?? path];
     const theirs = theirsAll.get(path);
-    if (isOwned(path, owned)) {
+    const ownedOld = ownedOldPath(path, { pristine, owned, readRepo });
+    if (ownedOld !== undefined || isOwned(path, owned)) {
       result.owned.push(path);
-      if (theirs !== undefined) result.pristine[path] = theirs;
+      if (ownedOld !== undefined) {
+        if (ownedOld in pristine.files) result.pristine[ownedOld] = pristine.files[ownedOld];
+      } else if (theirs !== undefined) result.pristine[path] = theirs;
       continue;
     }
     const ours = readRepo(from ?? path);
@@ -237,9 +250,12 @@ export async function runUpdate(root, { bindWith, version }) {
   const freshStaged = plan.stage.map(([path]) => path).filter((path) => entry(root, path) === null);
   refuseLinks(root, [...plan.write.map(([path]) => path), PRISTINE, ...freshStaged, ...plan.remove]);
   const skipped = plan.stage.filter(([path]) => entry(root, path) !== null).map(([path]) => path.slice(STAGING.length));
+  const renamedFrom = Object.fromEntries(Object.entries(RENAMES).map(([from, to]) => [to, from]));
   for (const path of skipped) {
     // The old staged copy is unsettled, so its file keeps the old base and the next update stages it again.
-    if (path in pristine.files) plan.pristine.files[path] = pristine.files[path];
+    // A renamed file's base is still under its old name.
+    const base = path in pristine.files ? path : renamedFrom[path];
+    if (base in pristine.files) plan.pristine.files[path] = pristine.files[base];
     else delete plan.pristine.files[path];
   }
   for (const [path, text] of plan.write) put(root, path, text);
