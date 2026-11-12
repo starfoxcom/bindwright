@@ -10,6 +10,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **The attribution guard reads commands with a real shell parser** (#821). Bindwright's helper now carries tree-sitter's bash and PowerShell grammars (`helper/parsers/`, copied unchanged with their versions and checksums), and the guard reads each command's body flags as the shell reads them: every command's, a wrapper's (`env`, `sudo`, `xargs`) and one whose program is built at run time included, except a text tool's (`awk -F,`, `cut -d@`, `grep -F word`), git's outside a write and gh's `--template`. Quoted text, here-docs and the value of `-m`, `--body` or `--title` are text, not flags, so the hand-rolled quote and stage scan, which nested quotes, PowerShell's `--%` and typographic quotes could mislead into skipping a real body file, is gone. A body file named by text built at run time (`"$HOME/body.md"`), or a relative one after a `cd` to a folder built at run time, is refused. **Act on it:** the parser runs on Node 18 or later. Without Node, or before `/bindwright:update` installs the new helper, the guard reads every file flag in the command text, a text tool's included, so `git tag --list | awk -F.` is refused there; install Node 18 or later on a Python-only computer.
 
+### Fixed
+
+- The deep review's pin lookup verifies a pin only when nothing but a comment follows the commit id and no part of the action's path is `.` or `..`, so `o/r@<id> x` and `o/r/../x@<id>` are no longer reported as verified.
+
 ## [v3.6.0] — 2026-11-12
 
 ### Added
