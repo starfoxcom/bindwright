@@ -2,3 +2,5 @@
 # would write CRLF and sh would fail on the stray \r, so a guard hook would
 # stop running without any error that blocks.
 *.sh text eol=lf
+# Vendored parser files are kept byte for byte: helper/parsers/SOURCE.md records their SHA-256.
+helper/parsers/** -text
