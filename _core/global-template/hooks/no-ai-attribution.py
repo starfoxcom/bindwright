@@ -165,6 +165,8 @@ def text_spans(cmd, esc):
                 j += 2 if q == '"' and cmd[j] == esc else 1
             spans.append((i, j + 1))
             i = j + 1
+        elif q == esc:
+            i += 2  # an escaped quote outside quotes is a literal: 'it'\''s stays one string
         else:
             i += 1
     return spans
