@@ -61,7 +61,7 @@ jobs:
       # A weekly run starts on whichever branch it was started from (a scheduled
       # one on the default branch, main); it tests develop, where the mods are
       # worked on. Every other event checks out its own ref.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           ref: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'develop' || '' }}
           persist-credentials: false

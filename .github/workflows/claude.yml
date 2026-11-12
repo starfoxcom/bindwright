@@ -82,7 +82,7 @@ jobs:
       # settings again from the PR's base and fails the gate on bad ones.
       # The ref is explicit: on review events the default checkout is the
       # PR's merge commit, whose settings the PR controls.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
@@ -173,7 +173,7 @@ jobs:
       # later write their own bot token into the origin URL before their one
       # fetch (the base branch, for their config restore); that is the
       # action's own setup and predates this file.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6 (v6.1.0)
         with:
           fetch-depth: 0
           persist-credentials: false
