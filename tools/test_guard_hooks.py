@@ -453,7 +453,8 @@ class GuardHookTest(unittest.TestCase):
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
                 ('gh release create v1 -n "--notes-file x is gone"', "Bash"),
                 ('gh pr comment 5 --body "--body-file=x was ignored"', "Bash"),
-                ("git grep -F needle && git commit -m x", "Bash")):
+                ("git grep -F needle && git commit -m x", "Bash"),
+                ("Get-ChildItem -Filter *.md -Force; git commit -m x", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -488,7 +489,9 @@ class GuardHookTest(unittest.TestCase):
                 (f'git log | gh pr comment 5 > out --body-file "{path}"', "Bash"),
                 (f'Get-Content -Path:"{path}" | gh issue create --title t --body-file -', "PowerShell"),
                 (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
-                ("gh api repos/o/r/issues -F 'body='\"@$f\"", "Bash")):
+                ("gh api repos/o/r/issues -F 'body='\"@$f\"", "Bash"),
+                (f'git commit -aF "{path}"', "Bash"),
+                (f'git commit -aF"{path}"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 
