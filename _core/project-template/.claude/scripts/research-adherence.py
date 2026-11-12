@@ -37,42 +37,18 @@ GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
-REDIRECT = re.compile(r"^\d*[<>]")
+REDIRECT = re.compile(r"^(?:\d*|&)[<>]")
 # A redirect operator written apart from its target (`2> /dev/null`): the next word is the target.
-BARE_REDIRECT = re.compile(r"^\d*(?:>>?|<)&?$")
+BARE_REDIRECT = re.compile(r"^(?:\d*|&)(?:>>?|<)&?$")
 WILDCARD = re.compile(r"[*?\[]")
 
-# Options that take a value, from each tool's --help: the value is neither the pattern nor a path.
-RG_SHORT = set("ABCEMTdefgjmrt")
-RG_LONG = {
-    "after-context", "before-context", "color", "colors", "context", "context-separator",
-    "dfa-size-limit", "encoding", "engine", "field-context-separator", "field-match-separator",
-    "file", "generate", "glob", "hostname-bin", "hyperlink-format", "iglob", "ignore-file",
-    "max-columns", "max-count", "max-depth", "max-filesize", "path-separator", "pre", "pre-glob",
-    "regex-size-limit", "regexp", "replace", "sort", "sortr", "threads", "type", "type-add",
-    "type-clear", "type-not",
-}
-GREP_SHORT = set("ABCDdefm")
-GREP_LONG = {
-    "after-context", "before-context", "binary-files", "context", "devices", "directories",
-    "exclude", "exclude-dir", "exclude-from", "file", "include", "label", "max-count",
-    "max-depth", "regexp",
-}
-# ag and ack read -f and -D as switches, so they share only the options all three spell alike.
-AG_ACK_SHORT = set("ABCGgm")
-AG_ACK_LONG = {"after-context", "before-context", "context", "file-search-regex", "ignore", "ignore-dir",
-               "max-count", "type"}
-# Which options name the pattern, and which narrow the files read.
-PATTERN_OPTIONS = {"e", "f", "regexp", "file"}
-GLOB_OPTIONS = {"g", "glob", "iglob", "include"}
-TYPE_OPTIONS = {"t", "type"}
-PS_VALUE_PARAMETERS = ("path", "literalpath", "include", "exclude", "filter", "depth", "attributes")
-# Get-ChildItem's switches and the common parameters that take a value; an exact name wins over a prefix.
-PS_SWITCHES = ("recurse", "file", "directory", "force", "name", "hidden", "readonly", "system",
-               "followsymlink")
-PS_COMMON_VALUES = ("erroraction", "ea", "errorvariable", "ev", "warningaction", "wa",
-                    "informationaction", "infa", "outvariable", "ov", "outbuffer", "ob",
-                    "pipelinevariable", "pv", "warningvariable", "wv", "informationvariable", "iv")
+# Options whose value narrows the files a search reads, written apart (`-g x`) or joined (`-gx`,
+# `--glob=x`, `-Include:x`). Every other word only matters when it names a file or folder that exists.
+FILTER_OPTIONS = ("-g", "--glob", "--iglob", "--include", "-t", "--type", "-include", "-filter",
+                  "--exclude", "--exclude-dir", "-exclude")
+# Their values leave files out; they never say what the search reads.
+EXCLUDE_OPTIONS = ("--exclude", "--exclude-dir", "-exclude")
+TYPE_OPTIONS = ("-t", "--type")
 
 
 def unquote_separators(command):
@@ -158,9 +134,10 @@ class Repo:
         if WILDCARD.search(os.path.basename(path)):
             return is_code_name(path)
         if os.path.isdir(path):
-            prefix = path.rstrip("\\/") + os.sep
-            return path == self.root or any(f.startswith(prefix) for f in self.code_files())
-        return not os.path.exists(path) or is_code_name(path)
+            # Case-blind: macOS and Windows folders match whatever case the search typed.
+            prefix = path.rstrip("\\/").lower() + os.sep
+            return path == self.root or any(f.lower().startswith(prefix) for f in self.code_files())
+        return is_code_name(path)
 
 
 class Search:
@@ -175,7 +152,8 @@ class Search:
 
     def reads_code(self, base, repo):
         """True when the search reads code inside the repo, with paths read from `base`."""
-        paths = [resolve(p, base) for p in self.paths] or [base]
+        named = [resolve(p, base) for p in self.paths]
+        paths = [p for p in named if os.path.exists(p) or WILDCARD.search(os.path.basename(p))] or [base]
         inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
             return False
@@ -207,81 +185,44 @@ def split_words(head):
     return kept
 
 
-def option_value(word, words, short, long):
-    """The (name, value) of the option in `word`; a separate value is taken from `words`."""
-    if word.startswith("--"):
-        name, joined, value = word[2:].partition("=")
-        if joined or name not in long:
-            return name, value if joined else None
-        return name, words.pop(0) if words else ""
-    name = word[1:2]
-    for i, flag in enumerate(word[1:]):
-        if flag in short:
-            rest = word[i + 2:]
-            return flag, rest if rest else (words.pop(0) if words else "")
-    return name, None
+def filter_of(word, words):
+    """(option, value) when `word` is a filter option, taking a separate value from `words`."""
+    lower = word.lower()
+    for option in FILTER_OPTIONS:
+        if lower == option:
+            return option, words.pop(0) if words else ""
+        if lower.startswith(option) and lower[len(option):len(option) + 1] in ("=", ":"):
+            return option, word[len(option) + 1:]
+        if len(option) == 2 and lower.startswith(option) and option[1] in "gt" and word[1] == option[1]:
+            return option, word[2:]
+    return None
 
 
-def text_search(words):
-    """What grep, rg, ag, ack or git grep reads, from the words after the command name."""
-    tables = {"rg": (RG_SHORT, RG_LONG), "ag": (AG_ACK_SHORT, AG_ACK_LONG), "ack": (AG_ACK_SHORT, AG_ACK_LONG)}
-    short, long = tables.get(words[0], (GREP_SHORT, GREP_LONG))
-    if words[:2] == ["git", "grep"]:
-        words = words[1:]
-    rest, positional, globs, types, has_pattern = words[1:], [], [], [], False
+def words_search(words):
+    """What a text search or a recursive listing reads: its filters, and every word that may name a path.
+
+    Patterns, option values and stray tokens rarely name a file or folder that exists, so
+    `Search.reads_code` keeps only the words that do, instead of parsing each tool's options."""
+    rest, paths, globs, types = words[1:], [], [], []
     while rest:
         word = rest.pop(0)
-        if word == "--":
-            positional += rest
-            break
-        if not word.startswith("-") or word == "-":
-            positional.append(word)
+        found = filter_of(word, rest) if word.startswith("-") else None
+        if found:
+            option, value = found
+            # A PowerShell list (`"*.md","*.py"`, `*.md, *.py`) arrives as several words.
+            while rest and (value.endswith(",") or rest[0].startswith(",")):
+                value += rest.pop(0)
+            pieces = [unquote(v.strip()) for v in value.split(",")]
+            if option not in EXCLUDE_OPTIONS:
+                (types if option in TYPE_OPTIONS else globs).extend(v for v in pieces if v)
             continue
-        name, value = option_value(word, rest, short, long)
-        has_pattern |= name in PATTERN_OPTIONS
-        if value is not None and name in GLOB_OPTIONS:
-            globs.append(value)
-        elif value is not None and name in TYPE_OPTIONS:
-            types.append(value)
-    paths = positional if has_pattern else positional[1:]
+        if word.startswith("-"):
+            word = re.split(r"[=:]", word, maxsplit=1)[1] if re.search(r"[=:]", word) else ""
+        for piece in filter(None, word.split(",")):
+            # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
+            is_filter = WILDCARD.search(piece) and not re.search(r"['\"/\\]", piece)
+            (globs if is_filter else paths).append(unquote(piece))
     return Search(paths, globs, types)
-
-
-def listing_search(words):
-    """What a recursive Get-ChildItem reads: -Path or the first word, narrowed by -Include."""
-    rest, values, positional = words[1:], {}, []
-    while rest:
-        word = rest.pop(0)
-        if not word.startswith("-"):
-            positional.append(word)
-            continue
-        name, joined, value = word[1:].lower().partition(":")
-        parameter = ps_parameter(name)
-        given = value if joined or parameter is None else (rest.pop(0) if rest else "")
-        if parameter:
-            values.setdefault(parameter, []).append(given)
-
-    def listed(key):
-        return [v for item in values.get(key, []) for v in item.split(",") if v]
-
-    named = listed("path") + listed("literalpath")
-    globs = listed("include") + listed("filter")
-    # The first word is the path only when no -Path names one; the second is the filter.
-    return Search(named or positional[:1], globs + (positional[1:2] if not named else positional[:1]))
-
-
-def ps_parameter(name):
-    """The value-taking parameter `name` spells, "" for one this count ignores, or None for a switch."""
-    if not name or name in PS_SWITCHES:
-        return None
-    if name in PS_VALUE_PARAMETERS:
-        return name
-    if name in PS_COMMON_VALUES:
-        return ""
-    if any(p.startswith(name) for p in PS_SWITCHES):
-        return None
-    match = [p for p in PS_VALUE_PARAMETERS if p.startswith(name)]
-    return match[0] if len(match) == 1 else None
 
 
 def shell_search(command, repo):
@@ -299,10 +240,9 @@ def shell_search(command, repo):
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
             base = repo.root if back else resolve(" ".join(words), base)
             continue
-        if SHELL_SEARCH.search(head):
-            search = text_search(split_words(head))
-        elif PS_LISTING.search(head) and any(PS_SEARCH.search(s) for s in stages[1:]):
-            search = listing_search(split_words(head))
+        if SHELL_SEARCH.search(head) or (
+                PS_LISTING.search(head) and any(PS_SEARCH.search(s) for s in stages[1:])):
+            search = words_search(split_words(head))
         else:
             continue
         if search.reads_code(base, repo):

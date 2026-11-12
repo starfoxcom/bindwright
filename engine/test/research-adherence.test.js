@@ -47,7 +47,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), "x\n");
   }
-  for (const args of [["init", "-q"], ["add", "-A"]]) spawnSync("git", ["-C", root, ...args]);
+  // No personal excludes file: it could leave a fixture file untracked.
+  for (const args of [["init", "-q"], ["-c", "core.excludesFile=", "add", "-A"]]) spawnSync("git", ["-C", root, ...args]);
   mkdirSync(scratch);
   const bash = (command) => ({ name: "Bash", args: { command } });
   const ps = (command) => ({ name: "PowerShell", args: { command } });
@@ -116,6 +117,12 @@ test("searches count only inside the repo, wherever the path or a cd points", {
       ps(`Get-ChildItem -Path "${scratch}" -Recurse -ErrorAction SilentlyContinue | sls x`), null],
     ["-File is a switch, not -Filter", ps(`Get-ChildItem -Recurse -File "${scratch}" | sls x`), null],
     ["-File before a docs folder", ps("Get-ChildItem -Recurse -File docs | sls x"), null],
+    ["a spaced &> redirect is not a path", bash(`rg foo "${scratch}" &> /dev/null`), null],
+    ["a docs search with a spaced &> redirect", bash("grep -rn x docs/ &> /dev/null"), null],
+    ["a quoted -Include list reads code", ps('Get-ChildItem -Recurse -Include "*.md","*.py" | sls x'), "fallback"],
+    ["a spaced -Path list reads code", ps("Get-ChildItem -Recurse -Path docs, src | sls x"), "fallback"],
+    ["-Path:value keeps the value's case", ps(`Get-ChildItem -Recurse -Path:${join(root, "src")} | sls x`), "fallback"],
+    ["ag -f is a switch", bash(`ag -f foo "${scratch}"`), null],
     ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],
   ];
   try {
