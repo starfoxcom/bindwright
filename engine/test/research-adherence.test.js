@@ -109,6 +109,11 @@ test("searches count only inside the repo, wherever the path or a cd points", {
       "fallback"],
     ["a listing that includes only docs", ps("Get-ChildItem -Recurse -Include *.md -Exclude *.py | sls x"), null],
     ["an exclude says nothing of what is read", ps("Get-ChildItem -Recurse -Exclude:x.md | sls y"), "fallback"],
+    ["a common parameter's value is not a path",
+      ps(`Get-ChildItem -Path "${scratch}" -Recurse -ErrorAction SilentlyContinue | sls x`), null],
+    ["-File is a switch, not -Filter", ps(`Get-ChildItem -Recurse -File "${scratch}" | sls x`), null],
+    ["-File before a docs folder", ps("Get-ChildItem -Recurse -File docs | sls x"), null],
+    ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],
   ];
   try {
     const got = classifyAll(root, rows.map(([, call]) => call));
