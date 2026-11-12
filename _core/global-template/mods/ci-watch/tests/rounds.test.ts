@@ -8,6 +8,8 @@ import { type Seen, world } from './world'
 const RED = 'FAILURE'
 const reds = (n: number) => Array.from({ length: n }, () => RED)
 const path = 'C:/Users/me/.claude/mods-data/ci-watch/rounds.json'
+// Dozens of fake-clock polls: a slow runner can take past the default 5 s.
+const LONG = { timeoutMs: 15_000 }
 
 // The rounds ci-watch saw settle on the PR, oldest first: any result but SUCCESS had a failed check.
 function seed(seen: Seen, results: string[]) {
@@ -112,7 +114,7 @@ test('each settled watch of a pushed head adds a round; an unreadable count file
 
 // A head someone else pushed (a silent watch, past the hour after this session's push) is no round of this
 // session's: its red run never counts.
-test("a silent watch of someone else's head adds no round", async ($, on) => {
+test("a silent watch of someone else's head adds no round", LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
