@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- `/close-session` states the three status-update triggers itself, since a project's `tracker.md` may defer them to another file, and runs an extra close step marked *after the hand-off* last, so a board check or a public mirror reads the session's final state. `clean-code.md`'s issue-link exception names the issue's title where a project check bans issue numbers in code (#791).
+
 ## [v3.4.0] — 2026-11-11
 
 v3.4.0 has a PR stop to rethink after 3 red review rounds instead of 6, and fixes the repo links in a bound README and issue form.
