@@ -412,7 +412,10 @@ class GuardHookTest(unittest.TestCase):
                 (f'sort `git commit -F "{path}"`', "Bash"),
                 (f'grep -rn foo C:\\\\repo\\\\\ngit commit -F "{path}"', "Bash"),
                 (f'grep x f \\\r\ngit commit -F "{path}"', "Bash"),
-                (f'grep -q a\\(b f && case $y in y) git commit -F "{path}";; esac', "Bash")):
+                (f'grep -q a\\(b f && case $y in y) git commit -F "{path}";; esac', "Bash"),
+                (f'git commit -m x >& sort.log -F "{path}"', "Bash"),
+                (f'git commit -m x >| sort.log -F "{path}"', "Bash"),
+                (f'grep x f # ends in a backslash \\\ngit commit -F "{path}"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool))
 

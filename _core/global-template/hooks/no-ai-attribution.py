@@ -103,6 +103,8 @@ GH_WRITE = re.compile(
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 # Text tools whose own -F or --file is a field separator or a pattern file, never a message.
 TEXT_TOOL = re.compile(r"\s*(?:awk|gawk|mawk|grep|egrep|fgrep|rg|cut|sort|column|paste|join|sed)\b")
+# Unquoted, any of these between a text tool and its flag means the flag is read after all.
+SHELL_SYNTAX = frozenset("<>&|;#`$(){}\\\r\n")
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 
 # Flags whose next token is a file the hook must read. `-F` is case-sensitive:
@@ -210,13 +212,23 @@ def stage_start(cmd, at, spans, esc):
     return 0 if depth == 0 else None
 
 
+def is_plain(cmd, start, end, spans):
+    """True when cmd[start:end] holds only words and quoted text: no redirect, separator,
+    substitution, comment, group or escape, any of which the stage scan cannot be sure of. A
+    stage that starts at a redirect's & or | (`>& file`, `>| file`) is no stage at all."""
+    if start >= 2 and cmd[start - 1] in "&|" and cmd[start - 2] in "<>":
+        return False
+    return not any(cmd[i] in SHELL_SYNTAX for i in range(start, end)
+                   if not any(s <= i < e for s, e in spans))
+
+
 def find_files(cmd, cwd, esc):
     spans = text_spans(cmd, esc)
     for m in FILE_FLAGS.finditer(cmd):
         if any(s <= m.start() < e for s, e in spans):
             continue
         start = stage_start(cmd, m.start(), spans, esc)
-        if start is not None and TEXT_TOOL.match(cmd, start):
+        if start is not None and TEXT_TOOL.match(cmd, start) and is_plain(cmd, start, m.start(), spans):
             continue
         path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
         if not path or path == "-":
