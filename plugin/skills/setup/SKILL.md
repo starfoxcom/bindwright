@@ -208,7 +208,7 @@ Build the answers. Only what differs from the defaults is needed; every other ch
 }
 ```
 
-**Default branch.** The rules say which branch GitHub opens pull requests against. On GitHub, unless `"localOnly": true`, read it with `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`; when it prints `develop`, add `"devIsDefault": true` to `advanced`. When it prints anything other than `main` or `develop`, or `gh` cannot read the repo, leave it out and tell the user the rules assume `main` as the default branch.
+**Default branch.** The rules say which branch GitHub opens pull requests against. On GitHub, unless `"localOnly": true`, read it with `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`; when it prints `develop`, add `"devIsDefault": true` to `advanced`. When it prints anything other than `main` or `develop`, or `gh` cannot read the repo, leave it out and tell the user the rules assume `main` as the default branch. With a setup code, the engine takes the answers from the code alone, so skip this; when the branch is `develop`, tell the user the rules will name `main`, and that a setup without the code sets it.
 
 With `"localOnly": true`, first run the engine with `--local-exclude <repo root>`, passing the same answers on standard input, so the exclude list is in place before any file is written. It prints `{"exclude": "<file>", "lines": [...], "shared": [...], "tracked": [...]}`. Keep `shared` for step 8. `tracked` names files git already tracks, which an exclude line cannot hide: name each one and say that the repo already carries it, so a change setup makes to it shows in the next commit; step 5 lets the user leave it as it is.
 

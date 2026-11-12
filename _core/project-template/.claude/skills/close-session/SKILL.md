@@ -99,7 +99,7 @@ If `.bindwright/session-steps.md` lists "Extra close steps", run them now.
 <!-- TOGGLE:code_host_local:off START -->
 ## Commit and PR
 
-Stage the session's files by name, never `git add -A` or `git add .`, and stop to ask when `git status` lists a file this session did not change. Then take the first row that matches:
+Stage the session's files by name, never `git add -A` or `git add .`. A file `git status` lists that this session did not change stays out of the commit; name it in the last message. Then take the first row that matches:
 
 | Situation | Do |
 |---|---|
@@ -135,7 +135,7 @@ Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.
 <!-- TOGGLE:code_host_local START -->
 ## Save point
 
-Commit the session's work as one save point, or one per finished piece, with the message format in `git.md`. Stage the files by name, never `git add -A` or `git add .`, and stop to ask when `git status` lists a file this session did not change. The project lives only on this computer: nothing is pushed, and there is no pull request.
+Commit the session's work as one save point, or one per finished piece, with the message format in `git.md`. Stage the files by name, never `git add -A` or `git add .`. A file `git status` lists that this session did not change stays out of the save point; name it in the last message. The project lives only on this computer: nothing is pushed, and there is no pull request.
 <!-- TOGGLE:code_host_local END -->
 
 <!-- TOGGLE:tracker:github START -->
