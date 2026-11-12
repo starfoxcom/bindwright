@@ -1,10 +1,10 @@
 ---
-name: runners
+name: local-runners
 description: Set up local CI runners for this repo. Checks the computer and the repo's CI, recommends how many runners (or none), installs the ones the user picks and lists them in the runners mod.
 disable-model-invocation: true
 ---
 
-# /bindwright:runners
+# /bindwright:local-runners
 
 A local runner is a program on the user's computer that takes GitHub Actions jobs for this repo, so those jobs stop waiting for GitHub's hosted machines and stop spending its Actions minutes. This skill works out whether that is worth it here and how many fit, then sets up the ones the user picks. Show every command before it runs, and run it only on a yes; a command that needs `sudo` or an administrator prompt is one the user runs themselves (in the CLI, `! <command>`).
 
