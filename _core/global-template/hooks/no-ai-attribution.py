@@ -49,9 +49,10 @@ git's own hooks (`--no-verify`, `-n` on commit or am, setting
 commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
-(`-nm x`) or shortened (`--no-veri`). With the parser a message value that
-names one passes; without it the command text is split at spaces, so quoted
-text that names one is denied too.
+(`-nm x`) or shortened (`--no-veri`), so a message value that names one
+passes. Without the parser, Python's POSIX shell lexer splits the command,
+so quotes are read the same way, and quotes that never close make every
+word count.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -72,6 +73,7 @@ exit 0 otherwise. Never blocks read-only commands.
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -203,9 +205,6 @@ SHORT_VALUES = {"commit": ("FmcCtU", "Su"), "am": ("Cp", "S")}
 LONG_VALUES = {"commit": ("--message", "--file", "--template", "--author", "--date", "--cleanup",
                           "--fixup", "--squash", "--reuse-message", "--reedit-message"),
                "am": ()}
-# The strict read's cuts between commands, and a redirect it leaves among the words.
-STRICT_SPLIT = re.compile(r"[|;&\n(){}#`]+")
-REDIRECT = re.compile(r"\d*(?:>>?|<|&>)")
 # Git takes any unambiguous start of a long option, so each is matched from its shortest
 # start that cannot mean a harmless option of the same command.
 LONG_BYPASSES = (("--no-verify", "--no-v", "hooks"), ("--trailer", "--tr", "trailer"))
@@ -330,20 +329,31 @@ def turns_lefthook_off(commands, assignments):
 
 
 def strict_commands(cmd):
-    """Without the parser: the command text cut into commands at control characters, groups,
-    substitutions and comments, then into words at spaces, quotes and redirects left out."""
-    commands = []
-    for part in STRICT_SPLIT.split(cmd):
-        words, skip_next = [], False
-        for word in part.split():
-            if skip_next:
-                skip_next = False
-            elif REDIRECT.match(word):
-                skip_next = REDIRECT.fullmatch(word) is not None  # the target is the next word
-            else:
-                words.append(word.strip("\"'"))
-        commands.append(words)
-    return commands
+    """Without the parser: the commands as Python's POSIX shell lexer reads them, quoted text
+    kept whole and comments dropped, cut at `;`, `|`, `&`, newlines and parentheses outside
+    quotes, a redirect and its target left out. A command cut by `(` keeps that `(` as its
+    last word, since what follows is one of its values (`git config core.hooksPath (...)`).
+    With quotes that never close, the whole text is one command, so every option counts."""
+    lexer = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return [cmd.split()]
+    commands, words, skip_next = [], [], False
+    for token in tokens:
+        if skip_next:
+            skip_next = False
+        elif token and set(token) <= set(lexer.punctuation_chars):
+            if "<" in token or ">" in token:  # `2>&1`, `> out`: drop the fd and the target
+                words = words[:-1] if words and words[-1].isdigit() else words
+                skip_next = True
+                continue
+            commands.append(words + ["("] if token.startswith("(") else words)
+            words = []
+        else:
+            words.append(token)
+    return commands + [words]
 
 
 def bypass_reason(cmd, parsed, assignments):

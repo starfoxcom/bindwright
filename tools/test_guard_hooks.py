@@ -671,6 +671,16 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
         self.assert_denied(self.attr('git -c "hook.x.enabled=false" commit -m x',
                                      helper=os.path.join(self.home, "none")), setting)
+        # Without the parser, quotes still hold a message whole, whatever it carries.
+        for command, because, tool in (('git commit -m "feat(x): y" --no-verify', hooks, "Bash"),
+                                       ('git commit -m "fix #12" -n', hooks, "Bash"),
+                                       ('git commit -m "a; b & c" --no-verify', hooks, "Bash"),
+                                       ('git commit -m "x\n\ny" --no-verify', hooks, "Bash"),
+                                       ('git commit -m "use {x}" --trailer "a: b"', trailer, "Bash"),
+                                       ("git config core.hooksPath $(pwd)/hooks", setting, "Bash"),
+                                       ("git config core.hooksPath (Join-Path $PWD h)", setting, "PowerShell")):
+            with self.subTest(command=command, helper="none"):
+                self.assert_denied(self.attr(command, tool=tool, helper=os.path.join(self.home, "none")), because)
         for command, tool in (("git config core.hooksPath 2>/dev/null", "Bash"),
                               ("git config core.hooksPath 2>&1", "Bash"),
                               ("git config core.hooksPath > out.txt", "Bash"),
