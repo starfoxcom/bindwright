@@ -214,6 +214,10 @@ const DIRECTORY_CASES = [
     /more than an exact --- line/],
   ["a frontmatter opener after a BOM", "skills/x/SKILL.md", "﻿---\nname: x\nallowed-tools: Bash\n---\n",
     /more than an exact --- line/],
+  ["a frontmatter opener before a form feed", "skills/x/SKILL.md", "---\f\nname: x\nallowed-tools: Bash\n---\n",
+    /more than an exact --- line/],
+  ["a frontmatter opener before a lone CR", "skills/x/SKILL.md", "---\rname: x\nallowed-tools: Bash\n---\n",
+    /more than an exact --- line/],
   ["a key hidden after a lone CR", "skills/x/SKILL.md", "---\nname: x\ndescription: a\rallowed-tools:\tBash\n---\n",
     /frontmatter lines outside/],
 ];
