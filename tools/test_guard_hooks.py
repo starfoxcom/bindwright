@@ -459,7 +459,7 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
-                ('git commit -nm "--file=x is gone"', "Bash"),
+                ('git commit -qm "--file=x is gone"', "Bash"),
                 ('git merge -nm "--file=x is gone" feature', "Bash"),
                 ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
@@ -631,6 +631,51 @@ class GuardHookTest(unittest.TestCase):
         # git's lowercase -c sets config; no folder changes, so the cwd's msg.txt is read.
         self.assert_denied(self.attr("git -c k=v commit -F sub/msg.txt", project=root, helper=none),
                            "found in file")
+
+    def test_routes_past_git_hooks_are_denied(self):
+        hooks, trailer, reuse = "git hook bypass", "--trailer is not allowed", "reusing another"
+        setting = "changes which hooks git runs"
+        for command, because in (
+                ("git commit --no-verify -m x", hooks),
+                ("git commit -n -m x", hooks),
+                ('git commit -nm "x"', hooks),
+                ("git commit --no-veri -m x", hooks),
+                ("git am -n mail.patch", hooks),
+                ("git push --no-verify", hooks),
+                ("git -c core.hooksPath=/dev/null commit -m x", setting),
+                ("git config core.hooksPath /dev/null", setting),
+                ("git config set --global core.hooksPath x", setting),
+                ("git --config-env=core.hooksPath=H commit -m x", setting),
+                ('git commit --trailer "x: y" -m z', trailer),
+                ("git commit --tr=x:y -m z", trailer),
+                ("git commit -C HEAD", reuse),
+                ("git commit -aC HEAD", reuse),
+                ("git commit --reuse-message=HEAD", reuse),
+                ("git commit --reu HEAD", reuse),
+                ("LEFTHOOK=0 git commit -m x", "disabling lefthook"),
+                ('export LEFTHOOK="false"', "disabling lefthook"),
+                ("env LEFTHOOK=0 git push", "disabling lefthook"),
+                ("lefthook uninstall", "disabling lefthook")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), because)
+        self.assert_denied(self.attr('$env:LEFTHOOK = "0"; git commit -m x', tool="PowerShell"),
+                           "disabling lefthook")
+        for command in ("git commit --no-verify -m x", "git commit -nm x", "$GIT commit -n -m x"):
+            with self.subTest(command=command, helper="none"):
+                self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
+        # Each is git's own meaning, a read, or a message that names an option.
+        for command in ('git commit -m "document --no-verify"', 'git commit -m "-n means skip"',
+                        "git commit -m x -- -n", "git merge -n feature/x", "git push -n",
+                        "git tag -n", "git am -c mail.patch", "git checkout --track origin/x",
+                        "git config core.hooksPath && git commit -m x",
+                        "git config get core.hooksPath && git commit -m x",
+                        'git commit -m "say LEFTHOOK=0 skips it"',
+                        "python - <<'EOF'\nrows = ['LEFTHOOK=0 git commit -m x']\nEOF"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
+        # A read is checked only for the routes past the hook, so its file-like words are not read.
+        self.assert_passes(self.attr('"p: " + (git config --get core.hooksPath); gci "$env:X\\h" -ErrorAction 0',
+                                     tool="PowerShell"))
 
     def test_a_wrapped_gh_keeps_its_template_name(self):
         self.assert_passes(self.attr("env GH_TOKEN=x gh issue create --title t --template bug.md"))

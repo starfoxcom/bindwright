@@ -43,12 +43,21 @@ What is scanned, for any git write, gh write or GitHub API call:
     `cd`, `pushd`, `Set-Location` or `git -C` is denied. So flag-like text
     in such a command's message (`$GIT commit -m "--file=x"`) is denied too.
 
+Denied outright, since the hook cannot see past them: a git write that skips
+git's own hooks (`--no-verify`, `--no-hooks`, `-n` on commit or am, setting
+`core.hooksPath` or a `hooks.` setting; reading one is fine), `--trailer`, a
+commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
+`--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
+uninstall`) from any command. Options are read as git reads them, bundled
+(`-nm x`) or shortened (`--no-veri`). With the parser a message value that
+names one passes; without it the command text is split at spaces, so quoted
+text that names one is denied too.
+
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
 pass unread: message text the shell builds at run time ($VAR, $(...),
 backticks, eval), a body file the command itself writes, a body piped in
-on stdin, a message reused from another commit
-(-C / --reuse-message), flags that skip git's own hooks, and text a program
+on stdin, and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
 by hand.
@@ -179,6 +188,157 @@ MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|pus
                           r"(?![\w-])|\bgit\b[^|;&\n]*?\s(?-i:-C)(?![\w-])", re.I)  # -c sets config
 
 
+# Routes past the hook, refused outright (see the module docstring).
+LEFTHOOK_OFF = re.compile(r"lefthook\s+uninstall|LEFTHOOK\s*=\s*['\"]?(?:0|false)\b", re.I)
+LEFTHOOK_OFF_VALUES = ("0", "false")
+# Not a write, so it needs its own way past the early exit.
+GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hooks", re.I)
+CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "--type", "--default", "--comment", "--value"}
+CONFIG_READS = {"get", "list", "get-regexp", "get-urlmatch", "get-color", "get-colorbool"}
+# Short options of commit and am (`git <subcommand> -h`) whose value is the rest of the word,
+# or the next word when nothing follows the letter; then those that take only an attached one.
+# -n is --no-verify on these two alone: merge's hides the diffstat, push's is a dry run.
+SHORT_VALUES = {"commit": ("FmcCtU", "Su"), "am": ("Cp", "S")}
+LONG_VALUES = ("--message", "--file", "--template", "--author", "--date", "--cleanup",
+               "--fixup", "--squash", "--reuse-message", "--reedit-message")
+# Git takes any unambiguous start of a long option, so each is matched from its shortest
+# start that cannot mean a harmless option of the same command.
+LONG_BYPASSES = (("--no-verify", "--no-v", "hooks"), ("--trailer", "--tr", "trailer"))
+LONG_REUSE = (("--reuse-message", "--reu"), ("--reedit-message", "--ree"))
+BYPASS_REASONS = {
+    "hooks": "git hook bypass (--no-verify / -n) is not allowed.",
+    "setting": ("setting core.hooksPath or a hooks. setting changes which hooks git runs; "
+                "ask the user to run it."),
+    "trailer": "--trailer is not allowed; write the message body directly.",
+    "reuse": "reusing another commit's message (-C / -c / --reuse-message) cannot be scanned.",
+    "lefthook": "disabling lefthook removes the commit-msg attribution check.",
+}
+
+
+def abbreviates(word, option, shortest):
+    """Whether git reads the option word as the long option `option`."""
+    name = word.split("=", 1)[0]
+    return name.startswith(shortest) and option.startswith(name)
+
+
+def names_hooks(setting):
+    setting = setting.lower()
+    return "hookspath" in setting or setting.startswith("hooks.")
+
+
+def option_words(subcommand, rest):
+    """The options of a commit or am command, one per letter of a bundle (`-nm` is `-n`,
+    `-m`), with each option's value left out so a message is never read as an option."""
+    takes_value, attached_only = SHORT_VALUES[subcommand]
+    options, skip_next = [], False
+    for word in rest:
+        if skip_next:
+            skip_next = False
+            continue
+        if word == "--":
+            break
+        if not word.startswith("-") or word == "-":
+            continue
+        if word.startswith("--"):
+            options.append(word)
+            skip_next = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES)
+            continue
+        for k, letter in enumerate(word[1:], 2):
+            options.append("-" + letter)
+            if letter in takes_value + attached_only:
+                skip_next = letter in takes_value and k == len(word)
+                break
+    return options
+
+
+def config_sets_hooks(rest):
+    """Whether a `git config` command sets a hook setting; reading one is fine."""
+    names, skip_next = [], False
+    for word in rest:
+        if skip_next:
+            skip_next = False
+        elif word.startswith("-"):
+            if word.startswith("--get") or word in ("-l", "--list"):
+                return False
+            skip_next = word in CONFIG_VALUE_OPTIONS
+        else:
+            names.append(word)
+    if names[:1] == ["set"]:
+        names = names[1:]
+    elif names[:1] and names[0] in CONFIG_READS:
+        return False
+    return len(names) >= 2 and names_hooks(names[0])
+
+
+def global_settings(words, end):
+    """The settings git's own options before the subcommand set (`-c k=v`, `--config-env`)."""
+    settings = []
+    for k in range(1, end):
+        text, before = text_of(words[k]), text_of(words[k - 1])
+        if before in ("-c", "--config-env"):
+            settings.append(text)
+        elif text.startswith("--config-env="):
+            settings.append(text.split("=", 1)[1])
+    return settings
+
+
+def git_bypass(words):
+    """The kind of route past the hook one git command takes, or None."""
+    i, _ = git_subcommand(words)
+    if any(names_hooks(setting) for setting in global_settings(words, i)):
+        return "setting"
+    subcommand = text_of(words[i]) if i < len(words) else ""
+    rest = [text_of(w) for w in words[i + 1:]]
+    if subcommand == "config":
+        return "setting" if config_sets_hooks(rest) else None
+    options = option_words(subcommand, rest) if subcommand in SHORT_VALUES else rest
+    if "--no-hooks" in options or (subcommand in SHORT_VALUES and "-n" in options):
+        return "hooks"
+    for option, shortest, kind in LONG_BYPASSES:
+        if any(abbreviates(word, option, shortest) for word in options):
+            return kind
+    if subcommand == "commit" and ("-C" in options or "-c" in options or any(
+            abbreviates(word, option, shortest) for word in options for option, shortest in LONG_REUSE)):
+        return "reuse"
+    return None
+
+
+def turns_lefthook_off(commands, assignments):
+    """Whether the parsed commands turn lefthook off: `lefthook uninstall`, or LEFTHOOK set
+    to 0, false or a value built at run time, by assignment or through `env` or `sudo`."""
+    for setting in assignments:
+        if not isinstance(setting, dict):
+            return True
+        name, value = str(setting.get("name", "")).lower(), setting.get("value")
+        name = name[len("$env:"):] if name.startswith("$env:") else name.lstrip("$")
+        if name == "lefthook" and (not isinstance(value, str) or value.lower() in LEFTHOOK_OFF_VALUES):
+            return True
+    for words in commands:
+        texts = [text_of(word).lower() for word in words]
+        if program(words) == "lefthook" and texts[1:2] == ["uninstall"]:
+            return True
+        if program(words) in ("env", "sudo") and any(
+                text in ("lefthook=" + value for value in LEFTHOOK_OFF_VALUES) for text in texts):
+            return True
+    return False
+
+
+def bypass_reason(cmd, parsed, assignments):
+    """Why the command takes a route past the hook, or None: read from the parsed commands,
+    or, without the parser, from the command text split at spaces, quoted text included."""
+    strict = parsed is None
+    if LEFTHOOK_OFF.search(cmd) if strict or assignments is None else turns_lefthook_off(parsed, assignments):
+        return BYPASS_REASONS["lefthook"]
+    commands = [part.split() for part in re.split(r"[|;&\n]+", cmd)] if strict else parsed
+    for words in commands:
+        for i, word in enumerate(words):
+            if program(words[i:]) == "git" or is_run_time_git(word) or (strict and GIT_WORD.search(word)):
+                kind = git_bypass(words[i:])
+                if kind:
+                    return BYPASS_REASONS[kind]
+    return None
+
+
 def deny(reason):
     sys.stdout.write(json.dumps({
         "hookSpecificOutput": {
@@ -224,23 +384,25 @@ def node_program(cwd):
 
 def parse(cmd, shell, cwd):
     """(each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    and "". When the parser is missing, fails or is unsure of the command: None, and the
-    hint that says which."""
+    the variables they set, or None from a helper that does not report them, and "". When
+    the parser is missing, fails or is unsure of the command: None, None, and the hint that
+    says which."""
     node, script = node_program(cwd), parser_script()
     if not node:
-        return None, NO_NODE_HINT
+        return None, None, NO_NODE_HINT
     if not script:
-        return None, NO_HELPER_HINT
+        return None, None, NO_HELPER_HINT
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
                              capture_output=True, timeout=PARSE_SECONDS)
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None, UNREAD_HINT
+        return None, None, UNREAD_HINT
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
-        return None, UNREAD_HINT
-    return data["commands"], ""
+        return None, None, UNREAD_HINT
+    assignments = data.get("assignments")
+    return data["commands"], assignments if isinstance(assignments, list) else None, ""
 
 
 def text_of(word):
@@ -490,14 +652,18 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    if not cmd or not (GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
-                       or HTTP_GH.search(cmd)):
+    writes = bool(GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
+                  or HTTP_GH.search(cmd))
+    if not (writes or LEFTHOOK_OFF.search(cmd) or GIT_CONFIG_HOOKS.search(cmd)):
         sys.exit(0)
 
-    scan_text(cmd, "the command text")
+    if writes:
+        scan_text(cmd, "the command text")
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
-    parsed, hint = parse(cmd, shell, cwd)
-    for path, error in (parsed_files(parsed, cwd) if parsed is not None else strict_files(cmd, cwd)):
+    parsed, assignments, hint = parse(cmd, shell, cwd)
+    # A command that writes nothing is checked only for the routes past the hook.
+    files = parsed_files(parsed, cwd) if parsed is not None else strict_files(cmd, cwd)
+    for path, error in (files if writes else ()):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.{hint}")
         try:
@@ -505,6 +671,9 @@ def main():
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.{hint}")
         scan_text(text, f"file {path}")
+    reason = bypass_reason(cmd, parsed, assignments)
+    if reason:
+        deny(reason)
     sys.exit(0)
 
 

@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The attribution guard refuses the routes past git's own hooks** (#839). A git write that skips them (`--no-verify`, `--no-hooks`, `-n` on `commit` or `am`, setting `core.hooksPath` or a `hooks.` setting, from the command or through `-c` and `--config-env`), `--trailer`, a commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`, `--reedit-message`) and turning lefthook off (`LEFTHOOK=0` or `false`, `export`, `env` and PowerShell's `$env:` included, `lefthook uninstall`) are refused, since the guard cannot see what they let through. Options are read as git reads them, bundled (`-nm x`) or shortened (`--no-veri`, `--reu`), and each keeps git's own meaning: `-n` on `merge`, `push` or `tag` is not a bypass, and reading `core.hooksPath` passes. Setting it is refused with a reason that asks the user to run it, as the git rules' lefthook step already says. A command that writes nothing is checked for these routes alone, never for body files. The helper's parser now reports the variables a command sets, so text that only names one of these routes (a message, a script in a here-doc) passes; without the parser, the strict read refuses it too.
+
 ## [v4.0.0] — 2026-11-12
 
 ### Breaking
