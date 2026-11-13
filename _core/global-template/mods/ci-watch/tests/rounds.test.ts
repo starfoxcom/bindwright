@@ -1,9 +1,7 @@
-import { expect, test } from 'claude-code/testing'
+import { type Engine, expect, test } from 'claude-code/testing'
 
 import { wakeText } from '../hooks/register'
-import {
-  isResearchDue, type Lookup, type PrRounds, recordRound, redStreak, roundsToResearch, sourcesOwed,
-} from '../hooks/rounds'
+import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
 
@@ -14,11 +12,9 @@ const path = 'C:/Users/me/.claude/mods-data/ci-watch/rounds.json'
 const LONG = { timeoutMs: 15_000 }
 
 // The rounds ci-watch saw settle on the PR, oldest first: any result but SUCCESS had a failed check.
-// `lastSha` names the newest round's head (the watched head, for a step back to hold).
-function seed(seen: Seen, results: string[], lastSha?: string) {
+function seed(seen: Seen, results: string[]) {
   seen.isReadable = true
-  const sha = (i: number) => (lastSha && i === results.length - 1 ? lastSha : `c${i}`)
-  const rounds = results.map((result, i) => ({ sha: sha(i), red: result !== 'SUCCESS' }))
+  const rounds = results.map((result, i) => ({ sha: `c${i}`, red: result !== 'SUCCESS' }))
   seen.files.set(path, JSON.stringify({ 'o/r#7': { rounds } }))
 }
 
@@ -64,43 +60,41 @@ test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
 
-// The step back as a table: due counts only, and three distinct topics looked up after the last red round
-// settled. A round saved without its time counts as settled at 0.
-test('a step back owes three distinct lookups made after the last red round settled', () => {
-  const settledAt = (n: number, at?: number): PrRounds => ({
-    rounds: Array.from({ length: n }, (_, i) => ({ sha: `c${i}`, red: true, ...(at === undefined ? {} : { at }) })),
-  })
-  const look = (...entries: [number, string][]) => entries.map(([at, topic]) => ({ at, topic }))
-  const rows: [string, PrRounds, Lookup[], number][] = [
-    ['not due at 4', settledAt(4, 100), [], 0],
-    ['due at 3, nothing looked up', settledAt(3, 100), [], 3],
-    ['lookups before the round', settledAt(6, 100), look([50, 'a'], [60, 'b'], [70, 'c']), 3],
-    ['a lookup at the same moment', settledAt(6, 100), look([100, 'a']), 3],
-    ['one lookup after', settledAt(6, 100), look([101, 'a']), 2],
-    ['the same topic twice', settledAt(6, 100), look([101, 'a'], [102, 'a']), 2],
-    ['three distinct after', settledAt(6, 100), look([101, 'a'], [102, 'b'], [103, 'c']), 0],
-    ['a round without its time', settledAt(5), look([1, 'a']), 2],
-  ]
-  for (const [name, pr, lookups, owed] of rows) expect([name, sourcesOwed(pr, lookups)]).toEqual([name, owed])
+// A latched step back counts distinct topics and ends at the third.
+test('a step back counts each topic once and ends at three', () => {
+  expect(withTopic([], ' How Others Solve It ')).toEqual(['how others solve it'])
+  expect(withTopic(['a'], 'A')).toEqual(['a'])
+  expect(withTopic(['a'], '  ')).toEqual(['a'])
+  expect(withTopic(['a', 'b'], 'c')).toBeUndefined()
 })
 
-// While a watched PR owes its step back, the session's edits, commits and pushes wait; nothing else does.
-test('at a step back, edits, commits and pushes wait for three distinct lookups', async ($, on) => {
-  const { seen } = world(on)
+type World = ReturnType<typeof world>
+const editInput = { tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }
+
+// The PR's red rounds in a row before this push, then the push's own round settles red.
+async function redRound($: Engine, { seen, clock }: World, before: number) {
+  seed(seen, reds(before))
+  seen.bucket = 'fail'
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let i = 0; i < 6; i++) await clock.advance(30_000)
+}
+
+// The red wake that asks for a step back latches it: edits, commits and pushes wait for three distinct
+// lookups, and nothing else does.
+test('a step back holds edits, commits and pushes until three distinct lookups ran', async ($, on) => {
+  const w = world(on)
   const tools = ['Edit', 'Write', 'WebSearch', 'WebFetch', 'Agent'] as const
   on('tool.call', { tool: tools }, async ($, e) =>
     (e as { url?: string }).url === 'https://down.example' ? { result: 'down', isError: true } : { result: 'done' })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   const call = (input: Record<string, unknown>) => $.tool.call(input as never)
   const bash = (command: string) => call({ tool: 'Bash', command })
-  seed(seen, reds(4), 'a1')
-  expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
-  seed(seen, reds(6), 'a1')
+  await redRound($, w, 5)
   const held = [
     () => bash('git push origin feature/x'),
     () => call({ tool: 'PowerShell', command: 'git push' }),
     () => bash('git -C . commit -m "fix it"'),
-    () => call({ tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }),
+    () => call(editInput),
     () => call({ tool: 'Write', file_path: 'C:/repo/a.ts', content: 'b' }),
   ]
   for (const attempt of held) expect(await attempt()).toHaveProperty('deny')
@@ -119,26 +113,28 @@ test('at a step back, edits, commits and pushes wait for three distinct lookups'
     call({ tool: 'Agent', subagent_type: 'web-fetch', prompt: 'read https://example.com/b' }),
     call({ tool: 'WebFetch', url: 'https://example.com/c' }),
   ])
-  const edit = { tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }
-  expect(await call(edit)).not.toHaveProperty('deny')
+  expect(await call(editInput)).not.toHaveProperty('deny')
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
 })
 
-// A pushed fix ends the step back: after the user's /ci-watch stop, a push of a new head is not held again.
-test('a pushed fix ends the step back, so /ci-watch stop lifts it for good', async ($, on) => {
-  const { seen } = world(on)
+// A red wake at a count that is not due latches nothing; a new watch of the PR keeps a latched step back,
+// and only the user's /ci-watch stop lifts it without lookups, for good.
+test('only a due red wake latches a step back, and only lookups or a stop lift it', async ($, on) => {
+  const w = world(on)
   on('tool.call', { tool: 'Edit' }, async () => ({ result: 'done' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  const bash = (command: string) => $.tool.call({ tool: 'Bash', command } as never)
-  const edit = () => $.tool.call({ tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' } as never)
-  seed(seen, reds(4), 'a1')
-  await bash('git push origin feature/x')
-  seed(seen, reds(6), 'a1')
+  const edit = () => $.tool.call(editInput as never)
+  await redRound($, w, 3)
+  expect(await edit()).not.toHaveProperty('deny')
+  w.seen.head = 'b2'
+  await redRound($, w, 5)
+  expect(await edit()).toHaveProperty('deny')
+  await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)
   expect(await edit()).toHaveProperty('deny')
   await $.command.run({ command: 'ci-watch', args: 'stop', origin: { kind: 'composer' } } as never)
   expect(await edit()).not.toHaveProperty('deny')
-  seen.head = 'b2'
-  expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
+  w.seen.bucket = 'pending'
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   expect(await edit()).not.toHaveProperty('deny')
 })
 
@@ -179,10 +175,7 @@ test('each settled watch of a pushed head adds a round; an unreadable count file
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
-  const round = JSON.parse(seen.files.get(path) ?? '{}')['o/r#7']
-  expect(round).toMatchObject({ rounds: [{ sha: 'a1', red: true }] })
-  // Stamped when it settled, after the push at 1000: the time a step back's lookups must come after.
-  expect(typeof round.rounds[0].at === 'number' && round.rounds[0].at > 1_000).toBe(true)
+  expect(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7']).toEqual({ rounds: [{ sha: 'a1', red: true }] })
 })
 
 // A head someone else pushed (a silent watch, past the hour after this session's push) is no round of this
@@ -199,7 +192,7 @@ test("a silent watch of someone else's head adds no round", LONG, async ($, on) 
   seen.bucket = 'fail'
   for (let i = 0; i < 25; i++) await clock.advance(30_000)
   const rounds = (JSON.parse(seen.files.get(path) ?? '{}') as Record<string, PrRounds>)['o/r#7']?.rounds
-  expect(rounds).toMatchObject([{ sha: 'a1', red: false }])
+  expect(rounds).toEqual([{ sha: 'a1', red: false }])
 })
 
 // A round another session writes while this one is being added is the state it adds to: the file is read

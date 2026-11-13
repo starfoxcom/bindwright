@@ -1,9 +1,8 @@
-// Where ci-watch keeps its files: each PR's fix rounds, shared by every session, and the web lookups of
-// this session alone.
+// Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import { recordRound, redStreak, ROUNDS_FILE } from './rounds'
-import type { Lookup, PrRounds } from './rounds'
+import { isResearchDue, recordRound, redStreak, ROUNDS_FILE } from './rounds'
+import type { PrRounds } from './rounds'
 
 // The engine's fs makes no missing folders, so the data folder is made through node, once per load.
 export const MKDIR_SCRIPT = 'require("fs").mkdirSync(process.argv[1],{recursive:true})'
@@ -46,44 +45,23 @@ async function updateRounds($: EngineInterface, key: string, change: (pr?: PrRou
 }
 
 // Each watch that settled on a pushed head is one round: red when a check failed. A watch that ran out of
-// time says nothing about the checks and is no round. A failed write leaves the count as it was.
-export async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<void> {
+// time says nothing about the checks and is no round. A failed write leaves the count as it was. Returns
+// the PRs, as `owner/name#N`, whose red round asks for a step back.
+export async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<Set<string>> {
+  const stepBacks = new Set<string>()
   for (const w of settled) {
     // A silent watch follows a head someone else pushed: no round of this session's.
     if (w.isSilent || (w.outcome !== 'failed' && w.outcome !== 'passed')) continue
     const red = w.outcome === 'failed'
-    const at = await $.clock.now()
-    await updateRounds($, `${w.repo}#${w.number}`, pr => recordRound(pr, w.headSha, red, at)).catch(() => undefined)
+    const key = `${w.repo}#${w.number}`
+    const counted = (pr?: PrRounds) => {
+      const next = recordRound(pr, w.headSha, red)
+      if (red && isResearchDue(redStreak(next))) stepBacks.add(key)
+      return next
+    }
+    await updateRounds($, key, counted).catch(() => stepBacks.delete(key))
   }
-}
-
-// The web lookups this session ran (WebSearch, WebFetch or the web-fetch agent), oldest first.
-const LOOKUPS_KEPT = 20
-
-async function lookupsPath($: EngineInterface): Promise<string> {
-  return (await statePath($)).replace(/\.json$/, '.research')
-}
-
-export async function readLookups($: EngineInterface): Promise<Lookup[]> {
-  const all = await $.fs.read(await lookupsPath($)).then(text => JSON.parse(String(text))).catch(() => undefined)
-  if (!Array.isArray(all)) return []
-  return all.filter((l): l is Lookup => typeof l?.at === 'number' && typeof l?.topic === 'string')
-}
-
-// Lookups that finish together (parallel calls) are written one after another, so none is lost.
-let lookupWrites: Promise<void> = Promise.resolve()
-
-export function noteLookup($: EngineInterface, topic: string): Promise<void> {
-  const written = lookupWrites.then(() => addLookup($, topic))
-  lookupWrites = written.catch(() => undefined)
-  return written
-}
-
-async function addLookup($: EngineInterface, topic: string): Promise<void> {
-  const clean = topic.trim().toLowerCase()
-  if (!clean) return
-  const lookups = [...(await readLookups($)), { at: await $.clock.now(), topic: clean }].slice(-LOOKUPS_KEPT)
-  await $.fs.write(await lookupsPath($), JSON.stringify(lookups)).catch(() => undefined)
+  return stepBacks
 }
 
 export async function redRoundsOf($: EngineInterface, pr: { repo: string; number: number }): Promise<number> {

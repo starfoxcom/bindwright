@@ -1,16 +1,16 @@
 // The fix-round count: how many pushed rounds in a row a PR has had whose checks did not all pass (both
 // reviews included). At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
-// compare at least three ways others solve the problem, simplify, then go on. Each step back that leaves
-// the PR red leaves one round fewer before the next; there is no last one. While a step back is due and
-// fewer than three distinct web lookups ran since the last red round settled (`sourcesOwed`), the
-// session's edits, commits and pushes are refused, so the fix comes after the research. A round is a watch of
+// research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
+// leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
+// also latches it on the watch: the session's edits, commits and pushes wait until three distinct web
+// lookups ran (`withTopic`), so the fix comes after the research. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
 // counted. Pure, no engine access.
 
 /** One settled watch of a PR's pushed head: whether a check failed. */
-export type Round = { sha: string; red: boolean; at?: number }
+export type Round = { sha: string; red: boolean }
 /** A PR's rounds, oldest first. */
 export type PrRounds = { rounds: Round[] }
 
@@ -18,9 +18,9 @@ const KEPT = 50
 
 /** The PR's rounds with one more settled watch. A watch of a head already on the list (a re-run) replaces
  * that round. */
-export function recordRound(pr: PrRounds | undefined, sha: string, red: boolean, at?: number): PrRounds {
+export function recordRound(pr: PrRounds | undefined, sha: string, red: boolean): PrRounds {
   const rounds = (Array.isArray(pr?.rounds) ? pr.rounds : []).filter(r => r.sha !== sha)
-  return { rounds: [...rounds, at === undefined ? { sha, red } : { sha, red, at }].slice(-KEPT) }
+  return { rounds: [...rounds, { sha, red }].slice(-KEPT) }
 }
 
 /** The rounds in a row, newest first, that had a failed check, back to the last one that passed. */
@@ -52,21 +52,15 @@ export function researchText(pr: string, red: number): string {
   )
 }
 
-/** One web lookup the session ran: when (ms) and what it looked up (the query, URL or brief), lower-cased. */
-export type Lookup = { at: number; topic: string }
-
-/** Distinct lookups a step back takes: one source is a guess, three can be compared. */
+/** Distinct web lookups a step back takes: one source is a guess, three can be compared. */
 export const SOURCES_NEEDED = 3
 
-/** How many more distinct lookups a push to the PR waits for: 0 unless a step back is due, else
- * SOURCES_NEEDED less the distinct topics looked up after its last red round settled. A round saved
- * without its time counts as settled at 0. */
-export function sourcesOwed(pr: PrRounds | undefined, lookups: readonly Lookup[]): number {
-  if (!isResearchDue(redStreak(pr))) return 0
-  const last = (Array.isArray(pr?.rounds) ? pr.rounds : []).at(-1)
-  const since = typeof last?.at === 'number' ? last.at : 0
-  const topics = new Set(lookups.filter(l => l.at > since).map(l => l.topic))
-  return Math.max(0, SOURCES_NEEDED - topics.size)
+/** A latched step back's topics with one more lookup, lower-cased and trimmed, a repeat counted once;
+ * undefined once SOURCES_NEEDED distinct topics were looked up, which ends the step back. */
+export function withTopic(topics: readonly string[], topic: string): string[] | undefined {
+  const clean = topic.trim().toLowerCase()
+  const next = clean && !topics.includes(clean) ? [...topics, clean] : [...topics]
+  return next.length >= SOURCES_NEEDED ? undefined : next
 }
 
 export function researchRefusal(pr: string, red: number, owed: number): string {

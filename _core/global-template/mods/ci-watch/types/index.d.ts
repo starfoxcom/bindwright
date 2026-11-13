@@ -27,6 +27,11 @@ export type Watch = {
   incidentPending?: boolean
   /** Whether GitHub lists any workflow for the repo, asked once the PR has gone a while with no check. */
   hasWorkflows?: boolean
+  /**
+   * Set by the red wake that asks for a step back: the distinct topics looked up on the web since. While set,
+   * the session's edits, commits and pushes wait; it clears at three topics or on `/ci-watch stop`.
+   */
+  stepBackTopics?: string[]
 }
 
 /** The settings pane's own state: the last refusal per field. */

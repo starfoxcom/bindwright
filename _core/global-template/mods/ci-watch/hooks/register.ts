@@ -3,10 +3,12 @@ import { atom, update, type EngineInterface, type Hook, type Register } from 'cl
 import type { Watch } from '../types'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
-import { isResearchDue, redStreak, researchRefusal, researchText, roundsToResearch, sourcesOwed } from './rounds'
+import {
+  isResearchDue, redStreak, researchRefusal, researchText, roundsToResearch, SOURCES_NEEDED, withTopic,
+} from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
-  dataFolder, ensureDir, noteLookup, readLookups, readRounds, recordRounds, redRoundsOf, statePath,
+  dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
 } from './store'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
@@ -267,18 +269,13 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// The refusal for an edit, commit or push while a PR this session watches owes its step back, or
-// undefined. A watch holds only while its head is the PR's last red round: a pushed fix ends that step
-// back. Only a PR that owes one is asked about on GitHub (a closed PR owes nothing).
+// The refusal for an edit, commit or push while a watch of this session has a step back latched, or
+// undefined. A closed PR owes nothing.
 async function owedResearch($: EngineInterface): Promise<string | undefined> {
-  const watched = new Map(live.watches.filter(w => !w.isSilent).map(w => [`${w.repo}#${w.number}`, w]))
-  if (watched.size === 0) return undefined
-  const all = await readRounds($)
-  const lookups = await readLookups($)
-  for (const [key, w] of watched) {
-    const isLastRound = all[key]?.rounds?.at(-1)?.sha === w.headSha
-    const owed = isLastRound ? sourcesOwed(all[key], lookups) : 0
-    if (owed && !(await isClosed($, w.repo, w.number))) return researchRefusal(key, redStreak(all[key]), owed)
+  for (const w of live.watches.filter(w => w.stepBackTopics)) {
+    if (await isClosed($, w.repo, w.number)) continue
+    const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
+    return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
   }
   return undefined
 }
@@ -346,7 +343,12 @@ async function startWatch(
     return pushed
   }
   const id = `${startedAt}-${Math.random().toString(36).slice(2)}`
-  const fresh: Watch = { repo, number, headSha, startedAt, checks: {}, stablePolls: 0, id, pushedAt: startedAt }
+  // A step back stays latched on the PR across a new watch of it: only lookups or a stop lift it.
+  const latched = live.watches.find(w => w.repo === repo && w.number === number && w.stepBackTopics)
+  const fresh: Watch = {
+    ...(latched ? { stepBackTopics: latched.stepBackTopics } : {}),
+    ...{ repo, number, headSha, startedAt, checks: {}, stablePolls: 0, id, pushedAt: startedAt },
+  }
   live.watches = [...live.watches.filter(w => !(w.repo === repo && w.number === number)), fresh]
   live.generation++
   await save($)
@@ -474,7 +476,7 @@ async function poll($: EngineInterface): Promise<void> {
     changed = true
     if (next.outcome) settled.push(next)
   }
-  await recordRounds($, settled)
+  const stepBacks = await recordRounds($, settled)
   // A push, a stop or a merge while this poll waited on gh changed the list: lay the results over it.
   live.watches = live.generation === generation ? kept : reconcile(live.watches, kept)
   // Found by watch and head, not identity: a push made meanwhile is laid onto the polled copy, and the
@@ -494,7 +496,10 @@ async function poll($: EngineInterface): Promise<void> {
   const due = toWake.filter(w => !isRecorded(recorded, w) && claimWake(w))
   // Marked by watch and head too: a same-head push made during the reads above replaced the object.
   const isDue = (w: Watch) => due.some(d => isSameRun(d, w))
-  if (due.length > 0) live.watches = live.watches.map(w => (isDue(w) ? { ...w, wakePending: true } : w))
+  // A red wake that asks for a step back latches it in the same save.
+  const isStepBack = (w: Watch) => w.outcome === 'failed' && stepBacks.has(`${w.repo}#${w.number}`)
+  const marked = (w: Watch): Watch => ({ ...w, wakePending: true, ...(isStepBack(w) ? { stepBackTopics: [] } : {}) })
+  if (due.length > 0) live.watches = live.watches.map(w => (isDue(w) ? marked(w) : w))
   if (changed || isIncidentNoted || live.isUnsaved) await save($)
   if (!live.isTurnRunning) await sendHeld($)
 }
@@ -594,7 +599,12 @@ function startPolling($: EngineInterface): Promise<void> {
 async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
   const input = e as { tool?: unknown; subagent_type?: unknown; query?: unknown; url?: unknown; prompt?: unknown }
   if (input.tool === 'Agent' && input.subagent_type !== 'web-fetch') return
-  await noteLookup($, String(input.query ?? input.url ?? input.prompt ?? ''))
+  if ((await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
+  const topic = String(input.query ?? input.url ?? input.prompt ?? '')
+  const counted = (w: Watch): Watch => ({ ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic) })
+  live.watches = live.watches.map(w => (w.stepBackTopics ? counted(w) : w))
+  live.generation++
+  await save($)
 }
 
 // A /clear moves the session to a new id and stops its timer; a start under way finishes first, under the
