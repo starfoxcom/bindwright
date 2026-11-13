@@ -73,8 +73,10 @@ def floating(name, text):
     found = []
     for n, line in enumerate(text.splitlines(), 1):
         m = USES.match(line)
-        if m and not (SHA.fullmatch(m.group(2)) and ends_value(line, m)):
-            ref = line[m.start(2):].split()[0]  # the whole value the runner uses, `<id>#x` included
+        commit = SHA.fullmatch(m.group(2)) if m else None
+        if m and not (commit and ends_value(line, m)):
+            # A commit id with text glued after it is shown with that text, the ref the runner uses.
+            ref = line[m.start(2):].split()[0] if commit else m.group(2)
             found.append("`%s@%s` at `%s:%d`" % (m.group(1), ref, name, n))
             continue
         m = DOCKER.match(line)
