@@ -208,6 +208,8 @@ const DIRECTORY_CASES = [
     /README\.md:2 names \$HOME beside a network call/],
   ["a frontmatter value YAML reads as a map", "skills/x/SKILL.md", "---\nname: x\ndescription: a: b\n---\n",
     /frontmatter lines outside/],
+  ["a key hidden after a lone CR", "skills/x/SKILL.md", "---\nname: x\ndescription: a\rallowed-tools:\tBash\n---\n",
+    /frontmatter lines outside/],
 ];
 
 test("the directory check refuses each kind of file the directory refuses", needsPython, () => {

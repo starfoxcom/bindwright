@@ -76,7 +76,11 @@ def _frontmatter_problems(rel, text):
         return ["%s has unclosed frontmatter" % rel]
     body = lines[1:lines.index("---", 1)]
     matches = [FRONTMATTER_LINE.fullmatch(line) for line in body]
-    unread = [line for line, m in zip(body, matches) if not (m and _frontmatter_value_ok(m.group(2)))]
+    # isprintable() is False for a tab, a lone CR and every other character YAML may read as a line break.
+    unread = [
+        line for line, m in zip(body, matches)
+        if not (line.isprintable() and m and _frontmatter_value_ok(m.group(2)))
+    ]
     if unread:
         return ['%s has frontmatter lines outside `key: text` or `key: "JSON string"`: %s' % (rel, " | ".join(unread))]
     extra = [m.group(1) for m in matches if m.group(1) not in SKILL_KEYS]
