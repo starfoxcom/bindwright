@@ -3,7 +3,7 @@
 //   node shell-words.mjs bash|powershell < command
 //
 // Prints one JSON object: {"error": <the command holds syntax it could not read, or a shape
-// the guard leaves to its strict read>, "commands": [[word, ...], ...], "assignments":
+// the guard refuses as unreadable>, "commands": [[word, ...], ...], "assignments":
 // [{"name": ..., "value": <word>}, ...]}, commands and the variables they set in source
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
@@ -136,12 +136,12 @@ export async function shellWords(shell, command) {
     if (node.type === "command") {
       const words = read(node);
       // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the
-      // command gets the strict read instead.
+      // command is unreadable.
       if (typeof words[0] !== "string") unreadable = true;
       commands.push(words);
     }
-    // An array's words reach a command later, wherever it runs: the strict read takes it. So
-    // does PowerShell's `--%`, after which the program splits the raw text by its own rules.
+    // An array's words reach a command later, wherever it runs, so it is unreadable. So
+    // is PowerShell's `--%`, after which the program splits the raw text by its own rules.
     if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);

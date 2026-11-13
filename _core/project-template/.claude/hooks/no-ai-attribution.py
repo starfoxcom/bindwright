@@ -35,13 +35,14 @@ What is scanned, for any git write, gh write or GitHub API call:
     further. One after a folder change it cannot place (`cd -`, a
     target built at run time, a folder this computer cannot find) is
     denied. A file it cannot read, or one named by text built at run time,
-    is denied, so a typo cannot slip a body through unread. A command the
-    parser is unsure of (a program or an array built at run time,
-    PowerShell's `--%`, syntax it cannot read) and one run without the helper or Node get the strict
-    read instead: every file flag in the command text, a text tool's and
-    one inside quoted text included, and a relative body file after any
-    `cd`, `pushd`, `Set-Location` or `git -C` is denied. So flag-like text
-    in such a command's message (`$GIT commit -m "--file=x"`) is denied too.
+    is denied, so a typo cannot slip a body through unread.
+
+The parser is required: it runs on Node 18 or later from Bindwright's
+helper, which setup installs with the guard. A command this hook reads is
+denied when either is missing, when the helper is older than this hook, or
+when the parser is unsure of it (a program or an array built at run time,
+PowerShell's `--%`, syntax it cannot read), with a reason that says which
+and how to fix it.
 
 Denied outright, since the hook cannot see past them: a git write that skips
 git's own hooks (`--no-verify`, `-n` on commit or am, setting
@@ -50,16 +51,8 @@ commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser a smaller reader stands in. It covers the
-ordinary ways a command is written, not every corner of the shell's grammar,
-which only the parser reads in full. It reads the command into commands and
-words with that shell's escape character: continued
-lines joined, quotes taken off, `$(...)`, backticks and groups (quoted ones
-too) read as commands as well, each here-doc body line read on its own, and
-redirects and comments dropped. Each command then gets the same checks as on
-the parser's read, so another program's options and quoted text (a message
-that quotes a route) do not count, while a script line inside a here-doc
-does. A read of `core.hooksPath` passes.
+passes, as does another program's option and quoted text that names a
+route. A read of `core.hooksPath` passes.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -75,9 +68,9 @@ The repo registers this file through run-hook.sh, which skips it when
 names it outside a permission rule.
 
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
-exit 0 otherwise. A read-only command is blocked only for the routes above:
-one that turns lefthook off or sets or unsets a hooks setting, or, on the strict read,
-a here-doc line that runs one.
+exit 0 otherwise. A read-only command is blocked only for the routes above
+(one that turns lefthook off or sets or unsets a hooks setting), or when the
+parser it needs to tell a read from a set is missing or unsure.
 """
 import json
 import os
@@ -141,21 +134,9 @@ GH_WRITE = re.compile(
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 
-# Without the parser: flags whose next token is a file the hook must read. `-F`
-# is case-sensitive: a lowercase `-f` is `git tag -f` (force) or `gh pr create
-# -f` (fill). Long flags match whole (`--filename` is not `--file`). The value
-# may follow a space or the long-option `=` (`--body-file=body.md`).
-FILE_FLAGS = re.compile(
-    r"(?:(?<=\s)-F"
-    r"|(?P<long>(?i:--file|--body-file|--notes-file|--template|--input|--message-file|--field|-InFile))(?![\w-])"
-    r"|(?i:Get-Content)(?:\s+(?i:-Raw|-Path|-LiteralPath)(?![\w-]))*"
-    r"|(?<=\s)-d\s*@|(?i:--data(?:-binary|-raw)?)\s*@)"
-    r"\s*=?\s*(?:\"(?P<dq>[^\"]+)\"|'(?P<sq>[^']+)'"
-    r"|(?P<kv>[^\s=\"']+=@(?:\"[^\"]+\"|'[^']+'))|(?P<bare>\S+))"
-)
 PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
 
-# With the parser: every command's file flags are read, except a text tool's, git's
+# Every command's file flags are read, except a text tool's, git's
 # in a read (where -F or --file means something else) and gh's `--template` (a template
 # name). Any other git subcommand, an alias included, is read as a write. A wrapper (`env`,
 # `sudo`, `xargs`) or any other program has its flags read.
@@ -187,15 +168,14 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
 HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
 CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
-STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
-               " as a command of its own.")
-NO_HELPER_HINT = (" Without Bindwright's helper (`/bindwright:update` installs it), the guard cannot"
-                  " read the command's structure," + STRICT_READ)
-NO_NODE_HINT = (" The guard reads a command's structure with a parser that runs on Node 18 or later,"
-                " which this computer lacks (install it to stop these refusals)," + STRICT_READ)
-UNREAD_HINT = " The guard could not read this command's structure," + STRICT_READ
-MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|push-location|pop-location)"
-                          r"(?![\w-])|\bgit\b[^|;&\n]*?\s(?-i:-C)(?![\w-])", re.I)  # -c sets config
+NO_NODE = ("the guard reads each command with a parser that runs on Node 18 or later, which this"
+           " computer lacks. Install Node, then run /bindwright:update.")
+NO_HELPER = ("the guard reads each command with Bindwright's helper, which is not installed. Run"
+             " /bindwright:update to install it.")
+OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update."
+UNREAD = ("the guard could not read this command's structure: a program or an array built at run"
+          " time, PowerShell's --%, or syntax the parser rejects. Write it as plain commands.")
+
 
 
 # Routes past the hook, refused outright (see the module docstring).
@@ -203,6 +183,9 @@ LEFTHOOK_OFF = re.compile(r"\blefthook\b[^|;&\n]*?\buninstall\b|LEFTHOOK\s*=\s*[
 LEFTHOOK_OFF_VALUES = ("0", "false")
 # Not a write, so it needs its own way past the early exit.
 GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hook", re.I)
+# A line end the shell joins to the next line: `\` (even runs of `\` escape each other) or
+# PowerShell's backtick after a blank.
+CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
 CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment", "--value"}
 CONFIG_READS = {"get", "list", "get-regexp", "get-urlmatch", "get-color", "get-colorbool"}
 # Short options of commit and am (`git <subcommand> -h`) whose value is the rest of the word,
@@ -337,209 +320,29 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-# Without the parser: the command is read into commands and words the way the shell reads it,
-# and each command's words get the parsed read's own checks, so the two reads share one set of
-# rules. A group, a quote and a here-doc body are each read to their own end by the same reader,
-# so a misread stays inside the part that holds it.
-CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
-STRICT_REDIRECT = re.compile(r"&>>?|<<<|<<-?|<>|<&|>&|>>|>\||<|>")  # longest operator first
-STRICT_BREAKS = ";|&\n()"
-STRICT_NEWLINE = re.compile(r"\r?\n")
-POWERSHELL_HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@", re.S)
-
-
 def join_continued(cmd):
-    """The command with each continued line (`\\` or PowerShell's backtick at the line end)
-    joined to the next, as the shell reads it."""
+    """The command with each continued line joined to the next, as the shell reads it, so the
+    early exit's patterns see a command written over several lines whole."""
     return CONTINUED_LINE.sub(lambda m: (m.group(1) or "") + " ", cmd)
 
 
-class StrictSplit:
-    """The words of the command being read. A redirect's target is the next word, read like any
-    other and then dropped; all digits right before the operator are its file number, and a
-    here-doc's target is kept as the line that ends its body."""
-
-    def __init__(self):
-        self.words, self.word, self.target, self.heredocs = [], None, None, []
-
-    def add(self, text):
-        self.word = (self.word or "") + text
-
-    def end_word(self):
-        if self.word is None:
-            return
-        if self.target is None:
-            self.words.append(self.word)
-        elif self.target in ("<<", "<<-"):
-            self.heredocs.append((self.word, self.target == "<<-"))
-        self.word, self.target = None, None
-
-    def start_redirect(self, operator):
-        if self.word is not None and self.word.isdigit():
-            self.word = None
-        self.end_word()
-        self.target = operator
-
-    def end_command(self, commands):
-        self.end_word()
-        if self.words:
-            commands.append(self.words)
-        self.words, self.target = [], None
-
-
-class StrictReader:
-    """Reads command text into commands, each a list of words with quotes taken off, as the
-    shell reads it: the commands inside `$(...)`, backticks, groups and here-doc bodies are read
-    too, and redirects and comments are left out. PowerShell escapes with the backtick; a POSIX
-    shell escapes with the backslash and opens a group with the backtick."""
-
-    def __init__(self, text, shell):
-        self.text, self.shell, self.commands = text, shell, []
-        self.escape = "`" if shell == "powershell" else "\\"
-
-    def read(self, i=0, closer=""):
-        """Reads commands from `i` up to an unmatched `closer` or the end; returns the index
-        after it."""
-        split = StrictSplit()
-        while i < len(self.text) and self.text[i] != closer:
-            i = self.step(i, split)
-        split.end_command(self.commands)
-        return min(i + 1, len(self.text))
-
-    def step(self, i, split):
-        """Reads the part of a command at `i`; returns the index after it."""
-        char = self.text[i]
-        redirect = STRICT_REDIRECT.match(self.text, i)
-        continued = char == self.escape and STRICT_NEWLINE.match(self.text, i + 1)
-        if continued:
-            return continued.end()
-        if self.opens_group(i):
-            return self.group(i, split)
-        if redirect:
-            split.start_redirect(redirect.group())
-            return redirect.end()
-        if char == "\n":
-            split.end_command(self.commands)
-            return self.heredoc_bodies(i + 1, split)
-        if char in " \t\r":
-            split.end_word()
-        elif char in STRICT_BREAKS or (char in "{}" and split.word is None):
-            split.end_command(self.commands)
-        elif char == "#" and split.word is None:
-            end = self.text.find("\n", i)
-            return len(self.text) if end < 0 else end
-        else:
-            value, end = self.part(i)
-            split.add(value)
-            return end
-        return i + 1
-
-    def opens_group(self, i):
-        """Whether a group opens at `i`: `(`, `$(`, `@(`, or a POSIX shell's backtick."""
-        return (self.text[i] == "(" or self.text.startswith(("$(", "@("), i)
-                or (self.text[i] == "`" and self.shell != "powershell"))
-
-    def group(self, i, split):
-        """Reads the group at `i` as commands of its own. Inside a command its text is one word
-        too; a `(` at a command's start is a subshell and adds none."""
-        opener = 1 if self.text[i] in "(`" else 2
-        end = self.read(i + opener, "`" if self.text[i] == "`" else ")")
-        if self.text[i] != "(" or split.words or split.word is not None:
-            split.add(self.text[i:end])
-        return end
-
-    def part(self, i):
-        """The value and end of the word part at `i`: a quoted part, `${...}`, an escaped
-        character or a plain one."""
-        text = self.text
-        here_string = POWERSHELL_HERE_STRING.match(text, i) if self.shell == "powershell" else None
-        if here_string:
-            return here_string.group(2), here_string.end()
-        if text[i] in "'\"":
-            return self.quoted(i)
-        if text.startswith("${", i):
-            end = text.find("}", i) + 1 or len(text)
-            return text[i:end], end
-        if text[i] == self.escape and i + 1 < len(text):
-            return text[i + 1], i + 2
-        return text[i], i + 1
-
-    def quoted(self, i):
-        """The value and end of the quoted part at `i`. In double quotes a `$(...)` (and a POSIX
-        shell's backtick) is read as commands too; PowerShell doubles a quote to escape it."""
-        text, quote, value, j = self.text, self.text[i], [], i + 1
-        while j < len(text):
-            char = text[j]
-            if char == quote and self.shell == "powershell" and text[j + 1:j + 2] == quote:
-                value.append(quote)
-                j += 2
-            elif char == quote:
-                return "".join(value), j + 1
-            elif quote == '"' and char == self.escape and self.escapes_in_quotes(j + 1):
-                value.append("" if text[j + 1] == "\n" else text[j + 1])
-                j += 2
-            elif quote == '"' and (text.startswith("$(", j) or (char == "`" and self.shell != "powershell")):
-                end = self.read(j + (2 if char == "$" else 1), ")" if char == "$" else "`")
-                value.append(text[j:end])
-                j = end
-            else:
-                value.append(char)
-                j += 1
-        return "".join(value), len(text)
-
-    def escapes_in_quotes(self, i):
-        """Whether the escape before `i` inside double quotes escapes: any character in
-        PowerShell, only `"`, `\\`, `$`, a backtick or a line end in a POSIX shell."""
-        return i < len(self.text) and (self.shell == "powershell" or self.text[i] in '"\\$`\n')
-
-    def heredoc_bodies(self, i, split):
-        """Reads the bodies of the here-docs the line just ended opens, each body line as
-        commands of its own; returns the index after the last body."""
-        for delimiter, strip_tabs in split.heredocs:
-            while i < len(self.text):
-                end = self.text.find("\n", i)
-                end = len(self.text) if end < 0 else end
-                line, i = self.text[i:end].rstrip("\r"), end + 1
-                if (line.lstrip("\t") if strip_tabs else line) == delimiter:
-                    break
-                body = StrictReader(line, self.shell)
-                body.read()
-                self.commands.extend(body.commands)
-        split.heredocs = []
-        return min(i, len(self.text))
-
-
-def strict_commands(cmd, shell):
-    """Without the parser: each command's words, as `StrictReader` reads them."""
-    reader = StrictReader(cmd, shell)
-    reader.read()
-    return reader.commands
-
-
-def git_route(commands, names_git_at_run_time):
-    """The kind of route past the hook a git call in the commands takes, or None; a word
-    `names_git_at_run_time` accepts (`$GIT`) counts as git too."""
+def git_route(commands):
+    """The kind of route past the hook a git call in the parsed commands takes, or None; a
+    word built at run time that names git (`$GIT`) counts as git too."""
     for words in commands:
         for i, word in enumerate(words):
-            if program(words[i:]) == "git" or names_git_at_run_time(word):
+            if program(words[i:]) == "git" or is_run_time_git(word):
                 kind = git_bypass(words[i:])
                 if kind:
                     return kind
     return None
 
 
-def strict_route(cmd, shell):
-    """Without the parser: the kind of route past the hook the command's words take, or None."""
-    return git_route(strict_commands(cmd, shell), lambda word: word.startswith("$") and GIT_WORD.search(word))
-
-
-def bypass_reason(cmd, parsed, assignments, shell):
-    """Why the command takes a route past the hook, or None: read from the parsed commands,
-    or, without the parser, from the commands the strict read splits."""
-    strict = parsed is None
-    if LEFTHOOK_OFF.search(cmd) if strict or assignments is None else turns_lefthook_off(parsed, assignments):
+def bypass_reason(parsed, assignments):
+    """Why the parsed command takes a route past the hook, or None."""
+    if turns_lefthook_off(parsed, assignments):
         return BYPASS_REASONS["lefthook"]
-    kind = strict_route(cmd, shell) if strict else git_route(parsed, is_run_time_git)
+    kind = git_route(parsed)
     return BYPASS_REASONS[kind] if kind else None
 
 
@@ -588,25 +391,25 @@ def node_program(cwd):
 
 def parse(cmd, shell, cwd):
     """(each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    the variables they set, or None from a helper that does not report them, and "". When
-    the parser is missing, fails or is unsure of the command: None, None, and the hint that
-    says which."""
+    the variables they set, ""). When the parser is missing, older than this hook, fails or is
+    unsure of the command: None, None, and the reason the command is refused."""
     node, script = node_program(cwd), parser_script()
     if not node:
-        return None, None, NO_NODE_HINT
+        return None, None, NO_NODE
     if not script:
-        return None, None, NO_HELPER_HINT
+        return None, None, NO_HELPER
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
                              capture_output=True, timeout=PARSE_SECONDS)
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None, None, UNREAD_HINT
+        return None, None, UNREAD
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
-        return None, None, UNREAD_HINT
-    assignments = data.get("assignments")
-    return data["commands"], assignments if isinstance(assignments, list) else None, ""
+        return None, None, UNREAD
+    if not isinstance(data.get("assignments"), list):
+        return None, None, OLD_HELPER
+    return data["commands"], data["assignments"], ""
 
 
 def text_of(word):
@@ -751,7 +554,7 @@ def command_files(words):
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in {"git", "gh"} | READ_CMDLETS]
     names = {program(run) for run in inner}
     # git's own reads take its --template; elsewhere it names one, unless a word built at run
-    # time names git (`timeout 5 $GIT commit`), as the strict read judges it. Then git's -m is
+    # time names git (`timeout 5 $GIT commit`). Then git's -m is
     # a message too.
     built_git = any(is_run_time_git(w) for w in words)
     flags = BODY_FLAGS if built_git else BODY_FLAGS - {"--template"}
@@ -775,8 +578,7 @@ def folder_targets(words):
 
 
 def is_run_time_git(word):
-    """Whether a word built at run time names git (`$GIT`, `$(command -v git)`), as the strict
-    read judges a command."""
+    """Whether a word built at run time names git (`$GIT`, `$(command -v git)`)."""
     return isinstance(word, dict) and GIT_WORD.search(text_of(word)) is not None
 
 
@@ -810,34 +612,6 @@ def parsed_files(commands, cwd):
                 yield from resolve(value, places)
 
 
-def strict_files(cmd, cwd):
-    """Without the parser: every file flag in the command text, a text tool's included. A
-    relative file after a folder change (`cd`, `git -C`) cannot be placed, so it is refused."""
-    moved = MOVES_FOLDER.search(cmd) is not None
-    for m in FILE_FLAGS.finditer(cmd):
-        path = m.group("dq") or m.group("sq") or m.group("kv") or m.group("bare")
-        if not path or path == "-":
-            continue
-        if (m.group("long") or "").lower() == "--template":
-            # A file for `git commit`; a template name or repository for gh.
-            stage = cmd[max(cmd.rfind(c, 0, m.start()) for c in ";&|\n") + 1:m.start()]
-            if not re.search(r"\bgit\b", stage, re.I):
-                continue
-        if "=" in path:            # gh -F key=value / key=@file
-            if "=@" not in path:
-                continue
-            path = path.split("=@", 1)[1]
-            if path == "-":        # key=@- reads stdin
-                continue
-        path = os.path.expanduser(path.strip("\"'"))
-        if os.path.isabs(path):
-            yield path, None
-        elif moved:
-            yield None, f"a relative body file {path} after a change of folder"
-        else:
-            yield os.path.join(cwd, path), None
-
-
 def scan_text(text, where):
     hit = ATTRIBUTION.search(strip_paths(text))
     if hit:
@@ -865,18 +639,19 @@ def main():
     if writes:
         scan_text(cmd, "the command text")
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
-    parsed, assignments, hint = parse(cmd, shell, cwd)
+    parsed, assignments, problem = parse(cmd, shell, cwd)
+    if problem:
+        deny(problem)
     # A command that writes nothing is checked only for the routes past the hook.
-    files = parsed_files(parsed, cwd) if parsed is not None else strict_files(cmd, cwd)
-    for path, error in (files if writes else ()):
+    for path, error in (parsed_files(parsed, cwd) if writes else ()):
         if error:
-            deny(f"could not tell which file holds {error}. Use a literal absolute path.{hint}")
+            deny(f"could not tell which file holds {error}. Use a literal absolute path.")
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except Exception as e:
-            deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.{hint}")
+            deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
         scan_text(text, f"file {path}")
-    reason = bypass_reason(cmd, parsed, assignments, shell)
+    reason = bypass_reason(parsed, assignments)
     if reason:
         deny(reason)
     sys.exit(0)
