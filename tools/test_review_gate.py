@@ -851,6 +851,7 @@ def fresh_repo(**changes):
                  "allow_squash_merge": True, "allow_rebase_merge": True,
                  "delete_branch_on_merge": False},
         "branches": ["main", "develop"], "labels": [], "secrets": [], "rulesets": [],
+        "gate_yml": "checks: one\n",
     }
     state.update(changes)
     return state
@@ -892,15 +893,17 @@ class SetupScript(unittest.TestCase):
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args):
+    def run_setup(self, state, *args, cwd=None):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
                    PATH=self.dir + os.pathsep + os.environ["PATH"])
-        # The full path: on Windows a bare "bash" can start WSL's instead.
+        # The full path: on Windows a bare "bash" can start WSL's instead. The temp
+        # folder is no git repo, so this repo's own branches never count as local ones.
         run = subprocess.run([tool("bash"), SETUP, "--repo", "acme/game", *args], env=env,
-                             stdin=subprocess.DEVNULL, capture_output=True, text=True)
+                             cwd=cwd or self.dir, stdin=subprocess.DEVNULL,
+                             capture_output=True, text=True)
         with open(self.state) as f:
             after = json.load(f)
         with open(self.log) as f:
@@ -972,6 +975,30 @@ class SetupScript(unittest.TestCase):
         self.assertIn("ok       ruleset on main", run.stdout)
         run, _, _ = self.run_setup(dict(state, gate_yml="checks: one  # one check\n"), "--check")
         self.assertIn('drop required check "Claude On-Demand"', run.stdout)
+
+    def test_new_rulesets_wait_until_the_default_branch_holds_the_gate(self):
+        ruleset = old_ruleset(include="refs/heads/develop")
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset])
+        del state["gate_yml"]
+        run, after, _ = self.run_setup(state)
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("MISSING  ruleset on main: waits until main holds the gate's files", run.stdout)
+        self.assertIn("set up   ruleset on develop", run.stdout)
+        self.assertEqual([r["name"] for r in after["rulesets"]], ["protect"])
+        self.assertEqual(after["labels"], ["needs-deep-review"])
+
+    def test_a_develop_branch_only_on_this_computer_is_reported(self):
+        clone = os.path.join(self.dir, "clone")
+        for args in (["init", "-q", "-b", "main", clone],
+                     ["-C", clone, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+                      "--allow-empty", "-m", "init"],
+                     ["-C", clone, "branch", "develop"]):
+            subprocess.run(["git", *args], check=True, capture_output=True)
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], branches=["main"])
+        run, _, _ = self.run_setup(state, cwd=clone)
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("MISSING  ruleset on develop: develop is only on this computer", run.stdout)
+        self.assertIn("set up   ruleset on main", run.stdout)
 
     def test_a_missing_token_without_a_terminal_is_reported_not_prompted(self):
         run, after, calls = self.run_setup(fresh_repo())

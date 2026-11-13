@@ -5,6 +5,10 @@
 # Claude GitHub App. With --check it changes nothing: it reports every
 # missing piece and exits 1 when any is missing.
 #
+# A branch with no ruleset gets one only once the default branch holds
+# .github/review-gate.yml: before the first setup PR merges there, the gate
+# cannot pass, and a ruleset requiring it would leave that PR unmergeable.
+#
 # Needs the gh CLI, logged in with admin access to the repository. Run it
 # from the repository folder, or pass --repo OWNER/NAME.
 
@@ -30,6 +34,11 @@ MERGE_STYLE=merge
 APPROVALS=0
 DEFAULT_BRANCH=""
 GATE_CHECKS=one
+# Whether the default branch holds .github/review-gate.yml. Until the first
+# setup PR merges, the gate cannot pass there, so no new ruleset requires it.
+GATE_LANDED=false
+# A develop branch this clone has but GitHub does not, so nothing protects it.
+LOCAL_ONLY_DEVELOP=false
 GAPS=0
 
 usage() {
@@ -115,16 +124,29 @@ preflight() {
     BRANCHES=("$DEFAULT_BRANCH")
     if [ "$DEFAULT_BRANCH" != develop ] && branch_exists develop; then
       BRANCHES+=(develop)
+    elif [ "$DEFAULT_BRANCH" != develop ] \
+      && git show-ref --verify --quiet refs/heads/develop 2> /dev/null; then
+      LOCAL_ONLY_DEVELOP=true
     fi
   fi
+}
+
+step_local_develop() {
+  [ "$LOCAL_ONLY_DEVELOP" = true ] || return 0
+  missing "ruleset on develop: develop is only on this computer; push it" \
+    "(git push -u origin develop), then run this again"
 }
 
 # The `checks` setting from the repository's .github/review-gate.yml on its
 # default branch; "one" when the file or the line is absent.
 read_gate_checks() {
   local text value
-  text=$(gh api -H "Accept: application/vnd.github.raw" \
-    "repos/$REPO/contents/.github/review-gate.yml" 2> /dev/null) || text=""
+  if text=$(gh api -H "Accept: application/vnd.github.raw" \
+    "repos/$REPO/contents/.github/review-gate.yml" 2> /dev/null); then
+    GATE_LANDED=true
+  else
+    text=""
+  fi
   value=$(sed -nE 's/^checks:[[:space:]]*(one|two)([[:space:]#].*)?$/\1/p' <<< "$text")
   GATE_CHECKS=${value:-one}
 }
@@ -344,6 +366,11 @@ step_rulesets() {
   local branch gaps gap
   for branch in "${BRANCHES[@]}"; do
     gaps=$(branch_gaps "$branch")
+    if [ "$gaps" = "no active ruleset" ] && [ "$GATE_LANDED" = false ]; then
+      missing "ruleset on $branch: waits until $DEFAULT_BRANCH holds the gate's files;" \
+        "merge the first setup PR into $DEFAULT_BRANCH, then run this again"
+      continue
+    fi
     if [ -n "$gaps" ] && [ "$MODE" = setup ]; then
       apply_ruleset "$branch"
       gaps=$(branch_gaps "$branch")
@@ -369,6 +396,7 @@ main() {
   step_secrets
   step_app
   step_rulesets
+  step_local_develop
   if [ "$GAPS" -gt 0 ]; then
     echo "$GAPS missing."
     exit 1
