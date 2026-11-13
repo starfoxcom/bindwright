@@ -676,6 +676,13 @@ class GuardHookTest(unittest.TestCase):
         for command, because, tool in (('git commit -m "feat(x): y" --no-verify', hooks, "Bash"),
                                        ('git commit "--no-verify" -m x', hooks, "Bash"),
                                        ("git commit -CHEAD", reuse, "Bash"),
+                                       ("git commit -m x \\\n  --no-verify", hooks, "Bash"),
+                                       ("git commit \\\n  -n -m x", hooks, "Bash"),
+                                       ("git commit -m x `\n  --no-verify", hooks, "PowerShell"),
+                                       ("git commit -m (Get-Date) --no-verify", hooks, "PowerShell"),
+                                       ("git commit --fixup HEAD@{1} --no-verify", hooks, "Bash"),
+                                       ('git -C "C:\\repo\\" commit --no-verify -m x', hooks, "PowerShell"),
+                                       ("git commit -m \"$(cat <<'EOF'\nf \"g()\"\nEOF\n)\" -n", hooks, "Bash"),
                                        ('git commit -m "fix #12" -n', hooks, "Bash"),
                                        ("git commit -m x --no-verify; git push", hooks, "Bash"),
                                        ("out=$(git commit -m x -n)", hooks, "Bash"),
@@ -697,6 +704,8 @@ class GuardHookTest(unittest.TestCase):
                               ("git commit -m x 2>&1 | tail -n 5", "Bash"),
                               ("git -C repo commit -m x && git -C repo push", "Bash"),
                               ("git commit -m x && git switch -c next", "Bash"),
+                              ("git commit -uno -m x", "Bash"),
+                              ("git commit -m x && git switch -c hook.x", "Bash"),
                               ("git commit -m x; if ($LASTEXITCODE -ne 0) { exit 1 }", "PowerShell"),
                               ("if (git config core.hooksPath) { 'set' }", "PowerShell")):
             with self.subTest(command=command, helper="none"):

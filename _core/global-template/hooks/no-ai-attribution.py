@@ -50,10 +50,12 @@ commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser the hook reads each git command up to the next
-list, pipe or group, quoted text kept whole, so another program's options do
-not count. A quoted message that opens with a route, a script line inside
-a here-doc and a comment still count. A read of `core.hooksPath` passes.
+passes. Without the parser the hook joins continued lines, then reads each
+git command up to the next list, pipe or line end, quoted text and groups
+kept whole and a quote that does not pair read as a plain character, so
+another program's options do not count. Text that names a git
+command with a route still counts: a message that quotes one, a script line
+inside a here-doc, a comment. A read of `core.hooksPath` passes.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -329,38 +331,55 @@ def turns_lefthook_off(commands, assignments):
 
 
 # Without the parser: each route is looked for inside one git command, from `git` to the next
-# list, pipe, group or line end, with quoted text, `${...}` and `$(...)` kept whole, so another
-# program's options and a message's words never count. An option may itself be quoted.
-STRICT_SEGMENT = (r"(?:\"(?:\\.|[^\"\\])*\"|'[^']*'|\\.|[<>]&|\$\{[^}\n]*\}|\$\([^()\n]*\)"
-                  r"|[^;|&()`{}\n\"'\\])*?")
+# list, pipe, closing bracket or line end. Continued lines are joined first. Quoted text, a
+# `$(cat <<'EOF' ...)` message, a group, backticks and braces are read whole; a quote or bracket
+# that does not pair is read as a plain character, so a misread never ends the command early.
+# Another program's options do not count; text that names a git command with a route still does.
+STRICT_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
+STRICT_HEREDOC = r"\$\(\s*cat\s*<<-?\s*['\"]?\w+['\"]?[^\n]*\n[\s\S]*?\n[ \t]*\w+[ \t]*\r?\n[ \t]*\)"
+STRICT_TOKEN = (STRICT_HEREDOC + r"|\"(?:" + STRICT_HEREDOC + r"|\\[\s\S]|[^\"\\])*\""
+                r"|\$'(?:\\[\s\S]|[^'\\])*'|'[^']*'|\\[\s\S]|[<>]&|&>"
+                r"|\((?:[^()\n]|\([^()\n]*\))*\)|\{[^{}\n]*\}|`[^`\n]*`"
+                r"|[^;|&)}\n]")
 STRICT_OPTION = r"(?<![^\s\"'])[\"']?"
-STRICT_GIT = r"(?i:\bgit\b)" + STRICT_SEGMENT
 
 
-def strict_pattern(subcommand, route, flags=0):
+def strict_segment(name):
+    """Tokens up to the route, each matched whole and then kept (a lookahead and its backreference),
+    so a quote that paired is never read again as plain characters. A bare `git` word starts the
+    next command's read, which keeps each read to its own stretch of the text."""
+    return (r"(?:(?!(?<![\w.-])(?i:git)(?![\w.-]))(?=(?P<" + name + r">" + STRICT_TOKEN + r"))(?P="
+            + name + r"))*?")
+
+
+def strict_pattern(subcommand, route):
     """A route inside a git command, after `subcommand` when one is named."""
-    after = r"\s(?:" + subcommand + r")(?![\w-])" + STRICT_SEGMENT if subcommand else ""
-    return re.compile(STRICT_GIT + after + route, flags)
+    after = r"\s(?:" + subcommand + r")(?![\w-])" + strict_segment("rest") if subcommand else ""
+    return re.compile(r"(?i:\bgit\b)" + strict_segment("lead") + after + route)
 
 
-# A short-option bundle holds `n` before any letter that takes the rest as its value.
+# A short-option bundle holds `n` (or `c`, `C`) before any letter that takes the rest as its
+# value: the letters of SHORT_VALUES.
 STRICT_ROUTES = (
     ("hooks", strict_pattern("", STRICT_OPTION + r"--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])")),
-    ("hooks", strict_pattern("commit|am", STRICT_OPTION + r"-(?:(?![mFCc])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
+    ("hooks", strict_pattern("commit|am", STRICT_OPTION + r"-(?:(?![FmcCtUSup])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
     ("trailer", strict_pattern("", STRICT_OPTION + r"--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?![\w-])")),
-    ("setting", strict_pattern("", r"(?:(?<!\S)-c\s+|--config-env[=\s]+)[\"']?(?:core\.hooksPath|hook\.)", re.I)),
-    ("reuse", strict_pattern("commit", STRICT_OPTION + r"(?:-(?:(?![mF])[A-Za-z])*[cC]|--re[eu][\w-]*(?![\w-]))")),
+    # git's own `-c` and `--config-env` stand among its options before the subcommand.
+    ("setting", re.compile(r"(?i:\bgit\b)(?:\s+(?:-C\s+\S+|[\"']?-\S*))*?\s+(?:-c\s+|--config-env[=\s]+)"
+                           r"[\"']?(?i:core\.hooksPath|hook\.)")),
+    ("reuse", strict_pattern("commit", STRICT_OPTION + r"(?:-(?:(?![FmtUSu])[A-Za-z])*[cC]|--re[eu][\w-]*(?![\w-]))")),
     # A set names a value after the setting; a read ends there, or at a redirect, a pipe, a
     # list, a comment, an option, or the close of the group or quote that holds it.
     ("setting", strict_pattern(
-        "config", r"[\"']?(?:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
-        r"(?![)}#;|&><\]-]|\d+[<>]|[\"'](?:\s|$|\)))\S", re.I)),
+        "config", r"[\"']?(?i:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
+        r"(?![)}#;|&><\]-]|\d+[<>]|[\"'](?:\s|$|\)))\S")),
 )
 
 
 def strict_route(cmd):
     """Without the parser: the kind of route past the hook the command text names, or None."""
-    return next((kind for kind, pattern in STRICT_ROUTES if pattern.search(cmd)), None)
+    joined = STRICT_CONTINUATION.sub(lambda m: (m.group(1) or "") + " ", cmd)
+    return next((kind for kind, pattern in STRICT_ROUTES if pattern.search(joined)), None)
 
 
 def bypass_reason(cmd, parsed, assignments):
