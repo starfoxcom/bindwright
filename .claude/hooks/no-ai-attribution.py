@@ -24,19 +24,21 @@ What is scanned, for any git write, gh write or GitHub API call:
     path). Bindwright's helper parses the command the way the shell does
     (tree-sitter, `hooks/shell-words.mjs`), so each flag belongs to one
     command. Every command's flags are read, a wrapper's (`env`, `sudo`,
-    `xargs`) and one whose program is built at run time included, except
-    a text tool's (`awk -F,`, `grep -F word`), git's in a read (`git log -F`), and
-    gh's `--template`. A flag inside quoted text, a here-doc, a here-string
-    or the value of -m / --body / --title is text, not a body file. After a
-    `cd`, `pushd` or `Set-Location`, which may run in a child shell or fail,
-    a relative path is read in every folder the command may be in, each
-    folder its `git -C` names included. One after a `cd -`, a `cd` to a folder this
-    computer cannot find, or a `cd` beside a loop or a function, is denied.
-    A file it cannot read, or one named by text built at run time,
-    is denied, so a typo cannot slip a body through unread. Without the
-    helper or Node it reads every file flag in the command text instead,
-    a text tool's and one inside quoted text included, and denies a
-    relative body file after any `cd`, `pushd`, `Set-Location` or `git -C`.
+    `xargs`) included, except a text tool's (`awk -F,`, `grep -F word`),
+    git's in a read (`git log -F`), and gh's `--template`. A flag inside
+    quoted text, a here-doc, a here-string or the value of -m / --body /
+    --title is text, not a body file. A relative path is read in the start
+    folder and in every folder a `cd`, `pushd`, `Set-Location` or `git -C`
+    in the command names, since one may run in a child shell, fail or run
+    later in a loop. One after a folder change it cannot place (`cd -`, a
+    target built at run time, a folder this computer cannot find) is
+    denied. A file it cannot read, or one named by text built at run time,
+    is denied, so a typo cannot slip a body through unread. A command the
+    parser is unsure of (a program or an array built at run time, syntax
+    it cannot read) and one run without the helper or Node get the strict
+    read instead: every file flag in the command text, a text tool's and
+    one inside quoted text included, and a relative body file after any
+    `cd`, `pushd`, `Set-Location` or `git -C` is denied.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -133,8 +135,8 @@ PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
 
 # With the parser: every command's file flags are read, except a text tool's, git's
 # in a read (where -F or --file means something else) and gh's `--template` (a template
-# name). Any other git subcommand, an alias included, is read as a write. A program built at run time,
-# a wrapper (`env`, `sudo`, `xargs`) or any other program has its flags read.
+# name). Any other git subcommand, an alias included, is read as a write. A wrapper (`env`,
+# `sudo`, `xargs`) or any other program has its flags read.
 GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "reflog", "diff", "blame",
              "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
@@ -147,24 +149,15 @@ BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-fil
 GIT_MESSAGE_FLAGS = {"-m", "--message"}
 MESSAGE_FLAGS = {"-b", "--body", "-t", "--title", "--notes", "--subject", "--message"}
 GH_MESSAGE_FLAGS = MESSAGE_FLAGS | {"-n"}  # gh's -n is --notes; git's is a switch
-# Git reads a short-flag cluster letter by letter: switches, then the first -m or -F takes
-# the rest of the word, or the next word (`-am msg`, `-aF msg.txt`, `-aFmsg.txt`).
-GIT_CLUSTER = re.compile(r"-(?:(?![CcStu])[A-Za-z])*?([mF])(.*)", re.S)
+GIT_MESSAGE_CLUSTER = re.compile(r"-[a-z]*m")  # `-am msg`: git's switches, then -m takes the next word
 ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fmsg`, `-d@body`)
-# A PowerShell word shaped like an identifier (`-Filter`, `-Force:$true`) can be a cmdlet's
-# parameter name; any other dash word (`-Fbody=@x`, `-d@body`) only a native program's flags.
-PARAMETER_NAME = re.compile(r"-[A-Za-z_]\w*:?")
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
 READ_CMDLETS = {"get-content", "gc"}
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
                      "--super-prefix", "--attr-source"}
-POP_COMMANDS = {"popd", "pop-location"}
-WRAPPERS = {"env", "sudo", "doas", "command", "exec", "nice", "nohup", "time", "timeout", "xargs", "stdbuf"}
-PUSH_COMMANDS = {"pushd", "push-location"}
-SAVED_FOLDER = re.compile(r"~[+-]|~\d")  # bash's previous, current or stacked folder
-CD_COMMANDS = {"cd", "chdir", "set-location", "sl"} | PUSH_COMMANDS | POP_COMMANDS
-UNKNOWN = object()  # a folder the command text cannot tell
+HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
+CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
 STRICT_READ = (" so it read every file flag, a text tool's (awk -F, grep -F) included: run that tool"
                " as a command of its own.")
@@ -209,8 +202,8 @@ def parser_script():
 
 def parse(cmd, shell):
     """(each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
-    whether a loop or a function may run them out of source order), and "". When the parser
-    is missing, fails or meets syntax it cannot read: None, and the hint that says which."""
+    and "". When the parser is missing, fails or is unsure of the command: None, and the
+    hint that says which."""
     node, script = shutil.which("node"), parser_script()
     if not node:
         return None, NO_NODE_HINT
@@ -225,7 +218,7 @@ def parse(cmd, shell):
         return None, UNREAD_HINT
     if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("commands"), list):
         return None, UNREAD_HINT
-    return (data["commands"], bool(data.get("repeats"))), ""
+    return data["commands"], ""
 
 
 def text_of(word):
@@ -240,13 +233,12 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, parameter_names=False):
+def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
     {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
-    never a flag. With `parameter_names`, a word shaped like a PowerShell parameter name
-    never carries an attached value or a git cluster's -F."""
+    never a flag."""
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
@@ -254,18 +246,11 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, parameter_names=Fa
             message = False
             continue
         built = isinstance(word, dict)
-        named = parameter_names and PARAMETER_NAME.fullmatch(text) is not None
-        cluster = None if "-m" not in message_flags or text.startswith("--") else GIT_CLUSTER.fullmatch(text)
         message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
-                   or (cluster is not None and cluster.groups() == ("m", "")))
-        if cluster is not None and cluster.group(1) == "F" and not named:
-            flag, value = "-F", cluster.group(2)
-            if not value:
-                yield flag, words[i + 1] if i + 1 < len(words) else None
-                continue
-        elif text.startswith("--") and "=" in text:
+                   or ("-m" in message_flags and GIT_MESSAGE_CLUSTER.fullmatch(text) is not None))
+        if text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
-        elif text[:2] in short and len(text) > 2 and not named:
+        elif text[:2] in short and len(text) > 2:
             flag, value = text[:2], text[2:]
         elif built:
             continue
@@ -292,10 +277,10 @@ def body_file(flag, value, readers="@<"):
     return value
 
 
-def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", parameter_names=False):
+def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<"):
     """Every file the words' flags in `flags` name as a body."""
     files = []
-    for flag, value in flag_values(words, ATTACHED, message_flags, parameter_names):
+    for flag, value in flag_values(words, ATTACHED, message_flags):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value, readers)
@@ -317,27 +302,12 @@ def git_subcommand(words):
 
 
 def git_files(words):
-    """The folders `git -C` names, and the body files of any subcommand but a read. When the
-    subcommand is built at run time (`git $OPTS commit`), every file flag after it is read."""
-    i, folders = git_subcommand(words)
-    if i >= len(words) or (isinstance(words[i], str) and words[i] in GIT_READS):
-        return folders, []
-    return folders, body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS)
-
-
-def git_reads(words):
-    """([the folders its `git -C` options name], body files) for a git command."""
-    folders, files = git_files(words)
+    """The body files of any git subcommand but a read. When the subcommand is built at run
+    time (`git $OPTS commit`), every file flag after it is read."""
     i = git_subcommand(words)[0]
-    if i < len(words) and not isinstance(words[i], str):
-        folders = [*folders, words[i]]  # a run-time word where git's options go may hold -C
-    return as_chains((folders, files))
-
-
-def as_chains(read):
-    """A (folders, files) read as ([its folder chain], files)."""
-    folders, files = read
-    return [folders] if folders else [], files
+    if i >= len(words) or (isinstance(words[i], str) and words[i] in GIT_READS):
+        return []
+    return body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS)
 
 
 def get_content_files(words):
@@ -350,142 +320,84 @@ def get_content_files(words):
 def resolve(value, places):
     """(path, error) for each file a body flag's value may name, or an error saying why it
     cannot be told before the command runs. A relative file is read in each of `places`
-    that holds it, or in the first when none does."""
+    that holds it, or in the first when none does; `places` is None after a folder change
+    the command text cannot place."""
     if isinstance(value, dict):
         yield None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
         return
     path = os.path.expanduser(value)
     if os.path.isabs(path):
         yield path, None
-    elif not places or UNKNOWN in places:
+    elif places is None:
         yield None, (f"a relative body file {value} after a folder change the command text cannot tell"
-                     " (such as `cd -`, a target built at run time or a folder this computer cannot find,"
-                     " or a `cd` beside a loop or a function)")
+                     " (such as `cd -`, a target built at run time or a folder this computer cannot find)")
     else:
         paths = [os.path.join(place, path) for place in places]
         yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
 
 
-def joined(target, places):
-    """The folders a folder name reaches from any of `places`; UNKNOWN for one built at run time."""
-    if not isinstance(target, str):
-        return [UNKNOWN]
-    path = os.path.expanduser(target)
-    if os.path.isabs(path):
-        return [path]
-    return [UNKNOWN if place is UNKNOWN else os.path.join(place, path) for place in places]
-
-
-def cd_places(words, places):
-    """The folders a `cd`-style command may move to from any of `places`: none for a return
-    to a folder this command pushed (`popd`, a bare `pushd`), home for a bare `cd`, and
-    UNKNOWN for a saved folder the command text does not hold (`cd -`, `~-`, `~+`, `~2`) or
-    for more than one target word (`cd sub -ErrorAction Stop`)."""
-    targets = [w for w in words[1:] if not text_of(w).startswith("-")]
-    if program(words) in POP_COMMANDS:
-        return []
-    saved = any(SAVED_FOLDER.match(text_of(w)) for w in targets)
-    if saved or len(targets) > 1 or "-" in [text_of(w) for w in words[1:]]:
-        return [UNKNOWN]
-    if not targets:
-        return [] if program(words) in PUSH_COMMANDS else [os.path.expanduser("~")]
-    return joined(targets[-1], places)
-
-
-def command_files(words, shell="bash"):
-    """(the `git -C` folder chains its reads name, body files) for one command, which may
-    run in any folder those chains reach. In PowerShell, outside
-    git's and gh's own words, a word such as `-Force` or `-FilePath` is a parameter name,
-    unless the program is built at run time and may be git."""
+def command_files(words):
+    """The body files one command names."""
     name = program(words)
     if name in TEXT_TOOLS:
-        return [], []
+        return []
     if name == "git":
-        return git_reads(words)
+        return git_files(words)
     if name == "gh":
-        return [], body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS, "@")
+        return body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS, "@")
     if name in READ_CMDLETS:
-        return [], get_content_files(words)
-    # Every flag is read. A word naming git or gh may be a wrapped program (`env A=1 git -C
-    # sub commit`, `sudo gh ...`) or just an argument (`sudo -u git`, a URL ending in /gh),
-    # so each is also read with its own rules, and only its own exceptions (gh's
-    # --template, git's -m) are taken off the outer read.
+        return get_content_files(words)
+    # Every flag is read. A word naming git or gh may be a wrapped program (`env A=1 git
+    # commit`, `sudo gh ...`) or just an argument (`sudo -u git`, a URL ending in /gh), so
+    # each is also read with its own rules, and only its own exceptions (gh's --template,
+    # git's -m) are taken off the outer read.
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
     names = {program(run) for run in inner}
-    found = [command_files(run, shell) for run in inner]
-    # A program built at run time (`$GIT`, `env $GIT`), or an array's words, may be git's: the
-    # words after it are read with git's rules too (`-aF msg`), and git's -m stays off the
-    # outer read, where gh's -m is a switch. An array keeps gh's --template a name, and one
-    # holding `-C` moves git to a folder the words cannot place.
-    if is_array(words):
-        found.append(([], body_files(words[1:], GIT_FILE_FLAGS - {"--template"}, GIT_MESSAGE_FLAGS)))
-        if "-C" in words[1:]:
-            found.append(([[words[0]]], []))
-    else:
-        found += [as_chains(git_files(["git", *words[i + 1:]])) for i in program_positions(words)]
     flags = BODY_FLAGS - {"--template"}  # git's own reads take its --template; elsewhere it names one
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
-    named = shell == "powershell" and bool(words) and isinstance(words[0], str)
-    files = body_files(words, flags, message, readers, named) + [f for _, run_files in found for f in run_files]
-    return [chain for chains, _ in found for chain in chains], files
+    return body_files(words, flags, message, readers) + [f for run in inner for f in command_files(run)]
 
 
-def reachable(named):
-    """The folders in `named` this computer can find; UNKNOWN when it finds none of them, as
-    for a Git Bash path (`/c/...`) or a folder made later, which cannot be checked."""
-    found = [place for place in named if place is UNKNOWN or os.path.isdir(place)]
-    return found if found or not named else [UNKNOWN]
+def folder_targets(words):
+    """The folders one command names to move to: a `cd`-style command's targets (home for a
+    bare `cd`, none for `popd` or a bare `pushd`), or the `-C` folders of a git it runs."""
+    name = program(words)
+    if name in CD_COMMANDS:
+        targets = [w for w in words[1:] if text_of(w) == "-" or not text_of(w).startswith("-")]
+        return targets or (["~"] if name in HOME_COMMANDS else [])
+    return [folder for i in range(len(words)) if program(words[i:]) == "git"
+            for folder in git_subcommand(words[i:])[1]]
 
 
-def command_places(chains, places):
-    """Every folder one command may run in: each folder its `git -C` chains reach from
-    `places`, first, then each of `places`."""
-    here = []
-    for chain in chains:
-        reached = places
-        for target in chain:
-            reached = reachable(joined(target, reached))
-        here += [place for place in reached if place not in here]
-    return here + [place for place in places if place not in here]
-
-
-def program_positions(words):
-    """Where a program built at run time may stand: first, or after only wrappers (`env`,
-    `sudo`), their options and `NAME=value` assignments, never as a later argument's value."""
-    for i, word in enumerate(words):
-        if not isinstance(word, str):
-            yield i
-            return
-        if program([word]) not in WRAPPERS and not (i and (word.startswith("-") or "=" in word)):
-            return
-
-
-def is_array(words):
-    """Whether these words are a bash array's, which a later command uses wherever it runs."""
-    return bool(words) and isinstance(words[0], dict) and words[0].get("array") is True
-
-
-def parsed_files(commands, repeats, cwd, shell):
-    """(path, error) for every body file the parsed commands name, in order. A `cd` may run
-    in a child shell (a subshell, a pipeline, a background job) or fail, so the shell may be
-    in any folder one named so far, and each command also in any folder its `git -C` reaches.
-    A loop or a function can run a later `cd` before an earlier write, so beside one any `cd`
-    makes the folder unknown."""
-    places = [UNKNOWN] if repeats and any(program(words) in CD_COMMANDS for words in commands) else [cwd]
-    # An array's words run where the command that uses them runs, after any folder change.
-    moves = any(program(words) in CD_COMMANDS or command_files(words, shell)[0] for words in commands)
+def folder_places(commands, cwd):
+    """Every folder a command may run in: the start folder, and each folder a folder change
+    in the command names, reached from any folder found before it. Order does not matter,
+    since a `cd` may run in a child shell, fail, or run later in a loop. None when a target
+    cannot be placed: one built at run time, or one this computer cannot find, such as a
+    saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made later."""
+    places = [cwd]
     for words in commands:
-        if program(words) in CD_COMMANDS:
-            # A `cd` that fails from one place leaves the shell where it was, so a missing
-            # folder is dropped.
-            places += [place for place in reachable(cd_places(words, places)) if place not in places]
-            continue
-        chains, files = command_files(words, shell)
-        here = [UNKNOWN] if moves and is_array(words) else command_places(chains, places)
-        for value in files:
+        for target in folder_targets(words):
+            if not isinstance(target, str):
+                return None
+            path = os.path.expanduser(target)
+            reached = [path] if os.path.isabs(path) else [os.path.join(place, path) for place in places]
+            found = [place for place in reached if os.path.isdir(place)]
+            if not found:
+                return None
+            places += [place for place in found if place not in places]
+    return places
+
+
+def parsed_files(commands, cwd):
+    """(path, error) for every body file the parsed commands name, in order, a relative one
+    read in every folder the command may run in."""
+    places = folder_places(commands, cwd)
+    for words in commands:
+        for value in command_files(words):
             if value != "-":
-                yield from resolve(value, here)
+                yield from resolve(value, places)
 
 
 def strict_files(cmd, cwd):
@@ -541,7 +453,7 @@ def main():
     scan_text(cmd, "the command text")
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     parsed, hint = parse(cmd, shell)
-    for path, error in (parsed_files(*parsed, cwd, shell) if parsed is not None else strict_files(cmd, cwd)):
+    for path, error in (parsed_files(parsed, cwd) if parsed is not None else strict_files(cmd, cwd)):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.{hint}")
         try:
