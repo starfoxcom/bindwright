@@ -7,7 +7,7 @@ const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*`
 const GH_OPTS = String.raw`(?:\s+(?:-R\s+\S+|--repo[=\s]\S+))*`
 const AT_START = String.raw`(?:^|[\s;&|({])`
 const PUSH = `${AT_START}git${GIT_OPTS}\\s+push\\b`
-const COMMIT_OR_PUSH = new RegExp(`${AT_START}git${GIT_OPTS}\\s+(?:commit|push)\\b`)
+const COMMIT_OR_PUSH = new RegExp(`${AT_START}git${GIT_OPTS}\\s+(?:commit|push)(?![\\w-])`)
 const PUSH_OR_PR = new RegExp(`${PUSH}|${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+create\\b`)
 const PR_MERGE = new RegExp(`${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+merge\\b([^|;&\\n]*)`)
 

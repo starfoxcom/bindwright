@@ -70,7 +70,16 @@ export async function readLookups($: EngineInterface): Promise<Lookup[]> {
   return all.filter((l): l is Lookup => typeof l?.at === 'number' && typeof l?.topic === 'string')
 }
 
-export async function noteLookup($: EngineInterface, topic: string): Promise<void> {
+// Lookups that finish together (parallel calls) are written one after another, so none is lost.
+let lookupWrites: Promise<void> = Promise.resolve()
+
+export function noteLookup($: EngineInterface, topic: string): Promise<void> {
+  const written = lookupWrites.then(() => addLookup($, topic))
+  lookupWrites = written.catch(() => undefined)
+  return written
+}
+
+async function addLookup($: EngineInterface, topic: string): Promise<void> {
   const clean = topic.trim().toLowerCase()
   if (!clean) return
   const lookups = [...(await readLookups($)), { at: await $.clock.now(), topic: clean }].slice(-LOOKUPS_KEPT)

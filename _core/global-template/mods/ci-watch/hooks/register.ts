@@ -268,14 +268,16 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
 }
 
 // The refusal for an edit, commit or push while a PR this session watches owes its step back, or
-// undefined. Only a PR that owes one is asked about on GitHub (a closed PR owes nothing).
+// undefined. A watch holds only while its head is the PR's last red round: a pushed fix ends that step
+// back. Only a PR that owes one is asked about on GitHub (a closed PR owes nothing).
 async function owedResearch($: EngineInterface): Promise<string | undefined> {
   const watched = new Map(live.watches.filter(w => !w.isSilent).map(w => [`${w.repo}#${w.number}`, w]))
   if (watched.size === 0) return undefined
   const all = await readRounds($)
   const lookups = await readLookups($)
   for (const [key, w] of watched) {
-    const owed = sourcesOwed(all[key], lookups)
+    const isLastRound = all[key]?.rounds?.at(-1)?.sha === w.headSha
+    const owed = isLastRound ? sourcesOwed(all[key], lookups) : 0
     if (owed && !(await isClosed($, w.repo, w.number))) return researchRefusal(key, redStreak(all[key]), owed)
   }
   return undefined

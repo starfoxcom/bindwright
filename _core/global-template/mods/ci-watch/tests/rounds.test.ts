@@ -14,9 +14,11 @@ const path = 'C:/Users/me/.claude/mods-data/ci-watch/rounds.json'
 const LONG = { timeoutMs: 15_000 }
 
 // The rounds ci-watch saw settle on the PR, oldest first: any result but SUCCESS had a failed check.
-function seed(seen: Seen, results: string[]) {
+// `lastSha` names the newest round's head (the watched head, for a step back to hold).
+function seed(seen: Seen, results: string[], lastSha?: string) {
   seen.isReadable = true
-  const rounds = results.map((result, i) => ({ sha: `c${i}`, red: result !== 'SUCCESS' }))
+  const sha = (i: number) => (lastSha && i === results.length - 1 ? lastSha : `c${i}`)
+  const rounds = results.map((result, i) => ({ sha: sha(i), red: result !== 'SUCCESS' }))
   seen.files.set(path, JSON.stringify({ 'o/r#7': { rounds } }))
 }
 
@@ -91,9 +93,9 @@ test('at a step back, edits, commits and pushes wait for three distinct lookups'
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   const call = (input: Record<string, unknown>) => $.tool.call(input as never)
   const bash = (command: string) => call({ tool: 'Bash', command })
-  seed(seen, reds(4))
+  seed(seen, reds(4), 'a1')
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
-  seed(seen, reds(6))
+  seed(seen, reds(6), 'a1')
   const held = [
     () => bash('git push origin feature/x'),
     () => call({ tool: 'PowerShell', command: 'git push' }),
@@ -103,7 +105,7 @@ test('at a step back, edits, commits and pushes wait for three distinct lookups'
   ]
   for (const attempt of held) expect(await attempt()).toHaveProperty('deny')
   expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('3 more to go')
-  for (const command of ['git log --grep push', 'git stash push', 'echo "then git push"']) {
+  for (const command of ['git log --grep push', 'git stash push', 'echo "then git push"', 'git commit-graph write']) {
     expect(await bash(command)).not.toHaveProperty('deny')
   }
   expect(await call({ tool: 'Bash', command: 'git push', agentId: 'helper' })).not.toHaveProperty('deny')
@@ -112,11 +114,32 @@ test('at a step back, edits, commits and pushes wait for three distinct lookups'
   await call({ tool: 'WebFetch', url: 'https://down.example' })
   await call({ tool: 'Agent', subagent_type: 'general-purpose', prompt: 'look around' })
   expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('2 more to go')
-  await call({ tool: 'Agent', subagent_type: 'web-fetch', prompt: 'read https://example.com/b' })
-  await call({ tool: 'WebFetch', url: 'https://example.com/c' })
+  // Lookups sent together all count.
+  await Promise.all([
+    call({ tool: 'Agent', subagent_type: 'web-fetch', prompt: 'read https://example.com/b' }),
+    call({ tool: 'WebFetch', url: 'https://example.com/c' }),
+  ])
   const edit = { tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }
   expect(await call(edit)).not.toHaveProperty('deny')
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
+})
+
+// A pushed fix ends the step back: after the user's /ci-watch stop, a push of a new head is not held again.
+test('a pushed fix ends the step back, so /ci-watch stop lifts it for good', async ($, on) => {
+  const { seen } = world(on)
+  on('tool.call', { tool: 'Edit' }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const bash = (command: string) => $.tool.call({ tool: 'Bash', command } as never)
+  const edit = () => $.tool.call({ tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' } as never)
+  seed(seen, reds(4), 'a1')
+  await bash('git push origin feature/x')
+  seed(seen, reds(6), 'a1')
+  expect(await edit()).toHaveProperty('deny')
+  await $.command.run({ command: 'ci-watch', args: 'stop', origin: { kind: 'composer' } } as never)
+  expect(await edit()).not.toHaveProperty('deny')
+  seen.head = 'b2'
+  expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
+  expect(await edit()).not.toHaveProperty('deny')
 })
 
 // The third red round in a row: its own settled watch makes the count three, and the wake asks for research.
