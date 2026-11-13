@@ -346,6 +346,15 @@ class GuardHookTest(unittest.TestCase):
         self.addCleanup(os.remove, path)
         return path
 
+    def test_a_clean_quoted_body_file_after_stop_parsing_passes(self):
+        # After `--%` the program splits the raw text itself; the strict read takes it, quotes and all.
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        path = os.path.join(folder, "my notes.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("A plain body.\n")
+        self.assert_passes(self.attr(f'gh pr create --% --title t --body-file "{path}"', tool="PowerShell"))
+
     def test_attribution_in_a_body_file_is_denied(self):
         path = self.body_file(f"## What\n- x\n\n{GENERATED_LINE}\n")
         for command in (f'gh pr create --title t --body-file "{path}"', f'git commit -F "{path}"',
@@ -473,6 +482,7 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title "${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
                 (f'sort=1 git commit -F "{path}"', "Bash"),
                 (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
+                (f'gh pr create --% --title t --body-file "{path}"', "PowerShell"),
                 (f"gh pr create --title “a; sort b” --body-file {path}", "PowerShell"),
                 ("gh pr create --title t --body-file \"$HOME/body.md\"", "Bash"),
                 ('cd "$(git rev-parse --show-toplevel)"; git commit -F msg.txt', "Bash"),

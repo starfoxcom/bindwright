@@ -93,11 +93,6 @@ function psCommand(node) {
   const elements = node.namedChildren.find((c) => c.type === "command_elements");
   for (const child of elements?.namedChildren ?? []) {
     if (PS_SKIP.has(child.type)) continue;
-    if (child.type === "stop_parsing") {
-      // After --% PowerShell passes the rest of the line to the program verbatim.
-      words.push(...child.text.replace(/^--%/, "").split(/\s+/).filter(Boolean));
-      continue;
-    }
     words.push(psWord(child));
   }
   return words;
@@ -128,8 +123,9 @@ export async function shellWords(shell, command) {
       if (typeof words[0] !== "string") unreadable = true;
       commands.push(words);
     }
-    // An array's words reach a command later, wherever it runs: the strict read takes it.
-    if (node.type === "array") unreadable = true;
+    // An array's words reach a command later, wherever it runs: the strict read takes it. So
+    // does PowerShell's `--%`, after which the program splits the raw text by its own rules.
+    if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
   return { error: unreadable, commands };

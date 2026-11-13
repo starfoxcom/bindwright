@@ -34,8 +34,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     target built at run time, a folder this computer cannot find) is
     denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. A command the
-    parser is unsure of (a program or an array built at run time, syntax
-    it cannot read) and one run without the helper or Node get the strict
+    parser is unsure of (a program or an array built at run time,
+    PowerShell's `--%`, syntax it cannot read) and one run without the helper or Node get the strict
     read instead: every file flag in the command text, a text tool's and
     one inside quoted text included, and a relative body file after any
     `cd`, `pushd`, `Set-Location` or `git -C` is denied. So flag-like text
