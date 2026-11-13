@@ -856,7 +856,6 @@ def fresh_repo(**changes):
                  "allow_squash_merge": True, "allow_rebase_merge": True,
                  "delete_branch_on_merge": False},
         "branches": ["main", "develop"], "labels": [], "secrets": [], "rulesets": [],
-        "gate_yml": "checks: one\n",
     }
     state.update(changes)
     return state
