@@ -1,8 +1,9 @@
 // The fix-round count: how many pushed rounds in a row a PR has had whose checks did not all pass (both
 // reviews included). At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
-// research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
-// leaves one round fewer before the next. A push to the PR is refused while a step back is due and no web
-// research has run since its last red round settled (`isResearchOwed`). A round is a watch of
+// compare at least three ways others solve the problem, simplify, then go on. Each step back that leaves
+// the PR red leaves one round fewer before the next; there is no last one. While a step back is due and
+// fewer than three distinct web lookups ran since the last red round settled (`sourcesOwed`), the
+// session's edits, commits and pushes are refused, so the fix comes after the research. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
@@ -43,27 +44,38 @@ export const roundsToResearch = (red: number) => (red < 3 ? 3 : red < 5 ? 5 : re
 export function researchText(pr: string, red: number): string {
   return (
     ` ${pr} has had ${red} fix rounds in a row without every check green, both reviews included. Before ` +
-    'the next fix, step back: research how the community solves this problem and what options exist (web ' +
-    'search), pick the simplest design that removes the whole class of findings rather than the next one, ' +
-    'tell the user in plain words what changes and why, then apply it and keep going. The next step back ' +
+    'the next fix, step back: look up at least three different ways the community solves this problem ' +
+    '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
+    'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
+    'apply it and keep going. The next step back ' +
     `comes after ${roundsToResearch(red)} more red round(s).`
   )
 }
 
-/** Whether a push to the PR must wait for research: a step back is due and no web research ran after its
- * last red round settled (`researchedAt`, ms; 0 when none). A round saved without its time counts as
- * settled at 0, so any research covers it. */
-export function isResearchOwed(pr: PrRounds | undefined, researchedAt: number): boolean {
-  const red = redStreak(pr)
-  if (!isResearchDue(red)) return false
+/** One web lookup the session ran: when (ms) and what it looked up (the query, URL or brief), lower-cased. */
+export type Lookup = { at: number; topic: string }
+
+/** Distinct lookups a step back takes: one source is a guess, three can be compared. */
+export const SOURCES_NEEDED = 3
+
+/** How many more distinct lookups a push to the PR waits for: 0 unless a step back is due, else
+ * SOURCES_NEEDED less the distinct topics looked up after its last red round settled. A round saved
+ * without its time counts as settled at 0. */
+export function sourcesOwed(pr: PrRounds | undefined, lookups: readonly Lookup[]): number {
+  if (!isResearchDue(redStreak(pr))) return 0
   const last = (Array.isArray(pr?.rounds) ? pr.rounds : []).at(-1)
-  return researchedAt <= (typeof last?.at === 'number' ? last.at : 0)
+  const since = typeof last?.at === 'number' ? last.at : 0
+  const topics = new Set(lookups.filter(l => l.at > since).map(l => l.topic))
+  return Math.max(0, SOURCES_NEEDED - topics.size)
 }
 
-export function researchRefusal(pr: string, red: number): string {
+export function researchRefusal(pr: string, red: number, owed: number): string {
   return (
-    `${pr} has had ${red} red rounds in a row, so this push waits for a step back. Research first: ` +
-    'search the web (WebSearch or WebFetch) for how others solved this class of problem, pick the ' +
-    'simplest design that removes the whole class, tell the user what changes and why, then push.'
+    `${pr} has had ${red} red rounds in a row, so edits, commits and pushes wait for a step back. Look up ` +
+    `at least ${SOURCES_NEEDED} different ways others solved this class of problem (${owed} more to go; ` +
+    'each WebSearch, WebFetch or web-fetch agent call on a new topic counts once), compare them against ' +
+    'each other, pick the one that removes the whole class most simply, tell the user which one won and ' +
+    'why, then make the fix. Where web tools cannot run in this session, only the user can lift the hold, ' +
+    'with /ci-watch stop.'
   )
 }

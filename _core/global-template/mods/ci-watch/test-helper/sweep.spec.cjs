@@ -25,9 +25,11 @@ function folderWith(names, recent = []) {
 
 const run = (...args) => execFileSync(process.execPath, [SWEEP, ...args], { encoding: 'utf8', stdio: 'pipe' })
 
-test("the sweep removes only other sessions' old state and owner files", () => {
-  const kept = ['settings.json', 'rounds.json', `${ID}.json`, `${ID}.owner`, 'notes.txt', `${OTHER}.json.bak`]
-  const dir = folderWith([...kept, `${OTHER}.json`, `${OTHER}.owner`], [`${RECENT}.json`, `${RECENT}.owner`])
+test("the sweep removes only other sessions' old state, owner and lookup files", () => {
+  const kept = ['settings.json', 'rounds.json', `${ID}.json`, `${ID}.owner`, `${ID}.research`, 'notes.txt',
+    `${OTHER}.json.bak`]
+  const dir = folderWith([...kept, `${OTHER}.json`, `${OTHER}.owner`, `${OTHER}.research`],
+    [`${RECENT}.json`, `${RECENT}.owner`])
   run(dir, ID, '2')
   assert.deepStrictEqual(fs.readdirSync(dir).sort(), [...kept, `${RECENT}.json`, `${RECENT}.owner`].sort())
 })

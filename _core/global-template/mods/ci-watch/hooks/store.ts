@@ -1,9 +1,9 @@
-// Where ci-watch keeps its files, and the two it shares across sessions: each PR's fix rounds and when
-// this session last ran web research.
+// Where ci-watch keeps its files: each PR's fix rounds, shared by every session, and the web lookups of
+// this session alone.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
 import { recordRound, redStreak, ROUNDS_FILE } from './rounds'
-import type { PrRounds } from './rounds'
+import type { Lookup, PrRounds } from './rounds'
 
 // The engine's fs makes no missing folders, so the data folder is made through node, once per load.
 export const MKDIR_SCRIPT = 'require("fs").mkdirSync(process.argv[1],{recursive:true})'
@@ -57,19 +57,24 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
   }
 }
 
-// When this session last ran web research (WebSearch, WebFetch or the web-fetch agent), in ms; 0 when never.
-async function researchPath($: EngineInterface): Promise<string> {
-  return `${await statePath($)}.research`
+// The web lookups this session ran (WebSearch, WebFetch or the web-fetch agent), oldest first.
+const LOOKUPS_KEPT = 20
+
+async function lookupsPath($: EngineInterface): Promise<string> {
+  return (await statePath($)).replace(/\.json$/, '.research')
 }
 
-export async function researchedAt($: EngineInterface): Promise<number> {
-  const text = await $.fs.read(await researchPath($)).catch(() => '')
-  const at = Number(String(text).trim())
-  return Number.isFinite(at) ? at : 0
+export async function readLookups($: EngineInterface): Promise<Lookup[]> {
+  const all = await $.fs.read(await lookupsPath($)).then(text => JSON.parse(String(text))).catch(() => undefined)
+  if (!Array.isArray(all)) return []
+  return all.filter((l): l is Lookup => typeof l?.at === 'number' && typeof l?.topic === 'string')
 }
 
-export async function noteResearch($: EngineInterface): Promise<void> {
-  await $.fs.write(await researchPath($), String(await $.clock.now())).catch(() => undefined)
+export async function noteLookup($: EngineInterface, topic: string): Promise<void> {
+  const clean = topic.trim().toLowerCase()
+  if (!clean) return
+  const lookups = [...(await readLookups($)), { at: await $.clock.now(), topic: clean }].slice(-LOOKUPS_KEPT)
+  await $.fs.write(await lookupsPath($), JSON.stringify(lookups)).catch(() => undefined)
 }
 
 export async function redRoundsOf($: EngineInterface, pr: { repo: string; number: number }): Promise<number> {

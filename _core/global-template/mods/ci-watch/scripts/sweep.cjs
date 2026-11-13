@@ -7,8 +7,8 @@
 const fs = require('fs')
 const path = require('path')
 
-// A session's own files, named by its id: its watch state and its owner stamp.
-const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(json|owner)$/i
+// A session's own files, named by its id: its watch state, its owner stamp and its web lookups.
+const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(json|owner|research)$/i
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Whether the sweep removes a file once it is old: another session's own file. */

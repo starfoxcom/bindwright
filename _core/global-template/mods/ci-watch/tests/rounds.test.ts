@@ -1,7 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
 import { wakeText } from '../hooks/register'
-import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch } from '../hooks/rounds'
+import {
+  isResearchDue, type Lookup, type PrRounds, recordRound, redStreak, roundsToResearch, sourcesOwed,
+} from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
 
@@ -51,7 +53,7 @@ const failed = (outcome: Watch['outcome']): Watch =>
   ({ repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: { build: 'fail' }, stablePolls: 2, outcome }) as Watch
 
 test('only a red wake at a due count carries the research step', () => {
-  expect(wakeText(failed('failed'), undefined, 3)).toContain('research how the community solves this problem')
+  expect(wakeText(failed('failed'), undefined, 3)).toContain('look up at least three different ways the community')
   expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 fix rounds in a row')
   expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 fix rounds')
   expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 fix rounds')
@@ -60,19 +62,61 @@ test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
 
-// A push waits for web research only while a step back is owed, and research run after the last red
-// round settled clears it.
-test('a push waits for web research at a step back, and only there', async ($, on) => {
+// The step back as a table: due counts only, and three distinct topics looked up after the last red round
+// settled. A round saved without its time counts as settled at 0.
+test('a step back owes three distinct lookups made after the last red round settled', () => {
+  const settledAt = (n: number, at?: number): PrRounds => ({
+    rounds: Array.from({ length: n }, (_, i) => ({ sha: `c${i}`, red: true, ...(at === undefined ? {} : { at }) })),
+  })
+  const look = (...entries: [number, string][]) => entries.map(([at, topic]) => ({ at, topic }))
+  const rows: [string, PrRounds, Lookup[], number][] = [
+    ['not due at 4', settledAt(4, 100), [], 0],
+    ['due at 3, nothing looked up', settledAt(3, 100), [], 3],
+    ['lookups before the round', settledAt(6, 100), look([50, 'a'], [60, 'b'], [70, 'c']), 3],
+    ['a lookup at the same moment', settledAt(6, 100), look([100, 'a']), 3],
+    ['one lookup after', settledAt(6, 100), look([101, 'a']), 2],
+    ['the same topic twice', settledAt(6, 100), look([101, 'a'], [102, 'a']), 2],
+    ['three distinct after', settledAt(6, 100), look([101, 'a'], [102, 'b'], [103, 'c']), 0],
+    ['a round without its time', settledAt(5), look([1, 'a']), 2],
+  ]
+  for (const [name, pr, lookups, owed] of rows) expect([name, sourcesOwed(pr, lookups)]).toEqual([name, owed])
+})
+
+// While a watched PR owes its step back, the session's edits, commits and pushes wait; nothing else does.
+test('at a step back, edits, commits and pushes wait for three distinct lookups', async ($, on) => {
   const { seen } = world(on)
-  on('tool.call', { tool: 'WebSearch' }, async () => ({ result: 'found' }))
+  const tools = ['Edit', 'Write', 'WebSearch', 'WebFetch', 'Agent'] as const
+  on('tool.call', { tool: tools }, async ($, e) =>
+    (e as { url?: string }).url === 'https://down.example' ? { result: 'down', isError: true } : { result: 'done' })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const call = (input: Record<string, unknown>) => $.tool.call(input as never)
+  const bash = (command: string) => call({ tool: 'Bash', command })
   seed(seen, reds(4))
-  const push = (tool: string) => $.tool.call({ tool, command: 'git push origin feature/x' } as never)
-  expect(await push('Bash')).not.toHaveProperty('deny')
+  expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
   seed(seen, reds(6))
-  for (const tool of ['Bash', 'PowerShell']) expect(await push(tool)).toHaveProperty('deny')
-  await $.tool.call({ tool: 'WebSearch', query: 'how others solve it' } as never)
-  expect(await push('Bash')).not.toHaveProperty('deny')
+  const held = [
+    () => bash('git push origin feature/x'),
+    () => call({ tool: 'PowerShell', command: 'git push' }),
+    () => bash('git -C . commit -m "fix it"'),
+    () => call({ tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }),
+    () => call({ tool: 'Write', file_path: 'C:/repo/a.ts', content: 'b' }),
+  ]
+  for (const attempt of held) expect(await attempt()).toHaveProperty('deny')
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('3 more to go')
+  for (const command of ['git log --grep push', 'git stash push', 'echo "then git push"']) {
+    expect(await bash(command)).not.toHaveProperty('deny')
+  }
+  expect(await call({ tool: 'Bash', command: 'git push', agentId: 'helper' })).not.toHaveProperty('deny')
+  await call({ tool: 'WebSearch', query: 'how others solve it' })
+  await call({ tool: 'WebSearch', query: ' How others solve it' })
+  await call({ tool: 'WebFetch', url: 'https://down.example' })
+  await call({ tool: 'Agent', subagent_type: 'general-purpose', prompt: 'look around' })
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('2 more to go')
+  await call({ tool: 'Agent', subagent_type: 'web-fetch', prompt: 'read https://example.com/b' })
+  await call({ tool: 'WebFetch', url: 'https://example.com/c' })
+  const edit = { tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }
+  expect(await call(edit)).not.toHaveProperty('deny')
+  expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
 })
 
 // The third red round in a row: its own settled watch makes the count three, and the wake asks for research.
@@ -112,7 +156,10 @@ test('each settled watch of a pushed head adds a round; an unreadable count file
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
-  expect(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7']).toMatchObject({ rounds: [{ sha: 'a1', red: true }] })
+  const round = JSON.parse(seen.files.get(path) ?? '{}')['o/r#7']
+  expect(round).toMatchObject({ rounds: [{ sha: 'a1', red: true }] })
+  // Stamped when it settled, after the push at 1000: the time a step back's lookups must come after.
+  expect(typeof round.rounds[0].at === 'number' && round.rounds[0].at > 1_000).toBe(true)
 })
 
 // A head someone else pushed (a silent watch, past the hour after this session's push) is no round of this

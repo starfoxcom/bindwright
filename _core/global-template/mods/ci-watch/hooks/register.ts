@@ -1,12 +1,12 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
-import { isPushOrPr, mergedNumber, targetFolder } from './command'
+import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
-import { isResearchDue, isResearchOwed, redStreak, researchRefusal, researchText, roundsToResearch } from './rounds'
+import { isResearchDue, redStreak, researchRefusal, researchText, roundsToResearch, sourcesOwed } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
-  dataFolder, ensureDir, noteResearch, readRounds, recordRounds, redRoundsOf, researchedAt, statePath,
+  dataFolder, ensureDir, noteLookup, readLookups, readRounds, recordRounds, redRoundsOf, statePath,
 } from './store'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
@@ -267,13 +267,18 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// The refusal for a push to the branch's PR while its step back is owed, or undefined.
+// The refusal for an edit, commit or push while a PR this session watches owes its step back, or
+// undefined. Only a PR that owes one is asked about on GitHub (a closed PR owes nothing).
 async function owedResearch($: EngineInterface): Promise<string | undefined> {
-  const pr = await prOfBranch($)
-  if (!pr || (pr.state !== undefined && pr.state !== 'OPEN')) return undefined
-  const key = `${pr.repo}#${pr.number}`
-  const rounds = (await readRounds($))[key]
-  return isResearchOwed(rounds, await researchedAt($)) ? researchRefusal(key, redStreak(rounds)) : undefined
+  const watched = new Map(live.watches.filter(w => !w.isSilent).map(w => [`${w.repo}#${w.number}`, w]))
+  if (watched.size === 0) return undefined
+  const all = await readRounds($)
+  const lookups = await readLookups($)
+  for (const [key, w] of watched) {
+    const owed = sourcesOwed(all[key], lookups)
+    if (owed && !(await isClosed($, w.repo, w.number))) return researchRefusal(key, redStreak(all[key]), owed)
+  }
+  return undefined
 }
 
 // After a `gh pr merge` (`merged`: its PR number, 0 for the branch's PR, so every finished watch is a
@@ -582,6 +587,14 @@ function startPolling($: EngineInterface): Promise<void> {
   return start
 }
 
+// Each web lookup that ran (a WebSearch, a WebFetch or the web-fetch agent) counts toward an owed step back,
+// once per topic.
+async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
+  const input = e as { tool?: unknown; subagent_type?: unknown; query?: unknown; url?: unknown; prompt?: unknown }
+  if (input.tool === 'Agent' && input.subagent_type !== 'web-fetch') return
+  await noteLookup($, String(input.query ?? input.url ?? input.prompt ?? ''))
+}
+
 // A /clear moves the session to a new id and stops its timer; a start under way finishes first, under the
 // ending id, where retirement is read too (only for an instance that started, the only kind that claimed).
 const endSession: Hook<'session.end'> = async ($, e, next) => {
@@ -691,6 +704,9 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'NotebookEdit'] }, async ($, e, next) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
+    const isEdit = ['Edit', 'Write', 'NotebookEdit'].includes(String((e as { tool?: unknown }).tool))
+    const refusal = e.agentId === undefined && isEdit ? await owedResearch($) : undefined
+    if (refusal) return { deny: refusal }
     const result = await next(e)
     if (e.agentId !== undefined || 'deny' in result) return result
     const notes = await takeNotes($)
@@ -702,10 +718,9 @@ export const register: Register = (on, options) => {
     const isPowerShell = (e as { tool?: unknown }).tool === 'PowerShell'
     await startPolling($)
     if (await isRetired($)) return next(e)
-    if (e.agentId === undefined && /\bgit\b[^|;&\n]*\bpush\b/.test(command)) {
-      const refusal = await owedResearch($)
-      if (refusal) return { deny: refusal }
-    }
+    const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
+    const refusal = isHeld ? await owedResearch($) : undefined
+    if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.
     const notes = e.agentId !== undefined || 'deny' in answered ? [] : await takeNotes($)
@@ -719,15 +734,11 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // Web research clears an owed step back for this session's next push.
   on('tool.call', { tool: ['WebSearch', 'WebFetch', 'Agent'] }, async ($, e, next) => {
     const result = await next(e)
-    const isWebAgent = (e as { subagent_type?: unknown }).subagent_type === 'web-fetch'
-    const isResearch = (e as { tool?: unknown }).tool !== 'Agent' || isWebAgent
-    if (isResearch && !('deny' in result) && !result.isError) await noteResearch($)
+    if (!('deny' in result) && !result.isError) await noteWebLookup($, e)
     return result
   })
-
   on('tool.call', { tool: 'mcp__ci-watch__watch' }, async ($, e, next) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
