@@ -19,6 +19,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **A new repo's first setup PR can merge.** It used to target `develop` and could never pass the review gate: the gate's files and the review workflow were not on the default branch yet, and `setup-review-gate.sh` had already required the gate there. The script now creates and repairs no ruleset while the default branch lacks `.github/scripts/review_gate.py`, stops on a read that fails for any other reason than "not found", and names a ruleset that already requires the gate. `review-tiers.md` § "The first setup PR" says the PR targets the default branch, merges on two local reviews, then cascades into `develop` before the branch rules go on, and setup's finish points to it.
+- The layout check waits up to 90 s, not 30 s, for the browser's first start, which a fresh CI runner can take over 30 s for; the wait still ends as soon as the browser is listening (#847).
+- The pack's directory check refuses a skill whose first line is `---` with a BOM or a trailing space, which it used to skip (#847).
 
 ## [v4.0.0] — 2026-11-12
 

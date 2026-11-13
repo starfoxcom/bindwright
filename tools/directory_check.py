@@ -71,7 +71,9 @@ def _frontmatter_problems(rel, text):
     """The skill's frontmatter lines the check cannot read, else its keys the directory refuses."""
     lines = text.split("\n")
     if lines[0] != "---":
-        return []
+        # A BOM or a trailing space still reads as frontmatter to some parsers, so it is refused.
+        looks_open = lines[0].strip("﻿ \t") == "---"
+        return ["%s opens its frontmatter with more than an exact --- line" % rel] if looks_open else []
     if "---" not in lines[1:]:
         return ["%s has unclosed frontmatter" % rel]
     body = lines[1:lines.index("---", 1)]
