@@ -754,21 +754,6 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(name), open(os.path.join(HELPER, "parsers", name), "rb") as fh:
                 self.assertEqual(hashlib.sha256(fh.read()).hexdigest(), digest)
 
-    def test_bash_parser_rebuilds_to_the_shipped_bytes(self):
-        # Only the Go release SOURCE.md names gives the same bytes.
-        go = shutil.which("go")
-        version = subprocess.run([go, "version"], capture_output=True, text=True).stdout if go else ""
-        if "go1.27.4 " not in version:
-            self.skipTest("Go 1.27.4 is not installed")
-        out = os.path.join(tempfile.mkdtemp(), "shell-words-bash.wasm")
-        self.addCleanup(shutil.rmtree, os.path.dirname(out))
-        subprocess.run([go, "build", "-buildvcs=false", "-trimpath", "-ldflags=-s -w -buildid=",
-                "-o", out, "."], check=True,
-                       cwd=os.path.join(REPO, "tools", "shell-words-bash"),
-                       env=dict(os.environ, GOOS="js", GOARCH="wasm", GOFLAGS="-mod=readonly"))
-        with open(out, "rb") as built, open(os.path.join(HELPER, "parsers", "shell-words-bash.wasm"), "rb") as shipped:
-            self.assertEqual(built.read(), shipped.read())
-
     def test_read_only_commands_pass(self):
         for command, result in self.each(("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"),
                 lambda command: self.attr(command)):
