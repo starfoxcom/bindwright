@@ -50,8 +50,10 @@ commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser the hook reads the command into commands and
-words the way the shell does, with that shell's escape character: continued
+passes. Without the parser a smaller reader stands in. It covers the
+ordinary ways a command is written, not every corner of the shell's grammar,
+which only the parser reads in full. It reads the command into commands and
+words with that shell's escape character: continued
 lines joined, quotes taken off, `$(...)`, backticks and groups (quoted ones
 too) read as commands as well, each here-doc body line read on its own, and
 redirects and comments dropped. Each command then gets the same checks as on
