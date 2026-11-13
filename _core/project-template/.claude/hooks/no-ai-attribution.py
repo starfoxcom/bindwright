@@ -22,7 +22,7 @@ What is scanned, for any git write, gh write or GitHub API call:
     for a git write; --body-file / --notes-file / --input / -F and
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
-    (tree-sitter, `hooks/shell-words.mjs`), so each flag belongs to one
+    (`hooks/shell-words.mjs`), so each flag belongs to one
     command. Every command's flags are read, a wrapper's (`env`, `sudo`,
     `xargs`) included, except a text tool's (`awk -F,`, `grep -F word`),
     git's in a read (`git log -F`), and gh's `--template`. A flag inside
@@ -516,9 +516,12 @@ def config_sets_hooks(rest):
     """Whether `git config` sets or unsets a hook setting; a read passes."""
     names, skip, unsets = [], False, False
     for word in (text_of(w) for w in rest):
+        # The old form (`git config <name> <value>`) stops reading options at the first name, so a
+        # later `--get` is the value it stores.
+        legacy = names and names[0] not in ("set", "unset") and names[0] not in CONFIG_READS
         if skip:
             skip = False
-        elif word.startswith("-"):
+        elif word.startswith("-") and not legacy:
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
             unsets = unsets or abbreviates(word, "--unset-all", "--uns")
