@@ -194,12 +194,16 @@ BYPASS_REASONS = {
 # value (`-m -n`) is never read as an option. A long option may be shortened to any unique
 # prefix of at least the length given.
 NO_VERIFY_SUBCOMMANDS = {"commit", "am", "merge", "push", "rebase"}
-SHORT_VALUES = {"commit": "cCFmtu", "am": "C", "merge": "mFsX", "push": "o", "rebase": "sXx"}
-LONG_VALUES = {"--author", "--date", "--file", "--message", "--reedit-message", "--reuse-message",
-               "--fixup", "--squash", "--template", "--trailer", "--cleanup", "--pathspec-from-file",
-               "--strategy", "--strategy-option", "--push-option", "--repo", "--receive-pack",
-               "--exec", "--onto", "--directory", "--exclude", "--include", "--patch-format",
-               "--resolvemsg", "--whitespace", "--into-name"}
+SHORT_VALUES = {"commit": "cCFmt", "am": "C", "merge": "mFsX", "push": "o", "rebase": "sXx"}
+LONG_VALUES = {
+    "commit": {"--author", "--date", "--file", "--message", "--reedit-message", "--reuse-message",
+               "--fixup", "--squash", "--template", "--trailer", "--cleanup", "--pathspec-from-file"},
+    "am": {"--directory", "--exclude", "--include", "--patch-format", "--resolvemsg", "--whitespace"},
+    "merge": {"--strategy", "--strategy-option", "--message", "--file", "--into-name", "--cleanup"},
+    "push": {"--push-option", "--repo", "--receive-pack", "--exec"},
+    "rebase": {"--strategy", "--strategy-option", "--exec", "--onto"},
+}
+ENV_VALUE_OPTIONS = {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
 CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment", "--value"}
 CONFIG_READS = {"get", "list", "edit", "get-regexp", "get-all", "get-urlmatch", "get-color",
                 "get-colorbool"}
@@ -489,7 +493,7 @@ def option_words(subcommand, rest):
             break
         elif word.startswith("--"):
             options.append(word.split("=", 1)[0])
-            skip = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES)
+            skip = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES.get(subcommand, ()))
         elif word.startswith("-") and len(word) > 1:
             for k, letter in enumerate(word[1:], 1):
                 options.append("-" + letter)
@@ -552,11 +556,30 @@ def git_route(words):
     return None
 
 
+def env_assignments(words):
+    """The `NAME=value` words an `env` in this command sets for the program it runs."""
+    found = []
+    for i in range(len(words)):
+        if program(words[i:]) != "env":
+            continue
+        skip = False
+        for text in (text_of(w) for w in words[i + 1:]):
+            if skip:
+                skip = False
+            elif text.startswith("-"):
+                skip = text in ENV_VALUE_OPTIONS
+            elif re.match(r"\w+=", text):
+                found.append(text)
+            else:
+                break
+    return found
+
+
 def turns_lefthook_off(commands, assignments):
     """Whether the command sets LEFTHOOK to 0, false or a value built at run time (by
     assignment, `export`, `env` or PowerShell's `$env:`), or runs `lefthook uninstall`."""
     settings = [(s.get("name"), s.get("value")) for s in assignments if isinstance(s, dict)]
-    settings += [tuple(text_of(w).split("=", 1)) for words in commands for w in words if "=" in text_of(w)]
+    settings += [tuple(text.split("=", 1)) for words in commands for text in env_assignments(words)]
     for name, value in settings:
         name = re.sub(r"^\$\{?(?:env:)?|\}$", "", str(name), flags=re.I).lower()
         if name == "lefthook" and (not isinstance(value, str) or value.strip("'\"").lower() in LEFTHOOK_OFF_VALUES):

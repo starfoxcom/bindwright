@@ -656,6 +656,9 @@ class GuardHookTest(unittest.TestCase):
                 ("git commit -n -m x", hooks, "Bash"), ("git commit -nm x", hooks, "Bash"),
                 ("git commit --no-veri -m x", hooks, "Bash"), ("git am -n mail.patch", hooks, "Bash"),
                 ("git push --no-verify", hooks, "Bash"), ("env A=1 git commit -n -m x", hooks, "Bash"),
+                ("git commit -u --no-verify -m x", hooks, "Bash"),
+                ("git commit --include --no-verify -m x f", hooks, "Bash"),
+                ("git commit --patch -n -m x", hooks, "Bash"),
                 ("$GIT commit -n -m x", hooks, "Bash"),
                 ("git -c core.hooksPath=/dev/null commit -m x", setting, "Bash"),
                 ("git --config-env=core.hooksPath=H commit -m x", setting, "Bash"),
@@ -676,7 +679,8 @@ class GuardHookTest(unittest.TestCase):
                         "git commit --amend --no-edit", "git config core.hooksPath",
                         "git config get core.hooksPath && git commit -m x", '$GIT commit -m "--file=x"',
                         '"$S/bin/actionlint.exe" x && git commit -m x',
-                        'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push"):
+                        'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push",
+                        'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
 
