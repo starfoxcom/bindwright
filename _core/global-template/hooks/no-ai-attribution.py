@@ -423,7 +423,7 @@ def command_files(words, shell="bash"):
     else:
         found += [as_chains(git_files(["git", *words[i + 1:]])) for i, word in enumerate(words)
                   if not isinstance(word, str)]
-    flags = BODY_FLAGS - {"--template"} if "gh" in names else BODY_FLAGS
+    flags = BODY_FLAGS - {"--template"}  # git's own reads take its --template; elsewhere it names one
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
     named = shell == "powershell" and bool(words) and isinstance(words[0], str)
