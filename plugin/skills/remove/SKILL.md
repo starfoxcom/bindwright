@@ -60,7 +60,7 @@ Run the engine with `--settings <repo root or any folder>`: `installed` lists th
 - **Work language:** `home.py set-language english` removes the language setting and the commit-language rule setup added.
 - **Global instructions:** in `~/.claude/CLAUDE.md`, take out the sections that match `<helper>/_core/global-template/CLAUDE.md.additions` and the `<!-- bindwright:global-instructions -->` line, keeping everything else. Show the result and save it only on a yes.
 - **Anonymous review counts:** `node "<helper>/hooks/counts.mjs" share off` stops every send.
-- **The code-search tool** (FindWright): it ships in the helper, so removing the helper removes it; take its server out with `claude mcp remove findwright` when the user leaves no project set up. A tokensave left from an older setup is a program of its own, so it stays; give its own uninstall steps if the user asks.
+- **The code-search tool** (FindWright): it ships in the helper, so removing the helper removes it; take its server out with `claude mcp remove findwright` when the user leaves no project set up. Another code-search tool left from an older setup is a program of its own, so it stays; give its own uninstall steps if the user asks.
 
 Each `home.py` change backs up `~/.claude/settings.json` first, as `settings.json.bak`. Hooks, mods and agents stop at the next start of Claude Code, so say to restart it.
 
