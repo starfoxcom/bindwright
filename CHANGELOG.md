@@ -14,6 +14,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **The attribution guard refuses the routes past git's own hooks** (#839). For a git program, a wrapped one (`env`, `sudo`) and a word built at run time that names git (`$GIT`) included: `--no-verify` and `-n` on `commit` or `am` (`--no-verify` on `merge`, `push` and `rebase` too), setting or unsetting `core.hooksPath` or a `hook.` setting (`git config`, `-c`, `--config-env`), `--trailer`, a commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`, `--reedit-message`), and turning lefthook off (`LEFTHOOK=0` or `false` set by the command, through `export`, `env` or PowerShell's `$env:`, or `lefthook uninstall`). Options are read as git reads them, bundled (`-nm x`) or shortened (`--no-veri`), with each option's value skipped, so a message that names one passes, and each keeps git's own meaning: `-n` on `merge`, `push` or `tag` is not a bypass, and reading `core.hooksPath` passes. The helper's parser now reports the variables a command sets.
 
+### Changed
+
+- **Bash commands are read by mvdan.cc/sh, the parser shfmt uses** (#839), built into the helper as WebAssembly (`helper/parsers/shell-words-bash.wasm`, rebuilt byte for byte from `tools/shell-words-bash`), in place of tree-sitter's bash grammar. It reads what that grammar misread: a here-doc with a redirect or another command on its first line, two here-docs on one line, and a redirect between a command's words. PowerShell is still read with tree-sitter.
+
 ## [v4.0.0] — 2026-11-12
 
 ### Breaking

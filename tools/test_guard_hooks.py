@@ -511,21 +511,24 @@ class GuardHookTest(unittest.TestCase):
                 (f'git merge -sm -F "{path}" feature', "Bash"),
                 (f'git commit-tree -pm -F "{path}" HEAD^{{tree}}', "Bash"),
                 (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
-                (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell")):
-            with self.subTest(command=command):
-                self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
-        # Shapes the parser cannot read (an array, `--%`, words a redirect holds, a bare `$`) are
-        # refused with the way out, never guessed at.
-        for command, tool in (
-                ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
-                (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
-                (f'gh pr create --% --title t --body-file "{path}"', "PowerShell"),
+                (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
                 (f'gh pr create --title t <<EOF --body-file "{path}"\nx\nEOF', "Bash"),
                 (f'gh pr create --title t <<EOF 2>/dev/null --body-file "{path}"\nx\nEOF', "Bash"),
                 (f'gh pr create --title t 2>&- --body-file="{path}"', "Bash"),
                 (f'! git commit > log -F "{path}"', "Bash"),
                 (f'git log | gh pr comment 5 > out --body-file "{path}"', "Bash"),
                 (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
+                (f"cat <<'EOF'; gh pr comment 5 \\\n  --body-file \"{path}\"\nhello\nEOF\necho done", "Bash"),
+                (f"cat <<'EOF' > a.md; cat <<'EOF2' > b.md\na\nEOF\nb\nEOF2\ngit commit -F \"{path}\"", "Bash")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
+        # Shapes the parser cannot read (an array, `--%`, a comment ending in a backslash) are
+        # refused with the way out, never guessed at.
+        for command, tool in (
+                ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
+                (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
+                (f'gh pr create --% --title t --body-file "{path}"', "PowerShell"),
+                (f'grep x f # ends in a backslash \\\ngit commit -F "{path}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
                 (f'args=(\n  --title "feat: x"\n  --body-file "{path}"\n)\ngh pr create "${{args[@]}}"', "Bash")):
             with self.subTest(command=command):
@@ -666,6 +669,8 @@ class GuardHookTest(unittest.TestCase):
                 ("git config set --global hook.lint.enabled false", setting, "Bash"),
                 ("git config --unset core.hooksPath", setting, "Bash"),
                 ("git config --global \\\n  core.hooksPath /dev/null", setting, "Bash"),
+                ("git config core.hooksPath --get", setting, "Bash"),
+                ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
                 ("LEFTHOOK=0 git push", lefthook, "Bash"), ("env LEFTHOOK=false git commit -m x", lefthook, "Bash"),
@@ -703,10 +708,24 @@ class GuardHookTest(unittest.TestCase):
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
             rows = re.findall(r"^\| `([^`]+)` \|.*\| `([0-9a-f]{64})` \|$", fh.read(), re.M)
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 5)
         for name, digest in rows:
             with self.subTest(name), open(os.path.join(HELPER, "parsers", name), "rb") as fh:
                 self.assertEqual(hashlib.sha256(fh.read()).hexdigest(), digest)
+
+    def test_bash_parser_rebuilds_to_the_shipped_bytes(self):
+        # Only the Go release SOURCE.md names gives the same bytes.
+        go = shutil.which("go")
+        version = subprocess.run([go, "version"], capture_output=True, text=True).stdout if go else ""
+        if "go1.27.4 " not in version:
+            self.skipTest("Go 1.27.4 is not installed")
+        out = os.path.join(tempfile.mkdtemp(), "shell-words-bash.wasm")
+        self.addCleanup(shutil.rmtree, os.path.dirname(out))
+        subprocess.run([go, "build", "-trimpath", "-ldflags=-s -w -buildid=", "-o", out, "."], check=True,
+                       cwd=os.path.join(REPO, "tools", "shell-words-bash"),
+                       env=dict(os.environ, GOOS="js", GOARCH="wasm", GOFLAGS="-mod=readonly"))
+        with open(out, "rb") as built, open(os.path.join(HELPER, "parsers", "shell-words-bash.wasm"), "rb") as shipped:
+            self.assertEqual(built.read(), shipped.read())
 
     def test_read_only_commands_pass(self):
         for command in ("git log -5", "gh pr view 5 --json body", "git config --get core.hooksPath"):
