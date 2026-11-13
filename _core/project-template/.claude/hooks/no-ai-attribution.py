@@ -151,7 +151,9 @@ BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-fil
 GIT_MESSAGE_FLAGS = {"-m", "--message"}
 MESSAGE_FLAGS = {"-b", "--body", "-t", "--title", "--notes", "--subject", "--message"}
 GH_MESSAGE_FLAGS = MESSAGE_FLAGS | {"-n"}  # gh's -n is --notes; git's is a switch
-GIT_MESSAGE_CLUSTER = re.compile(r"-[a-z]*m")  # `-am msg`: git's switches, then -m takes the next word
+# `-am msg`: git's switches, then -m takes the next word. The first letter that takes a value
+# (m, c, n, t, u) takes the rest of the word instead (`-mcalm` is the message "calm").
+GIT_MESSAGE_CLUSTER = re.compile(r"-(?:(?![cmntu])[a-z])*m")
 ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fmsg`, `-d@body`)
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
