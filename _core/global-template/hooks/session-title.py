@@ -16,7 +16,9 @@ in `.bindwright/sessions/`; the newer of the two purposes wins.
 
 A title is set once: the hook prints nothing while the title is unchanged, so a
 name the user picks with /rename stays until the purpose changes. On SessionStart
-the hook also asks the assistant to write the session's focus to its purpose file.
+the hook also asks the assistant to write the session's focus to its purpose file;
+after a compaction or a resume it names the purpose already written and asks for
+a rewrite if the work has moved on.
 
 The project root is CLAUDE_PROJECT_DIR, else the input's `cwd`, else the current
 folder. Every failure prints nothing and exits 0: a title never blocks a session
@@ -37,6 +39,14 @@ PURPOSE_REQUEST = (
     "Once the session's focus is clear, write it in 10 words or fewer, without the "
     "project's name, to {path}, and rewrite that file whenever the focus changes."
 )
+# After a compaction or a resume the session goes on with a purpose written earlier,
+# which the work may have left behind.
+PURPOSE_CHECK = (
+    "This session's title gives its purpose as \"{purpose}\". If the work has moved on, "
+    "rewrite {path} now with the current focus in 10 words or fewer, without the "
+    "project's name, and keep rewriting it whenever the focus changes."
+)
+CARRIED_SOURCES = ("compact", "resume")
 
 
 def titles_folder():
@@ -149,7 +159,9 @@ def title_session(event, titles):
     changed = set_title(titles, session_id, title)
     request = None
     if event_name == "SessionStart":
-        request = PURPOSE_REQUEST.format(path=purpose_path(titles, session_id))
+        path = purpose_path(titles, session_id)
+        is_carried = purpose and event.get("source") in CARRIED_SOURCES
+        request = PURPOSE_CHECK.format(purpose=purpose, path=path) if is_carried else PURPOSE_REQUEST.format(path=path)
     output = hook_output(event_name, title if changed else None, request)
     if output:
         print(json.dumps(output))
