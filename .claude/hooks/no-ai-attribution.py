@@ -50,9 +50,9 @@ commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser, Python's POSIX shell lexer splits the command,
-so quotes are read the same way, and quotes that never close make every
-word count.
+passes. Without the parser the hook does not try to read the shell: it
+matches these routes anywhere in the command text, quoted text included, so
+text that only names one is denied too; a read of `core.hooksPath` passes.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -73,7 +73,6 @@ exit 0 otherwise. Never blocks read-only commands.
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -328,44 +327,49 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-def strict_commands(cmd):
-    """Without the parser: the commands as Python's POSIX shell lexer reads them, quoted text
-    kept whole and comments dropped, cut at `;`, `|`, `&`, newlines and parentheses outside
-    quotes, a redirect and its target left out. A command cut by `(` keeps that `(` as its
-    last word, since what follows is one of its values (`git config core.hooksPath (...)`).
-    With quotes that never close, the whole text is one command, so every option counts."""
-    lexer = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        return [cmd.split()]
-    commands, words, skip_next = [], [], False
-    for token in tokens:
-        if skip_next:
-            skip_next = False
-        elif token and set(token) <= set(lexer.punctuation_chars):
-            if "<" in token or ">" in token:  # `2>&1`, `> out`: drop the fd and the target
-                words = words[:-1] if words and words[-1].isdigit() else words
-                skip_next = True
-                continue
-            commands.append(words + ["("] if token.startswith("(") else words)
-            words = []
-        else:
-            words.append(token)
-    return commands + [words]
+# Without the parser: patterns over the whole command text, quotes and all, so text that only
+# names a route is refused too, as the strict read refuses every file flag. Each long option
+# is matched from its shortest start, as git takes it.
+STRICT_ROUTES = (
+    ("hooks", re.compile(r"(?<!\S)--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?=[\s=\"']|$)")),
+    ("trailer", re.compile(r"(?<!\S)--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?=[\s=\"']|$)")),
+    ("setting", re.compile(r"(?:(?<!\S)-c\s+|--config-env[=\s]+)[\"']?(?:core\.hooksPath|hook\.)", re.I)),
+)
+STRICT_COMMIT_OR_AM = re.compile(r"\bgit\b[\s\S]*\b(?:commit|am)\b", re.I)  # `$GIT` too
+STRICT_SHORT_N = re.compile(r"(?<!\S)-[A-Za-z]*n[A-Za-z]*(?=[\s\"']|$)")
+STRICT_REUSE = re.compile(r"\bcommit\b[\s\S]*?(?:(?<!\S)-[A-Za-z]*[cC]\s+[^\s=]+(?=\s|$)"
+                          r"|(?<!\S)--re[eu][\w-]*(?=[\s=\"']|$))")
+# A set names a value after the setting; a read ends there, or at a redirect, a pipe, a list,
+# a comment, or the close of the group or quote that holds it.
+STRICT_CONFIG_SET = re.compile(
+    r"\bgit\b[\s\S]*?\bconfig\b[^\n]*?[\"']?(?:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
+    r"(?![)#;|&><\]]|\d+[<>]|[\"'](?:\s|$|\)))\S", re.I)
+
+
+def strict_route(cmd):
+    """Without the parser: the kind of route past the hook the command text names, or None."""
+    for kind, pattern in STRICT_ROUTES:
+        if pattern.search(cmd):
+            return kind
+    if STRICT_COMMIT_OR_AM.search(cmd) and STRICT_SHORT_N.search(cmd):
+        return "hooks"
+    if STRICT_REUSE.search(cmd):
+        return "reuse"
+    return "setting" if STRICT_CONFIG_SET.search(cmd) else None
 
 
 def bypass_reason(cmd, parsed, assignments):
     """Why the command takes a route past the hook, or None: read from the parsed commands,
-    or, without the parser, from the command text split at spaces, quoted text included."""
+    or, without the parser, from patterns over the whole command text."""
     strict = parsed is None
     if LEFTHOOK_OFF.search(cmd) if strict or assignments is None else turns_lefthook_off(parsed, assignments):
         return BYPASS_REASONS["lefthook"]
-    commands = strict_commands(cmd) if strict else parsed
-    for words in commands:
+    if strict:
+        kind = strict_route(cmd)
+        return BYPASS_REASONS[kind] if kind else None
+    for words in parsed:
         for i, word in enumerate(words):
-            if program(words[i:]) == "git" or is_run_time_git(word) or (strict and GIT_WORD.search(word)):
+            if program(words[i:]) == "git" or is_run_time_git(word):
                 kind = git_bypass(words[i:])
                 if kind:
                     return BYPASS_REASONS[kind]
