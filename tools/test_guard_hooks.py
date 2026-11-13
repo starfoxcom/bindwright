@@ -473,6 +473,9 @@ class GuardHookTest(unittest.TestCase):
                 ('"$S/bin/actionlint.exe" x && git commit -m x', "Bash"),
                 ('J=/c/jq.exe; "$J" .x f.json && git commit -m x', "Bash"),
                 ('for c in python "py -3"; do $c -V; done && git commit -m x', "Bash"),
+                ('E="$L/P/E E/e.exe" && "$E" --x && git commit -m x', "Bash"),
+                ('$g = "$env:L\\P\\e.exe"; & $g --x; git commit -m x', "PowerShell"),
+                ('$exe = Join-Path $env:L "P\\e.exe"; & $exe --x; git commit -m x', "PowerShell"),
                 ("for id in 1 2; do gh api r/$id > $K/r-$id.json; done && git commit -m x", "Bash"),
                 ("git commit -F - <<'EOF' >/dev/null; git log -1\nmsg\nEOF", "Bash"),
                 ("gh api graphql -f query='query{user(login:\"x\"){id}}'", "PowerShell")):
@@ -539,13 +542,21 @@ class GuardHookTest(unittest.TestCase):
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
                 (f'$GIT commit --template "{path}"', "Bash"),
                 ('$GIT commit -m "--file=x"', "Bash"),
-                ("for GIT in ls /usr/bin/git; do $GIT commit -n -m x; done", "Bash"),
                 ("for GIT in ls $X; do $GIT commit -m x; done", "Bash"),
-                ("for GIT; do $GIT commit -m x; done", "Bash")):
+                ("for GIT; do $GIT commit -m x; done", "Bash"),
+                ("$(which git 2>/dev/null) commit -n -m x", "Bash"),
+                ('"$D/bin/$(which git)" commit -n -m x', "Bash"),
+                ("GIT=ls; read GIT; $GIT commit -n -m x", "Bash"),
+                ("true || GIT=ls; $GIT commit -n -m x", "Bash"),
+                ("(GIT=ls); $GIT commit -n -m x", "Bash"),
+                ("$git = 'ls'; Set-Variable git git; & $git commit -n -m x", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), "Write it as plain commands")
-        # A program named through a variable, and a write after a here-doc's first line, are read.
+        # A program named through a variable is read as each program the variable can hold, and a
+        # write after a here-doc's first line is read too.
         for command in ("GIT=git; $GIT commit -n -m x",
+                        "for GIT in ls /usr/bin/git; do $GIT commit -n -m x; done",
+                        'GIT=ls; [ -n "$x" ] && GIT=git; $GIT commit -n -m x',
                         "git commit -F - <<'EOF' >/dev/null && git push --no-verify\nmsg\nEOF"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), "git hook bypass")

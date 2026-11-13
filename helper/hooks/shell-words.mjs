@@ -7,7 +7,8 @@
 // [{"name": ..., "value": <word>}, ...]}, commands and the variables they set in source
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
-// substitution, a glob), so its value cannot be known before it runs.
+// substitution, a glob), so its value cannot be known before it runs. A program word built
+// at run time that literal text names gives one command per program it can be.
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -144,31 +145,182 @@ function heredocRestBelow(source) {
   return lines.join("\n");
 }
 
+// A program word the shell builds at run time names a program only through literal text, as
+// ShellCheck reads command names: the literal tail of a path (`"$S/bin/x.exe"`), or a variable
+// every value of which, in this command, is known and set before the use. Such a word yields
+// each list of leading words it can expand to; null means it could name any program.
 const PROGRAM_NAME = /^[\w.+-][\w .+-]*$/;
+const MAX_VARIANTS = 16;
+const LITERAL_PARTS = {
+  bash: new Set(["command_name", "word", "string", "string_content", "raw_string", "concatenation", "number"]),
+  powershell: new Set(["command_name", "command_name_expr", "path_command_name", "generic_token",
+    "string_literal", "expandable_string_literal", "verbatim_string_characters", "verbatim_string_literal"]),
+};
+const PS_WRAPPERS = new Set(["pipeline", "pipeline_chain", "logical_expression", "bitwise_expression",
+  "comparison_expression", "additive_expression", "multiplicative_expression", "format_expression",
+  "range_expression", "array_literal_expression", "unary_expression"]);
+// Where a setting runs on every path to a later command in the same shell: the nodes between
+// the two, and the node holding both.
+const SETTING_PATH = { bash: new Set(["declaration_command", "list", "compound_statement"]),
+  powershell: new Set(["pipeline"]) };
+const SEQUENCES = { bash: new Set(["program", "compound_statement", "do_group", "subshell", "list"]),
+  powershell: new Set(["program", "statement_list"]) };
 
-// The program a word built at run time names, or null when it could be any program, git
-// included: its last path segment when that is literal (`"$S/bin/actionlint.exe"`), or the
-// literal value of the one variable it is, set earlier in the command (`J=/c/jq.exe; "$J"`).
-function knownProgram(word, assignments, loops = []) {
-  const text = word.dynamic.replace(/^"(.*)"$/s, "$1");
-  // A `for` variable names each of its values in turn: known when every one is known and none is git.
-  const loop = loops.findLast((l) => new RegExp(`\\$\\{?${l.name}(?!\\w)`).test(text));
-  if (loop) {
-    const programs = loop.values.map((value) => {
-      const each = text.replace(new RegExp(`\\$\\{?${loop.name}(?!\\w)\\}?`, "g"), value);
-      return knownProgram({ dynamic: each }, assignments) ?? (PROGRAM_NAME.test(each) ? each : null);
-    });
-    const isGit = (program) => /^git(\.exe)?$/i.test(program.split(" ")[0].split(/[\\/]/).pop());
-    return programs.length && programs.every((p) => p !== null && !isGit(p)) ? programs[0] : null;
+const baseName = (text) => text.split(/[\\/]/).pop();
+const isInside = (node, outer) => Boolean(outer)
+  && node.startIndex >= outer.startIndex && node.endIndex <= outer.endIndex;
+const hasOr = (node) => node.type === "list" && node.children.some((c) => c.type === "||");
+
+function unwrap(node) {
+  while (node && PS_WRAPPERS.has(node.type) && node.namedChildCount === 1) node = node.namedChildren[0];
+  return node;
+}
+
+function runTimeParts(node, shell) {
+  if (!LITERAL_PARTS[shell].has(node.type)) return [node];
+  return node.namedChildren.flatMap((child) => runTimeParts(child, shell));
+}
+
+function variableName(part, shell) {
+  const bash = /^\$(\w+)$|^\$\{(\w+)\}$/.exec(part.text);
+  const ps = /^\$(?:(?:global|script|local|private):)?(\w+)$|^\$\{(\w+)\}$/i.exec(part.text);
+  if (shell === "bash") {
+    return bash && ["simple_expansion", "expansion"].includes(part.type) ? bash[1] ?? bash[2] : null;
   }
-  const name = /^\$\{?(\w+)\}?$/.exec(text);
-  if (name) {
-    const set = assignments.findLast((a) => a.name.replace(/^\$/, "") === name[1]);
-    if (!set || set.value === "") return null;
-    return typeof set.value === "string" ? set.value : knownProgram(set.value, []);
+  return ps && part.type === "variable" ? (ps[1] ?? ps[2]).toLowerCase() : null;
+}
+
+// Every variable setting in the command, with its value: a literal string, the node the shell
+// builds it from, or null when it cannot be read (`+=`, a `foreach`, a `for` with no list).
+function collectSettings(root, shell) {
+  const settings = [];
+  const literal = shell === "bash" ? bashWord : psWord;
+  const valueOf = (node) => {
+    const word = literal(node);
+    return typeof word === "string" ? word : node;
+  };
+  (function walk(node) {
+    if (shell === "bash" && node.type === "variable_assignment") {
+      const value = node.childForFieldName("value");
+      const appends = node.children.some((c) => c.type === "+=");
+      const name = node.childForFieldName("name")?.text;
+      settings.push({ name, node, value: appends ? null : value ? valueOf(value) : "" });
+    }
+    if (shell === "bash" && node.type === "for_statement") {
+      const name = node.childForFieldName("variable")?.text;
+      const values = node.childrenForFieldName("value");
+      for (const value of values.length ? values : [null]) {
+        settings.push({ name, node, isLoop: true, value: value && valueOf(value) });
+      }
+    }
+    if (shell === "powershell" && node.type === "assignment_expression") {
+      const [left, operator, right] = node.namedChildren;
+      const name = /^\$(?:(?:global|script|local|private):)?(\w+)\s*$/i.exec(left?.text ?? "")?.[1]?.toLowerCase();
+      settings.push({ name, node, value: operator?.text === "=" && right ? valueOf(unwrap(right)) : null });
+    }
+    if (shell === "powershell" && node.type === "foreach_statement") {
+      const name = /\(\s*\$(\w+)/.exec(node.text)?.[1]?.toLowerCase();
+      settings.push({ name, node, value: null });
+    }
+    for (const child of node.namedChildren) walk(child);
+  })(root);
+  return settings;
+}
+
+// True when the command sets `name` some way it does not report as a setting: `read NAME`,
+// `printf -v NAME`, `declare NAME`, PowerShell's `Set-Variable NAME` or `[ref]$NAME`.
+function hasHiddenSettings(name, facts) {
+  const { shell, source, settings } = facts;
+  const flags = shell === "bash" ? "g" : "gi";
+  const bare = new RegExp(`(?<![\\w$./\\\\:-])(?<!\\$\\{)${name}(?![\\w./\\\\:-])`, flags);
+  const named = new Set(settings.filter((s) => s.name === name && shell === "bash").map((s) => s.node.id));
+  const ps = new RegExp(`\\[ref\\]\\s*\\$${name}\\b|\\$${name}\\s*(\\+\\+|--)(?![\\w-])|(\\+\\+|--)\\$${name}\\b`, "i");
+  return (source.match(bare) ?? []).length > named.size || (shell === "powershell" && ps.test(source));
+}
+
+// True when setting `s` runs before `use` on every path to it, in the same shell.
+function setsBefore(s, use, shell) {
+  if (s.isLoop) return isInside(use, s.node.childForFieldName("body"));
+  if (s.node.startIndex >= use.startIndex) return false;
+  let node = s.node.parent;
+  while (node && !isInside(use, node)) {
+    if (!SETTING_PATH[shell].has(node.type) || hasOr(node)) return false;
+    node = node.parent;
   }
-  const last = text.split(/[\\/]/).pop().replace(/["')]+$/, "");
-  return last !== text && PROGRAM_NAME.test(last) ? last : null;
+  return Boolean(node) && SEQUENCES[shell].has(node.type) && !hasOr(node);
+}
+
+// Every value `name` can hold where `use` runs, or null when one of them is unknown.
+function valuesAt(name, use, facts) {
+  const settings = facts.settings.filter((s) => s.name === name);
+  if (!settings.length || settings.some((s) => s.value === null) || hasHiddenSettings(name, facts)) return null;
+  return settings.some((s) => setsBefore(s, use, facts.shell)) ? settings.map((s) => s.value) : null;
+}
+
+function distinct(variants) {
+  if (variants.some((v) => v === null)) return null;
+  const unique = [...new Map(variants.flat().map((words) => [JSON.stringify(words), words])).values()];
+  return unique.length && unique.length <= MAX_VARIANTS ? unique : null;
+}
+
+// The leading words a value gives where it is used: bash splits an unquoted value at spaces.
+function valueWords(value, isQuoted, facts, depth) {
+  const isWhole = isQuoted || facts.shell === "powershell";
+  if (typeof value !== "string") return isWhole ? programsOf(value, facts, depth) : null;
+  const words = isWhole ? [value] : value.trim().split(/\s+/);
+  return PROGRAM_NAME.test(baseName(words[0])) ? [[baseName(words[0]), ...words.slice(1)]] : null;
+}
+
+// PowerShell's `Join-Path <folder> "<child>"` ends in its last argument's file name.
+function joinPathPrograms(command, facts, depth) {
+  const name = command.namedChildren.find((c) => c.type === "command_name")?.text.toLowerCase();
+  const elements = command.namedChildren.find((c) => c.type === "command_elements")?.namedChildren ?? [];
+  const last = elements.filter((c) => !["command_argument_sep", "command_parameter"].includes(c.type)).at(-1);
+  return name === "join-path" && last ? programsOf(last, facts, depth + 1) : null;
+}
+
+function substitutedPrograms(word, parts, names, facts) {
+  let texts = [""];
+  let at = word.startIndex;
+  for (const [i, part] of parts.entries()) {
+    const values = valuesAt(names[i], word, facts);
+    const unquoted = facts.shell === "bash" && word.type !== "string";
+    if (!values || values.some((v) => typeof v !== "string" || (unquoted && /\s/.test(v)))) return null;
+    const before = word.text.slice(at - word.startIndex, part.startIndex - word.startIndex);
+    texts = texts.flatMap((text) => values.map((value) => text + before + value));
+    if (texts.length > MAX_VARIANTS) return null;
+    at = part.endIndex;
+  }
+  const programs = texts.map((text) => baseName((text + word.text.slice(at - word.startIndex)).replace(/["']/g, "")));
+  return distinct(programs.map((program) => PROGRAM_NAME.test(program) ? [[program]] : null));
+}
+
+// Each list of leading words the program word `word` can expand to, or null.
+function programsOf(node, facts, depth = 0) {
+  const { shell } = facts;
+  const word = unwrap(node);
+  if (!word || depth > 3) return null;
+  if (shell === "powershell" && word.type === "command") return joinPathPrograms(word, facts, depth);
+  const parts = runTimeParts(word, shell);
+  if (!parts.length) {
+    const literal = (shell === "bash" ? bashWord : psWord)(word);
+    return typeof literal === "string" ? valueWords(literal, true, facts, depth) : null;
+  }
+  const tail = word.text.slice(parts.at(-1).endIndex - word.startIndex).replace(/["']/g, "");
+  if (/[\\/]/.test(tail) && PROGRAM_NAME.test(baseName(tail))) return [[baseName(tail)]];
+  const names = parts.map((part) => variableName(part, shell));
+  if (names.includes(null)) return null;
+  if (parts.length > 1 || word.text.replace(/["']/g, "") !== parts[0].text) {
+    return substitutedPrograms(word, parts, names, facts);
+  }
+  const values = valuesAt(names[0], word, facts);
+  const isQuoted = word.type === "string";
+  return values && distinct(values.map((value) => valueWords(value, isQuoted, facts, depth + 1)));
+}
+
+function programWord(command, shell) {
+  if (shell === "bash") return command.namedChildren.find((c) => c.type === "command_name")?.namedChildren[0];
+  return command.namedChildren.find((c) => c.type === "command_name_expr" || c.type === "command_name");
 }
 
 export async function shellWords(shell, command) {
@@ -180,12 +332,13 @@ export async function shellWords(shell, command) {
   const source = shell === "bash" ? command
     : command.replace(/[“”„]/g, '"').replace(/[‘’‚‛]/g, "'");
   let tree = parser.parse(source);
+  let parsedText = source;
   const retries = shell === "powershell" ? [source.replace(PS_JOINED_QUOTE, "$1$3$2")]
     : [source.replace(BASH_HEREDOC_FIRST, "$3 $1"), heredocRestBelow(source)];
   for (const retry of retries) {
     if (!tree.rootNode.hasError) break;
     const moved = parser.parse(retry);
-    if (!moved.rootNode.hasError) tree = moved;
+    if (!moved.rootNode.hasError) [tree, parsedText] = [moved, retry];
   }
   // The bash grammar takes a backslash before CR LF as a line continuation, but bash ends
   // the command there, so it cannot be trusted on a command holding a CR.
@@ -193,12 +346,8 @@ export async function shellWords(shell, command) {
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
   const assignments = [];
-  const loops = [];
+  const facts = { shell, source: parsedText, settings: collectSettings(tree.rootNode, shell) };
   (function walk(node) {
-    if (shell === "bash" && node.type === "for_statement") {
-      const values = node.childrenForFieldName("value").map((v) => v.text.replace(/^(["'])(.*)\1$/s, "$2"));
-      loops.push({ name: node.childForFieldName("variable")?.text ?? "", values });
-    }
     if (shell === "bash" && node.type === "variable_assignment") assignments.push(bashAssignment(node));
     if (shell === "powershell" && node.type === "assignment_expression") assignments.push(psAssignment(node));
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
@@ -206,14 +355,11 @@ export async function shellWords(shell, command) {
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
     if (node.type === "command") {
       const words = read(node);
-      // A program built at run time that could be git (`$GIT`) cannot be told apart from its
-      // arguments, so the command is unreadable.
-      if (typeof words[0] !== "string") {
-        const known = knownProgram(words[0], assignments, loops);
-        if (known === null) unreadable = true;
-        else words[0] = known;
-      }
-      commands.push(words);
+      // A program built at run time that could be any program, git included, cannot be told
+      // apart from its arguments, so the command is unreadable.
+      const variants = typeof words[0] === "string" ? [[words[0]]] : programsOf(programWord(node, shell), facts);
+      if (variants === null) unreadable = true;
+      for (const leading of variants ?? [[words[0]]]) commands.push([...leading, ...words.slice(1)]);
     }
     // An array's words reach a command later, wherever it runs, so it is unreadable. So
     // is PowerShell's `--%`, after which the program splits the raw text by its own rules.
