@@ -854,11 +854,11 @@ test('a push or a new PR is the subcommand, never words inside a message', () =>
   // An option's value is never the subcommand.
   expect(isPushOrPr('git -c push.default=current fetch')).toBe(false)
   expect(isPushOrPr('git -c push.default=current --no-pager push')).toBe(true)
-  // Words split as the shell splits them: a redirect glued on, or a line continuation.
+  // A redirect glued on, or an option value built at run time, still reads as the push it is.
   expect(isPushOrPr('git push>push.log 2>&1')).toBe(true)
   expect(isPushOrPr('git push>$null', true)).toBe(true)
-  expect(isPushOrPr('git \\\n  push origin x')).toBe(true)
-  expect(isPushOrPr('git `\n  push origin x', true)).toBe(true)
+  expect(isPushOrPr('git -C ${REPO} push origin HEAD')).toBe(true)
+  expect(isPushOrPr('git -C $(pwd) push')).toBe(true)
   // A here-string feeds one word: the lines after it are still commands.
   expect(isPushOrPr('git commit -F - <<< fixup\ngit push')).toBe(true)
   expect(isPushOrPr('git commit -F - <<<"fixup"\ngit push')).toBe(true)

@@ -1,14 +1,16 @@
 // What a shell command does, read from its text: a push or `gh pr create` (which starts a watch), a
 // `gh pr merge` (which drops one), and the folder it ran in. Pure, no engine access.
 
-// Read on the command with its quoted text and here-doc bodies blanked (see `commandWords`), and on
-// the subcommand word: `git commit -m "explain the push"` is not a push. Global options may come first.
+// Matched on the command with its quoted text and here-doc bodies blanked (see `commandWords`), and on
+// the subcommand word: `git commit -m "explain the push"` is not a push. Global options may come first;
+// `-c` and `-C` always take the next word as their value, so a value (`-c push.default=x`) is never read
+// as the subcommand.
+const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-(?![Cc](?:\s|$))[\w-]+(?:=\S+)?))*`
 const GH_OPTS = String.raw`(?:\s+(?:-R\s+\S+|--repo[=\s]\S+))*`
 const AT_START = String.raw`(?:^|[\s;&|({])`
-const PR_CREATE = new RegExp(`${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+create\\b`)
-// git's global options that take the next word as their value (`git -C dir push`, `git -c k=v commit`),
-// as git itself reads them; every other option before the subcommand is one word.
-const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'])
+const PUSH = `${AT_START}git${GIT_OPTS}\\s+push\\b`
+const COMMIT_OR_PUSH = new RegExp(`${AT_START}git${GIT_OPTS}\\s+(?:commit|push)(?![\\w-])`)
+const PUSH_OR_PR = new RegExp(`${PUSH}|${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+create\\b`)
 const PR_MERGE = new RegExp(`${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+merge\\b([^|;&\\n]*)`)
 
 // The command with quoted strings emptied and here-doc bodies dropped, so message text never reads as
@@ -61,31 +63,13 @@ function maskedCommand(command: string, isPowerShell: boolean): string {
     .replace(quotedSpans(isPowerShell), span => span[0] + '_'.repeat(span.length - 2) + span[span.length - 1])
 }
 
-// The subcommand of each git call in the command, read word by word as git does: the first word after
-// `git` and its global options. An option's value is never read as the subcommand. Words split as the
-// shell splits them: a line continuation joins lines, and `<` or `>` ends a word even glued to it.
-function gitSubcommands(command: string, isPowerShell: boolean): string[] {
-  const found: string[] = []
-  const joined = commandWords(command, isPowerShell).replace(isPowerShell ? /`\r?\n/g : /\\\r?\n/g, ' ')
-  for (const part of joined.split(/[;&|\n(){}]/)) {
-    const words = part.trim().split(/[\s<>]+/)
-    for (let i = 0; i < words.length; i++) {
-      if (words[i] !== 'git') continue
-      let next = i + 1
-      while (words[next]?.startsWith('-')) next += GIT_VALUE_OPTIONS.has(words[next] ?? '') ? 2 : 1
-      if (words[next]) found.push(words[next] ?? '')
-    }
-  }
-  return found
-}
-
 export function isPushOrPr(command: string, isPowerShell = false): boolean {
-  return gitSubcommands(command, isPowerShell).includes('push') || PR_CREATE.test(commandWords(command, isPowerShell))
+  return PUSH_OR_PR.test(commandWords(command, isPowerShell))
 }
 
 // A step back holds these until it is done: the fix waits for the research.
 export function isCommitOrPush(command: string, isPowerShell = false): boolean {
-  return gitSubcommands(command, isPowerShell).some(word => word === 'commit' || word === 'push')
+  return COMMIT_OR_PUSH.test(commandWords(command, isPowerShell))
 }
 
 // A merged PR's watch is noise: the chat already says it merged. Returns the
