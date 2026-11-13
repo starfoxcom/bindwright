@@ -85,7 +85,9 @@ class GuardHookTest(unittest.TestCase):
         """Runs `run` on every row side by side, since each run is a hook process, and pairs the
         rows with their results in order. A tuple row is passed as separate arguments."""
         rows = list(rows)
-        with concurrent.futures.ThreadPoolExecutor(min(32, len(rows))) as pool:
+        # One run per usable core: more makes runs queue past the guard's parse time limit.
+        cores = getattr(os, "process_cpu_count", os.cpu_count)() or 1
+        with concurrent.futures.ThreadPoolExecutor(max(1, min(cores, len(rows)))) as pool:
             results = pool.map(lambda row: run(*row) if isinstance(row, tuple) else run(row), rows)
             return list(zip(rows, results))
 
@@ -655,8 +657,12 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(old, "hooks"))
         with open(os.path.join(old, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write('process.stdout.write(JSON.stringify({error: false, commands: [["git", "commit"]]}));\n')
+        broken = os.path.join(self.home, "broken-helper")
+        os.makedirs(os.path.join(broken, "hooks"))
+        with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
+            f.write("process.exit(1);\n")
         for helper, because in ((os.path.join(self.home, "none"), "Run /bindwright:update to install it"),
-                                (old, "older than this guard")):
+                                (old, "older than this guard"), (broken, "reinstall Bindwright's helper")):
             for command, result in self.each(("git commit -m x", "gh issue create --title t --template bug.md",
                             "git config core.hooksPath /x"), lambda command: self.attr(command, helper=helper)):
                 with self.subTest(helper=helper, command=command):

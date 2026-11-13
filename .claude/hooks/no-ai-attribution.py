@@ -181,6 +181,10 @@ NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Ru
 OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update to update it."
 UNREAD = ("the guard's parser could not read this command (an array built at run time, PowerShell's"
           " `--%`, or syntax it rejects). Write it as plain commands.")
+SLOW = (f"the guard's parser did not answer within {PARSE_SECONDS} s, so the command was not read."
+        " Run it again once the computer is less busy.")
+BROKEN = ("the guard's parser failed to run, so the command was not read. Run /bindwright:update to"
+          " reinstall Bindwright's helper.")
 LEFTHOOK_OFF_VALUES = {"0", "false"}
 BYPASS_REASONS = {
     "hooks": "git hook bypass (--no-verify / -n) is not allowed.",
@@ -268,10 +272,12 @@ def parse(cmd, shell, cwd):
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
                              capture_output=True, timeout=PARSE_SECONDS)
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None, None, UNREAD
+    except subprocess.TimeoutExpired:
+        return None, None, SLOW
+    except (OSError, ValueError):
+        return None, None, BROKEN
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return None, None, UNREAD
+        return None, None, BROKEN
     if not isinstance(data.get("assignments"), list):
         return None, None, OLD_HELPER
     if data.get("error"):
