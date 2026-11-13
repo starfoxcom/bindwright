@@ -1,6 +1,9 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { hasEngineWake, hasPendingWake, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS, workable } from './keepgoing'
+import {
+  hasEngineWake, hasPendingWake, isNearCompaction, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS,
+  nearCompactionText, workable,
+} from './keepgoing'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { PANE, phoneText } from './view'
 import type { EngineTask, Mirror, TaskArgs } from './mirror'
@@ -263,22 +266,35 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
   return $.fs.read(`${dir}/${name}`).then(String, () => undefined)
 }
 
+// Whether the context is near the auto-compaction point; false when the engine cannot say.
+async function isContextNearCompaction($: EngineInterface): Promise<boolean> {
+  try {
+    const { context } = await $.session.usage({ breakdown: 'summary' })
+    return isNearCompaction(context.tokens, context.breakdown?.autoCompactThreshold ?? context.window)
+  } catch {
+    return false
+  }
+}
+
 // A turn that ended with work nobody has to wait for gets a prompt to carry on, unless something else
 // wakes the session (background work, a scheduled wake, a CI watch, a plan-limit pause) or the last prompts
-// changed nothing on the list.
+// changed nothing on the list. Near the compaction a turn's end gets one even with no workable task: the
+// next step it announced is the work.
 async function keepGoing($: EngineInterface): Promise<void> {
   if (live.isTurnRunning) return
   const mirror = await mirrorOf($)
   const tasks = workable(mirror)
-  if (tasks.length === 0 || live.hasEngineWake) return
+  if (live.hasEngineWake) return
+  if (tasks.length === 0 && !(await isContextNearCompaction($))) return
   const ciWatch = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
   if (hasPendingWake(ciWatch, await $.clock.now())) return
   if (isPauseHolding(await peerFile($, 'usage-guard', 'pause.json'), await $.clock.now())) return
   const isIdle = live.idlePrompts > 0 && live.promptedAt === mirror.changedAt
-  if (isIdle && live.idlePrompts >= MAX_IDLE_PROMPTS) return
+  // With no task to name, one prompt: a turn that still ends after it waits on a person.
+  if (isIdle && live.idlePrompts >= (tasks.length > 0 ? MAX_IDLE_PROMPTS : 1)) return
   live.idlePrompts = isIdle ? live.idlePrompts + 1 : 1
   live.promptedAt = mirror.changedAt
-  await $.prompt.submit({ text: keepGoingText(tasks) })
+  await $.prompt.submit({ text: tasks.length > 0 ? keepGoingText(tasks) : nearCompactionText() })
 }
 
 // The settings file at the session's start, before any tool call: the settings module follows it from

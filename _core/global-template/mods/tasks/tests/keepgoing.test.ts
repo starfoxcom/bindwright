@@ -172,6 +172,22 @@ test('two prompts that change nothing on the list are the last; the person promp
   expect(seen.prompts.filter(text => text.startsWith('[tasks]'))).toHaveLength(5)
 })
 
+// Near the compaction, a turn's end with no workable task still gets one prompt to carry on; far from it,
+// none. A second turn end with nothing changed gets no more.
+test('near the compaction a turn end with no workable task gets one prompt to carry on', async ($, on) => {
+  const { seen, clock } = world(on, [task('1', 'pending', { hold: 'Alex' })])
+  let tokens = 100_000
+  const context = () => ({ tokens, window: 200_000, breakdown: { autoCompactThreshold: 160_000 } })
+  on('session.usage', () => ({ value: { context: context() } }) as never)
+  await turnEnds($, clock)
+  expect(seen.prompts).toEqual([])
+  tokens = 125_000
+  await turnEnds($, clock)
+  await turnEnds($, clock)
+  expect(seen.prompts).toHaveLength(1)
+  expect(seen.prompts[0]).toContain('ended near the compaction')
+})
+
 test('the setting turns it off', { options: { keepGoing: false } }, async ($, on) => {
   const { seen, clock } = world(on, [task('1', 'in_progress')])
   await turnEnds($, clock)

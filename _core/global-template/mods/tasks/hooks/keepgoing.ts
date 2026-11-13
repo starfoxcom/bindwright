@@ -7,6 +7,14 @@ import type { Mirror, MirrorTask } from './mirror'
 /** Prompts in a row, with no change to the task list between them, before the mod stops asking. */
 export const MAX_IDLE_PROMPTS = 2
 
+/** Context fill, against the auto-compaction point, from which a turn's end counts as near the compaction:
+ * where the session-facts row turns yellow. Sessions ended turns there on a next step they announced. */
+export const NEAR_COMPACTION = 0.75
+
+export function isNearCompaction(tokens: number | undefined, compactsAt: number | undefined): boolean {
+  return tokens !== undefined && compactsAt !== undefined && compactsAt > 0 && tokens / compactsAt >= NEAR_COMPACTION
+}
+
 /** The tasks the model can work on now: open, not on hold, not waiting on another open task. */
 export function workable(mirror: Mirror): MirrorTask[] {
   const isOpen = (task: MirrorTask) => task.status !== 'completed' && !task.droppedAt
@@ -79,5 +87,14 @@ export function keepGoingText(tasks: readonly MirrorTask[]): string {
     `[tasks] The turn ended with nothing pending to wake the session, and task #${first?.id} ` +
     `"${first?.subject}"${more} needs no one. Continue it now. If it waits on a person, a decision or ` +
     'another task, put it on hold with what it waits on; if it is done, mark it completed.'
+  )
+}
+
+export function nearCompactionText(): string {
+  return (
+    '[tasks] The turn ended near the compaction with nothing pending to wake the session and no task on ' +
+    'the list to carry on. The compaction carries the context across, so it is no reason to stop: go on ' +
+    'now with the step this turn announced or left open. Only if the work truly waits on a person, say ' +
+    'what it waits on and end the turn.'
   )
 }
