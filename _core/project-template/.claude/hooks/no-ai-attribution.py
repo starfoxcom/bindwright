@@ -160,6 +160,7 @@ READ_CMDLETS = {"get-content", "gc"}
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
                      "--super-prefix", "--attr-source"}
 POP_COMMANDS = {"popd", "pop-location"}
+WRAPPERS = {"env", "sudo", "doas", "command", "exec", "nice", "nohup", "time", "timeout", "xargs", "stdbuf"}
 PUSH_COMMANDS = {"pushd", "push-location"}
 SAVED_FOLDER = re.compile(r"~[+-]|~\d")  # bash's previous, current or stacked folder
 CD_COMMANDS = {"cd", "chdir", "set-location", "sl"} | PUSH_COMMANDS | POP_COMMANDS
@@ -414,15 +415,14 @@ def command_files(words, shell="bash"):
     found = [command_files(run, shell) for run in inner]
     # A program built at run time (`$GIT`, `env $GIT`), or an array's words, may be git's: the
     # words after it are read with git's rules too (`-aF msg`), and git's -m stays off the
-    # outer read, where gh's -m is a switch. An array holding `-C` moves git to a folder the
-    # words cannot place.
+    # outer read, where gh's -m is a switch. An array keeps gh's --template a name, and one
+    # holding `-C` moves git to a folder the words cannot place.
     if is_array(words):
-        found.append(as_chains(git_files(["git", "commit", *words[1:]])))
+        found.append(([], body_files(words[1:], GIT_FILE_FLAGS - {"--template"}, GIT_MESSAGE_FLAGS)))
         if "-C" in words[1:]:
             found.append(([[words[0]]], []))
     else:
-        found += [as_chains(git_files(["git", *words[i + 1:]])) for i, word in enumerate(words)
-                  if not isinstance(word, str)]
+        found += [as_chains(git_files(["git", *words[i + 1:]])) for i in program_positions(words)]
     flags = BODY_FLAGS - {"--template"}  # git's own reads take its --template; elsewhere it names one
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
@@ -448,6 +448,17 @@ def command_places(chains, places):
             reached = reachable(joined(target, reached))
         here += [place for place in reached if place not in here]
     return here + [place for place in places if place not in here]
+
+
+def program_positions(words):
+    """Where a program built at run time may stand: first, or after only wrappers (`env`,
+    `sudo`), their options and `NAME=value` assignments, never as a later argument's value."""
+    for i, word in enumerate(words):
+        if not isinstance(word, str):
+            yield i
+            return
+        if program([word]) not in WRAPPERS and not (i and (word.startswith("-") or "=" in word)):
+            return
 
 
 def is_array(words):
