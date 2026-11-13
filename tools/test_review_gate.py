@@ -898,18 +898,15 @@ class SetupScript(unittest.TestCase):
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args, cwd=None, repo_arg=True):
+    def run_setup(self, state, *args):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
                    PATH=self.dir + os.pathsep + os.environ["PATH"])
-        # The full path: on Windows a bare "bash" can start WSL's instead. The temp
-        # folder is no git repo, so this repo's own branches never count as local ones.
-        repo = ["--repo", "acme/game"] if repo_arg else []
-        run = subprocess.run([tool("bash"), SETUP, *repo, *args], env=env,
-                             cwd=cwd or self.dir, stdin=subprocess.DEVNULL,
-                             capture_output=True, text=True)
+        # The full path: on Windows a bare "bash" can start WSL's instead.
+        run = subprocess.run([tool("bash"), SETUP, "--repo", "acme/game", *args], env=env,
+                             stdin=subprocess.DEVNULL, capture_output=True, text=True)
         with open(self.state) as f:
             after = json.load(f)
         with open(self.log) as f:
@@ -1008,22 +1005,6 @@ class SetupScript(unittest.TestCase):
         self.assertIn("cannot read whether main holds .github/scripts/review_gate.py", run.stderr)
         self.assertEqual(self.writes(calls), [])
         self.assertEqual(after, fresh_repo(gate_script="forbidden"))
-
-    def test_a_develop_branch_only_on_this_computer_is_reported(self):
-        clone = os.path.join(self.dir, "clone")
-        for args in (["init", "-q", "-b", "main", clone],
-                     ["-C", clone, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
-                      "--allow-empty", "-m", "init"],
-                     ["-C", clone, "branch", "develop"]):
-            subprocess.run(["git", *args], check=True, capture_output=True)
-        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], branches=["main"])
-        run, _, _ = self.run_setup(state, cwd=clone, repo_arg=False)
-        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
-        self.assertIn("MISSING  ruleset on develop: develop is only on this computer", run.stdout)
-        self.assertIn("set up   ruleset on main", run.stdout)
-        # --repo may name another repository, so this folder's branches say nothing about it.
-        run, _, _ = self.run_setup(state, cwd=clone)
-        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_a_missing_token_without_a_terminal_is_reported_not_prompted(self):
         run, after, calls = self.run_setup(fresh_repo())

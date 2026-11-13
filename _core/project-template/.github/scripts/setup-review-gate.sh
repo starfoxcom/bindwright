@@ -37,10 +37,6 @@ GATE_CHECKS=one
 # Whether the default branch holds the gate's script. Until the first
 # setup PR merges, the gate cannot pass there, so no ruleset is touched.
 GATE_LANDED=false
-# A develop branch this clone has but GitHub does not, so nothing protects it.
-# Only read when the repository came from this folder, not from --repo.
-LOCAL_ONLY_DEVELOP=false
-REPO_IS_FOLDER=false
 GAPS=0
 
 usage() {
@@ -118,7 +114,6 @@ preflight() {
   if [ -z "$REPO" ]; then
     REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) \
       || die "no GitHub repository here; pass --repo OWNER/NAME"
-    REPO_IS_FOLDER=true
   fi
   admin=$(gh api "repos/$REPO" --jq .permissions.admin) || die "cannot read $REPO"
   [ "$admin" = true ] || die "$REPO: reading and changing its settings needs admin access"
@@ -127,17 +122,8 @@ preflight() {
     BRANCHES=("$DEFAULT_BRANCH")
     if [ "$DEFAULT_BRANCH" != develop ] && branch_exists develop; then
       BRANCHES+=(develop)
-    elif [ "$REPO_IS_FOLDER" = true ] && [ "$DEFAULT_BRANCH" != develop ] \
-      && git show-ref --verify --quiet refs/heads/develop 2> /dev/null; then
-      LOCAL_ONLY_DEVELOP=true
     fi
   fi
-}
-
-step_local_develop() {
-  [ "$LOCAL_ONLY_DEVELOP" = true ] || return 0
-  missing "ruleset on develop: develop is only on this computer; push it" \
-    "(git push -u origin develop), then run this again"
 }
 
 # The `checks` setting from the repository's .github/review-gate.yml on its
@@ -428,7 +414,6 @@ main() {
   step_secrets
   step_app
   step_rulesets
-  step_local_develop
   if [ "$GAPS" -gt 0 ]; then
     echo "$GAPS missing."
     exit 1
