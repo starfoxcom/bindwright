@@ -359,7 +359,7 @@ def strict_segment(name):
 # a value are the parsed read's own, so the two reads cannot drift apart. Each option is kept once
 # read, as the segment's tokens are, so a run of options is read in one pass.
 STRICT_GIT_OPTION = (r"\s+(?:(?:" + "|".join(re.escape(option) for option in sorted(GIT_VALUE_OPTIONS))
-                     + r")\s+(?:\"[^\"]*\"|'[^']*'|\$?\((?:[^()\n]|\([^()\n]*\))*\)|(?:\\.|[^\s\\])+)"
+                     + r")\s+(?:\"[^\"]*\"|'[^']*'|\$?\((?:[^()\n]|\([^()\n]*\))*\)|`[^`\n]*`|\\.|[^\s\\\"'`(])+"
                      r"|[\"']?-\S*)")
 STRICT_GIT_OPTIONS = (r"(?i:\bgit(?:\.exe)?)[\"']?(?=\s)(?:(?=(?P<option>" + STRICT_GIT_OPTION
                       + r"))(?P=option))*?")

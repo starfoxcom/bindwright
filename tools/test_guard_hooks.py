@@ -680,6 +680,7 @@ class GuardHookTest(unittest.TestCase):
                                        ("git -c user.name=x -c core.hooksPath=/dev/null commit -m y", setting, "Bash"),
                                        ("git am -cn mail.patch", hooks, "Bash"),
                                        ("git.exe commit -n -m x", hooks, "PowerShell"),
+                                       ("git -c user.name=\"A B\" commit -n -m x", hooks, "Bash"),
                                        ("git --attr-source HEAD commit -C HEAD", reuse, "Bash"),
                                        ("git commit -m x \\\n  --no-verify", hooks, "Bash"),
                                        ("git commit \\\n  -n -m x", hooks, "Bash"),
