@@ -50,9 +50,10 @@ commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser the hook does not try to read the shell: it
-matches these routes anywhere in the command text, quoted text included, so
-text that only names one is denied too; a read of `core.hooksPath` passes.
+passes. Without the parser the hook reads each git command up to the next
+list, pipe or group, quoted text kept whole, so another program's options do
+not count. A quoted message that opens with a route, a script line inside
+a here-doc and a comment still count. A read of `core.hooksPath` passes.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -327,35 +328,39 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-# Without the parser: patterns over the whole command text, quotes and all, so text that only
-# names a route is refused too, as the strict read refuses every file flag. Each long option
-# is matched from its shortest start, as git takes it.
+# Without the parser: each route is looked for inside one git command, from `git` to the next
+# list, pipe, group or line end, with quoted text, `${...}` and `$(...)` kept whole, so another
+# program's options and a message's words never count. An option may itself be quoted.
+STRICT_SEGMENT = (r"(?:\"(?:\\.|[^\"\\])*\"|'[^']*'|\\.|[<>]&|\$\{[^}\n]*\}|\$\([^()\n]*\)"
+                  r"|[^;|&()`{}\n\"'\\])*?")
+STRICT_OPTION = r"(?<![^\s\"'])[\"']?"
+STRICT_GIT = r"(?i:\bgit\b)" + STRICT_SEGMENT
+
+
+def strict_pattern(subcommand, route, flags=0):
+    """A route inside a git command, after `subcommand` when one is named."""
+    after = r"\s(?:" + subcommand + r")(?![\w-])" + STRICT_SEGMENT if subcommand else ""
+    return re.compile(STRICT_GIT + after + route, flags)
+
+
+# A short-option bundle holds `n` before any letter that takes the rest as its value.
 STRICT_ROUTES = (
-    ("hooks", re.compile(r"(?<!\S)--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?=[\s=\"']|$)")),
-    ("trailer", re.compile(r"(?<!\S)--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?=[\s=\"']|$)")),
-    ("setting", re.compile(r"(?:(?<!\S)-c\s+|--config-env[=\s]+)[\"']?(?:core\.hooksPath|hook\.)", re.I)),
+    ("hooks", strict_pattern("", STRICT_OPTION + r"--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])")),
+    ("hooks", strict_pattern("commit|am", STRICT_OPTION + r"-(?:(?![mFCc])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
+    ("trailer", strict_pattern("", STRICT_OPTION + r"--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?![\w-])")),
+    ("setting", strict_pattern("", r"(?:(?<!\S)-c\s+|--config-env[=\s]+)[\"']?(?:core\.hooksPath|hook\.)", re.I)),
+    ("reuse", strict_pattern("commit", STRICT_OPTION + r"(?:-(?:(?![mF])[A-Za-z])*[cC]|--re[eu][\w-]*(?![\w-]))")),
+    # A set names a value after the setting; a read ends there, or at a redirect, a pipe, a
+    # list, a comment, an option, or the close of the group or quote that holds it.
+    ("setting", strict_pattern(
+        "config", r"[\"']?(?:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
+        r"(?![)}#;|&><\]-]|\d+[<>]|[\"'](?:\s|$|\)))\S", re.I)),
 )
-STRICT_COMMIT_OR_AM = re.compile(r"\bgit\b[\s\S]*\b(?:commit|am)\b", re.I)  # `$GIT` too
-STRICT_SHORT_N = re.compile(r"(?<!\S)-[A-Za-z]*n[A-Za-z]*(?=[\s\"']|$)")
-STRICT_REUSE = re.compile(r"\bcommit\b[\s\S]*?(?:(?<!\S)-[A-Za-z]*[cC]\s+[^\s=]+(?=\s|$)"
-                          r"|(?<!\S)--re[eu][\w-]*(?=[\s=\"']|$))")
-# A set names a value after the setting; a read ends there, or at a redirect, a pipe, a list,
-# a comment, or the close of the group or quote that holds it.
-STRICT_CONFIG_SET = re.compile(
-    r"\bgit\b[\s\S]*?\bconfig\b[^\n]*?[\"']?(?:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
-    r"(?![)#;|&><\]]|\d+[<>]|[\"'](?:\s|$|\)))\S", re.I)
 
 
 def strict_route(cmd):
     """Without the parser: the kind of route past the hook the command text names, or None."""
-    for kind, pattern in STRICT_ROUTES:
-        if pattern.search(cmd):
-            return kind
-    if STRICT_COMMIT_OR_AM.search(cmd) and STRICT_SHORT_N.search(cmd):
-        return "hooks"
-    if STRICT_REUSE.search(cmd):
-        return "reuse"
-    return "setting" if STRICT_CONFIG_SET.search(cmd) else None
+    return next((kind for kind, pattern in STRICT_ROUTES if pattern.search(cmd)), None)
 
 
 def bypass_reason(cmd, parsed, assignments):

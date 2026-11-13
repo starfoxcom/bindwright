@@ -671,9 +671,15 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
         self.assert_denied(self.attr('git -c "hook.x.enabled=false" commit -m x',
                                      helper=os.path.join(self.home, "none")), setting)
-        # Without the parser, quotes still hold a message whole, whatever it carries.
+        # Without the parser, each git command is read up to the next list, pipe or group, with
+        # quoted text whole, so another program's options never count.
         for command, because, tool in (('git commit -m "feat(x): y" --no-verify', hooks, "Bash"),
+                                       ('git commit "--no-verify" -m x', hooks, "Bash"),
+                                       ("git commit -CHEAD", reuse, "Bash"),
                                        ('git commit -m "fix #12" -n', hooks, "Bash"),
+                                       ("git commit -m x --no-verify; git push", hooks, "Bash"),
+                                       ("out=$(git commit -m x -n)", hooks, "Bash"),
+                                       ("git commit -m x --trailer=k:v|tee log", trailer, "Bash"),
                                        ('git commit -m "a; b & c" --no-verify', hooks, "Bash"),
                                        ('git commit -m "x\n\ny" --no-verify', hooks, "Bash"),
                                        ('git commit -m "use {x}" --trailer "a: b"', trailer, "Bash"),
@@ -686,6 +692,12 @@ class GuardHookTest(unittest.TestCase):
                               ("git config core.hooksPath > out.txt", "Bash"),
                               ('if [ -n "$(git config core.hooksPath)" ]; then echo set; fi', "Bash"),
                               ("git config core.hooksPath # is it set?", "Bash"),
+                              ("git config get core.hooksPath --default none", "Bash"),
+                              ("try { git config core.hooksPath } catch {}", "PowerShell"),
+                              ("git commit -m x 2>&1 | tail -n 5", "Bash"),
+                              ("git -C repo commit -m x && git -C repo push", "Bash"),
+                              ("git commit -m x && git switch -c next", "Bash"),
+                              ("git commit -m x; if ($LASTEXITCODE -ne 0) { exit 1 }", "PowerShell"),
                               ("if (git config core.hooksPath) { 'set' }", "PowerShell")):
             with self.subTest(command=command, helper="none"):
                 self.assert_passes(self.attr(command, tool=tool, helper=os.path.join(self.home, "none")))
