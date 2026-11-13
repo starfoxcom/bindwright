@@ -2,8 +2,9 @@
 //
 //   node shell-words.mjs bash|powershell < command
 //
-// Prints one JSON object: {"error": <the command holds syntax it could not read, or a shape
-// the guard leaves to its strict read>, "commands": [[word, ...], ...]}, commands in source
+// Prints one JSON object: {"error": <the command holds syntax it could not read>, "commands":
+// [[word, ...], ...], "assignments": [{"name": ..., "value": <word>}, ...]}, the commands and
+// the variables they set (`A=1 git`, `export A=1`, PowerShell's `$env:A = 1`) in source
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
@@ -49,9 +50,17 @@ function holdsCommandWords(node) {
   if (node.type === "heredoc_redirect") return node.childrenForFieldName("argument").length > 0;
   if (node.type === "herestring_redirect") return node.namedChildren.length > 1;
   if (node.type !== "file_redirect") return false;
-  const targets = node.namedChildren.filter((c) => c.type !== "file_descriptor").length;
+  // Parts that touch (`$K/r-$id.json` is several nodes) are one word.
+  const parts = node.namedChildren.filter((c) => c.type !== "file_descriptor");
+  const targets = parts.filter((c, i) => i === 0 || parts[i - 1].endIndex !== c.startIndex).length;
   const closes = node.children.some((c) => c.type === ">&-" || c.type === "<&-");
   return targets > (closes ? 0 : 1);
+}
+
+// A variable the command sets, with its value as a word.
+function bashAssignment(node) {
+  const value = node.childForFieldName("value");
+  return { name: node.childForFieldName("name")?.text ?? "", value: value ? bashWord(value) : "" };
 }
 
 function bashCommand(node) {
@@ -98,6 +107,43 @@ function psCommand(node) {
   return words;
 }
 
+// `$env:A = "1"`: the name as written, and the value when it is a plain word or string.
+function psAssignment(node) {
+  const [left, , right] = node.namedChildren;
+  const literal = /^(["']?)([\w.-]*)\1$/.exec(right?.text ?? "");
+  return { name: left?.text.trim() ?? "", value: literal ? literal[2] : dynamic(right ?? node) };
+}
+
+// The PowerShell grammar fails on a bare word joined to a quoted string that holds a bracket
+// (`query='{a}'`), which PowerShell reads as one word. Moving the quote to the word's start
+// (`'query={a}'`) reads the same, so a failed parse is tried once more that way.
+const PS_JOINED_QUOTE = /(^|[\s;|(])([A-Za-z_][\w.-]*=)(['"])/g;
+// The bash grammar fails on a here-doc operator followed by another redirect on its line
+// (`<<'EOF' >/dev/null; next`); bash reads the redirects in either order, so a failed parse is
+// tried once more with the here-doc operator after them.
+const BASH_HEREDOC_FIRST = /(<<-?\s*(['"]?)\w+\2)((?:[ \t]+\d*(?:&>>?|[<>]{1,2}&?)[ \t]*[^\s;|&]+)+)/g;
+const BASH_LEADING_REDIRECTS = /^(?:[ \t]+\d*(?:&>>?|[<>]{1,2}&?)[ \t]*[^\s;|&]+)*/;
+
+// The bash grammar also fails on a command that goes on after a here-doc on its line
+// (`<<'EOF' >/dev/null; git log`). The words are the same with the rest of that line moved
+// below the body, its connector dropped, so a failed parse is tried that way too.
+function heredocRestBelow(source) {
+  const lines = source.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const at = /<<(-?)\s*(['"]?)(\w+)\2/.exec(lines[i]);
+    if (!at) continue;
+    const head = at.index + at[0].length;
+    const tail = lines[i].slice(head).replace(BASH_LEADING_REDIRECTS, "");
+    const rest = tail.replace(/^\s*(?:;|&&|\|\||\|)\s*/, "");
+    if (rest === tail || !rest.trim()) continue;
+    const end = lines.findIndex((l, k) => k > i && (at[1] ? l.replace(/^\t+/, "") : l) === at[3]);
+    if (end < 0) continue;
+    lines[i] = lines[i].slice(0, lines[i].length - rest.length).replace(/\s*(?:;|&&|\|\||\|)\s*$/, "");
+    lines.splice(end + 1, 0, rest);
+  }
+  return lines.join("\n");
+}
+
 export async function shellWords(shell, command) {
   const { Parser, Language } = await import(pathToFileURL(path.join(PARSERS, "web-tree-sitter.mjs")).href);
   await Parser.init({ locateFile: (name) => path.join(PARSERS, name) });
@@ -106,29 +152,33 @@ export async function shellWords(shell, command) {
   // PowerShell takes typographic quotes as quotes; the grammar knows only the plain ones.
   const source = shell === "bash" ? command
     : command.replace(/[“”„]/g, '"').replace(/[‘’‚‛]/g, "'");
-  const tree = parser.parse(source);
+  let tree = parser.parse(source);
+  const retries = shell === "powershell" ? [source.replace(PS_JOINED_QUOTE, "$1$3$2")]
+    : [source.replace(BASH_HEREDOC_FIRST, "$3 $1"), heredocRestBelow(source)];
+  for (const retry of retries) {
+    if (!tree.rootNode.hasError) break;
+    const moved = parser.parse(retry);
+    if (!moved.rootNode.hasError) tree = moved;
+  }
   // The bash grammar takes a backslash before CR LF as a line continuation, but bash ends
   // the command there, so it cannot be trusted on a command holding a CR.
   let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
+  const assignments = [];
   (function walk(node) {
+    if (shell === "bash" && node.type === "variable_assignment") assignments.push(bashAssignment(node));
+    if (shell === "powershell" && node.type === "assignment_expression") assignments.push(psAssignment(node));
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
-    if (node.type === "command") {
-      const words = read(node);
-      // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the
-      // command gets the strict read instead.
-      if (typeof words[0] !== "string") unreadable = true;
-      commands.push(words);
-    }
-    // An array's words reach a command later, wherever it runs: the strict read takes it. So
-    // does PowerShell's `--%`, after which the program splits the raw text by its own rules.
+    if (node.type === "command") commands.push(read(node));
+    // An array's words reach a command later, wherever it runs, so it is unreadable. So is
+    // PowerShell's `--%`, after which the program splits the raw text by its own rules.
     if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
-  return { error: unreadable, commands };
+  return { error: unreadable, commands, assignments };
 }
 
 // Node gives this module its real path, symlinks resolved, so the path it was started by is
