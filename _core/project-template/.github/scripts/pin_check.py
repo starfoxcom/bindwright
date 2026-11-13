@@ -73,8 +73,9 @@ def floating(name, text):
     found = []
     for n, line in enumerate(text.splitlines(), 1):
         m = USES.match(line)
-        if m and not SHA.fullmatch(m.group(2)):
-            found.append("`%s@%s` at `%s:%d`" % (m.group(1), m.group(2), name, n))
+        if m and not (SHA.fullmatch(m.group(2)) and ends_value(line, m)):
+            ref = line[m.start(2):].split()[0]  # the whole value the runner uses, `<id>#x` included
+            found.append("`%s@%s` at `%s:%d`" % (m.group(1), ref, name, n))
             continue
         m = DOCKER.match(line)
         if m and "@sha256:" not in m.group(1):

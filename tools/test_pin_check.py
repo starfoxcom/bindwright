@@ -103,11 +103,14 @@ class Main(unittest.TestCase):
             fh.write("      - uses: actions/checkout@v6\n      - uses: ./local-action\n"
                      "      - uses: actions/setup-python@" + OLD_SHA + "  # v6\n"
                      "      - uses: docker://alpine:3.20\n"
-                     "      - uses: 'docker://alpine@sha256:" + "0" * 64 + "'\n")
+                     "      - uses: 'docker://alpine@sha256:" + "0" * 64 + "'\n"
+                     "      - uses: actions/cache@" + OLD_SHA + "#x  # v4\n")
         _, out, _ = run("--cli", "2.1.280", "--action-sha", OLD_SHA, "--action-version", "v1.0.213", self.path)
+        # YAML reads a `#` glued to the id as part of the ref, so that ref is not the commit.
         self.assertEqual(out, "- Action `actions/checkout@v6` at `%s:11` is not pinned to a commit\n"
                               "- Action `docker://alpine:3.20` at `%s:14` is not pinned to a commit\n"
-                              % (self.path, self.path))
+                              "- Action `actions/cache@%s#x` at `%s:16` is not pinned to a commit\n"
+                              % (self.path, self.path, OLD_SHA, self.path))
 
     def test_bad_arguments_and_missing_files_fail(self):
         for argv in ([], ["--cli", "2.1.300", "--action-sha", OLD_SHA, "--action-version", "v1"],
