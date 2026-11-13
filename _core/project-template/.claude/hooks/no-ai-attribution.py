@@ -71,7 +71,9 @@ The repo registers this file through run-hook.sh, which skips it when
 names it outside a permission rule.
 
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
-exit 0 otherwise. Never blocks read-only commands.
+exit 0 otherwise. A read-only command is blocked only for the routes above:
+one that turns lefthook off or sets a hooks setting, or, on the strict read,
+text that names one.
 """
 import json
 import os
@@ -197,7 +199,7 @@ LEFTHOOK_OFF = re.compile(r"\blefthook\b[^|;&\n]*?\buninstall\b|LEFTHOOK\s*=\s*[
 LEFTHOOK_OFF_VALUES = ("0", "false")
 # Not a write, so it needs its own way past the early exit.
 GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hook", re.I)
-CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "--type", "--default", "--comment", "--value"}
+CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment", "--value"}
 CONFIG_READS = {"get", "list", "get-regexp", "get-urlmatch", "get-color", "get-colorbool"}
 # Short options of commit and am (`git <subcommand> -h`) whose value is the rest of the word,
 # or the next word when nothing follows the letter; then those that take only an attached one.
@@ -369,7 +371,8 @@ def strict_pattern(subcommand, route):
 # value: the letters of SHORT_VALUES.
 STRICT_ROUTES = (
     ("hooks", strict_pattern("", STRICT_OPTION + r"--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])")),
-    ("hooks", strict_pattern("commit|am", STRICT_OPTION + r"-(?:(?![FmcCtUSup])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
+    ("hooks", strict_pattern("commit", STRICT_OPTION + r"-(?:(?![FmcCtUSu])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
+    ("hooks", strict_pattern("am", STRICT_OPTION + r"-(?:(?![CpS])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
     ("trailer", strict_pattern("", STRICT_OPTION + r"--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?![\w-])")),
     # git's own `-c` and `--config-env` stand among its options before the subcommand.
     ("setting", re.compile(STRICT_GIT_OPTIONS + r"\s+(?:-c\s+|--config-env[=\s]+)[\"']?(?i:core\.hooksPath|hook\.)")),
@@ -377,7 +380,7 @@ STRICT_ROUTES = (
     # A set names a value after the setting; a read ends there, or at a redirect, a pipe, a
     # list, a comment, an option, or the close of the group or quote that holds it.
     ("setting", strict_pattern(
-        "config", r"[\"']?(?i:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
+        "config", r"(?<![\w.-])[\"']?(?i:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
         r"(?![)}#;|&><\]-]|\d+[<>]|[\"'](?:\s|$|\)))\S")),
 )
 
