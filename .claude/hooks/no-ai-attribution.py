@@ -29,8 +29,10 @@ What is scanned, for any git write, gh write or GitHub API call:
     quoted text, a here-doc, a here-string or the value of -m / --body /
     --title is text, not a body file. A relative path is read in the start
     folder and in every folder a `cd`, `pushd`, `Set-Location` or `git -C`
-    in the command names, since one may run in a child shell, fail or run
-    later in a loop. One after a folder change it cannot place (`cd -`, a
+    in the command names, each reached from the folders named before it in
+    the text, since one may run in a child shell or fail. A `cd` a loop or
+    a function runs again, or before one written earlier, is not followed
+    further. One after a folder change it cannot place (`cd -`, a
     target built at run time, a folder this computer cannot find) is
     denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. A command the
@@ -414,8 +416,8 @@ def is_run_time_git(word):
 
 def folder_places(commands, cwd):
     """Every folder a command may run in: the start folder, and each folder a folder change
-    in the command names, reached from any folder found before it. Order does not matter,
-    since a `cd` may run in a child shell, fail, or run later in a loop. None when a target
+    in the command names, reached from any folder found before it in the text, since a `cd`
+    may run in a child shell or fail, so the shell may be in any of them. None when a target
     cannot be placed: one built at run time, or one this computer cannot find, such as a
     saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made later."""
     places = [cwd]
