@@ -44,8 +44,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     in such a command's message (`$GIT commit -m "--file=x"`) is denied too.
 
 Denied outright, since the hook cannot see past them: a git write that skips
-git's own hooks (`--no-verify`, `--no-hooks`, `-n` on commit or am, setting
-`core.hooksPath` or a `hooks.` setting; reading one is fine), `--trailer`, a
+git's own hooks (`--no-verify`, `-n` on commit or am, setting
+`core.hooksPath` or a `hook.` setting; reading one is fine), `--trailer`, a
 commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
@@ -192,7 +192,7 @@ MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|pus
 LEFTHOOK_OFF = re.compile(r"\blefthook\b[^|;&\n]*?\buninstall\b|LEFTHOOK\s*=\s*['\"]?(?:0|false)\b", re.I)
 LEFTHOOK_OFF_VALUES = ("0", "false")
 # Not a write, so it needs its own way past the early exit.
-GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hooks", re.I)
+GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hook", re.I)
 CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "--type", "--default", "--comment", "--value"}
 CONFIG_READS = {"get", "list", "get-regexp", "get-urlmatch", "get-color", "get-colorbool"}
 # Short options of commit and am (`git <subcommand> -h`) whose value is the rest of the word,
@@ -203,7 +203,8 @@ SHORT_VALUES = {"commit": ("FmcCtU", "Su"), "am": ("Cp", "S")}
 LONG_VALUES = {"commit": ("--message", "--file", "--template", "--author", "--date", "--cleanup",
                           "--fixup", "--squash", "--reuse-message", "--reedit-message"),
                "am": ()}
-# A shell redirect the strict read leaves among the words (`2>/dev/null`, `>`, `&>`).
+# The strict read's cuts between commands, and a redirect it leaves among the words.
+STRICT_SPLIT = re.compile(r"[|;&\n(){}#`]+")
 REDIRECT = re.compile(r"\d*(?:>>?|<|&>)")
 # Git takes any unambiguous start of a long option, so each is matched from its shortest
 # start that cannot mean a harmless option of the same command.
@@ -211,7 +212,7 @@ LONG_BYPASSES = (("--no-verify", "--no-v", "hooks"), ("--trailer", "--tr", "trai
 LONG_REUSE = (("--reuse-message", "--reu"), ("--reedit-message", "--ree"))
 BYPASS_REASONS = {
     "hooks": "git hook bypass (--no-verify / -n) is not allowed.",
-    "setting": ("setting core.hooksPath or a hooks. setting changes which hooks git runs; "
+    "setting": ("setting core.hooksPath or a hook. setting changes which hooks git runs; "
                 "ask the user to run it."),
     "trailer": "--trailer is not allowed; write the message body directly.",
     "reuse": "reusing another commit's message (-C / -c / --reuse-message) cannot be scanned.",
@@ -227,7 +228,7 @@ def abbreviates(word, option, shortest):
 
 def names_hooks(setting):
     setting = setting.lower()
-    return "hookspath" in setting or setting.startswith("hooks.")
+    return "hookspath" in setting or setting.startswith("hook.")  # git's config hooks: hook.<name>.*
 
 
 def option_words(subcommand, rest):
@@ -261,8 +262,6 @@ def config_sets_hooks(rest):
     for word in rest:
         if skip_next:
             skip_next = False
-        elif REDIRECT.match(word):
-            skip_next = REDIRECT.fullmatch(word) is not None  # the target is the next word
         elif word.startswith("-"):
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
@@ -298,7 +297,7 @@ def git_bypass(words):
     if subcommand == "config":
         return "setting" if config_sets_hooks(rest) else None
     options = option_words(subcommand, rest) if subcommand in SHORT_VALUES else rest
-    if "--no-hooks" in options or (subcommand in SHORT_VALUES and "-n" in options):
+    if subcommand in SHORT_VALUES and "-n" in options:
         return "hooks"
     for option, shortest, kind in LONG_BYPASSES:
         if any(abbreviates(word, option, shortest) for word in options):
@@ -330,13 +329,30 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
+def strict_commands(cmd):
+    """Without the parser: the command text cut into commands at control characters, groups,
+    substitutions and comments, then into words at spaces, quotes and redirects left out."""
+    commands = []
+    for part in STRICT_SPLIT.split(cmd):
+        words, skip_next = [], False
+        for word in part.split():
+            if skip_next:
+                skip_next = False
+            elif REDIRECT.match(word):
+                skip_next = REDIRECT.fullmatch(word) is not None  # the target is the next word
+            else:
+                words.append(word.strip("\"'"))
+        commands.append(words)
+    return commands
+
+
 def bypass_reason(cmd, parsed, assignments):
     """Why the command takes a route past the hook, or None: read from the parsed commands,
     or, without the parser, from the command text split at spaces, quoted text included."""
     strict = parsed is None
     if LEFTHOOK_OFF.search(cmd) if strict or assignments is None else turns_lefthook_off(parsed, assignments):
         return BYPASS_REASONS["lefthook"]
-    commands = [part.split() for part in re.split(r"[|;&\n]+", cmd)] if strict else parsed
+    commands = strict_commands(cmd) if strict else parsed
     for words in commands:
         for i, word in enumerate(words):
             if program(words[i:]) == "git" or is_run_time_git(word) or (strict and GIT_WORD.search(word)):

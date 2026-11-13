@@ -646,6 +646,9 @@ class GuardHookTest(unittest.TestCase):
                 ("git config core.hooksPath /dev/null", setting),
                 ("git config set --global core.hooksPath x", setting),
                 ("git --config-env=core.hooksPath=H commit -m x", setting),
+                ("git -c hook.commit-msg.enabled=false commit -m x", setting),
+                ("git config set hook.commit-msg.enabled false", setting),
+                ("git config core.hooksPath '<'", setting),
                 ('git commit --trailer "x: y" -m z', trailer),
                 ("git commit --tr=x:y -m z", trailer),
                 ("git commit -C HEAD", reuse),
@@ -666,10 +669,16 @@ class GuardHookTest(unittest.TestCase):
         for command in ("git commit --no-verify -m x", "git commit -nm x", "$GIT commit -n -m x"):
             with self.subTest(command=command, helper="none"):
                 self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
-        for command in ("git config core.hooksPath 2>/dev/null", "git config core.hooksPath 2>&1",
-                        "git config core.hooksPath > out.txt"):
+        self.assert_denied(self.attr('git -c "hook.x.enabled=false" commit -m x',
+                                     helper=os.path.join(self.home, "none")), setting)
+        for command, tool in (("git config core.hooksPath 2>/dev/null", "Bash"),
+                              ("git config core.hooksPath 2>&1", "Bash"),
+                              ("git config core.hooksPath > out.txt", "Bash"),
+                              ('if [ -n "$(git config core.hooksPath)" ]; then echo set; fi', "Bash"),
+                              ("git config core.hooksPath # is it set?", "Bash"),
+                              ("if (git config core.hooksPath) { 'set' }", "PowerShell")):
             with self.subTest(command=command, helper="none"):
-                self.assert_passes(self.attr(command, helper=os.path.join(self.home, "none")))
+                self.assert_passes(self.attr(command, tool=tool, helper=os.path.join(self.home, "none")))
         # Each is git's own meaning, a read, or a message that names an option.
         for command in ('git commit -m "document --no-verify"', 'git commit -m "-n means skip"',
                         "git commit -m x -- -n", "git merge -n feature/x", "git push -n",
