@@ -1,11 +1,20 @@
 import type { Mirror, MirrorTask } from './mirror'
 
 // Keep going: a turn that ends while a task on the list needs no one gets a prompt to carry on, so an
-// unattended run never sits idle with work left that nobody has to wait for. Pure, no engine access:
+// unattended run never sits idle with work left that nobody has to wait for. Near a coming compaction a
+// turn's end gets one even with no such task, for a next step announced in prose. Pure, no engine access:
 // register.ts decides when to look and sends the prompt.
 
 /** Prompts in a row, with no change to the task list between them, before the mod stops asking. */
 export const MAX_IDLE_PROMPTS = 2
+
+/** Context fill, against the auto-compaction point, from which a turn's end counts as near the compaction:
+ * where the session-facts row turns yellow. Sessions ended turns there on a next step they announced. */
+export const NEAR_COMPACTION = 0.75
+
+export function isNearCompaction(tokens: number | undefined, compactsAt: number | undefined): boolean {
+  return tokens !== undefined && compactsAt !== undefined && compactsAt > 0 && tokens / compactsAt >= NEAR_COMPACTION
+}
 
 /** The tasks the model can work on now: open, not on hold, not waiting on another open task. */
 export function workable(mirror: Mirror): MirrorTask[] {
@@ -79,5 +88,14 @@ export function keepGoingText(tasks: readonly MirrorTask[]): string {
     `[tasks] The turn ended with nothing pending to wake the session, and task #${first?.id} ` +
     `"${first?.subject}"${more} needs no one. Continue it now. If it waits on a person, a decision or ` +
     'another task, put it on hold with what it waits on; if it is done, mark it completed.'
+  )
+}
+
+export function nearCompactionText(): string {
+  return (
+    '[tasks] The turn ended near the compaction with nothing pending to wake the session and no task on ' +
+    'the list to carry on. The compaction carries the context across, so it is no reason to stop: if this ' +
+    'turn announced a step or left one open that needs no one, go on with it now. If nothing is left, or ' +
+    'what is left waits on a person, say so in one line and end the turn.'
   )
 }
