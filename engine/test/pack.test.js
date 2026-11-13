@@ -210,6 +210,10 @@ const DIRECTORY_CASES = [
     /frontmatter lines outside/],
   ["a value after a second space", "skills/x/SKILL.md", "---\nname: x\nargument-hint:  [a | b]\n---\n",
     /frontmatter lines outside/],
+  ["a frontmatter opener with a trailing space", "skills/x/SKILL.md", "--- \nname: x\nallowed-tools: Bash\n---\n",
+    /more than an exact --- line/],
+  ["a frontmatter opener after a BOM", "skills/x/SKILL.md", "﻿---\nname: x\nallowed-tools: Bash\n---\n",
+    /more than an exact --- line/],
   ["a key hidden after a lone CR", "skills/x/SKILL.md", "---\nname: x\ndescription: a\rallowed-tools:\tBash\n---\n",
     /frontmatter lines outside/],
 ];
