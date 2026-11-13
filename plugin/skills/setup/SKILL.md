@@ -156,7 +156,7 @@ Three mods can be turned off for one project while every other project keeps the
 
 Run `python "<helper>/engine/home.py" project-mods <repo root>`: it prints `{"off": [...]}`, the ones already off here. Then ask one multiple-choice question, "Which of these mods run in this project?", one line each on what it does here, with the ones to recommend already picked:
 
-- `ci-watch`: watches each pushed pull request's checks and wakes the session once they finish. Recommend it only with `"codeHost": "github"` and GitHub apps allowed; otherwise say in one line that the project has no CI checks for it to watch, and leave it unpicked.
+- `ci-watch`: watches each pushed pull request's checks and wakes the session once they finish; after repeated red rounds it holds file edits, commits and pushes until the session has looked up three ways others solved the problem. Recommend it only with `"codeHost": "github"` and GitHub apps allowed; otherwise say in one line that the project has no CI checks for it to watch, and leave it unpicked.
 - `tasks`: keeps the session's task list honest and carries it across compactions. Recommended.
 - `skill-check`: checks that the project's session skills ran every step they promise. Recommended.
 
