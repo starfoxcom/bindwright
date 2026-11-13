@@ -379,7 +379,9 @@ async function recheckSettled($: EngineInterface, watch: Watch, now: number): Pr
   const id = `${now}-${Math.random().toString(36).slice(2)}`
   const { repo, number } = watch
   const fresh: Watch = { repo, number, headSha: head, startedAt: now, checks: {}, stablePolls: 0, id }
-  return { ...fresh, pushedAt: watch.pushedAt ?? watch.startedAt, ...(isOwn ? {} : { isSilent: true }) }
+  // A latched step back stays on the PR when its head moves: only lookups or a stop lift it.
+  const stepBack = watch.stepBackTopics ? { stepBackTopics: watch.stepBackTopics } : {}
+  return { ...fresh, ...stepBack, pushedAt: watch.pushedAt ?? watch.startedAt, ...(isOwn ? {} : { isSilent: true }) }
 }
 
 // GitHub's status, read at most every few minutes and only while some watch waits long past a normal run.
@@ -482,6 +484,9 @@ async function poll($: EngineInterface): Promise<void> {
   // Found by watch and head, not identity: a push made meanwhile is laid onto the polled copy, and the
   // watch as it is now decides whether it is silent. One stopped or restarted meanwhile is not found.
   const toWake = live.watches.filter(w => w.outcome && !w.isSilent && settled.some(s => isSameRun(s, w)))
+  // A green round ends the step back latched on its watch: the problem it asked about is fixed.
+  const isGreen = (w: Watch) => w.outcome === 'passed' && w.stepBackTopics && settled.some(s => isSameRun(s, w))
+  live.watches = live.watches.map(w => (isGreen(w) ? { ...w, stepBackTopics: undefined } : w))
   // GitHub's status is read before the retirement check: the read can take seconds, and a load retired
   // meanwhile must not save over the newer one's file afterwards.
   const isIncidentNoted = await noteIncidents($, now)
@@ -747,6 +752,7 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: ['WebSearch', 'WebFetch', 'Agent'] }, async ($, e, next) => {
+    await startPolling($)
     const result = await next(e)
     if (!('deny' in result) && !result.isError) await noteWebLookup($, e)
     return result

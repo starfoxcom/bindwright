@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
-- **A step back holds the fix until three options are researched.** When a watched PR's red rounds reach a step back (the 3rd in a row, the 5th, and every one from the 6th, with no last one), the ci-watch mod refuses the session's file edits, `git commit` and `git push` until three web lookups on different topics (WebSearch, WebFetch or the web-fetch agent) have run after that red wake, and asks for the three to be compared before the fix. Subagents and closed PRs are not held; `/ci-watch stop` lifts the hold where web tools cannot run. The review rules now ask for three compared options too.
+- **A step back holds the fix until three options are researched.** When a watched PR's red rounds reach a step back (the 3rd in a row, the 5th, and every one from the 6th, with no last one), the ci-watch mod refuses the session's file edits, `git commit` and `git push` until three web lookups on different topics (WebSearch, WebFetch or the web-fetch agent) have run after that red wake, and asks for the three to be compared before the fix. A green round ends it, subagents and closed PRs are not held, and `/ci-watch stop` lifts the hold where web tools cannot run. The review rules now ask for three compared options too.
 
 ## [v4.0.0] — 2026-11-12
 

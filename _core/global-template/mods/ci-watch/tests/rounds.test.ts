@@ -1,5 +1,6 @@
 import { type Engine, expect, test } from 'claude-code/testing'
 
+import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic } from '../hooks/rounds'
 import type { Watch } from '../types'
@@ -118,8 +119,8 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
 })
 
 // A red wake at a count that is not due latches nothing; a new watch of the PR keeps a latched step back,
-// and only the user's /ci-watch stop lifts it without lookups, for good.
-test('only a due red wake latches a step back, and only lookups or a stop lift it', async ($, on) => {
+// and only a green round or the user's /ci-watch stop lifts it without lookups.
+test('only a due red wake latches a step back, and only lookups, green or a stop lift it', async ($, on) => {
   const w = world(on)
   on('tool.call', { tool: 'Edit' }, async () => ({ result: 'done' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -129,13 +130,40 @@ test('only a due red wake latches a step back, and only lookups or a stop lift i
   w.seen.head = 'b2'
   await redRound($, w, 5)
   expect(await edit()).toHaveProperty('deny')
+  // A head pushed from elsewhere restarts the settled watch on the next poll, and the step back stays.
+  w.seen.head = 'c3'
+  w.seen.bucket = 'pending'
+  for (let i = 0; i < 6; i++) await w.clock.advance(30_000)
+  expect(await edit()).toHaveProperty('deny')
   await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)
+  expect(await edit()).toHaveProperty('deny')
+  // A green round on the PR ends it: the problem it asked about is fixed.
+  w.seen.bucket = 'pass'
+  for (let i = 0; i < 6; i++) await w.clock.advance(30_000)
+  expect(await edit()).not.toHaveProperty('deny')
+  w.seen.head = 'd4'
+  await redRound($, w, 5)
   expect(await edit()).toHaveProperty('deny')
   await $.command.run({ command: 'ci-watch', args: 'stop', origin: { kind: 'composer' } } as never)
   expect(await edit()).not.toHaveProperty('deny')
-  w.seen.bucket = 'pending'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   expect(await edit()).not.toHaveProperty('deny')
+})
+
+// A resume joins the saved copy of a watch that settled meanwhile: a step back latched in memory stays
+// unless that copy went green.
+test('a resume keeps a latched step back unless the saved copy went green', async () => {
+  const base: Watch = { repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: {}, stablePolls: 0 }
+  const rows: [Watch['outcome'], string[] | undefined][] = [['failed', ['a']], ['passed', undefined]]
+  for (const [outcome, kept] of rows) {
+    // The engine as followId uses it: the resumed id, and that id's saved state.
+    const saved = JSON.stringify({ watches: [{ ...base, outcome }] })
+    const engine = { session: { id: async () => 's2' }, fs: { read: async () => saved } }
+    const watches = [{ ...base, stepBackTopics: ['a'] }]
+    const memory: Memory = { watches, stateId: 's1', isUnsaved: false, generation: 0 }
+    await followId(engine as never, 'C:/data', memory)
+    expect([outcome, memory.watches[0]?.stepBackTopics]).toEqual([outcome, kept])
+  }
 })
 
 // The third red round in a row: its own settled watch makes the count three, and the wake asks for research.
