@@ -893,7 +893,7 @@ class SetupScript(unittest.TestCase):
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args, cwd=None):
+    def run_setup(self, state, *args, cwd=None, repo_arg=True):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
@@ -901,7 +901,8 @@ class SetupScript(unittest.TestCase):
                    PATH=self.dir + os.pathsep + os.environ["PATH"])
         # The full path: on Windows a bare "bash" can start WSL's instead. The temp
         # folder is no git repo, so this repo's own branches never count as local ones.
-        run = subprocess.run([tool("bash"), SETUP, "--repo", "acme/game", *args], env=env,
+        repo = ["--repo", "acme/game"] if repo_arg else []
+        run = subprocess.run([tool("bash"), SETUP, *repo, *args], env=env,
                              cwd=cwd or self.dir, stdin=subprocess.DEVNULL,
                              capture_output=True, text=True)
         with open(self.state) as f:
@@ -976,16 +977,27 @@ class SetupScript(unittest.TestCase):
         run, _, _ = self.run_setup(dict(state, gate_yml="checks: one  # one check\n"), "--check")
         self.assertIn('drop required check "Claude On-Demand"', run.stdout)
 
-    def test_new_rulesets_wait_until_the_default_branch_holds_the_gate(self):
+    def test_rulesets_wait_until_the_default_branch_holds_the_gate(self):
         ruleset = old_ruleset(include="refs/heads/develop")
         state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset])
         del state["gate_yml"]
         run, after, _ = self.run_setup(state)
         self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
-        self.assertIn("MISSING  ruleset on main: waits until main holds the gate's files", run.stdout)
-        self.assertIn("set up   ruleset on develop", run.stdout)
-        self.assertEqual([r["name"] for r in after["rulesets"]], ["protect"])
+        for branch in ("main", "develop"):
+            self.assertIn("MISSING  ruleset on %s: waits until main holds the gate's files" % branch,
+                          run.stdout)
+        self.assertEqual(after["rulesets"], [ruleset])
         self.assertEqual(after["labels"], ["needs-deep-review"])
+
+    def test_a_ruleset_requiring_the_gate_before_it_lands_is_named(self):
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], branches=["main"])
+        _, protected, _ = self.run_setup(state)
+        del protected["gate_yml"]
+        run, after, calls = self.run_setup(protected)
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn('MISSING  ruleset on main requires "Review gate" before main holds', run.stdout)
+        self.assertEqual(after["rulesets"], protected["rulesets"])
+        self.assertFalse([c for c in calls if "rulesets" in " ".join(c) and "-X" in c])
 
     def test_a_develop_branch_only_on_this_computer_is_reported(self):
         clone = os.path.join(self.dir, "clone")
@@ -995,10 +1007,13 @@ class SetupScript(unittest.TestCase):
                      ["-C", clone, "branch", "develop"]):
             subprocess.run(["git", *args], check=True, capture_output=True)
         state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], branches=["main"])
-        run, _, _ = self.run_setup(state, cwd=clone)
+        run, _, _ = self.run_setup(state, cwd=clone, repo_arg=False)
         self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
         self.assertIn("MISSING  ruleset on develop: develop is only on this computer", run.stdout)
         self.assertIn("set up   ruleset on main", run.stdout)
+        # --repo may name another repository, so this folder's branches say nothing about it.
+        run, _, _ = self.run_setup(state, cwd=clone)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_a_missing_token_without_a_terminal_is_reported_not_prompted(self):
         run, after, calls = self.run_setup(fresh_repo())

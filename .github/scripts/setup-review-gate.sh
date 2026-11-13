@@ -5,7 +5,7 @@
 # Claude GitHub App. With --check it changes nothing: it reports every
 # missing piece and exits 1 when any is missing.
 #
-# A branch with no ruleset gets one only once the default branch holds
+# No ruleset is created or repaired until the default branch holds
 # .github/review-gate.yml: before the first setup PR merges there, the gate
 # cannot pass, and a ruleset requiring it would leave that PR unmergeable.
 #
@@ -38,7 +38,9 @@ GATE_CHECKS=one
 # setup PR merges, the gate cannot pass there, so no new ruleset requires it.
 GATE_LANDED=false
 # A develop branch this clone has but GitHub does not, so nothing protects it.
+# Only read when the repository came from this folder, not from --repo.
 LOCAL_ONLY_DEVELOP=false
+REPO_IS_FOLDER=false
 GAPS=0
 
 usage() {
@@ -116,6 +118,7 @@ preflight() {
   if [ -z "$REPO" ]; then
     REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) \
       || die "no GitHub repository here; pass --repo OWNER/NAME"
+    REPO_IS_FOLDER=true
   fi
   admin=$(gh api "repos/$REPO" --jq .permissions.admin) || die "cannot read $REPO"
   [ "$admin" = true ] || die "$REPO: reading and changing its settings needs admin access"
@@ -124,7 +127,7 @@ preflight() {
     BRANCHES=("$DEFAULT_BRANCH")
     if [ "$DEFAULT_BRANCH" != develop ] && branch_exists develop; then
       BRANCHES+=(develop)
-    elif [ "$DEFAULT_BRANCH" != develop ] \
+    elif [ "$REPO_IS_FOLDER" = true ] && [ "$DEFAULT_BRANCH" != develop ] \
       && git show-ref --verify --quiet refs/heads/develop 2> /dev/null; then
       LOCAL_ONLY_DEVELOP=true
     fi
@@ -362,13 +365,32 @@ apply_ruleset() {
   done
 }
 
+# Before the default branch holds the gate's files, no ruleset is created or
+# repaired: one that required the gate would leave the first setup PR, and the
+# cascade after it, unmergeable. A ruleset that already requires it is named.
+hold_ruleset() {
+  local requires_gate=false
+  if [ -z "$2" ]; then
+    requires_gate=true
+  elif [ "$2" != "no active ruleset" ] && ! grep -qF 'required check "Review gate"' <<< "$2"; then
+    requires_gate=true
+  fi
+  if [ "$requires_gate" = true ]; then
+    missing "ruleset on $1 requires \"Review gate\" before $DEFAULT_BRANCH holds the" \
+      "gate's files, so the first setup PR cannot merge; take that check off" \
+      "(Settings, then Rules), merge the PR, then run this again"
+  else
+    missing "ruleset on $1: waits until $DEFAULT_BRANCH holds the gate's files;" \
+      "merge the first setup PR into $DEFAULT_BRANCH, then run this again"
+  fi
+}
+
 step_rulesets() {
   local branch gaps gap
   for branch in "${BRANCHES[@]}"; do
     gaps=$(branch_gaps "$branch")
-    if [ "$gaps" = "no active ruleset" ] && [ "$GATE_LANDED" = false ]; then
-      missing "ruleset on $branch: waits until $DEFAULT_BRANCH holds the gate's files;" \
-        "merge the first setup PR into $DEFAULT_BRANCH, then run this again"
+    if [ "$GATE_LANDED" = false ]; then
+      hold_ruleset "$branch" "$gaps"
       continue
     fi
     if [ -n "$gaps" ] && [ "$MODE" = setup ]; then
