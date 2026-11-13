@@ -586,6 +586,18 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_denied(self.attr(command, project=nested),
                                    f"found in file {os.path.join(nested, 'a', 'b', 'msg.txt')}")
 
+    def test_a_node_inside_the_project_is_never_run(self):
+        # A repo could ship its own `node` (Windows also finds one in the current folder by itself).
+        root = self.project_with({})
+        marker = os.path.join(root, "ran.txt")
+        for name, text in (("node", f"#!/bin/sh\necho x > '{marker}'\n"), ("node.cmd", f"@echo x > \"{marker}\"\r\n")):
+            with open(os.path.join(root, name), "w", newline="") as f:
+                f.write(text)
+            os.chmod(os.path.join(root, name), 0o755)
+        self.assert_passes(self.attr("git commit -m x", project=root,
+                                     path=root + os.pathsep + os.environ.get("PATH", "")))
+        self.assertFalse(os.path.exists(marker))
+
     def test_without_the_helper_every_file_flag_is_read(self):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
         self.assert_denied(result)

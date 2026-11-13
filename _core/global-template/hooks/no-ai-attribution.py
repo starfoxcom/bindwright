@@ -202,11 +202,24 @@ def parser_script():
     return next((script for script in scripts if os.path.isfile(script)), None)
 
 
-def parse(cmd, shell):
+def node_program(cwd):
+    """The `node` on PATH, or None when the only one is the session folder's own. On Windows a
+    bare name is looked up in the current folder first, so a repo could ship its own
+    `node.exe`: that search is switched off, and a match that is relative (a `.` on PATH) or
+    sits in the session folder is refused."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    found = shutil.which("node")
+    if not found or not os.path.isabs(found):
+        return None
+    here = {os.path.normcase(os.path.realpath(folder)) for folder in (cwd, os.getcwd())}
+    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
+
+
+def parse(cmd, shell, cwd):
     """(each simple command's words, as the shell reads them (helper/hooks/shell-words.mjs),
     and "". When the parser is missing, fails or is unsure of the command: None, and the
     hint that says which."""
-    node, script = shutil.which("node"), parser_script()
+    node, script = node_program(cwd), parser_script()
     if not node:
         return None, NO_NODE_HINT
     if not script:
@@ -464,7 +477,7 @@ def main():
 
     scan_text(cmd, "the command text")
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
-    parsed, hint = parse(cmd, shell)
+    parsed, hint = parse(cmd, shell, cwd)
     for path, error in (parsed_files(parsed, cwd) if parsed is not None else strict_files(cmd, cwd)):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.{hint}")
