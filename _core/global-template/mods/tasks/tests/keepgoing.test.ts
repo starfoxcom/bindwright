@@ -179,6 +179,15 @@ test('near the compaction a turn end with no workable task gets one prompt to ca
   let tokens = 100_000
   const context = () => ({ tokens, window: 200_000, breakdown: { autoCompactThreshold: 160_000 } })
   on('session.usage', () => ({ value: { context: context() } }) as never)
+  on('settings.read', () => ({ value: {} }) as never)
+  seen.files.set('C:/Users/me/.claude.json', JSON.stringify({ autoCompactEnabled: false }))
+  await turnEnds($, clock)
+  tokens = 125_000
+  // Auto-compaction off in /config: no compaction is coming, so no prompt.
+  await turnEnds($, clock)
+  expect(seen.prompts).toEqual([])
+  seen.files.set('C:/Users/me/.claude.json', '{}')
+  tokens = 100_000
   await turnEnds($, clock)
   expect(seen.prompts).toEqual([])
   tokens = 125_000

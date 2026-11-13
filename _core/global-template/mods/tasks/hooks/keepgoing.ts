@@ -1,7 +1,8 @@
 import type { Mirror, MirrorTask } from './mirror'
 
 // Keep going: a turn that ends while a task on the list needs no one gets a prompt to carry on, so an
-// unattended run never sits idle with work left that nobody has to wait for. Pure, no engine access:
+// unattended run never sits idle with work left that nobody has to wait for. Near a coming compaction a
+// turn's end gets one even with no such task, for a next step announced in prose. Pure, no engine access:
 // register.ts decides when to look and sends the prompt.
 
 /** Prompts in a row, with no change to the task list between them, before the mod stops asking. */
@@ -93,8 +94,8 @@ export function keepGoingText(tasks: readonly MirrorTask[]): string {
 export function nearCompactionText(): string {
   return (
     '[tasks] The turn ended near the compaction with nothing pending to wake the session and no task on ' +
-    'the list to carry on. The compaction carries the context across, so it is no reason to stop: go on ' +
-    'now with the step this turn announced or left open. Only if the work truly waits on a person, say ' +
-    'what it waits on and end the turn.'
+    'the list to carry on. The compaction carries the context across, so it is no reason to stop: if this ' +
+    'turn announced a step or left one open that needs no one, go on with it now. If nothing is left, or ' +
+    'what is left waits on a person, say so in one line and end the turn.'
   )
 }

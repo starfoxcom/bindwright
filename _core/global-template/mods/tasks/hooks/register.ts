@@ -266,14 +266,35 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
   return $.fs.read(`${dir}/${name}`).then(String, () => undefined)
 }
 
-// Whether the context is near the auto-compaction point; false when the engine cannot say.
+// Whether the person turned automatic compaction off: `DISABLE_AUTO_COMPACT` or `DISABLE_COMPACT`, or
+// auto-compact off in /config (`autoCompactEnabled`, in the settings or the global config). An unreadable
+// global config counts as off, since it may hold the switch.
+async function isAutoCompactOff($: EngineInterface): Promise<boolean> {
+  const isSet = (value: string | undefined) => Boolean(value) && !/^(0|false)$/i.test(value ?? '')
+  if (isSet(await $.env.get('DISABLE_AUTO_COMPACT').catch(() => undefined))) return true
+  if (isSet(await $.env.get('DISABLE_COMPACT').catch(() => undefined))) return true
+  const settings = (await $.settings.read().catch(() => ({}))) as { autoCompactEnabled?: unknown }
+  if (settings.autoCompactEnabled === false) return true
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
+  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const file = (configured ? `${configured}/.claude.json` : `${home}/.claude.json`).replace(/\\/g, '/')
+  try {
+    return (JSON.parse(String(await $.fs.read(file))) as { autoCompactEnabled?: unknown }).autoCompactEnabled === false
+  } catch {
+    return true
+  }
+}
+
+// Whether a compaction is coming soon: the context near the auto-compaction point, with auto-compaction on.
+// False when the engine cannot say.
 async function isContextNearCompaction($: EngineInterface): Promise<boolean> {
   try {
     const { context } = await $.session.usage({ breakdown: 'summary' })
-    return isNearCompaction(context.tokens, context.breakdown?.autoCompactThreshold ?? context.window)
+    if (!isNearCompaction(context.tokens, context.breakdown?.autoCompactThreshold)) return false
   } catch {
     return false
   }
+  return !(await isAutoCompactOff($))
 }
 
 // A turn that ended with work nobody has to wait for gets a prompt to carry on, unless something else
