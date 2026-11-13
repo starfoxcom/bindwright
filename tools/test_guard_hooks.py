@@ -705,6 +705,8 @@ class GuardHookTest(unittest.TestCase):
                               ("git -C repo commit -m x && git -C repo push", "Bash"),
                               ("git commit -m x && git switch -c next", "Bash"),
                               ("git commit -uno -m x", "Bash"),
+                              ("git commit -m x && git add commit.txt -n", "Bash"),
+                              ("git log --grep am -n 1 && git commit -m x", "Bash"),
                               ("git commit -m x && git switch -c hook.x", "Bash"),
                               ("git commit -m x; if ($LASTEXITCODE -ne 0) { exit 1 }", "PowerShell"),
                               ("if (git config core.hooksPath) { 'set' }", "PowerShell")):

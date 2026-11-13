@@ -352,10 +352,17 @@ def strict_segment(name):
             + name + r"))*?")
 
 
+# git's own options before the subcommand, with the value of those that take one.
+STRICT_GIT_OPTIONS = (r"(?i:\bgit\b)(?:\s+(?:(?:-C|-c|--git-dir|--work-tree|--namespace|--config-env)\s+"
+                      r"(?:\"[^\"]*\"|'[^']*'|\$?\((?:[^()\n]|\([^()\n]*\))*\)|\S+)|[\"']?-\S*))*?")
+
+
 def strict_pattern(subcommand, route):
-    """A route inside a git command, after `subcommand` when one is named."""
-    after = r"\s(?:" + subcommand + r")(?![\w-])" + strict_segment("rest") if subcommand else ""
-    return re.compile(r"(?i:\bgit\b)" + strict_segment("lead") + after + route)
+    """A route inside a git command, after `subcommand` when one is named: git's first word
+    past its own options, so a later `commit` or `am` (a file, a branch) is not the subcommand."""
+    if not subcommand:
+        return re.compile(r"(?i:\bgit\b)" + strict_segment("lead") + route)
+    return re.compile(STRICT_GIT_OPTIONS + r"\s+(?:" + subcommand + r")(?![\w.-])" + strict_segment("rest") + route)
 
 
 # A short-option bundle holds `n` (or `c`, `C`) before any letter that takes the rest as its
@@ -365,8 +372,7 @@ STRICT_ROUTES = (
     ("hooks", strict_pattern("commit|am", STRICT_OPTION + r"-(?:(?![FmcCtUSup])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
     ("trailer", strict_pattern("", STRICT_OPTION + r"--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?![\w-])")),
     # git's own `-c` and `--config-env` stand among its options before the subcommand.
-    ("setting", re.compile(r"(?i:\bgit\b)(?:\s+(?:-C\s+\S+|[\"']?-\S*))*?\s+(?:-c\s+|--config-env[=\s]+)"
-                           r"[\"']?(?i:core\.hooksPath|hook\.)")),
+    ("setting", re.compile(STRICT_GIT_OPTIONS + r"\s+(?:-c\s+|--config-env[=\s]+)[\"']?(?i:core\.hooksPath|hook\.)")),
     ("reuse", strict_pattern("commit", STRICT_OPTION + r"(?:-(?:(?![FmtUSu])[A-Za-z])*[cC]|--re[eu][\w-]*(?![\w-]))")),
     # A set names a value after the setting; a read ends there, or at a redirect, a pipe, a
     # list, a comment, an option, or the close of the group or quote that holds it.
