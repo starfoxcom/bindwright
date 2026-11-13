@@ -508,6 +508,8 @@ class GuardHookTest(unittest.TestCase):
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
                 ("& $git commit -Fmsg", "PowerShell"),
                 (f'flock lock $GIT commit --template "{path}"', "Bash"),
+                (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
+                (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
                 # A run-time program gets the strict read, which takes flag-like message text as a flag.
                 ('$GIT commit -m "--file=x"', "Bash")):
             with self.subTest(command=command):

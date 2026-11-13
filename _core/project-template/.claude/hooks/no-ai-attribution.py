@@ -349,11 +349,11 @@ def command_files(words):
         return body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS, "@")
     if name in READ_CMDLETS:
         return get_content_files(words)
-    # Every flag is read. A word naming git or gh may be a wrapped program (`env A=1 git
-    # commit`, `sudo gh ...`) or just an argument (`sudo -u git`, a URL ending in /gh), so
-    # each is also read with its own rules, and only its own exceptions (gh's --template,
-    # git's -m) are taken off the outer read.
-    inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
+    # Every flag is read. A word naming git, gh or Get-Content may be a wrapped program (`env
+    # A=1 git commit`, `sudo gh ...`, `pwsh -Command Get-Content x`) or just an argument
+    # (`sudo -u git`, a URL ending in /gh), so each is also read with its own rules, and only
+    # its own exceptions (gh's --template, git's -m) are taken off the outer read.
+    inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in {"git", "gh"} | READ_CMDLETS]
     names = {program(run) for run in inner}
     # git's own reads take its --template; elsewhere it names one, unless a word built at run
     # time names git (`timeout 5 $GIT commit`), as the strict read judges it. Then git's -m is
