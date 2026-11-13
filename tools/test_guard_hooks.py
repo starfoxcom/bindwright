@@ -708,6 +708,9 @@ class GuardHookTest(unittest.TestCase):
                 ("git config --unset core.hooksPath", setting, "Bash"),
                 ("git config --global \\\n  core.hooksPath /dev/null", setting, "Bash"),
                 ("git config core.hooksPath --get", setting, "Bash"),
+                ("git config --remove-section hook.lint", setting, "Bash"),
+                ("git config remove-section --global hook.lint", setting, "Bash"),
+                ("git config --rename-section core old", setting, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -722,6 +725,7 @@ class GuardHookTest(unittest.TestCase):
                 ("git commit -m -n", 'git commit -m "say --no-verify"', "git commit -m x -- -n",
                         "git push -n", "git merge -n feature", "git tag -n", "git am -c mail.patch",
                         "git commit --amend --no-edit", "git config core.hooksPath",
+                        "git config --remove-section alias",
                         "git config get core.hooksPath && git commit -m x", '$GIT commit -m "--file=x"',
                         '"$S/bin/actionlint.exe" x && git commit -m x',
                         'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push",
@@ -739,7 +743,7 @@ class GuardHookTest(unittest.TestCase):
                                       lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_passes(result)
-        # A rewrite applies only at a here-doc the parser found, never at a `<<` in arithmetic.
+        # A here-doc with more on its line, an arithmetic `<<` and a quoted redirect target.
         for command, result in self.each(("git commit -F - <<'EOF' >/dev/null && git push --no-verify\nmsg\nEOF",
                         "echo $((1<<true >1))\ncat <<'E' >/dev/null; git commit --no-verify -m x\nhi\nE",
                         'cat <<EOF >"a b"; git commit -n -m x\nx\nEOF'), lambda command: self.attr(command)):

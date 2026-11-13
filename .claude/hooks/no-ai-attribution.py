@@ -135,7 +135,8 @@ GH_WRITE = re.compile(
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.
-GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hook", re.I)
+GIT_CONFIG_HOOKS = re.compile(
+    r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|--re[mn]|\bre(?:move|name)-section\b)", re.I)
 LEFTHOOK_OFF = re.compile(r"\blefthook\b\W*=|\blefthook\b[^|;&\n]*\buninstall\b", re.I)
 # A line end the shell joins to the next: `\` (an even run of `\` escapes itself) or
 # PowerShell's backtick after a blank.
@@ -213,6 +214,7 @@ ENV_VALUE_OPTIONS = {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
 CONFIG_VALUE_OPTIONS = {"-f", "--file", "--blob", "-t", "--type", "--default", "--comment", "--value"}
 CONFIG_READS = {"get", "list", "edit", "get-regexp", "get-all", "get-urlmatch", "get-color",
                 "get-colorbool"}
+CONFIG_WRITES = {"set", "unset", "remove-section", "rename-section"}
 
 
 def deny(reason):
@@ -518,22 +520,35 @@ def names_hooks(setting):
     return "hookspath" in setting or setting.startswith("hook.")
 
 
+def names_hook_section(section):
+    """Whether removing or renaming this section drops hook settings (`core` holds hooksPath)."""
+    section = section.lower()
+    return section in ("hook", "core") or section.startswith("hook.")
+
+
 def config_sets_hooks(rest):
-    """Whether `git config` sets or unsets a hook setting; a read passes."""
-    names, skip, unsets = [], False, False
+    """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
+    holds them; a read passes."""
+    names, skip, unsets, sections = [], False, False, False
     for word in (text_of(w) for w in rest):
         # The old form (`git config <name> <value>`) stops reading options at the first name, so a
         # later `--get` is the value it stores.
-        legacy = names and names[0] not in ("set", "unset") and names[0] not in CONFIG_READS
+        legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
         if skip:
             skip = False
         elif word.startswith("-") and not legacy:
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
             unsets = unsets or abbreviates(word, "--unset-all", "--uns")
+            sections = (sections or abbreviates(word, "--remove-section", "--rem")
+                        or abbreviates(word, "--rename-section", "--ren"))
             skip = word in CONFIG_VALUE_OPTIONS
         else:
             names.append(word)
+    if names[:1] in (["remove-section"], ["rename-section"]):
+        sections, names = True, names[1:]
+    if sections:
+        return bool(names) and names_hook_section(names[0])
     if names[:1] in (["set"], ["unset"]):
         unsets, names = unsets or names[0] == "unset", names[1:]
     elif names[:1] and names[0] in CONFIG_READS:
