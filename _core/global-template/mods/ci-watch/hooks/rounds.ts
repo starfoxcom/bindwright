@@ -1,12 +1,11 @@
 // The fix-round count: how many pushed rounds in a row a PR has had whose checks did not all pass (both
-// reviews included). Every RESEARCH_EVERY of them (3, 6, 9, ...), the red wake asks for a step back:
-// research how others solve the problem, simplify, then go on. Nothing is refused. A round is a watch of
+// reviews included). At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
+// research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
+// leaves one round fewer before the next. Nothing is refused. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
 // counted. Pure, no engine access.
-
-export const RESEARCH_EVERY = 3
 
 /** One settled watch of a PR's pushed head: whether a check failed. */
 export type Round = { sha: string; red: boolean }
@@ -34,8 +33,11 @@ export function redStreak(pr: PrRounds | undefined): number {
  * spared by the sweep (it is named by no session). */
 export const ROUNDS_FILE = 'rounds.json'
 
-/** Whether a red streak this long calls for the research step: at 3, 6, 9, ... */
-export const isResearchDue = (red: number) => red > 0 && red % RESEARCH_EVERY === 0
+/** Whether a red streak this long calls for the research step: at 3, 5, then every round from 6. */
+export const isResearchDue = (red: number) => red === 3 || red >= 5
+
+/** How many more red rounds until the next research step: to 3, then to 5, then the next one. */
+export const roundsToResearch = (red: number) => (red < 3 ? 3 : red < 5 ? 5 : red + 1) - red
 
 export function researchText(pr: string, red: number): string {
   return (
@@ -43,6 +45,6 @@ export function researchText(pr: string, red: number): string {
     'the next fix, step back: research how the community solves this problem and what options exist (web ' +
     'search), pick the simplest design that removes the whole class of findings rather than the next one, ' +
     'tell the user in plain words what changes and why, then apply it and keep going. The next step back ' +
-    `comes after ${RESEARCH_EVERY} more red rounds.`
+    `comes after ${roundsToResearch(red)} more red round(s).`
   )
 }
