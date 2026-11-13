@@ -43,7 +43,7 @@ SKILL_KEYS = {"name", "description", "disable-model-invocation", "argument-hint"
 # The one frontmatter line form the check reads: `key: plain text` or `key: "JSON string"`.
 # A plain value holds no `: ` or ` #`, which YAML reads as a nested map or a comment,
 # and starts with none of YAML's indicator characters.
-FRONTMATTER_LINE = re.compile(r"([a-z][a-z-]*): (.+)")
+FRONTMATTER_LINE = re.compile(r"([a-z][a-z-]*): (\S.*)")
 YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 # What the policy scan reads as a call over the network, and as a credential beside one.
 NETWORK_CALL = re.compile(r"https?://|\b(?:curl|wget|Invoke-WebRequest|iwr)\b|\bgh api\b|--url\b", re.I)
