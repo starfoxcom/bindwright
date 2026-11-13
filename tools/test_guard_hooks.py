@@ -63,6 +63,12 @@ def settings_command(name):
     return next(h["command"] for h in pre_tool_hooks() if f" {name}" in h["command"])
 
 
+# The reason each route past the hook is refused with: skipped hooks, a trailer, a reused
+# message and a changed hooks setting.
+ROUTE_REASONS = ("git hook bypass", "--trailer is not allowed", "reusing another",
+                 "changes which hooks git runs")
+
+
 @unittest.skipIf(SH is None, "needs a POSIX sh on PATH (Git Bash on Windows)")
 class GuardHookTest(unittest.TestCase):
     def setUp(self):
@@ -633,8 +639,7 @@ class GuardHookTest(unittest.TestCase):
                            "found in file")
 
     def test_routes_past_git_hooks_are_denied(self):
-        hooks, trailer, reuse = "git hook bypass", "--trailer is not allowed", "reusing another"
-        setting = "changes which hooks git runs"
+        hooks, trailer, reuse, setting = ROUTE_REASONS
         for command, because in (
                 ("git commit --no-verify -m x", hooks),
                 ("git commit -n -m x", hooks),
@@ -645,6 +650,8 @@ class GuardHookTest(unittest.TestCase):
                 ("git -c core.hooksPath=/dev/null commit -m x", setting),
                 ("git config core.hooksPath /dev/null", setting),
                 ("git config set --global core.hooksPath x", setting),
+                ("git config --unset core.hooksPath", setting),
+                ("git config unset hook.lint.enabled", setting),
                 ("git --config-env=core.hooksPath=H commit -m x", setting),
                 ("git -c hook.commit-msg.enabled=false commit -m x", setting),
                 ("git config set hook.commit-msg.enabled false", setting),
@@ -666,11 +673,32 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), because)
         self.assert_denied(self.attr('$env:LEFTHOOK = "0"; git commit -m x', tool="PowerShell"), "disabling lefthook")
+        # Each is git's own meaning, a read, or a message that names an option.
+        for command in ('git commit -m "document --no-verify"', 'git commit -m "-n means skip"',
+                        "git commit -m x -- -n", "git merge -n feature/x", "git push -n",
+                        "git tag -n", "git am -c mail.patch", "git checkout --track origin/x",
+                        "git config core.hooksPath && git commit -m x",
+                        "git config get core.hooksPath && git commit -m x",
+                        'git commit -m "say LEFTHOOK=0 skips it"',
+                        "python - <<'EOF'\nrows = ['LEFTHOOK=0 git commit -m x']\nEOF"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
+        # A read is checked only for the routes past the hook, so its file-like words are not read.
+        self.assert_passes(self.attr('"p: " + (git config --get core.hooksPath); gci "$env:X\\h" -ErrorAction 0',
+                                     tool="PowerShell"))
+
+    def test_routes_without_the_parser_are_denied(self):
+        hooks, trailer, reuse, setting = ROUTE_REASONS
         for command in ("git commit --no-verify -m x", "git commit -nm x", "$GIT commit -n -m x"):
             with self.subTest(command=command, helper="none"):
                 self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
         self.assert_denied(self.attr('git -c "hook.x.enabled=false" commit -m x',
                                      helper=os.path.join(self.home, "none")), setting)
+        # A setting written over a continued line is read whole, with the parser and without.
+        for helper in (HELPER, os.path.join(self.home, "none")):
+            with self.subTest(helper=helper):
+                self.assert_denied(self.attr("git config --global \\\n  core.hooksPath /dev/null",
+                                             helper=helper), setting)
         # Without the parser, the command is split into commands and words as the shell splits
         # it, so another program's options and quoted message text never count.
         for command, because, tool in (('git commit -m "feat(x): y" --no-verify', hooks, "Bash"),
@@ -696,7 +724,14 @@ class GuardHookTest(unittest.TestCase):
                                        ('git commit -m "x\n\ny" --no-verify', hooks, "Bash"),
                                        ('git commit -m "use {x}" --trailer "a: b"', trailer, "Bash"),
                                        ("git config core.hooksPath $(pwd)/hooks", setting, "Bash"),
-                                       ("git config core.hooksPath (Join-Path $PWD h)", setting, "PowerShell")):
+                                       ("git config core.hooksPath (Join-Path $PWD h)", setting, "PowerShell"),
+                                       ('git commit -F - <<<"fix: a b" && git push --no-verify', hooks, "Bash"),
+                                       ("x 2>&1|git commit -n -m y", hooks, "Bash"),
+                                       ("git commit -F - <<EOF\nit's fine\nEOF\ngit push --no-verify", hooks, "Bash"),
+                                       ("$m = @'\nit's\n'@\ngit commit -m $m -n", hooks, "PowerShell"),
+                                       ('git commit -m "a `"b`" c" -n', hooks, "PowerShell"),
+                                       ('echo "$(git push --no-verify)"', hooks, "Bash"),
+                                       ('git commit -m x > "out file.txt" && git push --no-verify', hooks, "Bash")):
             with self.subTest(command=command, helper="none"):
                 self.assert_denied(self.attr(command, tool=tool, helper=os.path.join(self.home, "none")), because)
         for command, tool in (("git config core.hooksPath 2>/dev/null", "Bash"),
@@ -707,6 +742,8 @@ class GuardHookTest(unittest.TestCase):
                               ("git config get core.hooksPath --default none", "Bash"),
                               ("try { git config core.hooksPath } catch {}", "PowerShell"),
                               ("git commit -m x 2>&1 | tail -n 5", "Bash"),
+                              ("git commit -m x 2>&1|tail -n 5", "Bash"),
+                              ("git commit -m \"$(cat <<'EOF'\nfix: it's done (see #1\nEOF\n)\"", "Bash"),
                               ("git -C repo commit -m x && git -C repo push", "Bash"),
                               ("git commit -m x && git switch -c next", "Bash"),
                               ("git commit -uno -m x", "Bash"),
@@ -719,19 +756,6 @@ class GuardHookTest(unittest.TestCase):
                               ("if (git config core.hooksPath) { 'set' }", "PowerShell")):
             with self.subTest(command=command, helper="none"):
                 self.assert_passes(self.attr(command, tool=tool, helper=os.path.join(self.home, "none")))
-        # Each is git's own meaning, a read, or a message that names an option.
-        for command in ('git commit -m "document --no-verify"', 'git commit -m "-n means skip"',
-                        "git commit -m x -- -n", "git merge -n feature/x", "git push -n",
-                        "git tag -n", "git am -c mail.patch", "git checkout --track origin/x",
-                        "git config core.hooksPath && git commit -m x",
-                        "git config get core.hooksPath && git commit -m x",
-                        'git commit -m "say LEFTHOOK=0 skips it"',
-                        "python - <<'EOF'\nrows = ['LEFTHOOK=0 git commit -m x']\nEOF"):
-            with self.subTest(command=command):
-                self.assert_passes(self.attr(command))
-        # A read is checked only for the routes past the hook, so its file-like words are not read.
-        self.assert_passes(self.attr('"p: " + (git config --get core.hooksPath); gci "$env:X\\h" -ErrorAction 0',
-                                     tool="PowerShell"))
 
     def test_a_wrapped_gh_keeps_its_template_name(self):
         self.assert_passes(self.attr("env GH_TOKEN=x gh issue create --title t --template bug.md"))

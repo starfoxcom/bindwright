@@ -45,14 +45,15 @@ What is scanned, for any git write, gh write or GitHub API call:
 
 Denied outright, since the hook cannot see past them: a git write that skips
 git's own hooks (`--no-verify`, `-n` on commit or am, setting
-`core.hooksPath` or a `hook.` setting; reading one is fine), `--trailer`, a
+or unsetting `core.hooksPath` or a `hook.` setting; reading one is fine), `--trailer`, a
 commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser the hook splits the command into commands and
-words the way the shell does: continued lines joined, quotes taken off,
-`$(...)`, backticks and groups kept whole as words and read as commands too,
+passes. Without the parser the hook reads the command into commands and
+words the way the shell does, with that shell's escape character: continued
+lines joined, quotes taken off, `$(...)`, backticks and groups (quoted ones
+too) read as commands as well, each here-doc body line read on its own, and
 redirects and comments dropped. Each command then gets the same checks as on
 the parser's read, so another program's options and quoted text (a message
 that quotes a route) do not count, while a script line inside a here-doc
@@ -73,7 +74,7 @@ names it outside a permission rule.
 
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
 exit 0 otherwise. A read-only command is blocked only for the routes above:
-one that turns lefthook off or sets a hooks setting, or, on the strict read,
+one that turns lefthook off or sets or unsets a hooks setting, or, on the strict read,
 a here-doc line that runs one.
 """
 import json
@@ -261,22 +262,23 @@ def option_words(subcommand, rest):
 
 
 def config_sets_hooks(rest):
-    """Whether a `git config` command sets a hook setting; reading one is fine."""
-    names, skip_next = [], False
+    """Whether a `git config` command sets or unsets a hook setting; reading one is fine."""
+    names, skip_next, unsets = [], False, False
     for word in rest:
         if skip_next:
             skip_next = False
         elif word.startswith("-"):
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
+            unsets = unsets or (word.startswith("--uns") and "--unset-all".startswith(word))
             skip_next = word in CONFIG_VALUE_OPTIONS
         else:
             names.append(word)
-    if names[:1] == ["set"]:
-        names = names[1:]
+    if names[:1] in (["set"], ["unset"]):
+        unsets, names = unsets or names[0] == "unset", names[1:]
     elif names[:1] and names[0] in CONFIG_READS:
         return False
-    return len(names) >= 2 and names_hooks(names[0])
+    return len(names) >= (1 if unsets else 2) and names_hooks(names[0])
 
 
 def global_settings(words, end):
@@ -333,110 +335,183 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-# Without the parser: the command is split into commands and words the way the shell splits it,
+# Without the parser: the command is read into commands and words the way the shell reads it,
 # and each command's words get the parsed read's own checks, so the two reads share one set of
-# rules. Continued lines are joined first. A quote or group that never closes runs to the end of
-# the text, so a misread joins words and never drops one.
-STRICT_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
+# rules. A group, a quote and a here-doc body are each read to their own end by the same reader,
+# so a misread stays inside the part that holds it.
+CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
+STRICT_REDIRECT = re.compile(r"&>>?|<<<|<<-?|<>|<&|>&|>>|>\||<|>")  # longest operator first
 STRICT_BREAKS = ";|&\n()"
-STRICT_ESCAPED = set(" \t;|&()<>\"'`$\\#{}")
+STRICT_NEWLINE = re.compile(r"\r?\n")
+POWERSHELL_HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@", re.S)
 
 
-def strict_group(text, i):
-    """The end of the `$(...)`, `(...)` or backtick group that opens at `i`."""
-    if text[i] == "`":
-        end = text.find("`", i + 1)
-        return len(text) if end < 0 else end + 1
-    depth = 0
-    for j in range(i, len(text)):
-        depth += {"(": 1, ")": -1}.get(text[j], 0)
-        if depth == 0 and text[j] == ")":
-            return j + 1
-    return len(text)
+def join_continued(cmd):
+    """The command with each continued line (`\\` or PowerShell's backtick at the line end)
+    joined to the next, as the shell reads it."""
+    return CONTINUED_LINE.sub(lambda m: (m.group(1) or "") + " ", cmd)
 
 
-def strict_quoted(text, i, escapes=True):
-    """The value and end of the quoted part that opens at `i`. A double quote that never closes
-    with escapes read is read again without them, as PowerShell reads `"C:\\repo\\"`."""
-    quote, value, j = text[i], [], i + 1
-    while j < len(text) and text[j] != quote:
-        if escapes and quote == '"' and text[j] == "\\" and text[j + 1:j + 2] in ('"', "\\", "$", "`"):
-            value.append(text[j + 1])
-            j += 2
-        elif quote == '"' and (text.startswith("$(", j) or text[j] == "`"):
-            end = strict_group(text, j + (text[j] == "$"))
-            value.append(text[j:end])
-            j = end
+class StrictSplit:
+    """The words of the command being read. A redirect's target is the next word, read like any
+    other and then dropped; all digits right before the operator are its file number, and a
+    here-doc's target is kept as the line that ends its body."""
+
+    def __init__(self):
+        self.words, self.word, self.target, self.heredocs = [], None, None, []
+
+    def add(self, text):
+        self.word = (self.word or "") + text
+
+    def end_word(self):
+        if self.word is None:
+            return
+        if self.target is None:
+            self.words.append(self.word)
+        elif self.target in ("<<", "<<-"):
+            self.heredocs.append((self.word, self.target == "<<-"))
+        self.word, self.target = None, None
+
+    def start_redirect(self, operator):
+        if self.word is not None and self.word.isdigit():
+            self.word = None
+        self.end_word()
+        self.target = operator
+
+    def end_command(self, commands):
+        self.end_word()
+        if self.words:
+            commands.append(self.words)
+        self.words, self.target = [], None
+
+
+class StrictReader:
+    """Reads command text into commands, each a list of words with quotes taken off, as the
+    shell reads it: the commands inside `$(...)`, backticks, groups and here-doc bodies are read
+    too, and redirects and comments are left out. PowerShell escapes with the backtick; a POSIX
+    shell escapes with the backslash and opens a group with the backtick."""
+
+    def __init__(self, text, shell):
+        self.text, self.shell, self.commands = text, shell, []
+        self.escape = "`" if shell == "powershell" else "\\"
+
+    def read(self, i=0, closer=""):
+        """Reads commands from `i` up to an unmatched `closer` or the end; returns the index
+        after it."""
+        split = StrictSplit()
+        while i < len(self.text) and self.text[i] != closer:
+            i = self.step(i, split)
+        split.end_command(self.commands)
+        return min(i + 1, len(self.text))
+
+    def step(self, i, split):
+        """Reads the part of a command at `i`; returns the index after it."""
+        char = self.text[i]
+        redirect = STRICT_REDIRECT.match(self.text, i)
+        continued = char == self.escape and STRICT_NEWLINE.match(self.text, i + 1)
+        if continued:
+            return continued.end()
+        if self.opens_group(i):
+            return self.group(i, split)
+        if redirect:
+            split.start_redirect(redirect.group())
+            return redirect.end()
+        if char == "\n":
+            split.end_command(self.commands)
+            return self.heredoc_bodies(i + 1, split)
+        if char in " \t\r":
+            split.end_word()
+        elif char in STRICT_BREAKS or (char in "{}" and split.word is None):
+            split.end_command(self.commands)
+        elif char == "#" and split.word is None:
+            end = self.text.find("\n", i)
+            return len(self.text) if end < 0 else end
         else:
-            value.append(text[j])
-            j += 1
-    if j >= len(text) and escapes and quote == '"':
-        return strict_quoted(text, i, escapes=False)
-    return "".join(value), j + 1
+            value, end = self.part(i)
+            split.add(value)
+            return end
+        return i + 1
+
+    def opens_group(self, i):
+        """Whether a group opens at `i`: `(`, `$(`, `@(`, or a POSIX shell's backtick."""
+        return (self.text[i] == "(" or self.text.startswith(("$(", "@("), i)
+                or (self.text[i] == "`" and self.shell != "powershell"))
+
+    def group(self, i, split):
+        """Reads the group at `i` as commands of its own. Inside a command its text is one word
+        too; a `(` at a command's start is a subshell and adds none."""
+        opener = 1 if self.text[i] in "(`" else 2
+        end = self.read(i + opener, "`" if self.text[i] == "`" else ")")
+        if self.text[i] != "(" or split.words or split.word is not None:
+            split.add(self.text[i:end])
+        return end
+
+    def part(self, i):
+        """The value and end of the word part at `i`: a quoted part, `${...}`, an escaped
+        character or a plain one."""
+        text = self.text
+        here_string = POWERSHELL_HERE_STRING.match(text, i) if self.shell == "powershell" else None
+        if here_string:
+            return here_string.group(2), here_string.end()
+        if text[i] in "'\"":
+            return self.quoted(i)
+        if text.startswith("${", i):
+            end = text.find("}", i) + 1 or len(text)
+            return text[i:end], end
+        if text[i] == self.escape and i + 1 < len(text):
+            return text[i + 1], i + 2
+        return text[i], i + 1
+
+    def quoted(self, i):
+        """The value and end of the quoted part at `i`. In double quotes a `$(...)` (and a POSIX
+        shell's backtick) is read as commands too; PowerShell doubles a quote to escape it."""
+        text, quote, value, j = self.text, self.text[i], [], i + 1
+        while j < len(text):
+            char = text[j]
+            if char == quote and self.shell == "powershell" and text[j + 1:j + 2] == quote:
+                value.append(quote)
+                j += 2
+            elif char == quote:
+                return "".join(value), j + 1
+            elif quote == '"' and char == self.escape and self.escapes_in_quotes(j + 1):
+                value.append("" if text[j + 1] == "\n" else text[j + 1])
+                j += 2
+            elif quote == '"' and (text.startswith("$(", j) or (char == "`" and self.shell != "powershell")):
+                end = self.read(j + (2 if char == "$" else 1), ")" if char == "$" else "`")
+                value.append(text[j:end])
+                j = end
+            else:
+                value.append(char)
+                j += 1
+        return "".join(value), len(text)
+
+    def escapes_in_quotes(self, i):
+        """Whether the escape before `i` inside double quotes escapes: any character in
+        PowerShell, only `"`, `\\`, `$`, a backtick or a line end in a POSIX shell."""
+        return i < len(self.text) and (self.shell == "powershell" or self.text[i] in '"\\$`\n')
+
+    def heredoc_bodies(self, i, split):
+        """Reads the bodies of the here-docs the line just ended opens, each body line as
+        commands of its own; returns the index after the last body."""
+        for delimiter, strip_tabs in split.heredocs:
+            while i < len(self.text):
+                end = self.text.find("\n", i)
+                end = len(self.text) if end < 0 else end
+                line, i = self.text[i:end].rstrip("\r"), end + 1
+                if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+                    break
+                body = StrictReader(line, self.shell)
+                body.read()
+                self.commands.extend(body.commands)
+        split.heredocs = []
+        return min(i, len(self.text))
 
 
-def strict_redirect(text, i):
-    """The end of the redirect that starts at `i` (`>`, `2>&1`, `> out.txt`), its target included."""
-    j = i
-    while j < len(text) and text[j] in "<>&|-0123456789":
-        j += 1
-    if re.search(r"&\d*-?$", text[i:j]):
-        return j
-    while j < len(text) and text[j] in " \t":
-        j += 1
-    while j < len(text) and text[j] not in " \t\r\n;|&()":
-        j += 1
-    return j
-
-
-def strict_opens_group(text, i, in_command):
-    """Whether a group opens at `i`: a backtick, `$(`, or a `(` inside a command (PowerShell's
-    group; at a command's start it is a subshell)."""
-    return text[i] == "`" or text.startswith("$(", i) or (text[i] == "(" and in_command)
-
-
-def strict_part(text, i):
-    """The value and end of the word part at `i`: a quoted part, `${...}`, an escaped character
-    or a plain one. A backslash before anything else stays, as in a Windows path."""
-    if text[i] in "'\"":
-        return strict_quoted(text, i)
-    if text.startswith("${", i):
-        end = text.find("}", i) + 1 or len(text)
-        return text[i:end], end
-    if text[i] == "\\" and text[i + 1:i + 2] in STRICT_ESCAPED:
-        return text[i + 1], i + 2
-    return text[i], i + 1
-
-
-def strict_commands(cmd):
-    """Without the parser: each command's words, quotes taken off; the commands inside `$(...)`,
-    backticks and a group are read as commands too, and redirects and comments are left out."""
-    text = STRICT_CONTINUATION.sub(lambda m: (m.group(1) or "") + " ", cmd)
-    commands, words, word, i = [], [], None, 0
-    while i < len(text):
-        char = text[i]
-        if strict_opens_group(text, i, bool(words) or word is not None):
-            end = strict_group(text, i + (char == "$"))
-            commands.extend(strict_commands(text[i + (2 if char == "$" else 1):end - 1]))
-            word, i = (word or "") + text[i:end], end
-        elif char in "<>" and (word is None or word.isdigit()):
-            word, i = None, strict_redirect(text, i)
-        elif char in " \t\r" or char in STRICT_BREAKS or (char in "{}" and word is None):
-            if word is not None:
-                words.append(word)
-                word = None
-            if char not in " \t\r":
-                commands.append(words)
-                words = []
-            i += 1
-        elif char == "#" and word is None:
-            i = text.find("\n", i) if "\n" in text[i:] else len(text)
-        else:
-            value, i = strict_part(text, i)
-            word = (word or "") + value
-    if word is not None:
-        words.append(word)
-    return [words for words in commands + [words] if words]
+def strict_commands(cmd, shell):
+    """Without the parser: each command's words, as `StrictReader` reads them."""
+    reader = StrictReader(cmd, shell)
+    reader.read()
+    return reader.commands
 
 
 def git_route(commands, names_git_at_run_time):
@@ -451,18 +526,18 @@ def git_route(commands, names_git_at_run_time):
     return None
 
 
-def strict_route(cmd):
+def strict_route(cmd, shell):
     """Without the parser: the kind of route past the hook the command's words take, or None."""
-    return git_route(strict_commands(cmd), lambda word: word.startswith("$") and GIT_WORD.search(word))
+    return git_route(strict_commands(cmd, shell), lambda word: word.startswith("$") and GIT_WORD.search(word))
 
 
-def bypass_reason(cmd, parsed, assignments):
+def bypass_reason(cmd, parsed, assignments, shell):
     """Why the command takes a route past the hook, or None: read from the parsed commands,
     or, without the parser, from the commands the strict read splits."""
     strict = parsed is None
     if LEFTHOOK_OFF.search(cmd) if strict or assignments is None else turns_lefthook_off(parsed, assignments):
         return BYPASS_REASONS["lefthook"]
-    kind = strict_route(cmd) if strict else git_route(parsed, is_run_time_git)
+    kind = strict_route(cmd, shell) if strict else git_route(parsed, is_run_time_git)
     return BYPASS_REASONS[kind] if kind else None
 
 
@@ -779,9 +854,10 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    writes = bool(GIT_WRITE.search(cmd) or GH_WRITE.search(cmd) or GH_API.search(cmd)
-                  or HTTP_GH.search(cmd))
-    if not (writes or LEFTHOOK_OFF.search(cmd) or GIT_CONFIG_HOOKS.search(cmd)):
+    joined = join_continued(cmd)
+    writes = bool(GIT_WRITE.search(joined) or GH_WRITE.search(joined) or GH_API.search(joined)
+                  or HTTP_GH.search(joined))
+    if not (writes or LEFTHOOK_OFF.search(joined) or GIT_CONFIG_HOOKS.search(joined)):
         sys.exit(0)
 
     if writes:
@@ -798,7 +874,7 @@ def main():
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.{hint}")
         scan_text(text, f"file {path}")
-    reason = bypass_reason(cmd, parsed, assignments)
+    reason = bypass_reason(cmd, parsed, assignments, shell)
     if reason:
         deny(reason)
     sys.exit(0)
