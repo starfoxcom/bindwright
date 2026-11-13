@@ -851,6 +851,9 @@ test('a push or a new PR is the subcommand, never words inside a message', () =>
   expect(isPushOrPr("gh pr comment 5 --body 'create the gh pr create docs'")).toBe(false)
   expect(isPushOrPr("git commit -F - <<'EOF'\nfix: then git push it\nEOF")).toBe(false)
   expect(isPushOrPr('git log --oneline origin/x..HEAD')).toBe(false)
+  // An option's value is never the subcommand.
+  expect(isPushOrPr('git -c push.default=current fetch')).toBe(false)
+  expect(isPushOrPr('git -c push.default=current --no-pager push')).toBe(true)
   // A here-string feeds one word: the lines after it are still commands.
   expect(isPushOrPr('git commit -F - <<< fixup\ngit push')).toBe(true)
   expect(isPushOrPr('git commit -F - <<<"fixup"\ngit push')).toBe(true)

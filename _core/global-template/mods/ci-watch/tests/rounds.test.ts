@@ -100,7 +100,9 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
   ]
   for (const attempt of held) expect(await attempt()).toHaveProperty('deny')
   expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('3 more to go')
-  for (const command of ['git log --grep push', 'git stash push', 'echo "then git push"', 'git commit-graph write']) {
+  const notHeld = ['git log --grep push', 'git stash push', 'echo "then git push"', 'git commit-graph write',
+    'git -c commit.gpgsign=false rebase --continue', 'git -c push.default=current status']
+  for (const command of notHeld) {
     expect(await bash(command)).not.toHaveProperty('deny')
   }
   expect(await call({ tool: 'Bash', command: 'git push', agentId: 'helper' })).not.toHaveProperty('deny')
