@@ -4,7 +4,7 @@ import type { Watch } from '../types'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  isResearchDue, redStreak, researchRefusal, researchText, roundsToResearch, SOURCES_NEEDED, withTopic,
+  isResearchDue, lookupTopic, redStreak, researchRefusal, researchText, roundsToResearch, SOURCES_NEEDED, withTopic,
 } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
@@ -599,13 +599,10 @@ function startPolling($: EngineInterface): Promise<void> {
   return start
 }
 
-// Each web lookup that ran (a WebSearch, a WebFetch or the web-fetch agent) counts toward an owed step back,
-// once per topic.
+// Each web lookup the main session ran counts toward an owed step back, once per topic (`lookupTopic`).
 async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
-  const input = e as { tool?: unknown; subagent_type?: unknown; query?: unknown; url?: unknown; prompt?: unknown }
-  if (input.tool === 'Agent' && input.subagent_type !== 'web-fetch') return
-  if ((await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
-  const topic = String(input.query ?? input.url ?? input.prompt ?? '')
+  const topic = lookupTopic(e)
+  if (topic === undefined || (await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
   const counted = (w: Watch): Watch => ({ ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic) })
   live.watches = live.watches.map(w => (w.stepBackTopics ? counted(w) : w))
   live.generation++

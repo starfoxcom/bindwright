@@ -108,6 +108,9 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
   await call({ tool: 'WebSearch', query: ' How others solve it' })
   await call({ tool: 'WebFetch', url: 'https://down.example' })
   await call({ tool: 'Agent', subagent_type: 'general-purpose', prompt: 'look around' })
+  // A subagent's own lookups (the pages a web-fetch agent reads) are not the main session's.
+  await call({ tool: 'WebFetch', url: 'https://example.com/inner', agentId: 'fetcher' })
+  await call({ tool: 'WebSearch', query: 'inner search', agentId: 'fetcher' })
   expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('2 more to go')
   // Lookups sent together all count.
   await Promise.all([

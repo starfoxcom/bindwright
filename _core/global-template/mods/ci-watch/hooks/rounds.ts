@@ -55,6 +55,18 @@ export function researchText(pr: string, red: number): string {
 /** Distinct web lookups a step back takes: one source is a guess, three can be compared. */
 export const SOURCES_NEEDED = 3
 
+/** What a tool call looked up, when it is a web lookup of the main session: a WebSearch's query, a WebFetch's
+ * URL or a web-fetch agent's brief. A subagent's own calls are not: a web-fetch agent is one lookup, not its
+ * pages. Undefined for any other call. */
+export function lookupTopic(e: unknown): string | undefined {
+  const input = e as {
+    tool?: unknown; subagent_type?: unknown; query?: unknown; url?: unknown; prompt?: unknown; agentId?: unknown
+  }
+  if (input.agentId !== undefined) return undefined
+  if (input.tool === 'Agent' && input.subagent_type !== 'web-fetch') return undefined
+  return String(input.query ?? input.url ?? input.prompt ?? '')
+}
+
 /** A latched step back's topics with one more lookup, lower-cased and trimmed, a repeat counted once;
  * undefined once SOURCES_NEEDED distinct topics were looked up, which ends the step back. */
 export function withTopic(topics: readonly string[], topic: string): string[] | undefined {
