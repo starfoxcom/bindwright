@@ -469,7 +469,13 @@ class GuardHookTest(unittest.TestCase):
                 ('sudo git commit -am "-From now on x"', "PowerShell"),
                 ('timeout 5 $GIT commit -m "--file=x" && powershell -Command "Stop-Process -Force"', "Bash"),
                 ('python - <<\'EOF\' 2>/dev/null || true\nrun(["gh", "api", "--input", "-"])\nEOF\ngit commit -m x',
-                 "Bash")):
+                 "Bash"),
+                ('"$S/bin/actionlint.exe" x && git commit -m x', "Bash"),
+                ('J=/c/jq.exe; "$J" .x f.json && git commit -m x', "Bash"),
+                ('for c in python "py -3"; do $c -V; done && git commit -m x', "Bash"),
+                ("for id in 1 2; do gh api r/$id > $K/r-$id.json; done && git commit -m x", "Bash"),
+                ("git commit -F - <<'EOF' >/dev/null; git log -1\nmsg\nEOF", "Bash"),
+                ("gh api graphql -f query='query{user(login:\"x\"){id}}'", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -512,6 +518,8 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 
+    def test_shapes_the_parser_is_unsure_of_are_refused(self):
+        path = self.body_file(f"{GENERATED_LINE}\n")
         # Shapes the parser is unsure of (a program or an array built at run time, `--%`, a word
         # after a redirect) are refused with the way out, never guessed at.
         for command, tool in (
@@ -530,9 +538,17 @@ class GuardHookTest(unittest.TestCase):
                 (f'args=(\n  --title "feat: x"\n  --body-file "{path}"\n)\ngh pr create "${{args[@]}}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
                 (f'$GIT commit --template "{path}"', "Bash"),
-                ('$GIT commit -m "--file=x"', "Bash")):
+                ('$GIT commit -m "--file=x"', "Bash"),
+                ("for GIT in ls /usr/bin/git; do $GIT commit -n -m x; done", "Bash"),
+                ("for GIT in ls $X; do $GIT commit -m x; done", "Bash"),
+                ("for GIT; do $GIT commit -m x; done", "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), "Write it as plain commands")
+        # A program named through a variable, and a write after a here-doc's first line, are read.
+        for command in ("GIT=git; $GIT commit -n -m x",
+                        "git commit -F - <<'EOF' >/dev/null && git push --no-verify\nmsg\nEOF"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "git hook bypass")
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""

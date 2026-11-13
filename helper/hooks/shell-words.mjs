@@ -50,7 +50,9 @@ function holdsCommandWords(node) {
   if (node.type === "heredoc_redirect") return node.childrenForFieldName("argument").length > 0;
   if (node.type === "herestring_redirect") return node.namedChildren.length > 1;
   if (node.type !== "file_redirect") return false;
-  const targets = node.namedChildren.filter((c) => c.type !== "file_descriptor").length;
+  // Parts that touch (`$K/r-$id.json` is several nodes) are one word.
+  const parts = node.namedChildren.filter((c) => c.type !== "file_descriptor");
+  const targets = parts.filter((c, i) => i === 0 || parts[i - 1].endIndex !== c.startIndex).length;
   const closes = node.children.some((c) => c.type === ">&-" || c.type === "<&-");
   return targets > (closes ? 0 : 1);
 }
@@ -112,6 +114,63 @@ function psAssignment(node) {
   return { name: left?.text ?? "", value: literal ? literal[2] : dynamic(right ?? node) };
 }
 
+// The PowerShell grammar fails on a bare word joined to a quoted string that holds a bracket
+// (`query='{a}'`), which PowerShell reads as one word. Moving the quote to the word's start
+// (`'query={a}'`) reads the same, so a failed parse is tried once more that way.
+const PS_JOINED_QUOTE = /(^|[\s;|(])([A-Za-z_][\w.-]*=)(['"])/g;
+// The bash grammar fails on a here-doc operator followed by another redirect on its line
+// (`<<'EOF' >/dev/null; next`); bash reads the redirects in either order, so a failed parse is
+// tried once more with the here-doc operator after them.
+const BASH_HEREDOC_FIRST = /(<<-?\s*(['"]?)\w+\2)((?:[ \t]+\d*(?:&>>?|[<>]{1,2}&?)[ \t]*[^\s;|&]+)+)/g;
+const BASH_LEADING_REDIRECTS = /^(?:[ \t]+\d*(?:&>>?|[<>]{1,2}&?)[ \t]*[^\s;|&]+)*/;
+
+// The bash grammar also fails on a command that goes on after a here-doc on its line
+// (`<<'EOF' >/dev/null; git log`). The words are the same with the rest of that line moved
+// below the body, its connector dropped, so a failed parse is tried that way too.
+function heredocRestBelow(source) {
+  const lines = source.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const at = /<<(-?)\s*(['"]?)(\w+)\2/.exec(lines[i]);
+    if (!at) continue;
+    const head = at.index + at[0].length;
+    const tail = lines[i].slice(head).replace(BASH_LEADING_REDIRECTS, "");
+    const rest = tail.replace(/^\s*(?:;|&&|\|\||\|)\s*/, "");
+    if (rest === tail || !rest.trim()) continue;
+    const end = lines.findIndex((l, k) => k > i && (at[1] ? l.replace(/^\t+/, "") : l) === at[3]);
+    if (end < 0) continue;
+    lines[i] = lines[i].slice(0, lines[i].length - rest.length).replace(/\s*(?:;|&&|\|\||\|)\s*$/, "");
+    lines.splice(end + 1, 0, rest);
+  }
+  return lines.join("\n");
+}
+
+const PROGRAM_NAME = /^[\w.+-][\w .+-]*$/;
+
+// The program a word built at run time names, or null when it could be any program, git
+// included: its last path segment when that is literal (`"$S/bin/actionlint.exe"`), or the
+// literal value of the one variable it is, set earlier in the command (`J=/c/jq.exe; "$J"`).
+function knownProgram(word, assignments, loops = []) {
+  const text = word.dynamic.replace(/^"(.*)"$/s, "$1");
+  // A `for` variable names each of its values in turn: known when every one is known and none is git.
+  const loop = loops.findLast((l) => new RegExp(`\\$\\{?${l.name}(?!\\w)`).test(text));
+  if (loop) {
+    const programs = loop.values.map((value) => {
+      const each = text.replace(new RegExp(`\\$\\{?${loop.name}(?!\\w)\\}?`, "g"), value);
+      return knownProgram({ dynamic: each }, assignments) ?? (PROGRAM_NAME.test(each) ? each : null);
+    });
+    const isGit = (program) => /^git(\.exe)?$/i.test(program.split(" ")[0].split(/[\\/]/).pop());
+    return programs.length && programs.every((p) => p !== null && !isGit(p)) ? programs[0] : null;
+  }
+  const name = /^\$\{?(\w+)\}?$/.exec(text);
+  if (name) {
+    const set = assignments.findLast((a) => a.name.replace(/^\$/, "") === name[1]);
+    if (!set || set.value === "") return null;
+    return typeof set.value === "string" ? set.value : knownProgram(set.value, []);
+  }
+  const last = text.split(/[\\/]/).pop().replace(/["')]+$/, "");
+  return last !== text && PROGRAM_NAME.test(last) ? last : null;
+}
+
 export async function shellWords(shell, command) {
   const { Parser, Language } = await import(pathToFileURL(path.join(PARSERS, "web-tree-sitter.mjs")).href);
   await Parser.init({ locateFile: (name) => path.join(PARSERS, name) });
@@ -120,14 +179,26 @@ export async function shellWords(shell, command) {
   // PowerShell takes typographic quotes as quotes; the grammar knows only the plain ones.
   const source = shell === "bash" ? command
     : command.replace(/[“”„]/g, '"').replace(/[‘’‚‛]/g, "'");
-  const tree = parser.parse(source);
+  let tree = parser.parse(source);
+  const retries = shell === "powershell" ? [source.replace(PS_JOINED_QUOTE, "$1$3$2")]
+    : [source.replace(BASH_HEREDOC_FIRST, "$3 $1"), heredocRestBelow(source)];
+  for (const retry of retries) {
+    if (!tree.rootNode.hasError) break;
+    const moved = parser.parse(retry);
+    if (!moved.rootNode.hasError) tree = moved;
+  }
   // The bash grammar takes a backslash before CR LF as a line continuation, but bash ends
   // the command there, so it cannot be trusted on a command holding a CR.
   let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
   const assignments = [];
+  const loops = [];
   (function walk(node) {
+    if (shell === "bash" && node.type === "for_statement") {
+      const values = node.childrenForFieldName("value").map((v) => v.text.replace(/^(["'])(.*)\1$/s, "$2"));
+      loops.push({ name: node.childForFieldName("variable")?.text ?? "", values });
+    }
     if (shell === "bash" && node.type === "variable_assignment") assignments.push(bashAssignment(node));
     if (shell === "powershell" && node.type === "assignment_expression") assignments.push(psAssignment(node));
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
@@ -135,9 +206,13 @@ export async function shellWords(shell, command) {
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
     if (node.type === "command") {
       const words = read(node);
-      // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the
-      // command is unreadable.
-      if (typeof words[0] !== "string") unreadable = true;
+      // A program built at run time that could be git (`$GIT`) cannot be told apart from its
+      // arguments, so the command is unreadable.
+      if (typeof words[0] !== "string") {
+        const known = knownProgram(words[0], assignments, loops);
+        if (known === null) unreadable = true;
+        else words[0] = known;
+      }
       commands.push(words);
     }
     // An array's words reach a command later, wherever it runs, so it is unreadable. So
