@@ -31,9 +31,20 @@ type dynamic struct {
 }
 
 var (
-	unquotedEscape = regexp.MustCompile(`\\(.)`)
-	quotedEscape   = regexp.MustCompile("\\\\([$`\"\\\\])")
+	unquotedEscape = regexp.MustCompile(`(?s)\\(.)`)
+	quotedEscape   = regexp.MustCompile("\\\\([$`\"\\\\\n])")
 )
+
+// unescape reads backslash escapes left to right, as bash does: a backslash before a newline
+// joins the lines, before any other character it matched it keeps that character.
+func unescape(escape *regexp.Regexp, text string) string {
+	return escape.ReplaceAllStringFunc(text, func(match string) string {
+		if match[1:] == "\n" {
+			return ""
+		}
+		return match[1:]
+	})
+}
 
 // reader turns words into their literal values, keeping the source to quote dynamic ones.
 type reader struct {
@@ -68,7 +79,7 @@ func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 		if strings.ContainsAny(part.Value, "*?[") {
 			return "", false
 		}
-		return unquotedEscape.ReplaceAllString(strings.ReplaceAll(part.Value, "\\\n", ""), "$1"), true
+		return unescape(unquotedEscape, part.Value), true
 	case *syntax.SglQuoted:
 		return part.Value, !part.Dollar
 	case *syntax.DblQuoted:
@@ -81,7 +92,7 @@ func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 			if !ok {
 				return "", false
 			}
-			value.WriteString(quotedEscape.ReplaceAllString(strings.ReplaceAll(lit.Value, "\\\n", ""), "$1"))
+			value.WriteString(unescape(quotedEscape, lit.Value))
 		}
 		return value.String(), true
 	}
