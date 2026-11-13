@@ -680,7 +680,8 @@ class GuardHookTest(unittest.TestCase):
                         "git config get core.hooksPath && git commit -m x", '$GIT commit -m "--file=x"',
                         '"$S/bin/actionlint.exe" x && git commit -m x',
                         'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push",
-                        'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0"):
+                        'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0",
+                        "git commit -uno -m x", "git commit -Sn0key -m x"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
 

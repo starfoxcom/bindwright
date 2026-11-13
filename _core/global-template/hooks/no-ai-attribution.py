@@ -195,6 +195,8 @@ BYPASS_REASONS = {
 # prefix of at least the length given.
 NO_VERIFY_SUBCOMMANDS = {"commit", "am", "merge", "push", "rebase"}
 SHORT_VALUES = {"commit": "cCFmt", "am": "C", "merge": "mFsX", "push": "o", "rebase": "sXx"}
+# Letters whose value is optional and only ever written onto them (`-uno`, `-S<keyid>`).
+ATTACHED_VALUES = {"commit": "uS", "am": "S", "merge": "S", "rebase": "S"}
 LONG_VALUES = {
     "commit": {"--author", "--date", "--file", "--message", "--reedit-message", "--reuse-message",
                "--fixup", "--squash", "--template", "--trailer", "--cleanup", "--pathspec-from-file"},
@@ -499,6 +501,8 @@ def option_words(subcommand, rest):
                 options.append("-" + letter)
                 if letter in letters:
                     skip = k == len(word) - 1
+                    break
+                if letter in ATTACHED_VALUES.get(subcommand, ""):  # `-uno`: the rest is its value
                     break
     return options
 
