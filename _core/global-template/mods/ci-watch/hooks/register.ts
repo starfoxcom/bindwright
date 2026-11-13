@@ -3,15 +3,18 @@ import { atom, update, type EngineInterface, type Hook, type Register } from 'cl
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
-import { isResearchDue, recordRound, redStreak, researchText, roundsToResearch, ROUNDS_FILE } from './rounds'
-import type { PrRounds } from './rounds'
+import { isResearchDue, isResearchOwed, redStreak, researchRefusal, researchText, roundsToResearch } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import {
+  dataFolder, ensureDir, noteResearch, readRounds, recordRounds, redRoundsOf, researchedAt, statePath,
+} from './store'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
 import { HELP, HINT } from './help'
 export { HELP } from './help'
+export { MKDIR_SCRIPT } from './store'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -84,15 +87,6 @@ function outcomeText(watch: Watch, now?: number): string {
   )
 }
 
-// The engine's fs makes no missing folders, so the data folder is made through node, once per load.
-export const MKDIR_SCRIPT = 'require("fs").mkdirSync(process.argv[1],{recursive:true})'
-const madeDirs = new Set<string>()
-async function ensureDir($: EngineInterface, dir: string): Promise<void> {
-  if (madeDirs.has(dir)) return
-  const { exitCode } = await $.process.run(['node', '-e', MKDIR_SCRIPT, dir], { timeoutMs: 10_000 })
-  if (exitCode === 0) madeDirs.add(dir)
-}
-
 // Every session leaves a state file and an owner file behind. Once per load, those of other sessions
 // not written for SWEEP_DAYS are removed, never the settings
 // (`node <plugin root>/scripts/sweep.cjs <folder> <this session's id> <days>`; test-helper/sweep.spec.cjs runs it).
@@ -106,16 +100,6 @@ async function sweep($: EngineInterface): Promise<void> {
   await $.process.run(['node', script, ...args], { timeoutMs: 20_000 }).catch(() => undefined)
 }
 
-async function statePath($: EngineInterface): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const dir = `${configured ?? `${home}/.claude`}/mods-data/ci-watch`
-  return `${dir}/${await $.session.id()}.json`.replaceAll('\\', '/')
-}
-
-async function dataFolder($: EngineInterface): Promise<string> {
-  return (await statePath($)).replace(/\/[^/]*$/, '')
-}
 // At the entry check of every hook and poll: a resumed id's saved watches join memory (owner.ts).
 async function followSession($: EngineInterface): Promise<void> {
   try {
@@ -283,39 +267,14 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// The fix-round count (rounds.ts). Each PR's rounds live beside the session files, shared by every session.
-async function roundsPath($: EngineInterface): Promise<string> {
-  const path = await statePath($)
-  return `${path.slice(0, path.lastIndexOf('/'))}/${ROUNDS_FILE}`
+// The refusal for a push to the branch's PR while its step back is owed, or undefined.
+async function owedResearch($: EngineInterface): Promise<string | undefined> {
+  const pr = await prOfBranch($)
+  if (!pr || (pr.state !== undefined && pr.state !== 'OPEN')) return undefined
+  const key = `${pr.repo}#${pr.number}`
+  const rounds = (await readRounds($))[key]
+  return isResearchOwed(rounds, await researchedAt($)) ? researchRefusal(key, redStreak(rounds)) : undefined
 }
-
-async function readRounds($: EngineInterface): Promise<Record<string, PrRounds>> {
-  const all = await $.fs.read(await roundsPath($)).then(text => JSON.parse(String(text))).catch(() => undefined)
-  return all && typeof all === 'object' ? (all as Record<string, PrRounds>) : {}
-}
-
-// The PR's rounds changed by `change`, applied to the file as read right before the write, with nothing
-// awaited between the two: a round another session wrote meanwhile is the state the change starts from.
-async function updateRounds($: EngineInterface, key: string, change: (pr?: PrRounds) => PrRounds) {
-  const path = await roundsPath($)
-  await ensureDir($, path.slice(0, path.lastIndexOf('/')))
-  const all = await readRounds($)
-  await $.fs.write(path, JSON.stringify({ ...all, [key]: change(all[key]) }))
-}
-
-// Each watch that settled on a pushed head is one round: red when a check failed. A watch that ran out of
-// time says nothing about the checks and is no round. A failed write leaves the count as it was.
-async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<void> {
-  for (const w of settled) {
-    // A silent watch follows a head someone else pushed: no round of this session's.
-    if (w.isSilent || (w.outcome !== 'failed' && w.outcome !== 'passed')) continue
-    const red = w.outcome === 'failed'
-    await updateRounds($, `${w.repo}#${w.number}`, pr => recordRound(pr, w.headSha, red)).catch(() => undefined)
-  }
-}
-
-const redRoundsOf = async ($: EngineInterface, pr: { repo: string; number: number }) =>
-  redStreak((await readRounds($))[`${pr.repo}#${pr.number}`])
 
 // After a `gh pr merge` (`merged`: its PR number, 0 for the branch's PR, so every finished watch is a
 // candidate). A watch is dropped only once GitHub says its PR is merged or closed: `--auto` only queues the
@@ -743,6 +702,10 @@ export const register: Register = (on, options) => {
     const isPowerShell = (e as { tool?: unknown }).tool === 'PowerShell'
     await startPolling($)
     if (await isRetired($)) return next(e)
+    if (e.agentId === undefined && /\bgit\b[^|;&\n]*\bpush\b/.test(command)) {
+      const refusal = await owedResearch($)
+      if (refusal) return { deny: refusal }
+    }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.
     const notes = e.agentId !== undefined || 'deny' in answered ? [] : await takeNotes($)
@@ -753,6 +716,15 @@ export const register: Register = (on, options) => {
     const merged = mergedNumber(command, isPowerShell)
     if (merged !== undefined) await forgetMerged($, merged)
     if (isPushOrPr(command, isPowerShell)) await watchPushed($, command, isPowerShell, result.result)
+    return result
+  })
+
+  // Web research clears an owed step back for this session's next push.
+  on('tool.call', { tool: ['WebSearch', 'WebFetch', 'Agent'] }, async ($, e, next) => {
+    const result = await next(e)
+    const isWebAgent = (e as { subagent_type?: unknown }).subagent_type === 'web-fetch'
+    const isResearch = (e as { tool?: unknown }).tool !== 'Agent' || isWebAgent
+    if (isResearch && !('deny' in result) && !result.isError) await noteResearch($)
     return result
   })
 

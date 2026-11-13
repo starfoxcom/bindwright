@@ -60,17 +60,19 @@ test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
 
-// Nothing is refused any more: a push at any count goes through, and the count's file is no one's to guard.
-test('a push at any red count is never refused', async ($, on) => {
+// A push waits for web research only while a step back is owed, and research run after the last red
+// round settled clears it.
+test('a push waits for web research at a step back, and only there', async ($, on) => {
   const { seen } = world(on)
+  on('tool.call', { tool: 'WebSearch' }, async () => ({ result: 'found' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  for (const n of [6, 13]) {
-    seed(seen, reds(n))
-    for (const tool of ['Bash', 'PowerShell']) {
-      const answer = await $.tool.call({ tool, command: 'git push origin feature/x' } as never)
-      expect(answer).not.toHaveProperty('deny')
-    }
-  }
+  seed(seen, reds(4))
+  const push = (tool: string) => $.tool.call({ tool, command: 'git push origin feature/x' } as never)
+  expect(await push('Bash')).not.toHaveProperty('deny')
+  seed(seen, reds(6))
+  for (const tool of ['Bash', 'PowerShell']) expect(await push(tool)).toHaveProperty('deny')
+  await $.tool.call({ tool: 'WebSearch', query: 'how others solve it' } as never)
+  expect(await push('Bash')).not.toHaveProperty('deny')
 })
 
 // The third red round in a row: its own settled watch makes the count three, and the wake asks for research.
@@ -110,7 +112,7 @@ test('each settled watch of a pushed head adds a round; an unreadable count file
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
-  expect(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7']).toEqual({ rounds: [{ sha: 'a1', red: true }] })
+  expect(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7']).toMatchObject({ rounds: [{ sha: 'a1', red: true }] })
 })
 
 // A head someone else pushed (a silent watch, past the hour after this session's push) is no round of this
@@ -127,7 +129,7 @@ test("a silent watch of someone else's head adds no round", LONG, async ($, on) 
   seen.bucket = 'fail'
   for (let i = 0; i < 25; i++) await clock.advance(30_000)
   const rounds = (JSON.parse(seen.files.get(path) ?? '{}') as Record<string, PrRounds>)['o/r#7']?.rounds
-  expect(rounds).toEqual([{ sha: 'a1', red: false }])
+  expect(rounds).toMatchObject([{ sha: 'a1', red: false }])
 })
 
 // A round another session writes while this one is being added is the state it adds to: the file is read

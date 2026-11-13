@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **A push waits for research at a step back.** When a PR's red rounds reach a step back (the 3rd in a row, the 5th, and every one from the 6th), the ci-watch mod refuses the session's next `git push` until a web search or page fetch (WebSearch, WebFetch or the web-fetch agent) has run since that round settled. Subagents and closed PRs are not held.
+
 ## [v4.0.0] — 2026-11-12
 
 ### Breaking
