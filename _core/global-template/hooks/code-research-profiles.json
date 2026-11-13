@@ -33,7 +33,7 @@
       "detection_target": ".findwright/index.db",
       "sequence_bullets": "  • find: a plain-English question or a name; the files that answer it, best first.\n  • search: regexes over every tracked file, with globs and context lines.\n  • symbols / outline: names by kind, and a file's symbols with line ranges."
     },
-    "notes": "Ships inside Bindwright's helper, so nothing is downloaded but its meaning model (32 MB, from Hugging Face, checked against a pinned SHA-256) on the first search. Needs Node 22.13 or later. The agent step registers it once for every repo on this computer. A repo gets a .findwright/ folder the first time a session searches it with FindWright: the index, the hit log and an ignore file that keeps everything there out of git except config.json, the project's own settings. The index stays current on every call. In the mcp entry, $HOME stands for the home folder's absolute path."
+    "notes": "Ships inside Bindwright's helper, so nothing is downloaded but its meaning model (32 MB, from Hugging Face, checked against a pinned SHA-256) on the first search. Needs Node 22.16 or later on the 22 line, or 24 or later, for the full-text index (FTS5) in node:sqlite. The agent step registers it once for every repo on this computer. A repo gets a .findwright/ folder the first time a session searches it with FindWright: the index, the hit log and an ignore file that keeps everything there out of git except config.json, the project's own settings. The index stays current on every call. In the mcp entry, $HOME stands for the home folder's absolute path."
   },
   "none": {
     "license": null,
