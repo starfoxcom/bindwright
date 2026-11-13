@@ -152,8 +152,11 @@ GIT_MESSAGE_FLAGS = {"-m", "--message"}
 MESSAGE_FLAGS = {"-b", "--body", "-t", "--title", "--notes", "--subject", "--message"}
 GH_MESSAGE_FLAGS = MESSAGE_FLAGS | {"-n"}  # gh's -n is --notes; git's is a switch
 # `-am msg`: git's switches, then -m takes the next word. The first letter that takes a value
-# (m, c, n, t, u) takes the rest of the word instead (`-mcalm` is the message "calm").
-GIT_MESSAGE_CLUSTER = re.compile(r"-(?:(?![cmntu])[a-z])*m")
+# takes the rest of the word instead (`-mcalm` is the message "calm"). Besides m, these
+# lowercase letters take one in each git write that has -m (`git <subcommand> -h`); an alias
+# or a subcommand built at run time may be any of them.
+GIT_VALUE_LETTERS = {"commit": "ctu", "tag": "u", "notes": "c", "merge": "s", "commit-tree": "p"}
+ANY_VALUE_LETTERS = "cpstu"
 ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fmsg`, `-d@body`)
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
@@ -250,12 +253,14 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
+def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
     {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
-    never a flag."""
+    never a flag. With `value_letters`, so is the word after a git cluster ending in -m whose
+    earlier letters take no value."""
+    cluster = re.compile(r"-(?:(?![m%s])[a-z])*m" % value_letters) if value_letters is not None else None
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
@@ -264,7 +269,7 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS):
             continue
         built = isinstance(word, dict)
         message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
-                   or ("-m" in message_flags and GIT_MESSAGE_CLUSTER.fullmatch(text) is not None))
+                   or (cluster is not None and cluster.fullmatch(text) is not None))
         if text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
         elif text[:2] in short and len(text) > 2:
@@ -294,10 +299,10 @@ def body_file(flag, value, readers="@<"):
     return value
 
 
-def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<"):
+def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", value_letters=None):
     """Every file the words' flags in `flags` name as a body."""
     files = []
-    for flag, value in flag_values(words, ATTACHED, message_flags):
+    for flag, value in flag_values(words, ATTACHED, message_flags, value_letters):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value, readers)
@@ -324,7 +329,14 @@ def git_files(words):
     i = git_subcommand(words)[0]
     if i >= len(words) or (isinstance(words[i], str) and words[i] in GIT_READS):
         return []
-    return body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS)
+    return body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS, value_letters=git_value_letters(words))
+
+
+def git_value_letters(words):
+    """The lowercase letters other than m that take a value in this git command's subcommand."""
+    i = git_subcommand(words)[0]
+    subcommand = words[i] if i < len(words) and isinstance(words[i], str) else None
+    return GIT_VALUE_LETTERS.get(subcommand, ANY_VALUE_LETTERS)
 
 
 def get_content_files(words):
@@ -376,8 +388,11 @@ def command_files(words):
     built_git = any(is_run_time_git(w) for w in words)
     flags = BODY_FLAGS if built_git else BODY_FLAGS - {"--template"}
     message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names or built_git else set())
+    letters = None if "git" not in names and not built_git else "".join(
+        [ANY_VALUE_LETTERS] * built_git + [git_value_letters(run) for run in inner if program(run) == "git"])
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
-    return body_files(words, flags, message, readers) + [f for run in inner for f in command_files(run)]
+    return (body_files(words, flags, message, readers, letters)
+            + [f for run in inner for f in command_files(run)])
 
 
 def folder_targets(words):

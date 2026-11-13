@@ -450,6 +450,9 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
+                ('git commit -nm "--file=x is gone"', "Bash"),
+                ('git merge -nm "--file=x is gone" feature', "Bash"),
+                ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
                 ('gh release create v1 -n "--notes-file x is gone"', "Bash"),
                 ('gh pr comment 5 --body "--body-file=x was ignored"', "Bash"),
@@ -510,6 +513,8 @@ class GuardHookTest(unittest.TestCase):
                 (f'flock lock $GIT commit --template "{path}"', "Bash"),
                 (f'git notes add -mcalm -F "{path}"', "Bash"),
                 (f'git commit -cm -F "{path}"', "Bash"),
+                (f'git merge -sm -F "{path}" feature', "Bash"),
+                (f'git commit-tree -pm -F "{path}" HEAD^{{tree}}', "Bash"),
                 (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
                 (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
                 # A run-time program gets the strict read, which takes flag-like message text as a flag.
