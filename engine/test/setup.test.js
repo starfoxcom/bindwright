@@ -401,7 +401,8 @@ test("both writers name a link deeper down by its own path", { skip: noPython },
   );
 });
 
-const run = (cmd, args) => spawnSync(cmd, args, { cwd: repo, encoding: "utf8" });
+// A whole bind's output passes spawnSync's default 1 MiB buffer.
+const run = (cmd, args) => spawnSync(cmd, args, { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 });
 const commands = (args) => [
   run(process.execPath, [join(engine, "cli.js"), ...args]),
   run(python, [join(engine, "bind.py"), ...args]),
@@ -433,9 +434,11 @@ test("both commands bind a setup code to the same output", { skip: noPython }, a
 });
 
 test("stdin answers that hold only the changed choices bind as the full defaults do", { skip: noPython }, () => {
+  // A whole bind's output passes spawnSync's default 1 MiB buffer.
+  const output = { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30 };
   const piped = (args, input) => [
-    spawnSync(process.execPath, [join(engine, "cli.js"), ...args], { cwd: repo, encoding: "utf8", input }),
-    spawnSync(python, [join(engine, "bind.py"), ...args], { cwd: repo, encoding: "utf8", input }),
+    spawnSync(process.execPath, [join(engine, "cli.js"), ...args], { ...output, input }),
+    spawnSync(python, [join(engine, "bind.py"), ...args], { ...output, input }),
   ];
   const [jsFull] = piped([], JSON.stringify(defaults()));
   assert.equal(jsFull.status, 0, jsFull.stderr);

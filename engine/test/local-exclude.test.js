@@ -12,12 +12,15 @@ import { python } from "./python.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// A whole bind's output passes spawnSync's default 1 MiB buffer.
+const output = { encoding: "utf8", maxBuffer: 1 << 30 };
+
 // Both engines take the same flags and read the answers on standard input.
 const ENGINES = [
   ["node", (args, input) => spawnSync(process.execPath, [join(engine, "cli.js"), ...args],
-    { encoding: "utf8", input })],
+    { ...output, input })],
   ["python", (args, input) => spawnSync(python, ["-I", join(engine, "bind.py"), ...args],
-    { encoding: "utf8", input })],
+    { ...output, input })],
 ];
 
 // Partial answers: a local-only project with no team files.

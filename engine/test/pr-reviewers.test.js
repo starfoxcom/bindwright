@@ -14,12 +14,15 @@ const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = join(engine, "..");
 const noPython = !python && "needs Python 3.8+";
 
+// A whole bind's output passes spawnSync's default 1 MiB buffer.
+const output = { encoding: "utf8", maxBuffer: 1 << 30 };
+
 // Binds the answers through both commands, each reading them from stdin.
 function bindBoth(answers) {
   const input = JSON.stringify(answers);
   return [
-    spawnSync(process.execPath, [join(engine, "cli.js")], { cwd: repo, encoding: "utf8", input }),
-    spawnSync(python, [join(engine, "bind.py")], { cwd: repo, encoding: "utf8", input }),
+    spawnSync(process.execPath, [join(engine, "cli.js")], { cwd: repo, ...output, input }),
+    spawnSync(python, [join(engine, "bind.py")], { cwd: repo, ...output, input }),
   ];
 }
 
