@@ -189,7 +189,7 @@ MOVES_FOLDER = re.compile(r"(?<![\w-])(?:cd|chdir|pushd|popd|set-location|sl|pus
 
 
 # Routes past the hook, refused outright (see the module docstring).
-LEFTHOOK_OFF = re.compile(r"lefthook\s+uninstall|LEFTHOOK\s*=\s*['\"]?(?:0|false)\b", re.I)
+LEFTHOOK_OFF = re.compile(r"\blefthook\b[^|;&\n]*?\buninstall\b|LEFTHOOK\s*=\s*['\"]?(?:0|false)\b", re.I)
 LEFTHOOK_OFF_VALUES = ("0", "false")
 # Not a write, so it needs its own way past the early exit.
 GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hooks", re.I)
@@ -199,8 +199,12 @@ CONFIG_READS = {"get", "list", "get-regexp", "get-urlmatch", "get-color", "get-c
 # or the next word when nothing follows the letter; then those that take only an attached one.
 # -n is --no-verify on these two alone: merge's hides the diffstat, push's is a dry run.
 SHORT_VALUES = {"commit": ("FmcCtU", "Su"), "am": ("Cp", "S")}
-LONG_VALUES = ("--message", "--file", "--template", "--author", "--date", "--cleanup",
-               "--fixup", "--squash", "--reuse-message", "--reedit-message")
+# Their long options whose value is the next word. On am, `--mes` is the switch --message-id.
+LONG_VALUES = {"commit": ("--message", "--file", "--template", "--author", "--date", "--cleanup",
+                          "--fixup", "--squash", "--reuse-message", "--reedit-message"),
+               "am": ()}
+# A shell redirect the strict read leaves among the words (`2>/dev/null`, `>`, `&>`).
+REDIRECT = re.compile(r"\d*(?:>>?|<|&>)")
 # Git takes any unambiguous start of a long option, so each is matched from its shortest
 # start that cannot mean a harmless option of the same command.
 LONG_BYPASSES = (("--no-verify", "--no-v", "hooks"), ("--trailer", "--tr", "trailer"))
@@ -241,7 +245,7 @@ def option_words(subcommand, rest):
             continue
         if word.startswith("--"):
             options.append(word)
-            skip_next = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES)
+            skip_next = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES[subcommand])
             continue
         for k, letter in enumerate(word[1:], 2):
             options.append("-" + letter)
@@ -257,6 +261,8 @@ def config_sets_hooks(rest):
     for word in rest:
         if skip_next:
             skip_next = False
+        elif REDIRECT.match(word):
+            skip_next = REDIRECT.fullmatch(word) is not None  # the target is the next word
         elif word.startswith("-"):
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
@@ -313,12 +319,13 @@ def turns_lefthook_off(commands, assignments):
         name = name[len("$env:"):] if name.startswith("$env:") else name.lstrip("$")
         if name == "lefthook" and (not isinstance(value, str) or value.lower() in LEFTHOOK_OFF_VALUES):
             return True
-    for words in commands:
-        texts = [text_of(word).lower() for word in words]
-        if program(words) == "lefthook" and texts[1:2] == ["uninstall"]:
+    off = {"lefthook=" + value for value in LEFTHOOK_OFF_VALUES}
+    # Wrapped anywhere in the command: `npx lefthook uninstall`, `timeout 5 env LEFTHOOK=0 git`.
+    for run in (words[i:] for words in commands for i in range(len(words))):
+        texts = [text_of(word).lower() for word in run]
+        if program(run) == "lefthook" and "uninstall" in [t for t in texts[1:] if not t.startswith("-")][:1]:
             return True
-        if program(words) in ("env", "sudo") and any(
-                text in ("lefthook=" + value for value in LEFTHOOK_OFF_VALUES) for text in texts):
+        if program(run) in ("env", "sudo") and off.intersection(texts):
             return True
     return False
 

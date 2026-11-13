@@ -655,6 +655,9 @@ class GuardHookTest(unittest.TestCase):
                 ("LEFTHOOK=0 git commit -m x", "disabling lefthook"),
                 ('export LEFTHOOK="false"', "disabling lefthook"),
                 ("env LEFTHOOK=0 git push", "disabling lefthook"),
+                ("timeout 5 env LEFTHOOK=0 git commit -m x", "disabling lefthook"),
+                ("npx lefthook -v uninstall", "disabling lefthook"),
+                ("git am --message -n mail.patch", hooks),
                 ("lefthook uninstall", "disabling lefthook")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), because)
@@ -663,6 +666,10 @@ class GuardHookTest(unittest.TestCase):
         for command in ("git commit --no-verify -m x", "git commit -nm x", "$GIT commit -n -m x"):
             with self.subTest(command=command, helper="none"):
                 self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
+        for command in ("git config core.hooksPath 2>/dev/null", "git config core.hooksPath 2>&1",
+                        "git config core.hooksPath > out.txt"):
+            with self.subTest(command=command, helper="none"):
+                self.assert_passes(self.attr(command, helper=os.path.join(self.home, "none")))
         # Each is git's own meaning, a read, or a message that names an option.
         for command in ('git commit -m "document --no-verify"', 'git commit -m "-n means skip"',
                         "git commit -m x -- -n", "git merge -n feature/x", "git push -n",
