@@ -799,6 +799,8 @@ def api(path, opts, st):
         return st.get("comments", [])
     if path == repo + "/contents/.github/review-gate.yml":
         return st["gate_yml"] if "gate_yml" in st else KeyError
+    if path == repo + "/contents/.github/scripts/review_gate.py":
+        return {"forbidden": PermissionError, "absent": KeyError}.get(st.get("gate_script"), {})
     if path.startswith("orgs/"):
         return {"installations": st.get("installations", [])}
     return KeyError
@@ -826,6 +828,9 @@ def main():
         st["secrets"].append(pos[2])
     if data is KeyError:
         return not_found()
+    if data is PermissionError:
+        sys.stderr.write("gh: Resource not accessible by integration (HTTP 403)\n")
+        return 1
     # The script pipes one call into another (read a ruleset, write it back),
     # so two fakes run at once: only a call that changed the state writes it,
     # and the file is swapped whole, never seen half written.
@@ -972,6 +977,33 @@ class SetupScript(unittest.TestCase):
         self.assertIn("ok       ruleset on main", run.stdout)
         run, _, _ = self.run_setup(dict(state, gate_yml="checks: one  # one check\n"), "--check")
         self.assertIn('drop required check "Claude On-Demand"', run.stdout)
+
+    def test_rulesets_wait_until_the_default_branch_holds_the_gate(self):
+        ruleset = old_ruleset(include="refs/heads/develop")
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset], gate_script="absent")
+        run, after, _ = self.run_setup(state)
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        for branch in ("main", "develop"):
+            self.assertIn("MISSING  ruleset on %s: waits until main holds the gate's files" % branch,
+                          run.stdout)
+        self.assertEqual(after["rulesets"], [ruleset])
+        self.assertEqual(after["labels"], ["needs-deep-review"])
+
+    def test_a_ruleset_requiring_the_gate_before_it_lands_is_named(self):
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], branches=["main"])
+        _, protected, _ = self.run_setup(state)
+        run, after, calls = self.run_setup(dict(protected, gate_script="absent"))
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn('MISSING  ruleset on main requires "Review gate" before main holds', run.stdout)
+        self.assertEqual(after["rulesets"], protected["rulesets"])
+        self.assertFalse([c for c in calls if "rulesets" in " ".join(c) and "-X" in c])
+
+    def test_a_failed_read_of_the_gate_script_stops_without_changes(self):
+        run, after, calls = self.run_setup(fresh_repo(gate_script="forbidden"))
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("cannot read whether main holds .github/scripts/review_gate.py", run.stderr)
+        self.assertEqual(self.writes(calls), [])
+        self.assertEqual(after, fresh_repo(gate_script="forbidden"))
 
     def test_a_missing_token_without_a_terminal_is_reported_not_prompted(self):
         run, after, calls = self.run_setup(fresh_repo())

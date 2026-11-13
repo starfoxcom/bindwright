@@ -16,6 +16,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **A step back holds the fix until three options are researched.** When a watched PR's red rounds reach a step back (the 3rd in a row, the 5th, and every one from the 6th, with no last one), the ci-watch mod refuses the session's file edits, `git commit` and `git push` until three web lookups on different topics (WebSearch, WebFetch or the web-fetch agent) have run after that red wake, and asks for the three to be compared before the fix. A green round ends it, subagents and closed PRs are not held, and `/ci-watch stop` lifts the hold where web tools cannot run. The review rules now ask for three compared options too.
 
+### Fixed
+
+- **A new repo's first setup PR can merge.** It used to target `develop` and could never pass the review gate: the gate's files and the review workflow were not on the default branch yet, and `setup-review-gate.sh` had already required the gate there. The script now creates and repairs no ruleset while the default branch lacks `.github/scripts/review_gate.py`, stops on a read that fails for any other reason than "not found", and names a ruleset that already requires the gate. `review-tiers.md` § "The first setup PR" says the PR targets the default branch, merges on two local reviews, then cascades into `develop` before the branch rules go on, and setup's finish points to it.
+
 ## [v4.0.0] — 2026-11-12
 
 ### Breaking
