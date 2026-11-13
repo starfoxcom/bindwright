@@ -219,7 +219,7 @@ class GuardHookTest(unittest.TestCase):
 
     def test_malformed_payload_lets_the_call_through(self):
         # onFailure blocks a crash, so input the guard cannot read must exit 0, not 1.
-        env = dict(os.environ, HOME=self.home, CLAUDE_PROJECT_DIR=REPO)
+        env = dict(os.environ, HOME=self.home, CLAUDE_PROJECT_DIR=REPO, BINDWRIGHT_HELPER=HELPER)
         env.pop("USERPROFILE", None)
         with open(os.path.join(self.home, "body.md"), "w", encoding="utf-8") as f:
             f.write("A plain body.")
@@ -346,14 +346,10 @@ class GuardHookTest(unittest.TestCase):
         self.addCleanup(os.remove, path)
         return path
 
-    def test_a_clean_quoted_body_file_after_stop_parsing_passes(self):
-        # After `--%` the program splits the raw text itself; the strict read takes it, quotes and all.
-        folder = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        path = os.path.join(folder, "my notes.md")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("A plain body.\n")
-        self.assert_passes(self.attr(f'gh pr create --% --title t --body-file "{path}"', tool="PowerShell"))
+    def test_stop_parsing_is_refused_as_unreadable(self):
+        # After `--%` the program splits the raw text by its own rules, which the parser cannot follow.
+        self.assert_denied(self.attr('gh pr create --% --title t --body-file "x.md"', tool="PowerShell"),
+                           "Write it as plain commands")
 
     def test_attribution_in_a_body_file_is_denied(self):
         path = self.body_file(f"## What\n- x\n\n{GENERATED_LINE}\n")
@@ -459,7 +455,7 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
-                ('git commit -nm "--file=x is gone"', "Bash"),
+                ('git commit -vm "--file=x is gone"', "Bash"),
                 ('git merge -nm "--file=x is gone" feature', "Bash"),
                 ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
@@ -469,7 +465,6 @@ class GuardHookTest(unittest.TestCase):
                 ("npm create vite@latest app -- --template react && git commit -m init", "Bash"),
                 ('npm create "$PKG" app --template react && git commit -m init', "Bash"),
                 ('env A=1 gh issue create --title "$T" --label bug --template bug.md', "Bash"),
-                ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
                 ('sudo git commit -am "-From now on x"', "PowerShell"),
                 ('timeout 5 $GIT commit -m "--file=x" && powershell -Command "Stop-Process -Force"', "Bash"),
                 ('python - <<\'EOF\' 2>/dev/null || true\nrun(["gh", "api", "--input", "-"])\nEOF\ngit commit -m x',
@@ -481,8 +476,6 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title "`echo "x; sort y"`" --body-file "{path}"', "Bash"),
                 (f'gh pr create --title "${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
                 (f'sort=1 git commit -F "{path}"', "Bash"),
-                (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
-                (f'gh pr create --% --title t --body-file "{path}"', "PowerShell"),
                 (f"gh pr create --title “a; sort b” --body-file {path}", "PowerShell"),
                 ("gh pr create --title t --body-file \"$HOME/body.md\"", "Bash"),
                 ('cd "$(git rev-parse --show-toplevel)"; git commit -F msg.txt', "Bash"),
@@ -492,7 +485,6 @@ class GuardHookTest(unittest.TestCase):
                 ('curl -d @"$f" https://api.github.com/repos/o/r/issues', "Bash"),
                 (f'env A=1 git commit -F "{path}"', "Bash"),
                 (f'sudo gh pr create --title t --body-file "{path}"', "Bash"),
-                (f'gh pr create --title t <<EOF --body-file "{path}"\nx\nEOF', "Bash"),
                 (f'& "C:\\Program Files\\Git\\cmd\\git.exe" commit -F "{path}"', "PowerShell"),
                 (f'sudo -u git gh pr create --title t --body-file "{path}"', "Bash"),
                 (f'Invoke-RestMethod -Uri https://api.github.com/x -InFile:"{path}"', "PowerShell"),
@@ -503,14 +495,8 @@ class GuardHookTest(unittest.TestCase):
                 ('gh pr merge 5 -m --body-file="my notes/body.md"', "Bash"),
                 (f'curl -X PATCH https://api.github.com/repos/git/git -d @"{path}"', "Bash"),
                 (f'sudo -u git curl -d @"{path}" https://api.github.com/repos/o/r/issues', "Bash"),
-                (f'gh pr create --title t <<EOF 2>/dev/null --body-file "{path}"\nx\nEOF', "Bash"),
-                (f'gh pr create --title t 2>&- --body-file="{path}"', "Bash"),
-                (f'! git commit > log -F "{path}"', "Bash"),
-                (f'git log | gh pr comment 5 > out --body-file "{path}"', "Bash"),
                 (f'Get-Content -Path:"{path}" | gh issue create --title t --body-file -', "PowerShell"),
-                (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
                 ("gh api repos/o/r/issues -F 'body='\"@$f\"", "Bash"),
-                (f'args=(\n  --title "feat: x"\n  --body-file "{path}"\n)\ngh pr create "${{args[@]}}"', "Bash"),
                 (f'git ci -F "{path}" && git push', "Bash"),
                 (f'env A=1 git commit --template "{path}"', "Bash"),
                 (f'$GIT commit --template "{path}"', "Bash"),
@@ -518,7 +504,6 @@ class GuardHookTest(unittest.TestCase):
                 (f'nice -n 5 $GIT commit --template "{path}"', "Bash"),
                 (f'gh pr create --title "$T" --body "$B" --body-file "{path}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -Fbody=@{path}", "PowerShell"),
-                (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
                 ("& $git commit -Fmsg", "PowerShell"),
                 (f'flock lock $GIT commit --template "{path}"', "Bash"),
                 (f'git notes add -mcalm -F "{path}"', "Bash"),
@@ -526,11 +511,25 @@ class GuardHookTest(unittest.TestCase):
                 (f'git merge -sm -F "{path}" feature', "Bash"),
                 (f'git commit-tree -pm -F "{path}" HEAD^{{tree}}', "Bash"),
                 (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
-                (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
-                # A run-time program gets the strict read, which takes flag-like message text as a flag.
-                ('$GIT commit -m "--file=x"', "Bash")):
+                (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
+        # Shapes the parser cannot read (an array, `--%`, words a redirect holds, a bare `$`) are
+        # refused with the way out, never guessed at.
+        for command, tool in (
+                ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
+                (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
+                (f'gh pr create --% --title t --body-file "{path}"', "PowerShell"),
+                (f'gh pr create --title t <<EOF --body-file "{path}"\nx\nEOF', "Bash"),
+                (f'gh pr create --title t <<EOF 2>/dev/null --body-file "{path}"\nx\nEOF', "Bash"),
+                (f'gh pr create --title t 2>&- --body-file="{path}"', "Bash"),
+                (f'! git commit > log -F "{path}"', "Bash"),
+                (f'git log | gh pr comment 5 > out --body-file "{path}"', "Bash"),
+                (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
+                (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
+                (f'args=(\n  --title "feat: x"\n  --body-file "{path}"\n)\ngh pr create "${{args[@]}}"', "Bash")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool=tool), "Write it as plain commands")
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""
@@ -611,26 +610,23 @@ class GuardHookTest(unittest.TestCase):
             with open(os.path.join(root, name), "w", newline="") as f:
                 f.write(text)
             os.chmod(os.path.join(root, name), 0o755)
-        self.assert_passes(self.attr("git commit -m x", project=root,
-                                     path=root + os.pathsep + os.environ.get("PATH", "")))
+        # With the project's own `node` first on PATH, the guard has no parser and refuses.
+        self.assert_denied(self.attr("git commit -m x", project=root,
+                                     path=root + os.pathsep + os.environ.get("PATH", "")), "Install Node")
         self.assertFalse(os.path.exists(marker))
 
-    def test_without_the_helper_every_file_flag_is_read(self):
-        result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))
-        self.assert_denied(result)
-        self.assertIn("/bindwright:update", json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"])
-
-    def test_without_the_helper_a_moved_folder_is_not_guessed(self):
-        none = os.path.join(self.home, "none")
-        root = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
-        for command in ("cd sub && git commit -F msg.txt", "git -C sub commit -F msg.txt"):
-            with self.subTest(command=command):
-                self.assert_denied(self.attr(command, project=root, helper=none))
-        # gh's --template names a template, not a file.
-        self.assert_passes(self.attr("gh issue create --title t --template bug.md", helper=none))
-        # git's lowercase -c sets config; no folder changes, so the cwd's msg.txt is read.
-        self.assert_denied(self.attr("git -c k=v commit -F sub/msg.txt", project=root, helper=none),
-                           "found in file")
+    def test_without_its_parser_the_guard_refuses_what_it_reads(self):
+        old = os.path.join(self.home, "old-helper")
+        os.makedirs(os.path.join(old, "hooks"))
+        with open(os.path.join(old, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
+            f.write('process.stdout.write(JSON.stringify({error: false, commands: [["git", "commit"]]}));\n')
+        for helper, because in ((os.path.join(self.home, "none"), "Run /bindwright:update to install it"),
+                                (old, "older than this guard")):
+            for command in ("git commit -m x", "gh issue create --title t --template bug.md",
+                            "git config core.hooksPath /x"):
+                with self.subTest(helper=helper, command=command):
+                    self.assert_denied(self.attr(command, helper=helper), because)
+            self.assert_passes(self.attr("ls -la", helper=helper))
 
     def test_a_wrapped_gh_keeps_its_template_name(self):
         self.assert_passes(self.attr("env GH_TOKEN=x gh issue create --title t --template bug.md"))
@@ -642,15 +638,58 @@ class GuardHookTest(unittest.TestCase):
         except OSError:
             # Windows without the symlink right: a junction needs none, and Node resolves it too.
             subprocess.run(["cmd", "/c", "mklink", "/J", link, HELPER], check=True, capture_output=True)
-        # `awk -F.` is read only by the strict fallback, so a pass means the parser ran.
+        # Without its parser the guard refuses, so a pass means the parser ran.
         self.assert_passes(self.attr("git tag --list | awk -F. '{print $1}'", helper=link))
 
     def test_unreadable_command_names_the_cause(self):
         result = self.attr("git commit -m x \\\r\n -F missing.md")
         self.assert_denied(result)
         reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
-        self.assertIn("could not read this command's structure", reason)
+        self.assertIn("could not read this command", reason)
         self.assertNotIn("/bindwright:update", reason)
+
+    def test_routes_past_the_hooks_are_refused(self):
+        hooks, setting, trailer, reuse, lefthook = ("git hook bypass", "changes which hooks git runs",
+                                                    "--trailer is not allowed", "reusing another",
+                                                    "turning lefthook off")
+        for command, because, tool in (
+                ("git commit -n -m x", hooks, "Bash"), ("git commit -nm x", hooks, "Bash"),
+                ("git commit --no-veri -m x", hooks, "Bash"), ("git am -n mail.patch", hooks, "Bash"),
+                ("git push --no-verify", hooks, "Bash"), ("env A=1 git commit -n -m x", hooks, "Bash"),
+                ("$GIT commit -n -m x", hooks, "Bash"),
+                ("git -c core.hooksPath=/dev/null commit -m x", setting, "Bash"),
+                ("git --config-env=core.hooksPath=H commit -m x", setting, "Bash"),
+                ("git config core.hooksPath /dev/null", setting, "Bash"),
+                ("git config set --global hook.lint.enabled false", setting, "Bash"),
+                ("git config --unset core.hooksPath", setting, "Bash"),
+                ("git config --global \\\n  core.hooksPath /dev/null", setting, "Bash"),
+                ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
+                ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
+                ("LEFTHOOK=0 git push", lefthook, "Bash"), ("env LEFTHOOK=false git commit -m x", lefthook, "Bash"),
+                ("export LEFTHOOK=0", lefthook, "Bash"), ("npx lefthook uninstall", lefthook, "Bash"),
+                ('$env:LEFTHOOK = "0"; git commit -m x', lefthook, "PowerShell")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool=tool), because)
+        # Each option keeps git's own meaning, a value is never an option, and a read passes.
+        for command in ("git commit -m -n", 'git commit -m "say --no-verify"', "git commit -m x -- -n",
+                        "git push -n", "git merge -n feature", "git tag -n", "git am -c mail.patch",
+                        "git commit --amend --no-edit", "git config core.hooksPath",
+                        "git config get core.hooksPath && git commit -m x", '$GIT commit -m "--file=x"',
+                        '"$S/bin/actionlint.exe" x && git commit -m x',
+                        'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
+
+    def test_shapes_the_grammars_reject_are_read_as_the_shell_reads_them(self):
+        # A here-doc with a redirect or a command on its first line, a redirect target in several
+        # pieces, and PowerShell's `name='value'` with brackets in the value.
+        for command, tool in (("git commit -F - <<'EOF' >/dev/null; git log -1\nmsg\nEOF", "Bash"),
+                              ("for id in 1 2; do gh api r/$id > $K/r-$id.json; done && git commit -m x", "Bash"),
+                              ("gh api graphql -f query='query{user(login:\"x\"){id}}'", "PowerShell")):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, tool=tool))
+        self.assert_denied(self.attr("git commit -F - <<'EOF' >/dev/null && git push --no-verify\nmsg\nEOF"),
+                           "git hook bypass")
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:

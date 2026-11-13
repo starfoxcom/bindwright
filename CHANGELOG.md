@@ -6,6 +6,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Breaking
+
+- **The attribution guard needs Node 18 or later and Bindwright's helper** (#839). It reads every command it guards with the helper's parser and no longer falls back to a text read. On a computer without Node or the helper, or with a helper older than the guard, every git and GitHub write it reads is refused, with a reason that names the fix: install Node, then run `/bindwright:update`. A command the parser cannot read (an array built at run time, PowerShell's `--%`, syntax the parser rejects) is refused with a reason that asks for plain commands. A program built at run time (`$GIT`, `"$S/bin/x.exe"`) is read like any other command: every file flag it names is read, and git's own flags too when its text names git. **Act on it:** install Node 18 or later on a Python-only computer, then run `/bindwright:update`.
+
+### Added
+
+- **The attribution guard refuses the routes past git's own hooks** (#839). For a git program, a wrapped one (`env`, `sudo`) and a word built at run time that names git (`$GIT`) included: `--no-verify` and `-n` on `commit` or `am` (`--no-verify` on `merge`, `push` and `rebase` too), setting or unsetting `core.hooksPath` or a `hook.` setting (`git config`, `-c`, `--config-env`), `--trailer`, a commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`, `--reedit-message`), and turning lefthook off (`LEFTHOOK=0` or `false` set by the command, through `export`, `env` or PowerShell's `$env:`, or `lefthook uninstall`). Options are read as git reads them, bundled (`-nm x`) or shortened (`--no-veri`), with each option's value skipped, so a message that names one passes, and each keeps git's own meaning: `-n` on `merge`, `push` or `tag` is not a bypass, and reading `core.hooksPath` passes. The helper's parser now reports the variables a command sets.
+
 ## [v4.0.0] — 2026-11-12
 
 ### Breaking
