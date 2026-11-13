@@ -49,7 +49,7 @@ Each source project's session compared its live setup with `_core/project-templa
 - **Shipped-text scope:** every shipped file type (scripts, shaders, manifests, doc XML, scenes, ARB); `docs/` is internal there, so v2's globs check the wrong files.
 - **Clean-room extras:** abbreviation greps, a CI check, "the board is a shipped artifact".
 - **Visual:** debug toggle from line one, the ~150-line slice cap, shader sequencing.
-- **Session skill steps:** board read and check, runner health and power policy, scheduled-CI failures, mod ROADMAPs, a tokensave affected/test-risk/dead-code gate, board sweep and status update, devlog draft, runners on before push.
+- **Session skill steps:** board read and check, runner health and power policy, scheduled-CI failures, mod ROADMAPs, a previous-tool affected/test-risk/dead-code gate, board sweep and status update, devlog draft, runners on before push.
 
 ### Would gain
 - Explicit cascade PR procedure (its session-close still says "managed from GitHub").
@@ -60,7 +60,7 @@ Each source project's session compared its live setup with `_core/project-templa
 - `/bindwright:audit` would catch drift (example: its session-close still links every PR by hand, stale since `develop` became default).
 
 ### Conflicts
-- **Hooks location:** GameProject bans project-local hooks (a tokensave settings-corruption bug); global plus repo copies would double-fire.
+- **Hooks location:** GameProject bans project-local hooks (a previous-tool settings-corruption bug); global plus repo copies would double-fire.
 - Review gate: one check vs two required checks with a deep-tier state machine.
 - Code size: test-file allowance looser than GameProject's; v2 forbids hot loops past hard where GameProject allows an allowlisted claim.
 - Docs fast path: v2 allows `--admin` on BLOCKED; GameProject requires CLEAN.
