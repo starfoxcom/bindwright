@@ -3,7 +3,8 @@
 //   node shell-words.mjs bash|powershell < command
 //
 // Prints one JSON object: {"error": <the command holds syntax it could not read, or a shape
-// the guard leaves to its strict read>, "commands": [[word, ...], ...]}, commands in source
+// the guard leaves to its strict read>, "commands": [[word, ...], ...], "assignments":
+// [{"name": ..., "value": <word>}, ...]}, commands and the variables they set in source
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
@@ -54,6 +55,12 @@ function holdsCommandWords(node) {
   return targets > (closes ? 0 : 1);
 }
 
+// A variable the command sets (`A=1 git ...`, `export A=1`), with its value as a word.
+function bashAssignment(node) {
+  const value = node.childForFieldName("value");
+  return { name: node.childForFieldName("name")?.text ?? "", value: value ? bashWord(value) : "" };
+}
+
 function bashCommand(node) {
   return node.namedChildren.filter((child) => !BASH_SKIP.has(child.type)).map((child) =>
     child.type === "command_name" ? bashWord(child.namedChildren[0] ?? child) : bashWord(child));
@@ -98,6 +105,13 @@ function psCommand(node) {
   return words;
 }
 
+// `$env:A = "1"`: the name as written, and the value when it is a plain word or string.
+function psAssignment(node) {
+  const [left, , right] = node.namedChildren;
+  const literal = /^(["']?)([\w.-]*)\1$/.exec(right?.text ?? "");
+  return { name: left?.text ?? "", value: literal ? literal[2] : dynamic(right ?? node) };
+}
+
 export async function shellWords(shell, command) {
   const { Parser, Language } = await import(pathToFileURL(path.join(PARSERS, "web-tree-sitter.mjs")).href);
   await Parser.init({ locateFile: (name) => path.join(PARSERS, name) });
@@ -112,7 +126,10 @@ export async function shellWords(shell, command) {
   let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
+  const assignments = [];
   (function walk(node) {
+    if (shell === "bash" && node.type === "variable_assignment") assignments.push(bashAssignment(node));
+    if (shell === "powershell" && node.type === "assignment_expression") assignments.push(psAssignment(node));
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
@@ -128,7 +145,7 @@ export async function shellWords(shell, command) {
     if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
-  return { error: unreadable, commands };
+  return { error: unreadable, commands, assignments };
 }
 
 // Node gives this module its real path, symlinks resolved, so the path it was started by is
