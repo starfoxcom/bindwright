@@ -121,17 +121,20 @@ const PS_JOINED_QUOTE = /(^|[\s;|(])([A-Za-z_][\w.-]*=)(['"])/g;
 // The bash grammar fails on a here-doc operator followed by another redirect on its line
 // (`<<'EOF' >/dev/null; next`); bash reads the redirects in either order, so a failed parse is
 // tried once more with the here-doc operator after them.
-const BASH_HEREDOC_FIRST = /(<<-?\s*(['"]?)\w+\2)((?:[ \t]+\d*(?:&>>?|[<>]{1,2}&?)[ \t]*[^\s;|&]+)+)/g;
-const BASH_LEADING_REDIRECTS = /^(?:[ \t]+\d*(?:&>>?|[<>]{1,2}&?)[ \t]*[^\s;|&]+)*/;
+// One redirect after a command word; a quoted target may hold spaces, and `<<` is never one.
+const REDIRECT = String.raw`[ \t]+\d*(?:&>>?|>>?&?|<(?!<)&?)[ \t]*(?:"[^"]*"|'[^']*'|[^\s;|&'"])+`;
+const BASH_HEREDOC_FIRST = new RegExp(String.raw`(<<-?\s*(['"]?)\w+\2)((?:` + REDIRECT + ")+)", "g");
+const BASH_LEADING_REDIRECTS = new RegExp(`^(?:${REDIRECT})*`);
 
 // The bash grammar also fails on a command that goes on after a here-doc on its line
 // (`<<'EOF' >/dev/null; git log`). The words are the same with the rest of that line moved
 // below the body, its connector dropped, so a failed parse is tried that way too.
-function heredocRestBelow(source) {
+function heredocRestBelow(source, operators) {
   const lines = source.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const at = /<<(-?)\s*(['"]?)(\w+)\2/.exec(lines[i]);
-    if (!at) continue;
+    const lineStart = lines.slice(0, i).reduce((sum, line) => sum + line.length + 1, 0);
+    if (!at || !operators.has(lineStart + at.index)) continue;
     const head = at.index + at[0].length;
     const tail = lines[i].slice(head).replace(BASH_LEADING_REDIRECTS, "");
     const rest = tail.replace(/^\s*(?:;|&&|\|\||\|)\s*/, "");
@@ -153,8 +156,17 @@ export async function shellWords(shell, command) {
   const source = shell === "bash" ? command
     : command.replace(/[“”„]/g, '"').replace(/[‘’‚‛]/g, "'");
   let tree = parser.parse(source);
+  // A bash rewrite applies only at a here-doc operator the first parse found, never at a `<<`
+  // in arithmetic, quoted text or a here-doc body.
+  const operators = new Set();
+  (function find(node) {
+    if (node.type === "heredoc_redirect") operators.add(node.startIndex);
+    if (node.type === "heredoc_start") operators.add(source.lastIndexOf("<<", node.startIndex));
+    for (const child of node.children) find(child);
+  })(tree.rootNode);
   const retries = shell === "powershell" ? [source.replace(PS_JOINED_QUOTE, "$1$3$2")]
-    : [source.replace(BASH_HEREDOC_FIRST, "$3 $1"), heredocRestBelow(source)];
+    : [source.replace(BASH_HEREDOC_FIRST, (all, operator, quote, redirects, at) =>
+      operators.has(at) ? `${redirects} ${operator}` : all), heredocRestBelow(source, operators)];
   for (const retry of retries) {
     if (!tree.rootNode.hasError) break;
     const moved = parser.parse(retry);

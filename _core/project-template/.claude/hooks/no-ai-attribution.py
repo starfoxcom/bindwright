@@ -631,9 +631,9 @@ def main():
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
     joined = CONTINUED_LINE.sub(r"\1", cmd)
-    writes = bool(GIT_WRITE.search(joined) or GH_WRITE.search(joined) or GH_API.search(joined)
-                  or HTTP_GH.search(joined))
-    if not (writes or GIT_CONFIG_HOOKS.search(joined) or LEFTHOOK_OFF.search(joined)):
+    texts = (cmd, joined)  # joining lines can also hide a match, so both are checked
+    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
+    if not (writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)):
         sys.exit(0)
 
     if writes:

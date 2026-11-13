@@ -693,8 +693,12 @@ class GuardHookTest(unittest.TestCase):
                               ("gh api graphql -f query='query{user(login:\"x\"){id}}'", "PowerShell")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
-        self.assert_denied(self.attr("git commit -F - <<'EOF' >/dev/null && git push --no-verify\nmsg\nEOF"),
-                           "git hook bypass")
+        # A rewrite applies only at a here-doc the parser found, never at a `<<` in arithmetic.
+        for command in ("git commit -F - <<'EOF' >/dev/null && git push --no-verify\nmsg\nEOF",
+                        "echo $((1<<true >1))\ncat <<'E' >/dev/null; git commit --no-verify -m x\nhi\nE",
+                        'cat <<EOF >"a b"; git commit -n -m x\nx\nEOF'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "git hook bypass")
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
