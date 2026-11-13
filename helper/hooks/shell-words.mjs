@@ -2,11 +2,9 @@
 //
 //   node shell-words.mjs bash|powershell < command
 //
-// Prints one JSON object: {"error": <the parse hit syntax it could not read>, "commands":
-// [[word, ...], ...], "repeats": <a loop or a function may run them out of source order>},
-// commands in source order, nested ones (inside $( ... ) or a pipeline) included, and each
-// bash array's words as a command whose program is built at run time. A word
-// is a string, or
+// Prints one JSON object: {"error": <the command holds syntax it could not read, or a shape
+// the guard leaves to its strict read>, "commands": [[word, ...], ...]}, commands in source
+// order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
@@ -25,14 +23,6 @@ function dynamic(node) {
 const BASH_SKIP = new Set(["variable_assignment", "file_redirect", "heredoc_redirect", "herestring_redirect"]);
 const BASH_RUNTIME = new Set(["simple_expansion", "expansion", "command_substitution",
   "process_substitution", "arithmetic_expansion"]);
-
-// A loop, a function or a script block may run its commands again, or later than where
-// they are written.
-const REPEATS = {
-  bash: new Set(["function_definition", "for_statement", "c_style_for_statement", "while_statement"]),
-  powershell: new Set(["function_statement", "foreach_statement", "for_statement", "while_statement",
-    "do_statement", "switch_statement", "trap_statement", "class_method_definition", "script_block_expression"]),
-};
 
 function bashWord(node) {
   if (node.type === "word" || node.type === "number") {
@@ -55,9 +45,8 @@ function bashWord(node) {
 // under the redirect in shapes it does not keep consistent, so such a command is reported
 // unreadable rather than read with words missing.
 function holdsCommandWords(node) {
-  if (node.type === "heredoc_redirect") {
-    return node.childrenForFieldName("argument").length > 0 || node.childrenForFieldName("redirect").length > 0;
-  }
+  // A redirect inside a heredoc's (`<<EOF 2>/dev/null`) is checked on its own when the walk reaches it.
+  if (node.type === "heredoc_redirect") return node.childrenForFieldName("argument").length > 0;
   if (node.type === "herestring_redirect") return node.namedChildren.length > 1;
   if (node.type !== "file_redirect") return false;
   const targets = node.namedChildren.filter((c) => c.type !== "file_descriptor").length;
@@ -104,11 +93,6 @@ function psCommand(node) {
   const elements = node.namedChildren.find((c) => c.type === "command_elements");
   for (const child of elements?.namedChildren ?? []) {
     if (PS_SKIP.has(child.type)) continue;
-    if (child.type === "stop_parsing") {
-      // After --% PowerShell passes the rest of the line to the program verbatim.
-      words.push(...child.text.replace(/^--%/, "").split(/\s+/).filter(Boolean));
-      continue;
-    }
     words.push(psWord(child));
   }
   return words;
@@ -128,19 +112,23 @@ export async function shellWords(shell, command) {
   let unreadable = tree.rootNode.hasError || (shell === "bash" && source.includes("\r"));
   const read = shell === "bash" ? bashCommand : psCommand;
   const commands = [];
-  let repeats = false;
   (function walk(node) {
-    if (REPEATS[shell].has(node.type)) repeats = true;
     if (shell === "bash" && holdsCommandWords(node)) unreadable = true;
     // A bare `$`, `==` or `=~` argument is an unnamed token the word list would skip.
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
-    if (node.type === "command") commands.push(read(node));
-    // An array's words reach a command later (`gh pr create "${args[@]}"`), so they are read
-    // as a command whose program is built at run time.
-    if (shell === "bash" && node.type === "array") commands.push([dynamic(node), ...node.namedChildren.map(bashWord)]);
+    if (node.type === "command") {
+      const words = read(node);
+      // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the
+      // command gets the strict read instead.
+      if (typeof words[0] !== "string") unreadable = true;
+      commands.push(words);
+    }
+    // An array's words reach a command later, wherever it runs: the strict read takes it. So
+    // does PowerShell's `--%`, after which the program splits the raw text by its own rules.
+    if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
-  return { error: unreadable, commands, repeats };
+  return { error: unreadable, commands };
 }
 
 // Node gives this module its real path, symlinks resolved, so the path it was started by is
