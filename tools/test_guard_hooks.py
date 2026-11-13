@@ -346,6 +346,15 @@ class GuardHookTest(unittest.TestCase):
         self.addCleanup(os.remove, path)
         return path
 
+    def test_a_clean_quoted_body_file_after_stop_parsing_passes(self):
+        # After `--%` the program splits the raw text itself; the strict read takes it, quotes and all.
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        path = os.path.join(folder, "my notes.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("A plain body.\n")
+        self.assert_passes(self.attr(f'gh pr create --% --title t --body-file "{path}"', tool="PowerShell"))
+
     def test_attribution_in_a_body_file_is_denied(self):
         path = self.body_file(f"## What\n- x\n\n{GENERATED_LINE}\n")
         for command in (f'gh pr create --title t --body-file "{path}"', f'git commit -F "{path}"',
@@ -450,14 +459,21 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
+                ('git commit -nm "--file=x is gone"', "Bash"),
+                ('git merge -nm "--file=x is gone" feature', "Bash"),
+                ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
                 ('env A=1 git commit -m "--file=x is gone"', "Bash"),
                 ('gh release create v1 -n "--notes-file x is gone"', "Bash"),
                 ('gh pr comment 5 --body "--body-file=x was ignored"', "Bash"),
                 ("git grep -F needle && git commit -m x", "Bash"),
-                ("Get-ChildItem -Filter *.md -Force; git commit -m x", "PowerShell"),
-                ("Write-Output git -Force -Param x; git commit -m x", "PowerShell"),
-                ("Start-Process -FilePath git -ArgumentList 'commit','-m','x' -Wait", "PowerShell"),
-                ('sudo git commit -am "-From now on x"', "PowerShell")):
+                ("npm create vite@latest app -- --template react && git commit -m init", "Bash"),
+                ('npm create "$PKG" app --template react && git commit -m init', "Bash"),
+                ('env A=1 gh issue create --title "$T" --label bug --template bug.md', "Bash"),
+                ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
+                ('sudo git commit -am "-From now on x"', "PowerShell"),
+                ('timeout 5 $GIT commit -m "--file=x" && powershell -Command "Stop-Process -Force"', "Bash"),
+                ('python - <<\'EOF\' 2>/dev/null || true\nrun(["gh", "api", "--input", "-"])\nEOF\ngit commit -m x',
+                 "Bash")):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, tool=tool))
         for command, tool in (
@@ -466,6 +482,7 @@ class GuardHookTest(unittest.TestCase):
                 (f'gh pr create --title "${{T:-"x; sort y"}}" --body-file "{path}"', "Bash"),
                 (f'sort=1 git commit -F "{path}"', "Bash"),
                 (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
+                (f'gh pr create --% --title t --body-file "{path}"', "PowerShell"),
                 (f"gh pr create --title “a; sort b” --body-file {path}", "PowerShell"),
                 ("gh pr create --title t --body-file \"$HOME/body.md\"", "Bash"),
                 ('cd "$(git rev-parse --show-toplevel)"; git commit -F msg.txt', "Bash"),
@@ -493,13 +510,25 @@ class GuardHookTest(unittest.TestCase):
                 (f'Get-Content -Path:"{path}" | gh issue create --title t --body-file -', "PowerShell"),
                 (f'gh release create v1 --title $ --notes-file "{path}"', "Bash"),
                 ("gh api repos/o/r/issues -F 'body='\"@$f\"", "Bash"),
-                (f'git commit -aF "{path}"', "Bash"),
-                (f'git commit -aF"{path}"', "Bash"),
                 (f'args=(\n  --title "feat: x"\n  --body-file "{path}"\n)\ngh pr create "${{args[@]}}"', "Bash"),
-                (f'declare -a opts=(-F "{path}"); git commit "${{opts[@]}}"', "Bash"),
+                (f'git ci -F "{path}" && git push', "Bash"),
+                (f'env A=1 git commit --template "{path}"', "Bash"),
+                (f'$GIT commit --template "{path}"', "Bash"),
+                (f'timeout 5 $GIT commit --template "{path}"', "Bash"),
+                (f'nice -n 5 $GIT commit --template "{path}"', "Bash"),
+                (f'gh pr create --title "$T" --body "$B" --body-file "{path}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -Fbody=@{path}", "PowerShell"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
-                ("& $git commit -Fmsg", "PowerShell")):
+                ("& $git commit -Fmsg", "PowerShell"),
+                (f'flock lock $GIT commit --template "{path}"', "Bash"),
+                (f'git notes add -mcalm -F "{path}"', "Bash"),
+                (f'git commit -cm -F "{path}"', "Bash"),
+                (f'git merge -sm -F "{path}" feature', "Bash"),
+                (f'git commit-tree -pm -F "{path}" HEAD^{{tree}}', "Bash"),
+                (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
+                (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
+                # A run-time program gets the strict read, which takes flag-like message text as a flag.
+                ('$GIT commit -m "--file=x"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 
@@ -536,14 +565,7 @@ class GuardHookTest(unittest.TestCase):
                 ("cd ~-; git commit -F msg.txt", "Bash", hidden),
                 ("cd /no/such/folder && git commit -F msg.txt", "Bash", hidden),
                 ("cd sub -ErrorAction Stop; git commit -F msg.txt", "PowerShell", hidden),
-                ("f() { git commit -F msg.txt; }; cd sub; f", "Bash", hidden),
-                ("for i in 1 2; do git commit -F msg.txt; cd sub; done", "Bash", hidden),
-                ("switch (1,2) { default { git commit -F msg.txt; Set-Location sub } }", "PowerShell", hidden),
-                ("class A { static [void] M() { git commit -F msg.txt } }; cd sub; [A]::M()",
-                 "PowerShell", hidden),
-                ("Get-Item x -ErrorAction Stop; git commit -F msg.txt; trap { cd sub; continue }",
-                 "PowerShell", hidden),
-                ("git -C - commit -F msg.txt", "Bash", os.path.join(clean, "-", "msg.txt"))):
+                ("git -C - commit -F msg.txt", "Bash", hidden)):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool, project=clean), reason)
         # An absolute target names the folder again, whatever came before it.
@@ -552,16 +574,46 @@ class GuardHookTest(unittest.TestCase):
                         f'pushd sub; popd; git -C "{absolute}" commit -F msg.txt'):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=root), "found in file")
-        flagged = os.path.join(root, "sub", "sub", "msg.txt")
-        self.assert_denied(self.attr("git -C sub -C sub commit -F msg.txt", project=root), f"found in file {flagged}")
         moved = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
-        for command in ("env A=1 git -C sub commit -F msg.txt", "$GIT -C sub commit -F msg.txt"):
+        # A loop, a function or a trap can run a later `cd` before an earlier write.
+        for command, tool in (("f() { git commit -F msg.txt; }; cd sub; f", "Bash"),
+                              ("for i in 1 2; do git commit -F msg.txt; cd sub; done", "Bash"),
+                              ("switch (1,2) { default { git commit -F msg.txt; Set-Location sub } }", "PowerShell"),
+                              ("class A { static [void] M() { git commit -F msg.txt } }; cd sub; [A]::M()",
+                               "PowerShell"),
+                              ("Get-Item x -ErrorAction Stop; git commit -F msg.txt; trap { cd sub; continue }",
+                               "PowerShell")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool=tool, project=moved), "found in file")
+        for command in ("env A=1 git -C sub commit -F msg.txt",
+                        "env A=1 git -C sub merge feature/gh -F msg.txt"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, project=moved), "found in file")
+        # A command held in an array runs wherever it is used, and a `-C` git cannot see (in an
+        # array, behind a run-time word) moves it to a folder the text cannot place.
+        for command in ('cmd=(git -C sub commit -F msg.txt); "${cmd[@]}"',
+                        '"$WRAP" "$ARG" git -C sub commit -F msg.txt',
+                        "$GIT -C sub commit -F msg.txt", "env $GIT -C sub commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=moved))
         # A second relative `cd` that fails from the first folder leaves the shell where it was.
         nested = self.project_with({"msg.txt": "x\n", "a/msg.txt": "x\n", "a/b/msg.txt": f"{GENERATED_LINE}\n"})
-        self.assert_denied(self.attr("cd a && cd b && git commit -F msg.txt", project=nested),
-                           f"found in file {os.path.join(nested, 'a', 'b', 'msg.txt')}")
+        for command in ("cd a && cd b && git commit -F msg.txt", "git -C a -C b commit -F msg.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=nested),
+                                   f"found in file {os.path.join(nested, 'a', 'b', 'msg.txt')}")
+
+    def test_a_node_inside_the_project_is_never_run(self):
+        # A repo could ship its own `node` (Windows also finds one in the current folder by itself).
+        root = self.project_with({})
+        marker = os.path.join(root, "ran.txt")
+        for name, text in (("node", f"#!/bin/sh\necho x > '{marker}'\n"), ("node.cmd", f"@echo x > \"{marker}\"\r\n")):
+            with open(os.path.join(root, name), "w", newline="") as f:
+                f.write(text)
+            os.chmod(os.path.join(root, name), 0o755)
+        self.assert_passes(self.attr("git commit -m x", project=root,
+                                     path=root + os.pathsep + os.environ.get("PATH", "")))
+        self.assertFalse(os.path.exists(marker))
 
     def test_without_the_helper_every_file_flag_is_read(self):
         result = self.attr("git tag --list | awk -F. '{print $1}'", helper=os.path.join(self.home, "none"))

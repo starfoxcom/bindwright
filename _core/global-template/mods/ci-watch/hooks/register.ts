@@ -3,7 +3,7 @@ import { atom, update, type EngineInterface, type Hook, type Register } from 'cl
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
-import { isResearchDue, recordRound, redStreak, researchText, RESEARCH_EVERY, ROUNDS_FILE } from './rounds'
+import { isResearchDue, recordRound, redStreak, researchText, roundsToResearch, ROUNDS_FILE } from './rounds'
 import type { PrRounds } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
@@ -353,7 +353,7 @@ async function roundsCommand($: EngineInterface, args: string): Promise<string> 
   if (!pr && number) return repo ? `No PR ${repo}#${number}.` : `No PR #${number} in this folder's repo.`
   if (!pr) return "This folder's branch has no PR."
   const red = await redRoundsOf($, pr)
-  const next = RESEARCH_EVERY - (red % RESEARCH_EVERY)
+  const next = roundsToResearch(red)
   const count = `${red} fix round(s) in a row without every check green`
   return `${pr.repo}#${pr.number}: ${count}; the next step back is due in ${next}.`
 }
