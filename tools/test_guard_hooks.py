@@ -665,15 +665,14 @@ class GuardHookTest(unittest.TestCase):
                 ("lefthook uninstall", "disabling lefthook")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), because)
-        self.assert_denied(self.attr('$env:LEFTHOOK = "0"; git commit -m x', tool="PowerShell"),
-                           "disabling lefthook")
+        self.assert_denied(self.attr('$env:LEFTHOOK = "0"; git commit -m x', tool="PowerShell"), "disabling lefthook")
         for command in ("git commit --no-verify -m x", "git commit -nm x", "$GIT commit -n -m x"):
             with self.subTest(command=command, helper="none"):
                 self.assert_denied(self.attr(command, helper=os.path.join(self.home, "none")), hooks)
         self.assert_denied(self.attr('git -c "hook.x.enabled=false" commit -m x',
                                      helper=os.path.join(self.home, "none")), setting)
-        # Without the parser, each git command is read up to the next list, pipe or group, with
-        # quoted text whole, so another program's options never count.
+        # Without the parser, the command is split into commands and words as the shell splits
+        # it, so another program's options and quoted message text never count.
         for command, because, tool in (('git commit -m "feat(x): y" --no-verify', hooks, "Bash"),
                                        ('git commit "--no-verify" -m x', hooks, "Bash"),
                                        ("git commit -CHEAD", reuse, "Bash"),
@@ -716,6 +715,7 @@ class GuardHookTest(unittest.TestCase):
                               ("git log --grep am -n 1 && git commit -m x", "Bash"),
                               ("git commit -m x && git switch -c hook.x", "Bash"),
                               ("git commit -m x; if ($LASTEXITCODE -ne 0) { exit 1 }", "PowerShell"),
+                              ('git commit -m "explain why git commit -n is refused"', "Bash"),
                               ("if (git config core.hooksPath) { 'set' }", "PowerShell")):
             with self.subTest(command=command, helper="none"):
                 self.assert_passes(self.attr(command, tool=tool, helper=os.path.join(self.home, "none")))

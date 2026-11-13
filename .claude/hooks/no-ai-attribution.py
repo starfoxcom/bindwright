@@ -50,12 +50,13 @@ commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message value that names one
-passes. Without the parser the hook joins continued lines, then reads each
-git command up to the next list, pipe or line end, quoted text and groups
-kept whole and a quote that does not pair read as a plain character, so
-another program's options do not count. Text that names a git
-command with a route still counts: a message that quotes one, a script line
-inside a here-doc, a comment. A read of `core.hooksPath` passes.
+passes. Without the parser the hook splits the command into commands and
+words the way the shell does: continued lines joined, quotes taken off,
+`$(...)`, backticks and groups kept whole as words and read as commands too,
+redirects and comments dropped. Each command then gets the same checks as on
+the parser's read, so another program's options and quoted text (a message
+that quotes a route) do not count, while a script line inside a here-doc
+does. A read of `core.hooksPath` passes.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -73,7 +74,7 @@ names it outside a permission rule.
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
 exit 0 otherwise. A read-only command is blocked only for the routes above:
 one that turns lefthook off or sets a hooks setting, or, on the strict read,
-text that names one.
+a here-doc line that runs one.
 """
 import json
 import os
@@ -332,87 +333,137 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-# Without the parser: each route is looked for inside one git command, from `git` to the next
-# list, pipe, closing bracket or line end. Continued lines are joined first. Quoted text, a
-# `$(cat <<'EOF' ...)` message, a group, backticks and braces are read whole; a quote or bracket
-# that does not pair is read as a plain character, so a misread never ends the command early.
-# Another program's options do not count; text that names a git command with a route still does.
+# Without the parser: the command is split into commands and words the way the shell splits it,
+# and each command's words get the parsed read's own checks, so the two reads share one set of
+# rules. Continued lines are joined first. A quote or group that never closes runs to the end of
+# the text, so a misread joins words and never drops one.
 STRICT_CONTINUATION = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
-STRICT_HEREDOC = r"\$\(\s*cat\s*<<-?\s*['\"]?\w+['\"]?[^\n]*\n[\s\S]*?\n[ \t]*\w+[ \t]*\r?\n[ \t]*\)"
-STRICT_TOKEN = (STRICT_HEREDOC + r"|\"(?:" + STRICT_HEREDOC + r"|\\[\s\S]|[^\"\\])*\""
-                r"|\$'(?:\\[\s\S]|[^'\\])*'|'[^']*'|\\[\s\S]|[<>]&|&>"
-                r"|\((?:[^()\n]|\([^()\n]*\))*\)|\{[^{}\n]*\}|`[^`\n]*`"
-                r"|[^;|&)}\n]")
-STRICT_OPTION = r"(?<![^\s\"'])[\"']?"
+STRICT_BREAKS = ";|&\n()"
+STRICT_ESCAPED = set(" \t;|&()<>\"'`$\\#{}")
 
 
-def strict_segment(name):
-    """Tokens up to the route, each matched whole and then kept (a lookahead and its backreference),
-    so a quote that paired is never read again as plain characters. A bare `git` word starts the
-    next command's read, which keeps each read to its own stretch of the text."""
-    return (r"(?:(?!(?<![\w.-])(?i:git)(?![\w.-]))(?=(?P<" + name + r">" + STRICT_TOKEN + r"))(?P="
-            + name + r"))*?")
+def strict_group(text, i):
+    """The end of the `$(...)`, `(...)` or backtick group that opens at `i`."""
+    if text[i] == "`":
+        end = text.find("`", i + 1)
+        return len(text) if end < 0 else end + 1
+    depth = 0
+    for j in range(i, len(text)):
+        depth += {"(": 1, ")": -1}.get(text[j], 0)
+        if depth == 0 and text[j] == ")":
+            return j + 1
+    return len(text)
 
 
-# git's own options before the subcommand, with the value of those that take one.
-# The program is `git` or `git.exe`, a quoted path's closing quote after it; the options that take
-# a value are the parsed read's own, so the two reads cannot drift apart. Each option is kept once
-# read, as the segment's tokens are, so a run of options is read in one pass.
-STRICT_GIT_OPTION = (r"\s+(?:(?:" + "|".join(re.escape(option) for option in sorted(GIT_VALUE_OPTIONS))
-                     + r")\s+(?:\"[^\"]*\"|'[^']*'|\$?\((?:[^()\n]|\([^()\n]*\))*\)|`[^`\n]*`|\\.|[^\s\\\"'`(])+"
-                     r"|[\"']?-\S*)")
-STRICT_GIT_OPTIONS = (r"(?i:\bgit(?:\.exe)?)[\"']?(?=\s)(?:(?=(?P<option>" + STRICT_GIT_OPTION
-                      + r"))(?P=option))*?")
+def strict_quoted(text, i, escapes=True):
+    """The value and end of the quoted part that opens at `i`. A double quote that never closes
+    with escapes read is read again without them, as PowerShell reads `"C:\\repo\\"`."""
+    quote, value, j = text[i], [], i + 1
+    while j < len(text) and text[j] != quote:
+        if escapes and quote == '"' and text[j] == "\\" and text[j + 1:j + 2] in ('"', "\\", "$", "`"):
+            value.append(text[j + 1])
+            j += 2
+        elif quote == '"' and (text.startswith("$(", j) or text[j] == "`"):
+            end = strict_group(text, j + (text[j] == "$"))
+            value.append(text[j:end])
+            j = end
+        else:
+            value.append(text[j])
+            j += 1
+    if j >= len(text) and escapes and quote == '"':
+        return strict_quoted(text, i, escapes=False)
+    return "".join(value), j + 1
 
 
-def strict_pattern(subcommand, route):
-    """A route inside a git command, after `subcommand` when one is named: git's first word
-    past its own options, so a later `commit` or `am` (a file, a branch) is not the subcommand."""
-    if not subcommand:
-        return re.compile(r"(?i:\bgit\b)" + strict_segment("lead") + route)
-    return re.compile(STRICT_GIT_OPTIONS + r"\s+(?:" + subcommand + r")(?![\w.-])" + strict_segment("rest") + route)
+def strict_redirect(text, i):
+    """The end of the redirect that starts at `i` (`>`, `2>&1`, `> out.txt`), its target included."""
+    j = i
+    while j < len(text) and text[j] in "<>&|-0123456789":
+        j += 1
+    if re.search(r"&\d*-?$", text[i:j]):
+        return j
+    while j < len(text) and text[j] in " \t":
+        j += 1
+    while j < len(text) and text[j] not in " \t\r\n;|&()":
+        j += 1
+    return j
 
 
-# A short-option bundle holds `n` (or `c`, `C`) before any letter that takes the rest as its
-# value: the letters of SHORT_VALUES.
-STRICT_ROUTES = (
-    ("hooks", strict_pattern("", STRICT_OPTION + r"--no-v(?:e(?:r(?:i(?:fy?)?)?)?)?(?![\w-])")),
-    ("hooks", strict_pattern("commit", STRICT_OPTION + r"-(?:(?![FmcCtUSu])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
-    ("hooks", strict_pattern("am", STRICT_OPTION + r"-(?:(?![CpS])[A-Za-z])*n[A-Za-z]*(?![\w-])")),
-    ("trailer", strict_pattern("", STRICT_OPTION + r"--tr(?:a(?:i(?:l(?:er?)?)?)?)?(?![\w-])")),
-    # git's own `-c` and `--config-env` stand among its options before the subcommand.
-    ("setting", re.compile(STRICT_GIT_OPTIONS + r"\s+(?:-c\s+|--config-env[=\s]+)[\"']?(?i:core\.hooksPath|hook\.)")),
-    ("reuse", strict_pattern("commit", STRICT_OPTION + r"(?:-(?:(?![FmtUSu])[A-Za-z])*[cC]|--re[eu][\w-]*(?![\w-]))")),
-    # A set names a value after the setting; a read ends there, or at a redirect, a pipe, a
-    # list, a comment, an option, or the close of the group or quote that holds it.
-    ("setting", strict_pattern(
-        "config", r"(?<![\w.-])[\"']?(?i:core\.hooksPath|hook\.[\w.-]+)[\"']?[ \t]+"
-        r"(?![)}#;|&><\]-]|\d+[<>]|[\"'](?:\s|$|\)))\S")),
-)
+def strict_opens_group(text, i, in_command):
+    """Whether a group opens at `i`: a backtick, `$(`, or a `(` inside a command (PowerShell's
+    group; at a command's start it is a subshell)."""
+    return text[i] == "`" or text.startswith("$(", i) or (text[i] == "(" and in_command)
+
+
+def strict_part(text, i):
+    """The value and end of the word part at `i`: a quoted part, `${...}`, an escaped character
+    or a plain one. A backslash before anything else stays, as in a Windows path."""
+    if text[i] in "'\"":
+        return strict_quoted(text, i)
+    if text.startswith("${", i):
+        end = text.find("}", i) + 1 or len(text)
+        return text[i:end], end
+    if text[i] == "\\" and text[i + 1:i + 2] in STRICT_ESCAPED:
+        return text[i + 1], i + 2
+    return text[i], i + 1
+
+
+def strict_commands(cmd):
+    """Without the parser: each command's words, quotes taken off; the commands inside `$(...)`,
+    backticks and a group are read as commands too, and redirects and comments are left out."""
+    text = STRICT_CONTINUATION.sub(lambda m: (m.group(1) or "") + " ", cmd)
+    commands, words, word, i = [], [], None, 0
+    while i < len(text):
+        char = text[i]
+        if strict_opens_group(text, i, bool(words) or word is not None):
+            end = strict_group(text, i + (char == "$"))
+            commands.extend(strict_commands(text[i + (2 if char == "$" else 1):end - 1]))
+            word, i = (word or "") + text[i:end], end
+        elif char in "<>" and (word is None or word.isdigit()):
+            word, i = None, strict_redirect(text, i)
+        elif char in " \t\r" or char in STRICT_BREAKS or (char in "{}" and word is None):
+            if word is not None:
+                words.append(word)
+                word = None
+            if char not in " \t\r":
+                commands.append(words)
+                words = []
+            i += 1
+        elif char == "#" and word is None:
+            i = text.find("\n", i) if "\n" in text[i:] else len(text)
+        else:
+            value, i = strict_part(text, i)
+            word = (word or "") + value
+    if word is not None:
+        words.append(word)
+    return [words for words in commands + [words] if words]
+
+
+def git_route(commands, names_git_at_run_time):
+    """The kind of route past the hook a git call in the commands takes, or None; a word
+    `names_git_at_run_time` accepts (`$GIT`) counts as git too."""
+    for words in commands:
+        for i, word in enumerate(words):
+            if program(words[i:]) == "git" or names_git_at_run_time(word):
+                kind = git_bypass(words[i:])
+                if kind:
+                    return kind
+    return None
 
 
 def strict_route(cmd):
-    """Without the parser: the kind of route past the hook the command text names, or None."""
-    joined = STRICT_CONTINUATION.sub(lambda m: (m.group(1) or "") + " ", cmd)
-    return next((kind for kind, pattern in STRICT_ROUTES if pattern.search(joined)), None)
+    """Without the parser: the kind of route past the hook the command's words take, or None."""
+    return git_route(strict_commands(cmd), lambda word: word.startswith("$") and GIT_WORD.search(word))
 
 
 def bypass_reason(cmd, parsed, assignments):
     """Why the command takes a route past the hook, or None: read from the parsed commands,
-    or, without the parser, from patterns over the whole command text."""
+    or, without the parser, from the commands the strict read splits."""
     strict = parsed is None
     if LEFTHOOK_OFF.search(cmd) if strict or assignments is None else turns_lefthook_off(parsed, assignments):
         return BYPASS_REASONS["lefthook"]
-    if strict:
-        kind = strict_route(cmd)
-        return BYPASS_REASONS[kind] if kind else None
-    for words in parsed:
-        for i, word in enumerate(words):
-            if program(words[i:]) == "git" or is_run_time_git(word):
-                kind = git_bypass(words[i:])
-                if kind:
-                    return BYPASS_REASONS[kind]
-    return None
+    kind = strict_route(cmd) if strict else git_route(parsed, is_run_time_git)
+    return BYPASS_REASONS[kind] if kind else None
 
 
 def deny(reason):
