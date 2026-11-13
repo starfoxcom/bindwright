@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { wakeText } from '../hooks/register'
-import { isResearchDue, type PrRounds, recordRound, redStreak, RESEARCH_EVERY } from '../hooks/rounds'
+import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
 
@@ -40,11 +40,11 @@ test('a re-run replaces its round, and the list stays bounded', () => {
   expect(redStreak({ rounds: 'x' } as never)).toBe(0)
 })
 
-// Every RESEARCH_EVERY red rounds in a row the wake asks for a step back, and never in between.
-test('the research step is due at 3, 6 and 9 red rounds, and only then', () => {
+// Each step back that leaves the PR red leaves one round fewer before the next: 3, then 2, then 1.
+test('the research step is due at 3, 5 and every red round from 6', () => {
   const due = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(isResearchDue)
-  expect(due).toEqual([3, 6, 9])
-  expect(RESEARCH_EVERY).toBe(3)
+  expect(due).toEqual([3, 5, 6, 7, 8, 9])
+  expect([0, 2, 3, 4, 5, 6, 9].map(roundsToResearch)).toEqual([3, 1, 2, 1, 1, 1, 1])
 })
 
 const failed = (outcome: Watch['outcome']): Watch =>
@@ -54,6 +54,7 @@ test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('failed'), undefined, 3)).toContain('research how the community solves this problem')
   expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 fix rounds in a row')
   expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 fix rounds')
+  expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 fix rounds')
   for (const red of [0, 2, 4]) expect(wakeText(failed('failed'), undefined, red)).not.toContain('research')
   expect(wakeText(failed('passed'), undefined, 3)).not.toContain('research')
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
@@ -93,7 +94,7 @@ test('/ci-watch rounds tells the count and when the next step back is due', asyn
     ((await $.command.run({ command: 'ci-watch', args, origin: { kind: 'composer' } } as never)) as { text: string })
       .text
   expect(await ask('rounds')).toBe(
-    'o/r#7: 7 fix round(s) in a row without every check green; the next step back is due in 2.',
+    'o/r#7: 7 fix round(s) in a row without every check green; the next step back is due in 1.',
   )
   expect(await ask('rounds 7')).toContain('o/r#7: 7 fix round(s) in a row')
   expect(await ask('rounds reset 7')).toContain('/ci-watch rounds')
