@@ -750,6 +750,18 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "git hook bypass")
 
+    def test_shipped_bash_parser_reads_escapes_as_bash_does(self):
+        # Runs helper/parsers/shell-words-bash.wasm itself, so the rows prove the shipped bytes.
+        script = os.path.join(HELPER, "hooks", "shell-words.mjs")
+        for (command, words), result in self.each((
+                ('git commit -m "a\\\\\nb"', ["git", "commit", "-m", "a\\\nb"]),
+                ('git commit -m "a\\\nb"', ["git", "commit", "-m", "ab"]),
+                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"])),
+                lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
+                                                      capture_output=True, timeout=60)):
+            with self.subTest(command=command):
+                self.assertEqual(json.loads(result.stdout)["commands"], [words], result.stderr)
+
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
             rows = re.findall(r"^\| `([^`]+)` \|.*\| `([0-9a-f]{64})` \|$", fh.read(), re.M)
