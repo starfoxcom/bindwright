@@ -6,7 +6,7 @@
 # missing piece and exits 1 when any is missing.
 #
 # No ruleset is created or repaired until the default branch holds
-# .github/review-gate.yml: before the first setup PR merges there, the gate
+# .github/scripts/review_gate.py: before the first setup PR merges there, the gate
 # cannot pass, and a ruleset requiring it would leave that PR unmergeable.
 #
 # Needs the gh CLI, logged in with admin access to the repository. Run it
@@ -34,8 +34,8 @@ MERGE_STYLE=merge
 APPROVALS=0
 DEFAULT_BRANCH=""
 GATE_CHECKS=one
-# Whether the default branch holds .github/review-gate.yml. Until the first
-# setup PR merges, the gate cannot pass there, so no new ruleset requires it.
+# Whether the default branch holds the gate's script. Until the first
+# setup PR merges, the gate cannot pass there, so no ruleset is touched.
 GATE_LANDED=false
 # A develop branch this clone has but GitHub does not, so nothing protects it.
 # Only read when the repository came from this folder, not from --repo.
@@ -144,14 +144,23 @@ step_local_develop() {
 # default branch; "one" when the file or the line is absent.
 read_gate_checks() {
   local text value
-  if text=$(gh api -H "Accept: application/vnd.github.raw" \
-    "repos/$REPO/contents/.github/review-gate.yml" 2> /dev/null); then
-    GATE_LANDED=true
-  else
-    text=""
-  fi
+  text=$(gh api -H "Accept: application/vnd.github.raw" \
+    "repos/$REPO/contents/.github/review-gate.yml" 2> /dev/null) || text=""
   value=$(sed -nE 's/^checks:[[:space:]]*(one|two)([[:space:]#].*)?$/\1/p' <<< "$text")
   GATE_CHECKS=${value:-one}
+}
+
+# Whether the default branch holds the gate's script, the same file the review
+# workflow looks for on a PR's base. Only GitHub's "not found" means it has
+# not landed; any other failure stops here, so a read that failed never holds
+# or loosens a protected repo's rulesets.
+read_gate_landed() {
+  local err
+  if err=$(gh api "repos/$REPO/contents/.github/scripts/review_gate.py" --silent 2>&1); then
+    GATE_LANDED=true
+  elif [[ $err != *"HTTP 404"* ]]; then
+    die "cannot read whether $DEFAULT_BRANCH holds .github/scripts/review_gate.py: $err"
+  fi
 }
 
 step_label() {
@@ -412,6 +421,7 @@ main() {
   parse_args "$@"
   preflight
   read_gate_checks
+  read_gate_landed
   echo "Review gate on $REPO ($MODE)"
   step_label
   step_merge
