@@ -414,7 +414,8 @@ export default {
   "mods.all.text": "Cada mod encendido a la vez: la configuración con la que se construye este proyecto.",
   "mods.all.value": "Los 10 activados",
   "mods.ci-watch.title": "<code>ci-watch</code>",
-  "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan.",
+  "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan. Tras varias "
+    + "rondas en rojo, frena los cambios hasta que la sesión investigue una mejor solución.",
   "mods.ci-watch.value": "Activado",
   "mods.compact-handoff.title": "<code>compact-handoff</code>",
   "mods.compact-handoff.text": "Lleva tus palabras y un traspaso a través de cada compactación.",
