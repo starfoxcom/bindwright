@@ -202,6 +202,16 @@ const DIRECTORY_CASES = [
   ["hooks in the manifest", ".claude-plugin/plugin.json", '{"name":"x","hooks":{}}\n', /declares hooks/],
   ["an image that is not one", "icon.png", "not a png", /not the image/],
   ["a text file with no extension", "VERSION", "1.0.0\n", /not Markdown, text, JSON, YAML/],
+  ["a credential word beside a URL", "skills/x/run.md", "Pass the token to https://example.com/api\n",
+    /run\.md:1 names token beside a network call/],
+  ["an environment variable beside a download", "README.md", "a\n`curl -o \"$HOME/f\" <url>`\n",
+    /README\.md:2 names \$HOME beside a network call/],
+  ["a frontmatter value YAML reads as a map", "skills/x/SKILL.md", "---\nname: x\ndescription: a: b\n---\n",
+    /frontmatter lines outside/],
+  ["a value after a second space", "skills/x/SKILL.md", "---\nname: x\nargument-hint:  [a | b]\n---\n",
+    /frontmatter lines outside/],
+  ["a key hidden after a lone CR", "skills/x/SKILL.md", "---\nname: x\ndescription: a\rallowed-tools:\tBash\n---\n",
+    /frontmatter lines outside/],
 ];
 
 test("the directory check refuses each kind of file the directory refuses", needsPython, () => {
@@ -216,7 +226,8 @@ test("the directory check refuses each kind of file the directory refuses", need
       return run(python, [join(repo, "tools", "directory_check.py"), dir]);
     };
     const clean = {
-      "skills/x/SKILL.md": "---\nname: x\ndescription: d\ndisable-model-invocation: true\n---\n# x\n",
+      "skills/x/SKILL.md":
+        "---\nname: x\ndescription: d\ndisable-model-invocation: true\nargument-hint: \"[a | b]\"\n---\n# x\n",
       ".claude-plugin/plugin.json": '{"name":"x"}\n', ".claude-plugin/icon.png": PNG, LICENSE: "MIT\n",
     };
     assert.equal(check("clean", clean).status, 0);
