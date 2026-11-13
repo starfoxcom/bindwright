@@ -24,10 +24,6 @@ const BASH_SKIP = new Set(["variable_assignment", "file_redirect", "heredoc_redi
 const BASH_RUNTIME = new Set(["simple_expansion", "expansion", "command_substitution",
   "process_substitution", "arithmetic_expansion"]);
 
-// Programs that run the command named in their arguments.
-const WRAPPERS = new Set(["env", "sudo", "doas", "command", "exec", "nice", "nohup", "time", "timeout", "xargs",
-  "stdbuf"]);
-
 function bashWord(node) {
   if (node.type === "word" || node.type === "number") {
     return /[*?[]/.test(node.text) ? dynamic(node) : node.text.replace(/\\(.)/gs, "$1");
@@ -127,11 +123,9 @@ export async function shellWords(shell, command) {
     if (shell === "bash" && node.type === "command" && node.children.some((c) => !c.isNamed)) unreadable = true;
     if (node.type === "command") {
       const words = read(node);
-      // A program built at run time (`$GIT`, `env $GIT`) cannot be told apart from its
-      // arguments, so the command gets the strict read instead.
-      const lead = words.findIndex((w, i) =>
-        typeof w !== "string" || !(i === 0 ? WRAPPERS.has(w) : /^-|=/.test(w)));
-      if (lead >= 0 && typeof words[lead] !== "string") unreadable = true;
+      // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the
+      // command gets the strict read instead.
+      if (typeof words[0] !== "string") unreadable = true;
       commands.push(words);
     }
     // An array's words reach a command later, wherever it runs: the strict read takes it.

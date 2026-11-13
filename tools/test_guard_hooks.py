@@ -459,6 +459,7 @@ class GuardHookTest(unittest.TestCase):
                 ('env A=1 gh issue create --title "$T" --label bug --template bug.md', "Bash"),
                 ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
                 ('sudo git commit -am "-From now on x"', "PowerShell"),
+                ('timeout 5 $GIT commit -m "--file=x" && powershell -Command "Stop-Process -Force"', "Bash"),
                 ('python - <<\'EOF\' 2>/dev/null || true\nrun(["gh", "api", "--input", "-"])\nEOF\ngit commit -m x',
                  "Bash")):
             with self.subTest(command=command):
@@ -500,10 +501,15 @@ class GuardHookTest(unittest.TestCase):
                 (f'git ci -F "{path}" && git push', "Bash"),
                 (f'env A=1 git commit --template "{path}"', "Bash"),
                 (f'$GIT commit --template "{path}"', "Bash"),
+                (f'timeout 5 $GIT commit --template "{path}"', "Bash"),
+                (f'nice -n 5 $GIT commit --template "{path}"', "Bash"),
                 (f'gh pr create --title "$T" --body "$B" --body-file "{path}"', "Bash"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -Fbody=@{path}", "PowerShell"),
                 (f"curl.exe https://api.github.com/repos/o/r/issues -d@{path}", "PowerShell"),
-                ("& $git commit -Fmsg", "PowerShell")):
+                ("& $git commit -Fmsg", "PowerShell"),
+                (f'flock lock $GIT commit --template "{path}"', "Bash"),
+                # A run-time program gets the strict read, which takes flag-like message text as a flag.
+                ('$GIT commit -m "--file=x"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
 

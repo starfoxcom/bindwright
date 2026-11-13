@@ -38,7 +38,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     it cannot read) and one run without the helper or Node get the strict
     read instead: every file flag in the command text, a text tool's and
     one inside quoted text included, and a relative body file after any
-    `cd`, `pushd`, `Set-Location` or `git -C` is denied.
+    `cd`, `pushd`, `Set-Location` or `git -C` is denied. So flag-like text
+    in such a command's message (`$GIT commit -m "--file=x"`) is denied too.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -140,6 +141,7 @@ PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
 GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "reflog", "diff", "blame",
              "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
+GIT_WORD = re.compile(r"\bgit\b", re.I)  # `$GIT`, `$(command -v git)`
 FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
 DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
 BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
@@ -353,8 +355,12 @@ def command_files(words):
     # git's -m) are taken off the outer read.
     inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
     names = {program(run) for run in inner}
-    flags = BODY_FLAGS - {"--template"}  # git's own reads take its --template; elsewhere it names one
-    message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names else set())
+    # git's own reads take its --template; elsewhere it names one, unless a word built at run
+    # time names git (`timeout 5 $GIT commit`), as the strict read judges it. Then git's -m is
+    # a message too.
+    built_git = any(is_run_time_git(w) for w in words)
+    flags = BODY_FLAGS if built_git else BODY_FLAGS - {"--template"}
+    message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names or built_git else set())
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
     return body_files(words, flags, message, readers) + [f for run in inner for f in command_files(run)]
 
@@ -366,8 +372,14 @@ def folder_targets(words):
     if name in CD_COMMANDS:
         targets = [w for w in words[1:] if text_of(w) == "-" or not text_of(w).startswith("-")]
         return targets or (["~"] if name in HOME_COMMANDS else [])
-    return [folder for i in range(len(words)) if program(words[i:]) == "git"
+    return [folder for i in range(len(words)) if program(words[i:]) == "git" or is_run_time_git(words[i])
             for folder in git_subcommand(words[i:])[1]]
+
+
+def is_run_time_git(word):
+    """Whether a word built at run time names git (`$GIT`, `$(command -v git)`), as the strict
+    read judges a command."""
+    return isinstance(word, dict) and GIT_WORD.search(text_of(word)) is not None
 
 
 def folder_places(commands, cwd):
