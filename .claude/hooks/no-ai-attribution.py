@@ -355,8 +355,14 @@ def strict_segment(name):
 
 
 # git's own options before the subcommand, with the value of those that take one.
-STRICT_GIT_OPTIONS = (r"(?i:\bgit\b)(?:\s+(?:(?:-C|-c|--git-dir|--work-tree|--namespace|--config-env)\s+"
-                      r"(?:\"[^\"]*\"|'[^']*'|\$?\((?:[^()\n]|\([^()\n]*\))*\)|\S+)|[\"']?-\S*))*?")
+# The program is `git` or `git.exe`, a quoted path's closing quote after it; the options that take
+# a value are the parsed read's own, so the two reads cannot drift apart. Each option is kept once
+# read, as the segment's tokens are, so a run of options is read in one pass.
+STRICT_GIT_OPTION = (r"\s+(?:(?:" + "|".join(re.escape(option) for option in sorted(GIT_VALUE_OPTIONS))
+                     + r")\s+(?:\"[^\"]*\"|'[^']*'|\$?\((?:[^()\n]|\([^()\n]*\))*\)|(?:\\.|[^\s\\])+)"
+                     r"|[\"']?-\S*)")
+STRICT_GIT_OPTIONS = (r"(?i:\bgit(?:\.exe)?)[\"']?(?=\s)(?:(?=(?P<option>" + STRICT_GIT_OPTION
+                      + r"))(?P=option))*?")
 
 
 def strict_pattern(subcommand, route):
