@@ -674,6 +674,10 @@ class GuardHookTest(unittest.TestCase):
                 ("git config set --global core.hooksPath x", setting),
                 ("git config --unset core.hooksPath", setting),
                 ("git config unset hook.lint.enabled", setting),
+                ("git config --remove-section core", setting),
+                ("git config rename-section hook.lint x", setting),
+                ("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=x git commit -m y", setting),
+                ("env GIT_CONFIG_PARAMETERS=\"'core.hooksPath'='x'\" git push", setting),
                 ("git --config-env=core.hooksPath=H commit -m x", setting),
                 ("git -c hook.commit-msg.enabled=false commit -m x", setting),
                 ("git config set hook.commit-msg.enabled false", setting),
@@ -701,6 +705,7 @@ class GuardHookTest(unittest.TestCase):
                         "git tag -n", "git am -c mail.patch", "git checkout --track origin/x",
                         "git config core.hooksPath && git commit -m x",
                         "git config get core.hooksPath && git commit -m x",
+                        "git config --remove-section alias && git commit -m x",
                         'git commit -m "say LEFTHOOK=0 skips it"',
                         "python - <<'EOF'\nrows = ['LEFTHOOK=0 git commit -m x']\nEOF"):
             with self.subTest(command=command):

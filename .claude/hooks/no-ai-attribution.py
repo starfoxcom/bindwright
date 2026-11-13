@@ -40,13 +40,17 @@ What is scanned, for any git write, gh write or GitHub API call:
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with the guard. A command this hook reads is
 denied when either is missing, when the helper is older than this hook, or
-when the parser is unsure of it (a program or an array built at run time,
-PowerShell's `--%`, syntax it cannot read), with a reason that says which
-and how to fix it.
+when the parser is unsure of it (an array built at run time, a program
+built at run time that no literal text names, PowerShell's `--%`, syntax it
+cannot read), with a reason that says which and how to fix it. A program
+named by a literal path tail (`"$S/bin/x.exe"`) or by a variable the command
+sets is read as each program it can be.
 
 Denied outright, since the hook cannot see past them: a git write that skips
 git's own hooks (`--no-verify`, `-n` on commit or am, setting
-or unsetting `core.hooksPath` or a `hook.` setting; reading one is fine), `--trailer`, a
+or unsetting `core.hooksPath` or a `hook.` setting, removing or renaming the `core` or
+`hook` section, or handing one to git through `GIT_CONFIG_KEY_<n>` or
+`GIT_CONFIG_PARAMETERS`; reading one is fine), `--trailer`, a
 commit that reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0`, `lefthook
 uninstall`) from any command. Options are read as git reads them, bundled
@@ -182,7 +186,7 @@ UNREAD = ("the guard could not read this command's structure: a program or an ar
 LEFTHOOK_OFF = re.compile(r"\blefthook\b[^|;&\n]*?\buninstall\b|LEFTHOOK\s*=\s*['\"]?(?:0|false)\b", re.I)
 LEFTHOOK_OFF_VALUES = ("0", "false")
 # Not a write, so it needs its own way past the early exit.
-GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*hook", re.I)
+GIT_CONFIG_HOOKS = re.compile(r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|section|--re[mn])", re.I)
 # A line end the shell joins to the next line: `\` (even runs of `\` escape each other) or
 # PowerShell's backtick after a blank.
 CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
@@ -248,7 +252,7 @@ def option_words(subcommand, rest):
 
 def config_sets_hooks(rest):
     """Whether a `git config` command sets or unsets a hook setting; reading one is fine."""
-    names, skip_next, unsets = [], False, False
+    names, skip_next, unsets, sections = [], False, False, False
     for word in rest:
         if skip_next:
             skip_next = False
@@ -256,9 +260,15 @@ def config_sets_hooks(rest):
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
             unsets = unsets or (word.startswith("--uns") and "--unset-all".startswith(word))
+            sections = sections or any(word.startswith(option[:5]) and option.startswith(word)
+                                       for option in ("--remove-section", "--rename-section"))
             skip_next = word in CONFIG_VALUE_OPTIONS
         else:
             names.append(word)
+    if names[:1] in (["remove-section"], ["rename-section"]):
+        sections, names = True, names[1:]
+    if sections:  # removing or renaming `core` or a `hook` section drops its hook settings
+        return bool(names) and names[0].lower().split(".")[0] in ("core", "hook")
     if names[:1] in (["set"], ["unset"]):
         unsets, names = unsets or names[0] == "unset", names[1:]
     elif names[:1] and names[0] in CONFIG_READS:
@@ -326,6 +336,21 @@ def join_continued(cmd):
     return CONTINUED_LINE.sub(lambda m: (m.group(1) or "") + " ", cmd)
 
 
+def environment_sets_hooks(commands, assignments):
+    """Whether the command gives git a hook setting through its environment
+    (`GIT_CONFIG_KEY_0=core.hooksPath`, `GIT_CONFIG_PARAMETERS`), by assignment or `env`."""
+    settings = [(str(s.get("name", "")), s.get("value")) for s in assignments if isinstance(s, dict)]
+    settings += [tuple(text_of(word).split("=", 1)) for words in commands for word in words
+                 if "=" in text_of(word)]
+    for name, value in settings:
+        name = name.lower()
+        name = name[len("$env:"):] if name.startswith("$env:") else name.lstrip("$")
+        if re.fullmatch(r"git_config_(key_\d+|parameters)", name):
+            if not isinstance(value, str) or names_hooks(value.strip("'\"")) or "hookspath" in value.lower():
+                return True
+    return False
+
+
 def git_route(commands):
     """The kind of route past the hook a git call in the parsed commands takes, or None; a
     word built at run time that names git (`$GIT`) counts as git too."""
@@ -342,6 +367,8 @@ def bypass_reason(parsed, assignments):
     """Why the parsed command takes a route past the hook, or None."""
     if turns_lefthook_off(parsed, assignments):
         return BYPASS_REASONS["lefthook"]
+    if environment_sets_hooks(parsed, assignments):
+        return BYPASS_REASONS["setting"]
     kind = git_route(parsed)
     return BYPASS_REASONS[kind] if kind else None
 
