@@ -62,11 +62,13 @@ function maskedCommand(command: string, isPowerShell: boolean): string {
 }
 
 // The subcommand of each git call in the command, read word by word as git does: the first word after
-// `git` and its global options. An option's value is never read as the subcommand.
+// `git` and its global options. An option's value is never read as the subcommand. Words split as the
+// shell splits them: a line continuation joins lines, and `<` or `>` ends a word even glued to it.
 function gitSubcommands(command: string, isPowerShell: boolean): string[] {
   const found: string[] = []
-  for (const part of commandWords(command, isPowerShell).split(/[;&|\n(){}]/)) {
-    const words = part.trim().split(/\s+/)
+  const joined = commandWords(command, isPowerShell).replace(isPowerShell ? /`\r?\n/g : /\\\r?\n/g, ' ')
+  for (const part of joined.split(/[;&|\n(){}]/)) {
+    const words = part.trim().split(/[\s<>]+/)
     for (let i = 0; i < words.length; i++) {
       if (words[i] !== 'git') continue
       let next = i + 1

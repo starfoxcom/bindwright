@@ -95,6 +95,7 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
     () => bash('git push origin feature/x'),
     () => call({ tool: 'PowerShell', command: 'git push' }),
     () => bash('git -C . commit -m "fix it"'),
+    () => bash('git commit>commit.log -m "fix it"'),
     () => call(editInput),
     () => call({ tool: 'Write', file_path: 'C:/repo/a.ts', content: 'b' }),
   ]
