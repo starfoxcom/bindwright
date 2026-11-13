@@ -1,17 +1,22 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
-import { isPushOrPr, mergedNumber, targetFolder } from './command'
+import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
-import { isResearchDue, recordRound, redStreak, researchText, roundsToResearch, ROUNDS_FILE } from './rounds'
-import type { PrRounds } from './rounds'
+import {
+  isResearchDue, lookupTopic, redStreak, researchRefusal, researchText, roundsToResearch, SOURCES_NEEDED, withTopic,
+} from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import {
+  dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
+} from './store'
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
 import { HELP, HINT } from './help'
 export { HELP } from './help'
+export { MKDIR_SCRIPT } from './store'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -84,15 +89,6 @@ function outcomeText(watch: Watch, now?: number): string {
   )
 }
 
-// The engine's fs makes no missing folders, so the data folder is made through node, once per load.
-export const MKDIR_SCRIPT = 'require("fs").mkdirSync(process.argv[1],{recursive:true})'
-const madeDirs = new Set<string>()
-async function ensureDir($: EngineInterface, dir: string): Promise<void> {
-  if (madeDirs.has(dir)) return
-  const { exitCode } = await $.process.run(['node', '-e', MKDIR_SCRIPT, dir], { timeoutMs: 10_000 })
-  if (exitCode === 0) madeDirs.add(dir)
-}
-
 // Every session leaves a state file and an owner file behind. Once per load, those of other sessions
 // not written for SWEEP_DAYS are removed, never the settings
 // (`node <plugin root>/scripts/sweep.cjs <folder> <this session's id> <days>`; test-helper/sweep.spec.cjs runs it).
@@ -106,16 +102,6 @@ async function sweep($: EngineInterface): Promise<void> {
   await $.process.run(['node', script, ...args], { timeoutMs: 20_000 }).catch(() => undefined)
 }
 
-async function statePath($: EngineInterface): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const dir = `${configured ?? `${home}/.claude`}/mods-data/ci-watch`
-  return `${dir}/${await $.session.id()}.json`.replaceAll('\\', '/')
-}
-
-async function dataFolder($: EngineInterface): Promise<string> {
-  return (await statePath($)).replace(/\/[^/]*$/, '')
-}
 // At the entry check of every hook and poll: a resumed id's saved watches join memory (owner.ts).
 async function followSession($: EngineInterface): Promise<void> {
   try {
@@ -283,39 +269,16 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// The fix-round count (rounds.ts). Each PR's rounds live beside the session files, shared by every session.
-async function roundsPath($: EngineInterface): Promise<string> {
-  const path = await statePath($)
-  return `${path.slice(0, path.lastIndexOf('/'))}/${ROUNDS_FILE}`
-}
-
-async function readRounds($: EngineInterface): Promise<Record<string, PrRounds>> {
-  const all = await $.fs.read(await roundsPath($)).then(text => JSON.parse(String(text))).catch(() => undefined)
-  return all && typeof all === 'object' ? (all as Record<string, PrRounds>) : {}
-}
-
-// The PR's rounds changed by `change`, applied to the file as read right before the write, with nothing
-// awaited between the two: a round another session wrote meanwhile is the state the change starts from.
-async function updateRounds($: EngineInterface, key: string, change: (pr?: PrRounds) => PrRounds) {
-  const path = await roundsPath($)
-  await ensureDir($, path.slice(0, path.lastIndexOf('/')))
-  const all = await readRounds($)
-  await $.fs.write(path, JSON.stringify({ ...all, [key]: change(all[key]) }))
-}
-
-// Each watch that settled on a pushed head is one round: red when a check failed. A watch that ran out of
-// time says nothing about the checks and is no round. A failed write leaves the count as it was.
-async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<void> {
-  for (const w of settled) {
-    // A silent watch follows a head someone else pushed: no round of this session's.
-    if (w.isSilent || (w.outcome !== 'failed' && w.outcome !== 'passed')) continue
-    const red = w.outcome === 'failed'
-    await updateRounds($, `${w.repo}#${w.number}`, pr => recordRound(pr, w.headSha, red)).catch(() => undefined)
+// The refusal for an edit, commit or push while a watch of this session has a step back latched, or
+// undefined. A closed PR owes nothing.
+async function owedResearch($: EngineInterface): Promise<string | undefined> {
+  for (const w of live.watches.filter(w => w.stepBackTopics)) {
+    if (await isClosed($, w.repo, w.number)) continue
+    const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
+    return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
   }
+  return undefined
 }
-
-const redRoundsOf = async ($: EngineInterface, pr: { repo: string; number: number }) =>
-  redStreak((await readRounds($))[`${pr.repo}#${pr.number}`])
 
 // After a `gh pr merge` (`merged`: its PR number, 0 for the branch's PR, so every finished watch is a
 // candidate). A watch is dropped only once GitHub says its PR is merged or closed: `--auto` only queues the
@@ -380,7 +343,12 @@ async function startWatch(
     return pushed
   }
   const id = `${startedAt}-${Math.random().toString(36).slice(2)}`
-  const fresh: Watch = { repo, number, headSha, startedAt, checks: {}, stablePolls: 0, id, pushedAt: startedAt }
+  // A step back stays latched on the PR across a new watch of it: only lookups or a stop lift it.
+  const latched = live.watches.find(w => w.repo === repo && w.number === number && w.stepBackTopics)
+  const fresh: Watch = {
+    ...(latched ? { stepBackTopics: latched.stepBackTopics } : {}),
+    ...{ repo, number, headSha, startedAt, checks: {}, stablePolls: 0, id, pushedAt: startedAt },
+  }
   live.watches = [...live.watches.filter(w => !(w.repo === repo && w.number === number)), fresh]
   live.generation++
   await save($)
@@ -411,7 +379,9 @@ async function recheckSettled($: EngineInterface, watch: Watch, now: number): Pr
   const id = `${now}-${Math.random().toString(36).slice(2)}`
   const { repo, number } = watch
   const fresh: Watch = { repo, number, headSha: head, startedAt: now, checks: {}, stablePolls: 0, id }
-  return { ...fresh, pushedAt: watch.pushedAt ?? watch.startedAt, ...(isOwn ? {} : { isSilent: true }) }
+  // A latched step back stays on the PR when its head moves: only lookups or a stop lift it.
+  const stepBack = watch.stepBackTopics ? { stepBackTopics: watch.stepBackTopics } : {}
+  return { ...fresh, ...stepBack, pushedAt: watch.pushedAt ?? watch.startedAt, ...(isOwn ? {} : { isSilent: true }) }
 }
 
 // GitHub's status, read at most every few minutes and only while some watch waits long past a normal run.
@@ -508,12 +478,15 @@ async function poll($: EngineInterface): Promise<void> {
     changed = true
     if (next.outcome) settled.push(next)
   }
-  await recordRounds($, settled)
+  const stepBacks = await recordRounds($, settled)
   // A push, a stop or a merge while this poll waited on gh changed the list: lay the results over it.
   live.watches = live.generation === generation ? kept : reconcile(live.watches, kept)
   // Found by watch and head, not identity: a push made meanwhile is laid onto the polled copy, and the
   // watch as it is now decides whether it is silent. One stopped or restarted meanwhile is not found.
   const toWake = live.watches.filter(w => w.outcome && !w.isSilent && settled.some(s => isSameRun(s, w)))
+  // A green round ends the step back latched on its watch: the problem it asked about is fixed.
+  const isGreen = (w: Watch) => w.outcome === 'passed' && w.stepBackTopics && settled.some(s => isSameRun(s, w))
+  live.watches = live.watches.map(w => (isGreen(w) ? { ...w, stepBackTopics: undefined } : w))
   // GitHub's status is read before the retirement check: the read can take seconds, and a load retired
   // meanwhile must not save over the newer one's file afterwards.
   const isIncidentNoted = await noteIncidents($, now)
@@ -528,7 +501,10 @@ async function poll($: EngineInterface): Promise<void> {
   const due = toWake.filter(w => !isRecorded(recorded, w) && claimWake(w))
   // Marked by watch and head too: a same-head push made during the reads above replaced the object.
   const isDue = (w: Watch) => due.some(d => isSameRun(d, w))
-  if (due.length > 0) live.watches = live.watches.map(w => (isDue(w) ? { ...w, wakePending: true } : w))
+  // A red wake that asks for a step back latches it in the same save.
+  const isStepBack = (w: Watch) => w.outcome === 'failed' && stepBacks.has(`${w.repo}#${w.number}`)
+  const marked = (w: Watch): Watch => ({ ...w, wakePending: true, ...(isStepBack(w) ? { stepBackTopics: [] } : {}) })
+  if (due.length > 0) live.watches = live.watches.map(w => (isDue(w) ? marked(w) : w))
   if (changed || isIncidentNoted || live.isUnsaved) await save($)
   if (!live.isTurnRunning) await sendHeld($)
 }
@@ -621,6 +597,16 @@ function startPolling($: EngineInterface): Promise<void> {
     if (live.started === start) armPolling($)
   })().catch(() => undefined)
   return start
+}
+
+// Each web lookup the main session ran counts toward an owed step back, once per topic (`lookupTopic`).
+async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
+  const topic = lookupTopic(e)
+  if (topic === undefined || (await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
+  const counted = (w: Watch): Watch => ({ ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic) })
+  live.watches = live.watches.map(w => (w.stepBackTopics ? counted(w) : w))
+  live.generation++
+  await save($)
 }
 
 // A /clear moves the session to a new id and stops its timer; a start under way finishes first, under the
@@ -732,6 +718,9 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'NotebookEdit'] }, async ($, e, next) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
+    const isEdit = ['Edit', 'Write', 'NotebookEdit'].includes(String((e as { tool?: unknown }).tool))
+    const refusal = e.agentId === undefined && isEdit ? await owedResearch($) : undefined
+    if (refusal) return { deny: refusal }
     const result = await next(e)
     if (e.agentId !== undefined || 'deny' in result) return result
     const notes = await takeNotes($)
@@ -743,6 +732,9 @@ export const register: Register = (on, options) => {
     const isPowerShell = (e as { tool?: unknown }).tool === 'PowerShell'
     await startPolling($)
     if (await isRetired($)) return next(e)
+    const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
+    const refusal = isHeld ? await owedResearch($) : undefined
+    if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.
     const notes = e.agentId !== undefined || 'deny' in answered ? [] : await takeNotes($)
@@ -756,6 +748,12 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  on('tool.call', { tool: ['WebSearch', 'WebFetch', 'Agent'] }, async ($, e, next) => {
+    await startPolling($)
+    const result = await next(e)
+    if (!('deny' in result) && !result.isError) await noteWebLookup($, e)
+    return result
+  })
   on('tool.call', { tool: 'mcp__ci-watch__watch' }, async ($, e, next) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
