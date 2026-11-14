@@ -545,14 +545,17 @@ def names_hook_section(section):
 def config_sets_hooks(rest):
     """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
     holds them; a read passes."""
-    names, skip, unsets, sections = [], False, False, False
+    names, skip, unsets, sections, ended = [], False, False, False, False
     for word in (text_of(w) for w in rest):
         # The old form (`git config <name> <value>`) stops reading options at the first name, so a
         # later `--get` is the value it stores.
         legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
         if skip:
             skip = False
-        elif word.startswith("-") and not legacy:
+        elif word == "--" and not ended:
+            # Git reads every word after `--` as a name or value, never as an option.
+            ended = True
+        elif word.startswith("-") and not legacy and not ended:
             if word.startswith("--get") or word in ("-l", "--list"):
                 return False
             unsets = unsets or abbreviates(word, "--unset-all", "--uns")
@@ -674,7 +677,9 @@ def main():
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
     joined = CONTINUED_LINE.sub(r"\1", cmd)
-    texts = (cmd, joined)  # joining lines can also hide a match, so both are checked
+    # Joining lines can also hide a match, and so can quotes inside a word (`com'mit'`,
+    # `LEFT"HOOK"=0`), so the command is checked as written, joined and without its quotes.
+    texts = (cmd, joined, re.sub(r"[\"'`]", "", joined))
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
     if not (writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)):
         sys.exit(0)

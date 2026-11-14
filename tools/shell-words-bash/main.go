@@ -155,8 +155,17 @@ func shellWords(source string) result {
 			if assign.Array != nil {
 				out.Error = true
 			}
-			if assign.Name != nil && !assign.Naked {
+			switch {
+			case assign.Name != nil && !assign.Naked:
 				out.Assignments = append(out.Assignments, r.assignment(assign))
+			case assign.Naked && assign.Value != nil:
+				// `export "A=1"` reaches the parser as one word, which bash splits at its first `=`;
+				// a word built at run time could set any variable.
+				if word, literal := r.word(assign.Value).(string); !literal {
+					out.Error = true
+				} else if name, value, sets := strings.Cut(word, "="); sets {
+					out.Assignments = append(out.Assignments, assignment{Name: name, Value: value})
+				}
 			}
 		}
 	}
