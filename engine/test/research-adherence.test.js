@@ -163,6 +163,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a wildcard under a docs folder", bash("grep -rn foo docs/*"), null],
     // ripgrep searches a named file whatever -t or -g says; grep's --include filters it.
     ["an rg code wildcard beside a docs type", bash("rg -tmd foo src/*.py"), "fallback"],
+    ["an rg code wildcard that matches nothing here", bash("rg -tmd foo *.py"), "fallback"],
     ["an rg code file beside a docs glob", bash("rg foo -g '*.md' src/app.py"), "fallback"],
     ["a grep code wildcard filtered to docs", bash("grep -rn --include=*.md foo src/*.py"), null],
     // A quoted ~ is a folder name to the shell; the home folder is `base`.

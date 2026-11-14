@@ -150,9 +150,12 @@ class Repo:
         return self._code_files
 
     def holds_code(self, path):
-        """True when an in-repo file or folder is code, or cannot be told apart from code."""
+        """True when an in-repo file or folder is code, or cannot be told apart from code.
+
+        A wildcard is judged by its name, never expanded: the folder it would expand in is a guess. One
+        with no extension (`*`, `gui*`) can name anything in its folder, so the folder judges it."""
         if WILDCARD.search(os.path.basename(path)):
-            return is_code_name(path)
+            return self.holds_code(os.path.dirname(path)) if is_wide(path) else is_code_name(path)
         if os.path.isdir(path):
             # Case-blind: macOS and Windows folders match whatever case the search typed.
             prefix = path.rstrip("\\/").lower() + os.sep
@@ -184,31 +187,19 @@ class Search:
                 not is_outside(p, repo.root) for p, word in zip(named, self.paths)
                 if os.path.exists(p) or re.search(r"[/\\]", word))
         # A word with a folder in it is a named path even once it is gone (a deleted temp clone).
-        kept = [(p, word) for p, word in zip(named, self.paths)
-                if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
-                or re.search(r"[/\\]", word)] or [(base, "")]
-        inside = [p for p in expand_wildcards(kept) if not is_outside(p, repo.root)]
+        paths = [p for p, word in zip(named, self.paths)
+                 if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
+                 or re.search(r"[/\\]", word)] or [base]
+        inside = [p for p in paths if not is_outside(p, repo.root)]
         if not inside:
             return False
         if self.globs or self.types:
             return (any(is_code_name(g) for g in self.globs)
                     or any(t not in NON_CODE_TYPES for t in self.types)
-                    or (not self.filters_named_files
-                        and any(os.path.isfile(p) and is_code_name(p) for p in inside)))
+                    or (not self.filters_named_files and any(
+                        (os.path.isfile(p) or WILDCARD.search(os.path.basename(p))) and is_code_name(p)
+                        for p in inside)))
         return any(repo.holds_code(p) for p in inside)
-
-
-def expand_wildcards(named):
-    """Each (path, word) pair's path, a wildcard replaced by what it matches as the shell expands it.
-
-    One that matches nothing stays, since the shell then passes it on as written, and so does a
-    quoted one, which the shell leaves for the tool (a `git grep` pathspec)."""
-    expanded = []
-    for path, word in named:
-        is_expanded = WILDCARD.search(os.path.basename(path)) and not re.search(r"['\"]", word)
-        matches = glob.glob(path) if is_expanded else []
-        expanded += [os.path.normcase(m) for m in matches] or [path]
-    return expanded
 
 
 def split_words(head):
@@ -327,9 +318,8 @@ def words_search(words, is_text_search=True):
         # named with it; a listing's is its -Filter.
         is_filter = (not is_text_search and WILDCARD.search(piece)
                      and not re.search(r"['\"/\\]", piece))
-        # A text search's word keeps its quotes, which `resolve` and `expand_wildcards` read: the shell
-        # expands no quoted wildcard, and a native tool takes a quoted `~` as a folder name. A listing
-        # is a cmdlet, which reads `~` as home either way.
+        # A text search's word keeps its quotes for `resolve`: a native tool takes a quoted `~` as a
+        # folder name. A listing is a cmdlet, which reads `~` as home either way.
         (globs if is_filter else paths).append(piece if is_text_search else unquote(piece))
     return Search(paths, globs, types, filters_named_files=tool != "rg")
 
