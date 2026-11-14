@@ -5,6 +5,7 @@ export default {
   "meta.title": "Bindwright",
   "meta.description": "Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo "
     + "trabajas desde el primer mensaje.",
+  "meta.card": "El logo de Bindwright junto a la frase: Claude recuerda cómo te gusta trabajar.",
   "skip.link": "Ir a la instalación",
   "nav.site": "Sitio",
   "nav.home": "Inicio",
