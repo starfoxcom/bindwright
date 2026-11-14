@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Breaking
+
+- **FindWright is a plugin of its own.** Bindwright no longer carries a copy of FindWright or writes its `findwright-first.py` hook. With FindWright as the code-search tool, setup installs the FindWright plugin (`starfoxcom/findwright`) and takes out the old hook; then restart Claude Code and run `/findwright:setup`, which installs its helper and meaning model, registers its server, offers its own search hook and fits the index. Until it runs, FindWright's server points at a file that is gone and searches fall back to the built-in tools. `/close-session` reads the hit rate from FindWright's own helper.
+
 ### Added
 
 - **Setup and the doctor flag tools behind on releases.** They read the newest release of Node on your line (and whether your line still gets security fixes), Git for Windows, the GitHub CLI, uv and the Claude Code CLI, put a security release first, and offer the upgrade command where one surely applies (else they say how to update) on a yes. Only the tools on this computer are checked, and nothing about you or the repo is sent.
