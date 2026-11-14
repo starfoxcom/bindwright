@@ -168,7 +168,7 @@ class Search:
 
     def __init__(self, paths=(), globs=(), types=(), is_sure=True, filters_named_files=True):
         self.paths = list(paths)
-        # ripgrep searches a file named on the command line whatever its -g or -t says.
+        # ripgrep and ack search a file named on the command line whatever their -g or -t says.
         self.filters_named_files = filters_named_files
         # False when the words cannot be told apart: then only where the search runs and what
         # its words point at are judged.
@@ -196,13 +196,15 @@ class Search:
         if self.globs or self.types:
             return (any(is_code_name(g) for g in self.globs)
                     or any(t not in NON_CODE_TYPES for t in self.types)
-                    or (not self.filters_named_files and any(map(names_code_file, inside))))
+                    or (not self.filters_named_files and any(names_code_file(p, repo) for p in inside)))
         return any(repo.holds_code(p) for p in inside)
 
 
-def names_code_file(path):
-    """True when a named path is a code file, or a wildcard whose name can match one."""
-    return (os.path.isfile(path) or bool(WILDCARD.search(os.path.basename(path)))) and is_code_name(path)
+def names_code_file(path, repo):
+    """True when a named path is a code file, or a wildcard that can name one, judged as `holds_code` does."""
+    if WILDCARD.search(os.path.basename(path)):
+        return repo.holds_code(path)
+    return os.path.isfile(path) and is_code_name(path)
 
 
 def split_words(head):
@@ -324,7 +326,7 @@ def words_search(words, is_text_search=True):
         # A text search's word keeps its quotes for `resolve`: a native tool takes a quoted `~` as a
         # folder name. A listing is a cmdlet, which reads `~` as home either way.
         (globs if is_filter else paths).append(piece if is_text_search else unquote(piece))
-    return Search(paths, globs, types, filters_named_files=tool != "rg")
+    return Search(paths, globs, types, filters_named_files=tool not in ("rg", "ack"))
 
 
 def shell_search(command, repo, is_powershell=False):

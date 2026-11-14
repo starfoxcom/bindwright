@@ -158,15 +158,17 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a grep wildcard beside a code folder", bash("grep -rn foo *.md engine/"), "fallback"],
     ["an rg wildcard after a code folder", bash("rg foo engine *.md"), "fallback"],
     ["a wildcard of docs alone", bash("grep -rn foo *.md"), null],
-    // The shell expands a wildcard, so the files it matches are judged.
+    // A wildcard is judged by its name, never expanded; one with no extension by its folder.
     ["a bare wildcard in a docs folder", bash("cd docs; grep -rn foo *"), null],
     ["a wildcard under a docs folder", bash("grep -rn foo docs/*"), null],
-    // ripgrep searches a named file whatever -t or -g says; grep's --include filters it.
+    // ripgrep and ack search a named file whatever -t or -g says; grep's --include filters it.
     ["an rg code wildcard beside a docs type", bash("rg -tmd foo src/*.py"), "fallback"],
     ["an rg code wildcard that matches nothing here", bash("rg -tmd foo *.py"), "fallback"],
     ["an rg code file beside a docs glob", bash("rg foo -g '*.md' src/app.py"), "fallback"],
     ["a grep code wildcard filtered to docs", bash("grep -rn --include=*.md foo src/*.py"), null],
-    // A quoted ~ is a folder name to the shell; the home folder is `base`.
+    ["an ack code wildcard beside a docs type", bash("ack --type=md foo *.py"), "fallback"],
+    ["an rg wildcard of a docs folder beside a docs type", bash("rg -tmd foo docs/*"), null],
+    // Bash and a native tool take a quoted ~ as a folder under the current one.
     ["a quoted ~ in a cd is a folder name", bash('cd "~/scratch"; grep -rn foo .'), "fallback"],
     ["a quoted ~ search path is a folder name", bash('rg foo "~/scratch"'), "fallback"],
     // A PowerShell cmdlet reads a quoted ~ as the home folder.
