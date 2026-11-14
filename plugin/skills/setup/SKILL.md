@@ -28,22 +28,6 @@ When Git is missing, or neither Node 18 or later nor Python 3.8 or later is ther
 
 Then say to restart Claude Code, since a running session does not see a program installed after it started (quit and reopen the desktop app or the editor it runs in, such as VS Code or JetBrains, or start `claude` again in a new terminal window), and to run `/bindwright:setup` again. Stop here.
 
-**Programs a feature needs.** Some features need a program beyond Git and the engine. Check them now, from the versions read above, before any question, so that installing one never leaves a run half done:
-
-| Feature | Needs | It is there when |
-|---|---|---|
-| Size check | Python 3.8 or later | `python3 --version` or `python --version` shows it |
-| Mods | Node 18 or later, and CLI 2.1.287 or later | `node --version` shows it, and the version this session runs does: take it from the `AI_AGENT` environment variable (`claude-code_2-1-316_agent` is 2.1.316), not from `claude --version`, since the desktop app runs its own copy of the CLI, which can be older than the one on the PATH; only when `AI_AGENT` is unset, use `claude --version` |
-| FindWright | Node 22.16 or later on the 22 line, or 24 or later | `node --version` shows it |
-
-Offer a program only for a feature that can still be on in this run, judged from the saved choices, which are plain JSON files readable before the helper is found: `<config>/bindwright/settings.json` (this computer's), and in the repo `.bindwright/project.json` (the project's shared settings: its answers under `advanced`, the settings it requires under `setup.required`) and `.bindwright/local.json` (this computer's own project choices). A missing or unreadable file counts as no saved answer.
-
-- **Size check:** open on a run that sets up a project: closed on `global`, and on a first run outside a git repo, which sets up only the computer.
-- **FindWright:** open on a `global` run, and on any other when no file saves a `codeResearch`, or the one that decides saves `findwright`: the project's `advanced.codeResearch` when `setup.required` lists `codeResearch`, otherwise the first that saves one of `local.json`'s `codeResearch`, the project's `advanced.codeResearch` and `settings.json`'s `codeResearch`.
-- **Mods:** open on a `global` run, and on any other unless every mod has a saved answer in `settings.json`'s `extras` and each one saved as yes is installed (its folder is in `<config>/mods/`). The mods are the folders in `<helper>/_core/global-template/mods/`; when the helper is missing, or its `VERSION` is not the plugin's (an update can bring a new mod), count the mods as open.
-
-For each program missing for an open feature, say which features need it, in the same message as a missing Git or engine, and ask once per program: "<program> is needed for <features>. Install it now?", with "Yes" first. On a yes, install it as above: on Windows with `winget install` (`winget upgrade --id <id>` when an older one is there) and `Python.Python.3.12` or `OpenJS.NodeJS.LTS`, the CLI with `claude update` (in Claude Desktop, say to update the app, which carries its own CLI); on macOS and Linux give the download (https://www.python.org/downloads, https://nodejs.org/en/download) for the user to install. Then say to restart Claude Code as above and run `/bindwright:setup` again with the same argument, and stop: nothing is saved or created yet. On a no, the features that need it are off, as § "A feature whose program was declined" (step 3) says.
-
 With Git and at least one of Node 18 or later or Python 3.8 or later in place, find the helper: the part of Bindwright that runs on this computer (the engine, the templates and its scripts), which ships apart from the plugin, as files attached to the plugin's release on GitHub. It lives in one folder, written `<helper>` in every Bindwright skill, and the engine runs from it. `<home>` stands for the user's home folder, written out in full in each command (such as `/home/ana` or `C:\Users\Ana`). Take the first of these that runs:
 
 1. Node 18 or later: `<helper>` is `<home>/.bindwright/helper/node_modules/bindwright`, and the engine is `node "<helper>/engine/cli.js"`.
@@ -58,6 +42,24 @@ The helper is ready when `<helper>/VERSION` holds the same version as the plugin
    - Python: `<python> -m pip install --upgrade --no-deps --no-index --target "<home>/.bindwright/helper/python" "<home>/.bindwright/helper/<file>"`. It works on a Python the system or Homebrew manages, since it installs into its own folder. When `pip` itself is missing, say how to add it (`sudo apt install python3-pip` on Debian and Ubuntu, for the user to run) and stop.
 
 Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: setup writes nothing without it. Show the install's last lines, and when it could not reach the network, say to run setup again once online.
+
+**Programs a feature needs.** Some features need a program beyond Git and the engine. Check them now, once the helper is ready and before any question, so that installing one never leaves a run half done:
+
+| Feature | Needs | It is there when |
+|---|---|---|
+| Size check | Python 3.8 or later | `python3 --version` or `python --version` shows it |
+| Mods | Node 18 or later, and CLI 2.1.287 or later | `node --version` shows it, and the version this session runs does: take it from the `AI_AGENT` environment variable (`claude-code_2-1-316_agent` is 2.1.316), not from `claude --version`, since the desktop app runs its own copy of the CLI, which can be older than the one on the PATH; only when `AI_AGENT` is unset, use `claude --version` |
+| FindWright | Node 22.16 or later on the 22 line, or 24 or later | `node --version` shows it |
+
+Ask the engine which features can still be on in this run, never the settings files by hand: it resolves their layers, and drops values it ignores. Run it with `--settings <repo root>` (the current folder outside a repo), and with a `bw1-` code also with `--code <the code>` and no `--write`, which writes nothing and prints the files the code would write.
+
+- **Size check:** open on a run that sets up a project: closed on `global`, and on a first run outside a git repo, which sets up only the computer. With a code, open only when `.github/scripts/size_check.py` is among its files.
+- **FindWright:** open on a `global` run. On any other, open when the `codeResearch` entry is missing, is not `from` `"personal"` (step 2 then asks the question), or is `findwright`. With a code, open only when its `.claude/skills/find/SKILL.md` names FindWright.
+- **Mods:** open on a `global` run. On any other, open while a mod in `<helper>/_core/global-template/mods/` has no entry in `extras`, or an entry that wants it (`want` true, the project's `required` included) while `installed` shows it `false` or leaves it out.
+
+For each program missing for an open feature, say which features need it, in the same message as a missing Git or engine, and ask once per program: "<program> is needed for <features>. Install it now?", with "Yes" first. On a yes, install it as above: on Windows with `winget install` (`winget upgrade --id <id>` when an older one is there) and `Python.Python.3.12` or `OpenJS.NodeJS.LTS`, the CLI with `claude update` (in Claude Desktop, say to update the app, which carries its own CLI); on macOS and Linux give the download (https://www.python.org/downloads, https://nodejs.org/en/download) for the user to install. Then say to restart Claude Code as above and run `/bindwright:setup` again with the same argument, and stop: nothing is saved or created yet. On a no, the features that need it are off, as § "A feature whose program was declined" (step 3) says.
+
+With a code, a declined program that one of its answers needs stops setup here, before step 2 saves anything, with how to make a new code that has it off; when its size check is on and Python is in place, run § "Lizard, when the size check is picked" (step 3) here too, and a no stops setup the same way.
 
 **Tools behind on releases.** With Node 18 or later, run `node "<helper>/hooks/tool-versions.mjs"`. It reads the public release lists of Node, Git (on Windows), the GitHub CLI, uv and the Claude Code CLI, sends nothing about the user or the repo, and prints `{"tools": [{"id", "have", "latest", "security", "ok", "say", "fix", "command"}, ...], "unreachable": [...]}`. Leave out the tools whose `ok` is true. A tool whose `security` is true comes first: say its `say` line and that an official security release is worth taking right away. Mention each other tool behind in one line. For each, offer to run its `command` on a yes when it is not null, and otherwise say its `fix`, which is an instruction for the user. After an upgrade, say that this session keeps using the old version until Claude Code restarts, and go on. Name the tools in `unreachable` in one line as not checked (offline, or a sandbox without network); an `{"error": ...}` line or no output means nothing was checked, so say that instead. Without Node, skip this.
 
@@ -129,8 +131,8 @@ For a "Let me pick", ask one multiple-choice question with that group's items; w
 
 - **Size check** (no Python): round two's checks do not offer it, and the answers save `"codeSizeCheck": false`.
 - **Mods** (no Node, or an older CLI): step 2 skips the mods question, and step 7 installs no mod. Every mod with no saved answer is saved as a no with step 2's save; a mod already saved as a yes keeps that answer and stays uninstalled until the program is in place. A mod the project requires (its rating in the project's shared settings) is named as required and left uninstalled too.
-- **FindWright** (Node older than it needs, declined in step 0 or never offered): step 2 does not offer it. When the deciding answer (as step 0 reads it) is still `findwright` and it came from `settings.json`, the user's own computer choice, save `none` with `--layer personal`, which `/bindwright:setup global` changes. When it came from the project or from `local.json`, save nothing: that choice stays the project's, so say that FindWright stays unwired on this computer until Node is updated, and later runs offer the Node again.
-- **A `bw1-` code:** its answers cannot be changed. To read them, run the engine with `--code <the code>` and no `--write`, which writes nothing and prints the files the code would write: the size check is on when `.github/scripts/size_check.py` is among them, and FindWright when `.claude/skills/find/SKILL.md` names it. A program one of those needs that is still missing, declined in step 0 or never offered, stops setup before anything is written, with how to make a new code that has it off.
+- **FindWright** (Node older than it needs, declined in step 0 or never offered): step 2 does not offer it. When the engine's `codeResearch` entry is still `findwright` and its `from` is `"personal"`, the user's own computer choice, save `none` with `--layer personal`, which `/bindwright:setup global` changes. When it is `from` the project or `local`, save nothing: that choice stays the project's, so say that FindWright stays unwired on this computer until Node is updated, and later runs offer the Node again.
+- **A `bw1-` code:** its answers cannot be changed, so step 0 already stopped on a declined program they need.
 
 Say in one line which features are off and why.
 
