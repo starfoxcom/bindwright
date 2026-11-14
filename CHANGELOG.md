@@ -6,6 +6,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v5.0.1] — 2026-11-14
+
+### Fixed
+
+- **The attribution guard reads the literal text after a word's run-time part again.** A hook setting or a bypass letter written next to a variable (`git config "$SECTION.hooksPath" /x`, `git -c "$S.hooksPath=/x" commit`, `git commit -${Q}n`) passed in v5.0.0 and is refused again: the helper's parser now reports each run-time word's text with a mark for each part built at run time, and the guard reads that.
+- **A declaration with a run-time value no longer makes the command unreadable.** `export "PATH=$HOME/bin:$PATH" && git push` (or `local "x=$1"`) was refused as unreadable in v5.0.0; its name is in the word's literal start, so the guard now reads it. A name built at run time (`export "$KV"`) still cannot be read.
+- **A PowerShell cmdlet's parameter is no longer read as a body file.** In a command that also wrote to GitHub, `Stop-Process -Force`, `Start-Process -FilePath` or `Get-Date -Format` was read as git's `-F` with a file named `orce`, `ilePath` or `ormat`, and refused. A native program (`curl.exe -Fbody=@file`) is still read as before.
+
 ## [v5.0.0] — 2026-11-14
 
 ### Breaking
