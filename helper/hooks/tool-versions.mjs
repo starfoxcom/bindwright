@@ -14,7 +14,9 @@ export const NODE_SCHEDULE_URL =
 export const GIT_URL = "https://api.github.com/repos/git-for-windows/git/releases?per_page=30";
 export const GH_URL = "https://api.github.com/repos/cli/cli/releases?per_page=30";
 export const UV_URL = "https://api.github.com/repos/astral-sh/uv/releases?per_page=30";
-export const CLAUDE_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest";
+// The stable tag, not latest: stable-channel installs sit about a week behind latest
+// on purpose, and `claude update` brings any CLI below stable up on either channel.
+export const CLAUDE_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/stable";
 
 // A release note that names an advisory (a CVE or GitHub's GHSA id) or a security fix.
 // A bare mention of security or of a vulnerability (a SECURITY.md link, a policy, a

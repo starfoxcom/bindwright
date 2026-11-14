@@ -302,3 +302,12 @@ for (const [name, found, urls] of fetchRows) {
     assert.deepEqual([...calls].sort(), [...urls].sort());
   });
 }
+
+test("checkTools: a CLI between stable and latest is current", async () => {
+  const { fetchJson } = fakeFetch({ [CLAUDE_URL]: { version: "2.1.311" } });
+  const result = await checkTools({
+    platform: "linux", today: TODAY, versions: { claude: "2.1.320" }, fetchJson,
+  });
+  assert.equal(result.tools[0].ok, true);
+  assert.equal(result.tools[0].command, null);
+});
