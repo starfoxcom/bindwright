@@ -26,7 +26,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- The ci-watch mod takes a session back from a newer instance that has exited: the owner renews its claim at every poll, and a claim two polls old is taken over by the instance still running, so the session's PRs are watched again instead of waiting for a restart.
+- The ci-watch mod takes a session back from a newer instance that has exited: the owner renews its claim every 30 seconds, and a claim ten minutes old is taken over by the instance still running, with the watches the exited one saved, so the session's PRs are watched again instead of waiting for a restart.
 - `/bindwright:update` says how to land an update that adds the deep review's pin lookup and new action pins together: the deep review on that PR runs the base branch's workflow, which cannot check them yet, so the new pins go back to their tags and land in a second PR.
 - The anonymous review counts and the once-a-day notice save their state files on Windows even while another process has the file open: the swap is retried for up to half a second instead of failing, and two writers never share a temporary file.
 - **A plan limit that resets early ends its pause.** After a banked or early reset, the usage-guard mod's pause, active or cancelled, held until the old reset time, so the tasks mod's keep-going prompt stayed silent all that while. A pause now ends as soon as every limit it paused for reads under the wrap-up line in a new window: an active one resumes each paused session at its next minute check, and a cancelled one stays cancelled and stops holding without resuming them.

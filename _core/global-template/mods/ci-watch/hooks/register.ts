@@ -13,7 +13,7 @@ import {
 import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
-import { claim, followId, ownerOf } from './owner'
+import { claim, followId, keepRenewing, ownerOf } from './owner'
 import { HELP, HINT } from './help'
 export { HELP } from './help'
 export { MKDIR_SCRIPT } from './store'
@@ -117,6 +117,7 @@ async function claimOwner($: EngineInterface): Promise<void> {
     const folder = await dataFolder($)
     await ensureDir($, folder)
     await claim($, folder)
+    keepRenewing($, () => dataFolder($))
   } catch {
     // No owner file: every instance stays active.
   }
@@ -126,12 +127,11 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
   if (live.isRetiredForGood) return true
   try {
     const folder = await dataFolder($)
-    // An owner two polls behind has exited; taking the session back restarts a timer retirement stopped.
-    const owner = await ownerOf($, folder, 2 * live.pollMs)
+    const owner = await ownerOf($, folder)
     if (owner === 'older' || owner === 'gone') await claim($, folder)
     if (owner === 'newer') return true
-    if (owner === 'gone' && live.started !== undefined && live.tick === undefined) armPolling($)
-    await followSession($)
+    // Taken back from an owner that exited: what it saved under this id replaces memory.
+    await (owner === 'gone' ? load($) : followSession($))
     return false
   } catch {
     return false
@@ -629,11 +629,8 @@ const endSession: Hook<'session.end'> = async ($, e, next) => {
 function armPolling($: EngineInterface): void {
   const period = live.pollMs
   const tick = $.clock.every(period, async () => {
-    if (await isRetired($)) {
-      if (live.tick === tick) live.tick = undefined
-      return void tick.cancel()
-    }
-    await claimOwner($)
+    // A retired instance keeps checking, so it takes the session back once the newer owner exits.
+    if (await isRetired($)) return
     if (live.pollMs !== period) {
       tick.cancel()
       armPolling($)

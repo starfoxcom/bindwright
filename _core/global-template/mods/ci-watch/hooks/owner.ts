@@ -6,9 +6,15 @@ import type { EngineInterface } from 'claude-code'
 // before. Each instance's name starts with when it loaded, and the newest load owns the session: one that
 // finds an older name in the owner file takes the session over, one that finds a newer name is retired
 // (it stops polling and its hooks pass through). A file, not a global, because instances do not share
-// one. An unreadable file retires none. The owner renews the time beside its name at every poll, so a
-// newer owner that stopped renewing it has exited, and a live instance takes the session back.
+// one. An unreadable file retires none. The owner renews the time beside its name on a timer of its own,
+// apart from the polls, so a newer owner whose claim is GONE_AFTER_MS old has exited, and a live
+// instance takes the session back (a lock file's heartbeat).
 const LOADED_AT = Date.now()
+const RENEW_MS = 30_000
+const GONE_AFTER_MS = 10 * RENEW_MS
+// The claim's time is written this wide, so one cut short mid-write reads as no time at all.
+const TIME_DIGITS = 16
+let isRenewing = false
 const INSTANCE = `${LOADED_AT}-${Math.random().toString(36).slice(2)}`
 
 /** Who the owner file names for the session's current id, as seen by this instance. */
@@ -21,7 +27,7 @@ async function ownerFile($: EngineInterface, folder: string): Promise<string> {
 /** Names this instance as the owner of the session's current id, in `folder` (which must exist), as of now. */
 export async function claim($: EngineInterface, folder: string): Promise<void> {
   try {
-    await $.fs.write(await ownerFile($, folder), `${INSTANCE} ${await $.clock.now()}`)
+    await $.fs.write(await ownerFile($, folder), `${INSTANCE} ${String(await $.clock.now()).padStart(TIME_DIGITS, '0')}`)
   } catch {
     // No owner file: every instance stays active, as before.
   }
@@ -29,18 +35,33 @@ export async function claim($: EngineInterface, folder: string): Promise<void> {
 
 /**
  * Reads the owner file of the session's current id; an unreadable or empty one names nobody. A newer
- * owner whose claim is older than `goneAfterMs` is `gone`; one with no time beside its name is newer.
+ * owner whose claim is GONE_AFTER_MS old is `gone`; one with no readable time beside its name is newer.
  */
-export async function ownerOf($: EngineInterface, folder: string, goneAfterMs: number): Promise<Owner> {
+export async function ownerOf($: EngineInterface, folder: string): Promise<Owner> {
   try {
     const [name = '', renewedAt] = String(await $.fs.read(await ownerFile($, folder))).trim().split(/\s+/)
     if (name === '') return 'none'
     if (name === INSTANCE) return 'this'
     if (Number(name.split('-')[0]) < LOADED_AT) return 'older'
-    return (await $.clock.now()) - Number(renewedAt) > goneAfterMs ? 'gone' : 'newer'
+    const isWhole = renewedAt?.length === TIME_DIGITS
+    return isWhole && (await $.clock.now()) - Number(renewedAt) > GONE_AFTER_MS ? 'gone' : 'newer'
   } catch {
     return 'none'
   }
+}
+
+/** Renews this instance's claim while it owns the session, once started; `folderOf` names the folder. */
+export function keepRenewing($: EngineInterface, folderOf: () => Promise<string>): void {
+  if (isRenewing) return
+  isRenewing = true
+  $.clock.every(RENEW_MS, async () => {
+    try {
+      const folder = await folderOf()
+      if ((await ownerOf($, folder)) === 'this') await claim($, folder)
+    } catch {
+      // Unreadable: the claim ages, and a live instance may take the session over.
+    }
+  })
 }
 
 /** What the instance holds in memory about the session's watches, kept in the mod's live state. */
