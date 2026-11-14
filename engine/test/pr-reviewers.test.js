@@ -18,8 +18,8 @@ const noPython = !python && "needs Python 3.8+";
 function bindBoth(answers) {
   const input = JSON.stringify(answers);
   return [
-    spawnSync(process.execPath, [join(engine, "cli.js")], { cwd: repo, encoding: "utf8", input }),
-    spawnSync(python, [join(engine, "bind.py")], { cwd: repo, encoding: "utf8", input }),
+    spawnSync(process.execPath, [join(engine, "cli.js")], { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30, input }),
+    spawnSync(python, [join(engine, "bind.py")], { cwd: repo, encoding: "utf8", maxBuffer: 1 << 30, input }),
   ];
 }
 
