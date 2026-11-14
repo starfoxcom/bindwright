@@ -328,6 +328,26 @@ def attribution_off(home):
     return {"settings": path}
 
 
+# The CLI draws the mods' rows above the prompt top-down in folder-list order, so the
+# most-read rows go last, nearest the prompt. Mods with no row follow. A mod of the user's own
+# keeps its place and a new one of theirs goes last.
+MOD_ORDER = ("shared-pc", "runners", "usage-guard", "ci-watch", "tasks", "session-info",
+             "session-facts", "compact-handoff", "skill-check", "mods")
+
+
+def _mod_rank(folder):
+    name = os.path.basename(os.path.normpath(os.path.expanduser(folder)))
+    return MOD_ORDER.index(name) if name in MOD_ORDER else None
+
+
+def _with_mod(listed, target):
+    rank = _mod_rank(target)
+    later = (i for i, d in enumerate(listed)
+             if rank is not None and _mod_rank(d) is not None and _mod_rank(d) > rank)
+    at = next(later, len(listed))
+    return listed[:at] + [target] + listed[at:]
+
+
 def add_mod(home, folder):
     name = os.path.basename(os.path.normpath(folder))
     if not os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
@@ -342,7 +362,7 @@ def add_mod(home, folder):
     listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
     if not any(same(d) for d in listed):
-        env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(listed + [target])
+        env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(_with_mod(listed, target))
         _save(path, data)
     return {"installed": target, "kept_existing": kept}
 
