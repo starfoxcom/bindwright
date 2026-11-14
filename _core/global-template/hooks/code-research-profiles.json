@@ -15,8 +15,8 @@
     "install": [],
     "agent": {
       "run": [
-        "claude plugin marketplace add starfoxcom/findwright",
-        "claude plugin install findwright@findwright"
+        "claude plugin marketplace add starfoxcom/wrights",
+        "claude plugin install findwright@wrights"
       ]
     },
     "index": null,
@@ -24,7 +24,7 @@
     "hook": {
       "source": "tool"
     },
-    "notes": "FindWright is a Claude Code plugin of its own (starfoxcom/findwright). The agent step installs the plugin; then the user runs /findwright:setup, which installs its helper from the plugin's release (checked against a pinned SHA-256), registers its server for every repo on this computer, offers its own hook that sends searches to it in indexed repos, and fits the index to the project. Needs Node 22.16 or later on the 22 line, or 24 or later. A repo gets a .findwright/ folder that keeps itself out of git except config.json."
+    "notes": "FindWright is a Claude Code plugin of its own (starfoxcom/findwright), listed in the wrights marketplace (starfoxcom/wrights). The agent step installs the plugin; then the user runs /findwright:setup, which installs its helper from the plugin's release (checked against a pinned SHA-256), registers its server for every repo on this computer, offers its own hook that sends searches to it in indexed repos, and fits the index to the project. Needs Node 22.16 or later on the 22 line, or 24 or later. A repo gets a .findwright/ folder that keeps itself out of git except config.json."
   },
   "none": {
     "license": null,
