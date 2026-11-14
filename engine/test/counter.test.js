@@ -156,6 +156,7 @@ test("/total answers from its saved copy until TOTALS_MAX_AGE_IN_SECONDS passes"
   const maxAge = TOTALS_MAX_AGE_IN_SECONDS * 1000;
   assert.equal((await run(total, { store, time: NOON + maxAge - 1 })).body.projects, 0, "still the copy");
   assert.equal((await run(total, { store, time: NOON + maxAge })).body.projects, 1, "refreshed");
+  assert.equal((await run(total, { store, time: NOON + maxAge + 1 })).body.projects, 1, "the refresh was saved");
 });
 
 test("a project sends once per gap", async () => {
