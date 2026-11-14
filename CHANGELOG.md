@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Mod rows stack in one fixed order.** Setup lists the mods in the order their rows should stack above the prompt, whatever order they are picked in: the PC queue on top, then runners, the usage pause, CI, tasks, the session row, and the budgets row last, right above the prompt, since it is read most. A mod of your own keeps its place. An existing list is not reordered; `~/.claude/mods/README.md` § Install gives the order to set by hand.
+
 ## [v5.1.0] — 2026-11-14
 
 ### Changed

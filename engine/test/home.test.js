@@ -188,6 +188,22 @@ test("a mod is copied once, listed once, and an installed copy keeps its edits",
   });
 });
 
+test("mods are listed in row order whatever order they are added in", { skip }, () => {
+  withHome((dir) => {
+    const add = (name) => {
+      const mod = join(dir, "pack", name);
+      mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
+      writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
+      return home(dir, "add-mod", mod).out.installed;
+    };
+    writeSettings(dir, { env: { CLAUDE_CODE_PLUGIN_DIRS: "/mine/early" } });
+    const added = ["mods", "session-facts", "mine-late", "shared-pc", "tasks"].map((n) => [n, add(n)]);
+    const at = Object.fromEntries(added);
+    const want = ["/mine/early", at["shared-pc"], at.tasks, at["session-facts"], at.mods, at["mine-late"]];
+    assert.equal(settings(dir).env.CLAUDE_CODE_PLUGIN_DIRS, want.join(delimiter));
+  });
+});
+
 test("an agent file is copied once, and an installed copy keeps its edits", { skip }, () => {
   withHome((dir) => {
     const agent = join(dir, "pack", "builder.md");
