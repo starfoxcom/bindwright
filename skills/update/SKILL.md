@@ -17,7 +17,7 @@ This skill rebuilds the repo's Bindwright files from the answers saved at setup,
 
 ## 2. Run the update
 
-Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin. With neither, tell the user the update needs Node 18 or later, or Python 3.8 or later, and stop.
+Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin, then taking out a FindWright copy from an older Bindwright as step 0's paragraph of that name says. With neither, tell the user the update needs Node 18 or later, or Python 3.8 or later, and stop.
 
 First say what the releases changed: run the engine with `--releases-since <repo root>`. It reads only the plugin's own changelog, never the repo's `CHANGELOG.md`, and prints `{"from": "<bound version>", "to": "<plugin version>", "releases": [{"version", "date", "text"}, ...]}`, newest first. When `releases` holds any, open with a plain summary of each release in the range, newest first and a few short lines each: what is new, what changed and what was fixed, then anything the user may want to act on, such as a new setup answer to consider or a behaviour that now works differently. When it holds an `unavailable` reason, say in one line that the summary is not available and why, and go on.
 
@@ -71,6 +71,8 @@ When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share":
 ## 7. Finish
 
 Tell the user, in plain words and grouped by kind (rules, skills, hooks, workflows, docs) rather than file by file: what was updated, what merged, what they settled, what was added or removed, and anything left unsettled in `.bindwright/incoming/`.
+
+When the update added `.github/scripts/pin_check.py` and also pinned an action to a commit (a `uses:` line in `.github/workflows/` that now ends in `@<40-hex sha>`), say that the deep review on that PR cannot check the new pins: a deep review runs the base branch's `claude.yml`, which does not look pins up yet. So put those `uses:` lines back at their tags for this PR, and pin them in a second PR once it merges.
 
 Then say that `.bindwright/pristine.json` changed too and belongs in the commit, since the next update merges against it, and that nothing is committed: they can read the changes with `git diff` and commit when happy.
 

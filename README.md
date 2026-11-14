@@ -4,10 +4,10 @@ Bindwright sets a repo up for agentic coding: the rules, session skills, guard h
 
 ## Install
 
-From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen. Or from Bindwright's own marketplace, in a Claude Code session:
+From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen. Or from the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in a Claude Code session:
 
 ```
-/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
+/plugin install bindwright --marketplace starfoxcom/wrights
 ```
 
 Then open a session in your project's folder and run `/bindwright:setup`. The first time, it asks to install Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the files attached to the plugin's GitHub release (one for Node, one for a computer with Python and no Node), checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Say yes and setup goes on; `/bindwright:update` keeps the helper at the plugin's version.
@@ -27,11 +27,12 @@ When a session starts with `/start-session`, a notice says at most once a day wh
 
 ## Privacy
 
-The plugin sends nothing about you or your code. It makes three kinds of network call of its own:
+The plugin sends nothing about you or your code. It makes four kinds of network call of its own:
 
 - **The helper install**, after your yes, downloads the helper file the plugin pins from the plugin's release at `github.com/starfoxcom/bindwright/releases`.
 - **The version check** (the helper's `hooks/notice.mjs`) reads one version number a day from `https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION`.
-- **Review counts** (the helper's `hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, six numbers (review counts and red review rounds) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests with the GitHub CLI you are already signed in to; no token or code leaves your computer.
+- **The tool release check** (the helper's `hooks/tool-versions.mjs`), when setup or `/bindwright:doctor` runs, reads the newest release numbers of the tools this computer has: Node from `nodejs.org` and its release schedule from `raw.githubusercontent.com`, Git for Windows, the GitHub CLI and uv from GitHub's API, and the Claude Code CLI from the npm registry.
+- **Review counts** (the helper's `hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, six numbers (review counts and red review rounds) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests with the GitHub CLI already on your computer; nothing else leaves your computer, your code included.
 
 Setup itself may run the install commands you approve (Git, Node or Python) and `gh` commands on your repo when you pick GitHub features. The full list of network calls is in the [README](https://github.com/starfoxcom/bindwright#privacy).
 
