@@ -11,7 +11,7 @@ This skill compares the team's setup in `.bindwright/project.json` with this mac
 ## 1. Read both sides
 
 - Find the repo root with `git rev-parse --show-toplevel`. If `.bindwright/project.json` is missing, this repo does not use Bindwright; say so and stop.
-- Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin, and run `--settings <repo root>`. On `{"error": "..."}`, show the message and stop. A message saying a file "was written by a newer Bindwright" means the plugin is older than the repo's setup: tell the user to update the plugin with `/plugin`, and stop.
+- Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin, then taking out a FindWright copy from an older Bindwright as setup's step 0 paragraph of that name says, and run `--settings <repo root>`. On `{"error": "..."}`, show the message and stop. A message saying a file "was written by a newer Bindwright" means the plugin is older than the repo's setup: tell the user to update the plugin with `/plugin`, and stop.
 - If `ignored` is not empty, list it in plain words: those values are not used. Values the project's own `setup` asks for that this plugin does not know are among them; never act on them.
 
 ## 2. Tracker access

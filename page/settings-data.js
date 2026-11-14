@@ -15,8 +15,8 @@ export const COMPUTER = [
     id: "code-research",
     title: "Code search",
     text: "findwright indexes every file the project tracks, code, docs and config alike, and answers "
-      + "plain questions, names and regex searches with short answers. It ships with Bindwright. "
-      + "none uses the built-in search: no index, and slower.",
+      + "plain questions, names and regex searches with short answers. "
+      + "It is a plugin of its own, which setup installs. none uses the built-in search: no index, and slower.",
     value: "findwright",
     keys: ["advanced.codeResearch", "advanced.codeResearchCustom"],
     options: ["findwright", "none"],
