@@ -22,7 +22,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **Setup cleans up any earlier code-search tool, not one named tool.** When FindWright is picked, `/bindwright:setup` asks whether an earlier code-search tool is still set up, shows the search hooks and servers that may belong to one, and offers to take out the one the user names, whatever the tool, and `/bindwright:remove` leaves any such program installed. A project whose saved answers name a tool setup no longer offers keeps working as a custom tool.
 
-- **A feature that needs a tool either gets it or stays off.** Setup checks the programs the size check, the mods and FindWright need (Python; Node and a newer CLI; a newer Node) at the start, beside Git and the engine, before it asks anything. A yes installs it and asks for a restart before anything is saved; a no turns those features off for the run and skips their questions, instead of writing a check that fails on every run or quietly using the built-in search. Lizard, the size check's Python tool, installs in the same run when the size check is picked.
+- **A feature that needs a tool either gets it or stays off.** Setup checks the programs the size check, the mods and FindWright need (Python; Node and a newer CLI; a newer Node) at the start, beside Git and the engine, before it asks anything. A yes installs it and asks for a restart before anything is saved; a no turns those features off and skips their questions, and a saved no stays until `/bindwright:setup global` changes it, instead of writing a check that fails on every run or quietly using the built-in search. Lizard, the size check's Python tool, installs in the same run when the size check is picked.
 
 ### Fixed
 
