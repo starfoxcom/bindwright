@@ -65,16 +65,29 @@ func (r reader) dynamicWord(word *syntax.Word) dynamic {
 	return dynamic{Dynamic: r.text(word), Prefix: r.prefix(word), CanBeEmpty: canBeEmpty(word)}
 }
 
-// prefix is the literal value of the word's leading parts, up to the first part built at run time
-// and, inside a plain part, the first character that could start a glob, a brace or an escape.
+// prefix is the text bash gives the word's start whatever runs: its leading plain, single-quoted
+// and double-quoted text, up to the first part built at run time and, in plain text, the first
+// character that could start a glob, a brace or an escape.
 func (r reader) prefix(word *syntax.Word) string {
 	var value strings.Builder
 	for _, part := range word.Parts {
-		if lit, ok := part.(*syntax.Lit); ok {
+		lit, plain := part.(*syntax.Lit)
+		if plain {
 			if cut := strings.IndexAny(lit.Value, "*?[{\\"); cut >= 0 {
 				value.WriteString(lit.Value[:cut])
-				break
+				return value.String()
 			}
+		}
+		if quoted, ok := part.(*syntax.DblQuoted); ok && !quoted.Dollar {
+			// `"core.hooksPath=$DIR"`: the text before the expansion is certain.
+			for _, inner := range quoted.Parts {
+				innerLit, ok := inner.(*syntax.Lit)
+				if !ok {
+					return value.String()
+				}
+				value.WriteString(unescape(quotedEscape, innerLit.Value))
+			}
+			continue
 		}
 		literal, ok := r.literalPart(part)
 		if !ok {
@@ -103,13 +116,15 @@ func canBeEmpty(word *syntax.Word) bool {
 	return true
 }
 
-// isList reports whether a part expands to every argument or array item (`$@`, `${list[@]}`).
+// isList reports whether a part is one of the expansions bash's manual gives one word per item
+// inside double quotes, and so none for no items: the arguments (`$@`), an array's items or keys
+// (`${list[@]}`, `${!list[@]}`) and the names of the set variables with a prefix (`${!prefix@}`).
 func isList(part syntax.WordPart) bool {
 	param, ok := part.(*syntax.ParamExp)
 	if !ok {
 		return false
 	}
-	if param.Param.Value == "@" {
+	if param.Param.Value == "@" || param.Names == syntax.NamesPrefixWords {
 		return true
 	}
 	index, ok := param.Index.(*syntax.Word)
