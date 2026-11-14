@@ -6,33 +6,38 @@ import type { EngineInterface } from 'claude-code'
 // before. Each instance's name starts with when it loaded, and the newest load owns the session: one that
 // finds an older name in the owner file takes the session over, one that finds a newer name is retired
 // (it stops polling and its hooks pass through). A file, not a global, because instances do not share
-// one. An unreadable file retires none.
+// one. An unreadable file retires none. The owner renews the time beside its name at every poll, so a
+// newer owner that stopped renewing it has exited, and a live instance takes the session back.
 const LOADED_AT = Date.now()
 const INSTANCE = `${LOADED_AT}-${Math.random().toString(36).slice(2)}`
 
 /** Who the owner file names for the session's current id, as seen by this instance. */
-export type Owner = 'this' | 'older' | 'newer' | 'none'
+export type Owner = 'this' | 'older' | 'newer' | 'gone' | 'none'
 
 async function ownerFile($: EngineInterface, folder: string): Promise<string> {
   return `${folder}/${await $.session.id()}.owner`
 }
 
-/** Names this instance as the owner of the session's current id, in `folder` (which must exist). */
+/** Names this instance as the owner of the session's current id, in `folder` (which must exist), as of now. */
 export async function claim($: EngineInterface, folder: string): Promise<void> {
   try {
-    await $.fs.write(await ownerFile($, folder), INSTANCE)
+    await $.fs.write(await ownerFile($, folder), `${INSTANCE} ${await $.clock.now()}`)
   } catch {
     // No owner file: every instance stays active, as before.
   }
 }
 
-/** Reads the owner file of the session's current id; an unreadable or empty one names nobody. */
-export async function ownerOf($: EngineInterface, folder: string): Promise<Owner> {
+/**
+ * Reads the owner file of the session's current id; an unreadable or empty one names nobody. A newer
+ * owner whose claim is older than `goneAfterMs` is `gone`; one with no time beside its name is newer.
+ */
+export async function ownerOf($: EngineInterface, folder: string, goneAfterMs: number): Promise<Owner> {
   try {
-    const owner = String(await $.fs.read(await ownerFile($, folder))).trim()
-    if (owner === '') return 'none'
-    if (owner === INSTANCE) return 'this'
-    return Number(owner.split('-')[0]) < LOADED_AT ? 'older' : 'newer'
+    const [name = '', renewedAt] = String(await $.fs.read(await ownerFile($, folder))).trim().split(/\s+/)
+    if (name === '') return 'none'
+    if (name === INSTANCE) return 'this'
+    if (Number(name.split('-')[0]) < LOADED_AT) return 'older'
+    return (await $.clock.now()) - Number(renewedAt) > goneAfterMs ? 'gone' : 'newer'
   } catch {
     return 'none'
   }

@@ -127,9 +127,12 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
   if (live.isRetiredForGood) return true
   try {
     const folder = await dataFolder($)
-    const owner = await ownerOf($, folder)
-    if (owner === 'older') await claim($, folder)
+    // Two missed polls: the owner has stopped running.
+    const owner = await ownerOf($, folder, 2 * live.pollMs)
+    if (owner === 'older' || owner === 'gone') await claim($, folder)
     if (owner === 'newer') return true
+    // Retired before, this instance stopped its timer; taking the session back starts it again.
+    if (owner === 'gone' && live.started !== undefined && live.tick === undefined) armPolling($)
     await followSession($)
     return false
   } catch {
@@ -628,7 +631,12 @@ const endSession: Hook<'session.end'> = async ($, e, next) => {
 function armPolling($: EngineInterface): void {
   const period = live.pollMs
   const tick = $.clock.every(period, async () => {
-    if (await isRetired($)) return void tick.cancel()
+    if (await isRetired($)) {
+      tick.cancel()
+      if (live.tick === tick) live.tick = undefined
+      return
+    }
+    await claimOwner($)
     if (live.pollMs !== period) {
       tick.cancel()
       armPolling($)

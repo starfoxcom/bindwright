@@ -355,6 +355,24 @@ test('an instance a newer load has replaced stops polling and never wakes the se
   expect(seen.files.get(STATE)).toBe(before)
 })
 
+test('a newer owner that stops renewing its claim is taken over, and the session is watched again', async ($, on) => {
+  const { seen, clock } = world(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  seen.isReadable = true
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  // A newer load claims the session, then exits: its claim is never renewed.
+  seen.files.set(OWNER, `${NEWER_LOAD} ${clock.now()}`)
+  seen.bucket = 'fail'
+  await clock.advance(POLL_MS)
+  expect(seen.prompts).toEqual([])
+  for (let poll = 0; poll < 2; poll++) await clock.advance(POLL_MS)
+  // This instance goes on under the session: its next hook finds the claim two polls old.
+  await $.tool.call({ tool: 'Bash', command: 'git status' } as never)
+  expect(seen.files.get(OWNER)).not.toContain(NEWER_LOAD)
+  for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+})
+
 test('a call that lands while a fresh load is still claiming the session is answered by it', async ($, on) => {
   const { seen } = world(on)
   seen.isReadable = true
