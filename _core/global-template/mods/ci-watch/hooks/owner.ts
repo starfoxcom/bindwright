@@ -11,7 +11,7 @@ import type { EngineInterface } from 'claude-code'
 // instance takes the session back (a lock file's heartbeat).
 const LOADED_AT = Date.now()
 const RENEW_MS = 30_000
-const GONE_AFTER_MS = 10 * RENEW_MS
+const GONE_AFTER_MS = 20 * RENEW_MS
 // The claim's time is written this wide, so one cut short mid-write reads as no time at all.
 const TIME_DIGITS = 16
 let isRenewing = false

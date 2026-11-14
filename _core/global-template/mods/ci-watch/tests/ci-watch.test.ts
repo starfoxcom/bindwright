@@ -364,12 +364,15 @@ test('an owner that exited is taken back with no hook, keeping the watch it save
   seen.files.set(OWNER, `${NEWER_LOAD} ${String(clock.now()).padStart(16, '0')}`)
   const saved = JSON.parse(seen.files.get(STATE) ?? '{}')
   const theirs = { repo: 'o/r', number: 9, headSha: 'abc', startedAt: 1, checks: {}, stablePolls: 0, id: 'w9' }
-  seen.files.set(STATE, JSON.stringify({ ...saved, watches: [...saved.watches, theirs] }))
+  // It exited mid-turn, so its saved state still says a turn runs.
+  seen.files.set(STATE, JSON.stringify({ ...saved, watches: [...saved.watches, theirs], isTurnRunning: true }))
   seen.bucket = 'fail'
-  for (let poll = 0; poll < 4; poll++) await clock.advance(POLL_MS)
+  // Just under ten minutes the claim still stands.
+  for (let poll = 0; poll < 19; poll++) await clock.advance(POLL_MS)
+  expect(seen.files.get(OWNER)).toContain(NEWER_LOAD)
   expect(seen.prompts).toEqual([])
-  // Past ten minutes the claim is that old: the idle session is taken back and both watches settle.
-  for (let poll = 0; poll < 20; poll++) await clock.advance(POLL_MS)
+  // Just past it the idle session is taken back, and both watches settle and wake it.
+  for (let poll = 0; poll < 6; poll++) await clock.advance(POLL_MS)
   expect(seen.files.get(OWNER)).not.toContain(NEWER_LOAD)
   const after = JSON.parse(seen.files.get(STATE) ?? '{}')
   expect(after.watches.map((w: { number: number }) => w.number).sort()).toEqual([7, 9])

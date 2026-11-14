@@ -130,8 +130,8 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
     const owner = await ownerOf($, folder)
     if (owner === 'older' || owner === 'gone') await claim($, folder)
     if (owner === 'newer') return true
-    // Taken back from an owner that exited: what it saved under this id replaces memory.
-    await (owner === 'gone' ? load($) : followSession($))
+    // Taken back from an owner that exited, maybe mid-turn: what it saved replaces memory, its turn ends.
+    await (owner === 'gone' ? load($).then(() => setTurnRunning($, false)) : followSession($))
     return false
   } catch {
     return false
