@@ -81,14 +81,16 @@ def unquote(word):
 
 
 def literal(word):
-    """`word` unquoted. A quoted `~` stays a folder name, as Bash and PowerShell leave it."""
+    """`word` unquoted. A quoted `~` stays a folder name, as Bash and a native tool leave it."""
     text = unquote(word)
     return "./" + text if word[:1] in "'\"" and text.startswith("~") else text
 
 
-def resolve(path, base):
-    """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(literal(path))
+def resolve(path, base, expands_quoted_home=False):
+    """The absolute, case-folded form of a path as a shell in `base` reads it.
+
+    A PowerShell cmdlet (`Set-Location`, `Get-ChildItem`) reads `~` as the home folder even quoted."""
+    path = os.path.expanduser(unquote(path) if expands_quoted_home else literal(path))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))
@@ -161,8 +163,10 @@ class Repo:
 class Search:
     """What one search reads: the paths it names, and the globs and types that narrow its files."""
 
-    def __init__(self, paths=(), globs=(), types=(), is_sure=True):
+    def __init__(self, paths=(), globs=(), types=(), is_sure=True, filters_named_files=True):
         self.paths = list(paths)
+        # ripgrep searches a file named on the command line whatever its -g or -t says.
+        self.filters_named_files = filters_named_files
         # False when the words cannot be told apart: then only where the search runs and what
         # its words point at are judged.
         self.is_sure = is_sure
@@ -183,13 +187,25 @@ class Search:
         paths = [p for p, word in zip(named, self.paths)
                  if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
                  or re.search(r"[/\\]", word)] or [base]
-        inside = [p for p in paths if not is_outside(p, repo.root)]
+        inside = [p for p in expand_wildcards(paths) if not is_outside(p, repo.root)]
         if not inside:
             return False
         if self.globs or self.types:
             return (any(is_code_name(g) for g in self.globs)
-                    or any(t not in NON_CODE_TYPES for t in self.types))
+                    or any(t not in NON_CODE_TYPES for t in self.types)
+                    or (not self.filters_named_files
+                        and any(os.path.isfile(p) and is_code_name(p) for p in inside)))
         return any(repo.holds_code(p) for p in inside)
+
+
+def expand_wildcards(paths):
+    """Each wildcard path replaced by what it matches, as the shell expands it; one that matches
+    nothing stays, since the shell then passes it on as written."""
+    expanded = []
+    for path in paths:
+        matches = glob.glob(path) if WILDCARD.search(os.path.basename(path)) else []
+        expanded += [os.path.normcase(m) for m in matches] or [path]
+    return expanded
 
 
 def split_words(head):
@@ -308,11 +324,12 @@ def words_search(words, is_text_search=True):
         # named with it; a listing's is its -Filter.
         is_filter = (not is_text_search and WILDCARD.search(piece)
                      and not re.search(r"['\"/\\]", piece))
-        (globs if is_filter else paths).append(literal(piece))
-    return Search(paths, globs, types)
+        # A listing is a cmdlet, which reads a quoted `~` as home; a text search is a native tool.
+        (globs if is_filter else paths).append(literal(piece) if is_text_search else unquote(piece))
+    return Search(paths, globs, types, filters_named_files=tool != "rg")
 
 
-def shell_search(command, repo):
+def shell_search(command, repo, is_powershell=False):
     """True when a command line runs a code search of its own inside the repo."""
     base = repo.root
     for part in re.split(r"&&|\|\||;|\n", unquote_separators(command)):
@@ -325,7 +342,7 @@ def shell_search(command, repo):
             words = split_words(moved.group(2) or "")
             target = words[0] if words else None
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
-            base = repo.root if back else resolve(" ".join(words), base)
+            base = repo.root if back else resolve(" ".join(words), base, is_powershell)
             continue
         if SHELL_SEARCH.search(head):
             search = words_search(split_words(head))
@@ -363,7 +380,7 @@ def classify(name, args, root=None):
         return "fallback" if tool_search(name, args).reads_code(repo.root, repo) else None
     if name in ("Bash", "PowerShell"):
         command = args.get("command", "")
-        if shell_search(command, repo):
+        if shell_search(command, repo, is_powershell=name == "PowerShell"):
             return "bypass" if BYPASS in command else "fallback"
     return None
 
