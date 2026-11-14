@@ -51,13 +51,14 @@ Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: se
 | Mods | Node 18 or later, and CLI 2.1.287 or later | `node --version` shows it, and the version this session runs does: take it from the `AI_AGENT` environment variable (`claude-code_2-1-316_agent` is 2.1.316), not from `claude --version`, since the desktop app runs its own copy of the CLI, which can be older than the one on the PATH; only when `AI_AGENT` is unset, use `claude --version` |
 | FindWright | Node 22.16 or later on the 22 line, or 24 or later | `node --version` shows it |
 
-Ask the engine which features can still be on in this run, never the settings files by hand: it resolves their layers, and drops values it ignores. Run it with `--settings <repo root>` (the current folder outside a repo), and with a `bw1-` code also with `--code <the code>` and no `--write`, which writes nothing and prints the files the code would write.
+Work out this run's plan once, from the engine, never from the settings files by hand (it resolves their layers and drops values it ignores), and follow it in every later step: step 2 asks exactly the questions it lists. Run the engine with `--settings <repo root>` (the current folder outside a repo). With a `bw1-` code, also run it a second, separate time with `--code <the code>` and no `--write`, which writes nothing and prints the files the code would write.
 
+- **Step 2's questions:** on `global`, every one. Otherwise each setting or mod whose entry is missing or not `from` `"personal"` (a project's or `local.json`'s answer does not answer a computer question).
 - **Size check:** open on a run that sets up a project: closed on `global`, and on a first run outside a git repo, which sets up only the computer. With a code, open only when `.github/scripts/size_check.py` is among its files.
-- **FindWright:** open on a `global` run. On any other, open when the `codeResearch` entry is missing, is not `from` `"personal"` (step 2 then asks the question), or is `findwright`. With a code, open only when its `.claude/skills/find/SKILL.md` names FindWright.
-- **Mods:** open on a `global` run. On any other, open while a mod in `<helper>/_core/global-template/mods/` has no entry in `extras`, or an entry that wants it (`want` true, the project's `required` included) while `installed` shows it `false` or leaves it out.
+- **FindWright:** open when the plan asks the code-search question, when the resolved `codeResearch` is `findwright`, or when a code's `.claude/skills/find/SKILL.md` names FindWright.
+- **Mods:** open when the plan asks about any mod, or when a mod's entry wants it (`want` true, the project's `required` included) while `installed` shows it `false` or leaves it out.
 
-For each program missing for an open feature, say which features need it, in the same message as a missing Git or engine, and ask once per program: "<program> is needed for <features>. Install it now?", with "Yes" first. On a yes, install it as above: on Windows with `winget install` (`winget upgrade --id <id>` when an older one is there) and `Python.Python.3.12` or `OpenJS.NodeJS.LTS`, the CLI with `claude update` (in Claude Desktop, say to update the app, which carries its own CLI); on macOS and Linux give the download (https://www.python.org/downloads, https://nodejs.org/en/download) for the user to install. Then say to restart Claude Code as above and run `/bindwright:setup` again with the same argument, and stop: nothing is saved or created yet. On a no, the features that need it are off, as § "A feature whose program was declined" (step 3) says.
+For each program missing for an open feature, say which features need it and ask once per program: "<program> is needed for <features>. Install it now?", with "Yes" first. On a yes, install it as above: on Windows with `winget install` (`winget upgrade --id <id>` when an older one is there) and `Python.Python.3.12` or `OpenJS.NodeJS.LTS`, the CLI with `claude update` (in Claude Desktop, say to update the app, which carries its own CLI); on macOS and Linux give the download (https://www.python.org/downloads, https://nodejs.org/en/download) for the user to install. Then say to restart Claude Code as above and run `/bindwright:setup` again with the same argument, and stop: nothing is saved or created yet. On a no, the features that need it are off, as § "A feature whose program was declined" (step 3) says.
 
 With a code, a declined program that one of its answers needs stops setup here, before step 2 saves anything, with how to make a new code that has it off; when its size check is on and Python is in place, run § "Lizard, when the size check is picked" (step 3) here too, and a no stops setup the same way.
 
@@ -65,7 +66,7 @@ With a code, a declined program that one of its answers needs stops setup here, 
 
 **Git for Windows.** On Windows, the project's guard hooks run in Git for Windows' own shell, and the CLI blocks every shell command when that shell is missing. `git --version` printing `.windows.` (as in `git version 2.47.0.windows.1`) means it is there. When it is not, treat Git as missing above and offer the same `winget` install.
 
-**Lizard, for the size check.** The size check also needs a small Python tool called lizard. § "Lizard, when the size check is picked" (step 3) installs it; nothing is checked here.
+**Lizard, for the size check.** The size check also needs a small Python tool called lizard. § "Lizard, when the size check is picked" (step 3) installs it.
 
 **Plain mode.** When `git config user.name` prints nothing or `gh auth status` fails, ask first: "Have you used Git and GitHub before?", with "Not really" first. On "Not really", word every later question and message in everyday words, with no term such as branch, pull request, CI, remote or repo left unexplained; recommend the safe answers (just me, mine, private, AI credit kept out); and offer "Just this computer" first where step 3 asks where the code lives. With both commands working, skip the question.
 
@@ -86,7 +87,7 @@ With a code, a declined program that one of its answers needs stops setup here, 
 
 ## 2. Computer choices, asked once
 
-Run the engine with `--settings <repo root>`. It prints `{"settings": {...}, "extras": {...}, "installed": {...}}`; an entry whose `from` is `"personal"` is a choice this person already made for the computer. Ask only the questions below that have no such entry. The first time on a computer that is all of them; later, usually none.
+Run the engine with `--settings <repo root>`. It prints `{"settings": {...}, "extras": {...}, "installed": {...}}`; an entry whose `from` is `"personal"` is a choice this person already made for the computer. Ask only the questions below that have no such entry: the ones step 0's plan lists. The first time on a computer that is all of them; later, usually none.
 
 Before asking, say in one line: "These are about your whole computer, so I'll only ask them once."
 
