@@ -204,6 +204,8 @@ BYPASS_REASONS = {
 }
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
+# Stands for the part of a word the shell builds at run time: no option letter or setting name.
+UNKNOWN_REST = "\0"
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
 # value (`-m -n`) is never read as an option. A long option may be shortened to any unique
 # prefix of at least the length given.
@@ -306,7 +308,9 @@ def parse(cmd, shell, cwd):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
         return None, None, NO_NODE if node_too_old(node) else BROKEN
-    if not isinstance(data.get("assignments"), list):
+    words = [word for command in data["commands"] for word in command]
+    if not isinstance(data.get("assignments"), list) or any(
+            isinstance(word, dict) and "canBeEmpty" not in word for word in words):
         return None, None, OLD_HELPER
     if data.get("error"):
         return None, None, UNREAD
@@ -612,29 +616,18 @@ def config_sets_hooks(rest):
     return len(names) >= (1 if unsets else 2) and names_hooks(names[0])
 
 
-def can_be_empty(word):
-    """Whether a word the shell builds at run time can expand to no word at all: an unquoted
-    expansion (`$OPTS`, a command's output) or the arguments (`"$@"`) can; any other quoted
-    word or a glob always leaves one."""
-    if isinstance(word, str):
-        return False
-    text = text_of(word)
-    if "$@" in text or "${@" in text:
-        return True
-    return not any(quote in text for quote in "\"'") and any(sign in text for sign in "$`")
-
-
 def git_route(words):
     """The kind of route past the hooks one git call takes, or None. A word built at run time is
-    one word the guard cannot read, and each one that can expand to nothing is also read as no
-    word, apart from the others (`git $OPTS commit`)."""
+    read as its literal start and an unknown rest (`--trailer=$WHO`), and each one the parser says
+    can expand to nothing is also read as no word, apart from the others (`git $OPTS commit`)."""
     head, rest = words[:1], words[1:]
-    run_time = [i for i, word in enumerate(rest) if can_be_empty(word)]
+    run_time = [i for i, word in enumerate(rest) if not isinstance(word, str) and word["canBeEmpty"]]
     if len(run_time) > MAX_RUN_TIME_WORDS:
         return "unread"
+    known = [word if isinstance(word, str) else str(word["prefix"]) + UNKNOWN_REST for word in rest]
     for empty in itertools.product((False, True), repeat=len(run_time)):
         dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
-        reading = [word if isinstance(word, str) else "" for i, word in enumerate(rest) if i not in dropped]
+        reading = [word for i, word in enumerate(known) if i not in dropped]
         route = literal_git_route(head + reading)
         if route:
             return route
