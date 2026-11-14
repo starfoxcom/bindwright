@@ -72,6 +72,8 @@ When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share":
 
 Tell the user, in plain words and grouped by kind (rules, skills, hooks, workflows, docs) rather than file by file: what was updated, what merged, what they settled, what was added or removed, and anything left unsettled in `.bindwright/incoming/`.
 
+When the update added `.github/scripts/pin_check.py` and also pinned an action to a commit (a `uses:` line in `.github/workflows/` that now ends in `@<40-hex sha>`), say that the deep review on that PR cannot check the new pins: a deep review runs the base branch's `claude.yml`, which does not look pins up yet. So put those `uses:` lines back at their tags for this PR, and pin them in a second PR once it merges.
+
 Then say that `.bindwright/pristine.json` changed too and belongs in the commit, since the next update merges against it, and that nothing is committed: they can read the changes with `git diff` and commit when happy.
 
 Do not commit or push.
