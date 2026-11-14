@@ -700,29 +700,41 @@ def literal_git_route(words):
 
 
 def env_assignments(words):
-    """The `NAME=value` words an `env` in this command sets for the program it runs. A bundle whose
-    letters are built at run time (`-${Q}u`) may or may not take the next word: both readings count."""
+    """The `NAME=value` words an `env` in this command sets for the program it runs."""
     found = []
     for i in range(len(words)):
         if program(words[i:]) == "env":
-            for uncertain_skips in (False, True):
-                found += env_words(words[i + 1:], uncertain_skips)
+            found += env_words(words[i + 1:])
     return found
 
 
-def env_words(args, uncertain_skips):
-    """The `NAME=value` words before `env`'s program, an uncertain bundle taking the next word or not."""
-    found, skip = [], False
+def env_words(args):
+    """The `NAME=value` words before `env`'s program. An option whose letters are built at run time
+    (`-${Q}u`) may or may not take the next word, so every reading is followed at once: `states`
+    holds, per reading still alive, whether the next word is an option's value."""
+    found, states = [], {False}
     for text in (text_of(w) for w in args):
-        if skip:
-            skip = False
-        elif text.startswith("-"):
-            skip = uncertain_skips if is_uncertain(text) else takes_next_word(text, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
-        elif re.match(r"\w+=", text):
-            found.append(text)
-        else:
+        following = set()
+        for skip in states:
+            if skip:
+                following.add(False)
+            elif text.startswith("-"):
+                following |= env_option_skips(text)
+            elif re.match(r"\w+=", text):
+                found.append(text)
+                following.add(False)
+        states = following
+        if not states:
             break
     return found
+
+
+def env_option_skips(word):
+    """Whether an `env` option takes the next word, as the set of its possible answers."""
+    unknown = next((i for i, sign in enumerate(word) if sign in "\0*?[{"), len(word))
+    if unknown == len(word) or word.startswith("--") and "=" in word[:unknown]:
+        return {takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)}
+    return {False, True}
 
 
 def turns_lefthook_off(commands, assignments):

@@ -156,19 +156,23 @@ func canBeEmpty(word *syntax.Word) bool {
 }
 
 // staysOneWord reports whether no part of the word can split it into more words: no unquoted
-// expansion (`"A"=$X` exports each word of $X) and no quoted list (`"A=$@"`).
+// expansion (`"A"=$X` exports each word of $X) and no list anywhere inside it, nested ones
+// included (`"A=$@"`, `"A=${U:-$@}"`).
 func staysOneWord(word *syntax.Word) bool {
 	for _, part := range word.Parts {
-		switch part := part.(type) {
+		switch part.(type) {
 		case *syntax.ParamExp, *syntax.CmdSubst, *syntax.ArithmExp, *syntax.ProcSubst:
 			return false
-		case *syntax.DblQuoted:
-			if slices.ContainsFunc(part.Parts, isList) {
-				return false
-			}
 		}
 	}
-	return true
+	oneWord := true
+	syntax.Walk(word, func(node syntax.Node) bool {
+		if part, ok := node.(syntax.WordPart); ok && isList(part) {
+			oneWord = false
+		}
+		return oneWord
+	})
+	return oneWord
 }
 
 // isList reports whether a part is one of the expansions bash's manual gives one word per item
