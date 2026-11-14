@@ -476,6 +476,29 @@ test('fence: an early end fences each paused limit at its own reset and keeps a 
   expect(fence).toEqual({ five_hour: afterReset(HOUR), seven_day: afterReset(48 * HOUR) })
 })
 
+test('an arm moved onto the pause is used once by the early resume and never fires again', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await doWork($)
+  seen.limits = [fresh(40, new Date(NOW + HOUR).toISOString()), { kind: 'seven_day', percentUsed: 97, resetsAt: RESET }]
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h "check CI"' } as never)
+  // The arm comes due during the pause and moves onto its wake.
+  for (let step = 0; step < 7; step++) await seen.clock.advance(10 * 60_000)
+  expect(resumes(seen)).toEqual([])
+  seen.limits = [fresh(2, NEW_WINDOW), { kind: 'seven_day', percentUsed: 3, resetsAt: afterReset(7 * 24 * HOUR) }]
+  await seen.clock.advance(60_000)
+  expect(resumes(seen)).toHaveLength(1)
+  expect(resumes(seen)[0]).toContain('check CI')
+
+  // A later pause replaces the file before the old wake comes.
+  const later: Pause = { ...FIVE_HOUR_PAUSE, status: 'done', resetsAt: NEW_WINDOW, wakeAt: NOW + 3 * HOUR }
+  seen.files.set(PAUSE_FILE, JSON.stringify(later))
+  await advanceToWake(seen)
+  await seen.clock.advance(10 * 60_000)
+  expect(resumes(seen)).toHaveLength(1)
+})
+
 test('a lower reading of the same window keeps the pause', LONG, async ($, on) => {
   const seen = world(on)
   await start($)

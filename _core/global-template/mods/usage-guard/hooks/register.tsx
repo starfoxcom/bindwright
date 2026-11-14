@@ -547,13 +547,14 @@ async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): P
   return forward
 }
 
-// An arm already due stands down, as at the pause's own wake: moved onto this reset, resume() counts it. An arm
-// still ahead keeps its own time.
+// An arm already due, or already moved onto this pause, stands down as at the pause's own wake: brought to now on
+// this reset, resume() counts it and its own timer then clears it. An arm still ahead keeps its own time.
 async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
   live.wakeTimer?.cancel()
   live.wakeTimer = undefined
   const held = await read($, armedWake)
-  const moved = held && held.wakeAt <= now && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+  const isStandingDown = held && (held.wakeAt <= now || held.resetsAt === pause.resetsAt)
+  const moved = isStandingDown && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
   if (moved) await setArm($, moved).then(() => scheduleArm($, moved))
   return resume($, pause.resetsAt)
 }
