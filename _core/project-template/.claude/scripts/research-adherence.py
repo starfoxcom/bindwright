@@ -35,10 +35,9 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# The home folder as a shell spells it at the start of a path: $HOME, ${HOME}, $USERPROFILE,
-# PowerShell's $env:USERPROFILE and $env:HOME, and cmd's %USERPROFILE%.
-HOME_VARIABLE = re.compile(
-    r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|\$env:(?:HOME|USERPROFILE)|%USERPROFILE%)(?=[/\\]|$)", re.I)
+# The home folder as Bash and PowerShell spell it at the start of a path: $HOME, ${HOME},
+# $USERPROFILE, $env:USERPROFILE and $env:HOME (PowerShell's names are case-blind).
+HOME_VARIABLE = re.compile(r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|\$env:(?:HOME|USERPROFILE))(?=[/\\]|$)", re.I)
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")

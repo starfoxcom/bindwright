@@ -176,6 +176,9 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["${HOME} in a cd is the home folder", bash("cd ${HOME}/scratch && grep -rn foo ."), null],
     ["$USERPROFILE in a cd is the home folder", bash("cd $USERPROFILE/scratch && grep -rn foo ."), null],
     ["$env:USERPROFILE in a cd is the home folder", ps("cd $env:USERPROFILE/scratch; rg foo ."), null],
+    ["$env:HOME in a cd is the home folder", ps("cd $env:HOME/scratch; rg foo ."), null],
+    // Only cmd expands %USERPROFILE%: in Bash and PowerShell the cd fails and the search reads the repo.
+    ["%USERPROFILE% is a plain folder name", ps("cd %USERPROFILE%/scratch; rg foo ."), "fallback"],
     ["a home path into the repo still counts", bash('cd "$HOME/repo" && grep -rn foo src/'), "fallback"],
     ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],
   ];
