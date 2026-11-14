@@ -35,12 +35,13 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# A home-folder environment variable at the start of a cd target, per shell: Bash's $HOME, ${HOME},
-# $USERPROFILE and ${USERPROFILE} (case-sensitive, before a /), and PowerShell's $env:HOME and
-# $env:USERPROFILE (case-blind, before a / or a \).
+# A home-folder environment variable at the start of a cd target, per shell, among those whose value
+# this script shares with that shell: Bash's $HOME, ${HOME}, $USERPROFILE and ${USERPROFILE}
+# (case-sensitive, before a /), and PowerShell's $env:USERPROFILE (case-blind, before a / or a \,
+# both separators to PowerShell). Windows sets no HOME, so PowerShell's $env:HOME is left out.
 HOME_VARIABLES = {
     "Bash": re.compile(r"^(?:\$(HOME|USERPROFILE)|\$\{(HOME|USERPROFILE)\})(?=/|$)"),
-    "PowerShell": re.compile(r"^\$env:(HOME|USERPROFILE)(?=[/\\]|$)", re.I),
+    "PowerShell": re.compile(r"^\$env:(USERPROFILE)(?=[/\\]|$)", re.I),
 }
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
@@ -95,7 +96,10 @@ def expand_home(path, shell):
     path = unquote(path)
     match = HOME_VARIABLES[shell].match(path)
     value = match and os.environ.get(next(name for name in match.groups() if name))
-    return value + path[match.end():] if value else path
+    if not value:
+        return path
+    rest = path[match.end():]
+    return value + (rest.replace("\\", "/") if shell == "PowerShell" else rest)
 
 
 def resolve(path, base):

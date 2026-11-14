@@ -177,7 +177,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["${HOME} in a cd is the home folder", bash("cd ${HOME}/scratch && grep -rn foo ."), null],
     ["$USERPROFILE in a cd is the home folder", bash("cd $USERPROFILE/scratch && grep -rn foo ."), null],
     ["$env:USERPROFILE in a cd is the home folder", ps("cd $env:USERPROFILE/scratch; rg foo ."), null],
-    ["$env:HOME in a cd is the home folder", ps("cd $env:HOME/scratch; rg foo ."), null],
+    ["a PowerShell backslash path back into the repo", ps("cd $env:USERPROFILE\\repo\\src; rg foo ."),
+      "fallback"],
     // A spelling the shell does not expand stays a plain folder name inside the repo, so it counts.
     ["%USERPROFILE% is a plain folder name", ps("cd %USERPROFILE%/scratch; rg foo ."), "fallback"],
     ["Bash's $home is another variable", bash("cd $home/scratch && grep -rn foo ."), "fallback"],
@@ -187,6 +188,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     // Each shell expands only its own spelling, and Bash reads a backslash as an escape.
     ["PowerShell's $USERPROFILE is another variable", ps("cd $USERPROFILE/scratch; rg foo ."), "fallback"],
     ["Bash's $env:HOME is not an environment variable", bash("cd $env:HOME/scratch; rg foo ."), "fallback"],
+    ["PowerShell's $env:HOME is not read: Windows sets no HOME", ps("cd $env:HOME/scratch; rg foo ."),
+      "fallback"],
     ["a backslash after $HOME in Bash is an escape", bash("cd $HOME\\scratch; rg foo ."), "fallback"],
     // Only a cd target is expanded: a search path or a tool's path is read as written.
     ["a search path is read as written", bash('rg foo "$HOME/scratch"'), "fallback"],
