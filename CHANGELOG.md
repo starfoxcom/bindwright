@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **Setup and the doctor flag tools behind on releases.** They read the newest release of Node on your line (and whether your line still gets security fixes), Git for Windows, the GitHub CLI, uv and the Claude Code CLI, put a security release first, and offer each upgrade command on a yes. Only the tools on this computer are checked, and nothing about you or the repo is sent.
+- **Setup and the doctor flag tools behind on releases.** They read the newest release of Node on your line (and whether your line still gets security fixes), Git for Windows, the GitHub CLI, uv and the Claude Code CLI, put a security release first, and offer the upgrade command where one surely applies (else they say how to update) on a yes. Only the tools on this computer are checked, and nothing about you or the repo is sent.
 
 ### Changed
 
