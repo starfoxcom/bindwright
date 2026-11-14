@@ -15,25 +15,16 @@
     "install": [],
     "agent": {
       "run": [
-        "claude mcp add --scope user findwright -- node \"$HOME/.bindwright/helper/node_modules/bindwright/findwright/server.mjs\""
+        "claude plugin marketplace add starfoxcom/wrights",
+        "claude plugin install findwright@wrights"
       ]
     },
     "index": null,
-    "mcp": {
-      "name": "findwright",
-      "command": "node",
-      "args": [
-        "$HOME/.bindwright/helper/node_modules/bindwright/findwright/server.mjs"
-      ]
-    },
+    "mcp": null,
     "hook": {
-      "source": "bindwright",
-      "filename_basename": "findwright-first",
-      "detection_mode": "walk_up",
-      "detection_target": ".findwright/index.db",
-      "sequence_bullets": "  • find: a plain-English question or a name; the files that answer it, best first.\n  • search: regexes over every tracked file, with globs and context lines.\n  • symbols / outline: names by kind, and a file's symbols with line ranges."
+      "source": "tool"
     },
-    "notes": "Ships inside Bindwright's helper, so nothing is downloaded but its meaning model (32 MB, from Hugging Face, checked against a pinned SHA-256) on the first search. Needs Node 22.16 or later on the 22 line, or 24 or later, for the full-text index (FTS5) in node:sqlite. The agent step registers it once for every repo on this computer. A repo gets a .findwright/ folder the first time a session searches it with FindWright: the index, the hit log and an ignore file that keeps everything there out of git except config.json, the project's own settings. The index stays current on every call. In the mcp entry, $HOME stands for the home folder's absolute path."
+    "notes": "FindWright is a Claude Code plugin of its own (starfoxcom/findwright), listed in the wrights marketplace (starfoxcom/wrights). The agent step installs the plugin; then the user runs /findwright:setup, which installs its helper from the plugin's release (checked against a pinned SHA-256), registers its server for every repo on this computer, offers its own hook that sends searches to it in indexed repos, and fits the index to the project. Needs Node 22.16 or later on the 22 line, or 24 or later. A repo gets a .findwright/ folder that keeps itself out of git except config.json."
   },
   "none": {
     "license": null,

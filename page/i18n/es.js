@@ -283,7 +283,7 @@ export default {
   "settings.code-research.text": "<a href=\"https://github.com/starfoxcom/findwright\">findwright</a> "
     + "indexa cada archivo que el proyecto sigue, código, docs y configuración por igual, "
     + "y responde preguntas en lenguaje normal, nombres y búsquedas con regex, con respuestas cortas. "
-    + "Viene con Bindwright. none usa la búsqueda integrada: sin índice, y más lenta.",
+    + "Es un plugin aparte, que setup instala. none usa la búsqueda integrada: sin índice, y más lenta.",
   "settings.code-research.value": "findwright",
   "settings.work-language.title": "Idioma de trabajo",
   "settings.work-language.text": "El idioma de las respuestas, los mensajes de commit y los comentarios del código, "
