@@ -35,9 +35,10 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# The home folder as Bash and PowerShell spell it at the start of a path: $HOME, ${HOME},
-# $USERPROFILE, $env:USERPROFILE and $env:HOME (PowerShell's names are case-blind).
-HOME_VARIABLE = re.compile(r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|\$env:(?:HOME|USERPROFILE))(?=[/\\]|$)", re.I)
+# A home-folder variable at the start of a path: Bash's $HOME, ${HOME} and $USERPROFILE (names
+# are case-sensitive), and PowerShell's $env:HOME and $env:USERPROFILE (case-blind).
+HOME_VARIABLE = re.compile(r"^(?:\$(HOME|USERPROFILE)|\$\{(HOME|USERPROFILE)\}"
+                           r"|\$(?i:env):((?i:HOME|USERPROFILE)))(?=[/\\]|$)")
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
@@ -81,9 +82,17 @@ def unquote(word):
     return word.strip("'\"")
 
 
+def expand_home(path):
+    """`path` with a leading home-folder variable replaced by its value. An unset one stays a plain
+    folder name, as it does for the shell's cd, which then fails and leaves the search where it was."""
+    match = HOME_VARIABLE.match(path)
+    value = match and os.environ.get(next(name for name in match.groups() if name))
+    return value + path[match.end():] if value else path
+
+
 def resolve(path, base):
     """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(HOME_VARIABLE.sub("~", unquote(path)))
+    path = os.path.expanduser(expand_home(unquote(path)))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))

@@ -27,9 +27,10 @@ calls = json.loads(sys.stdin.read())
 print(json.dumps([module.classify(c["name"], c["args"], root) for c in calls]))
 `;
 
-// `home` is the home folder the shell's ~, $HOME and $env:USERPROFILE name.
+// `home` sets the variables that name the home folder; one set to undefined is left unset.
 function classifyAll(root, calls, home) {
-  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const env = { ...process.env, ...home };
+  for (const name of Object.keys(home)) if (home[name] === undefined) delete env[name];
   const r = spawnSync(python, ["-I", "-c", RUNNER, script, root],
     { input: JSON.stringify(calls), encoding: "utf8", env });
   assert.equal(r.status, 0, r.stderr);
@@ -177,14 +178,20 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["$USERPROFILE in a cd is the home folder", bash("cd $USERPROFILE/scratch && grep -rn foo ."), null],
     ["$env:USERPROFILE in a cd is the home folder", ps("cd $env:USERPROFILE/scratch; rg foo ."), null],
     ["$env:HOME in a cd is the home folder", ps("cd $env:HOME/scratch; rg foo ."), null],
-    // Only cmd expands %USERPROFILE%: in Bash and PowerShell the cd fails and the search reads the repo.
+    // A spelling the shell does not expand: the cd fails and the search reads the repo.
     ["%USERPROFILE% is a plain folder name", ps("cd %USERPROFILE%/scratch; rg foo ."), "fallback"],
+    ["Bash's $home is another variable", bash("cd $home/scratch && grep -rn foo ."), "fallback"],
+    ["an unpaired brace is not a home path", bash("cd $HOME}/scratch && grep -rn foo ."), "fallback"],
     ["a home path into the repo still counts", bash('cd "$HOME/repo" && grep -rn foo src/'), "fallback"],
     ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],
   ];
   try {
-    const got = classifyAll(root, rows.map(([, call]) => call), base);
+    const got = classifyAll(root, rows.map(([, call]) => call), { HOME: base, USERPROFILE: base });
     rows.forEach(([label, , want], i) => assert.equal(got[i], want, label));
+    // HOME, since Windows keeps USERPROFILE set for every process.
+    const unset = classifyAll(root, [bash("cd $HOME/scratch && grep -rn foo .")],
+      { HOME: undefined, USERPROFILE: base });
+    assert.deepEqual(unset, ["fallback"], "an unset $HOME is a plain folder name");
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
