@@ -6,7 +6,7 @@ The live page (`page/`) is the reference. This file holds the tokens and the rul
 
 The main page is a landing page. Most visitors do not know what a rule file or a hook is; they want Claude Code to work better on their project. The first screen has 3 to 5 seconds to say what they get, so it leads with the outcome: a plain promise, one button, and a short scene of a real session. The live page is the source of truth: when it and this file disagree, this file follows the page.
 
-Controls feel physical, like keys on a keyboard or a synth. Color is scarce and every use has a job: the accent marks what is active, three status colors mark removed, warning and info, and the scenes use two tones of their own.
+Controls feel physical, like keys on a keyboard or a synth. Color is scarce and every use has a job: the accent marks what is active, three status colors mark removed, warning and info, and the scenes keep a terminal palette of their own.
 
 ## Tokens
 
@@ -26,7 +26,7 @@ Controls feel physical, like keys on a keyboard or a synth. Color is scarce and 
 --info: oklch(0.74 0.13 245); /* info */
 ```
 
-The scenes (`scene.css`) add one spinner tone at hue 45, and a second at hue 275 for the compaction row. No other hues.
+The scenes carry their own terminal palette, defined in the `.stage` block of `scene.css`: text tones for ok, bad, warning, info and magic, the diff backgrounds, and the spinner tones. It colors only the scenes, and that block is its source.
 
 Radii: 12 px for keys and buttons, 18 px for panels. No other values.
 
@@ -53,7 +53,7 @@ Radii: 12 px for keys and buttons, 18 px for panels. No other values.
 - No gradients, glows, glass, or dot-grid backgrounds.
 - Motion is quiet: each block below the first screen fades in once as it enters the view, and otherwise motion only confirms a state change (key press, switch, file tree update). With `prefers-reduced-motion`, every block shows at once and nothing animates.
 - Copy is plain, sentence case, specific. No em dashes, no "it's not X, it's Y", no aspirational filler.
-- Every color has a job. If a color cannot be explained as active, a status or a scene tone, remove it.
+- Every color has a job. If a color cannot be explained as active, a status, or part of the scenes' terminal palette, remove it.
 
 ## Accessibility
 
