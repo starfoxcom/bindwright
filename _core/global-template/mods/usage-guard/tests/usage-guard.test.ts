@@ -241,6 +241,50 @@ test('cancel stops the automatic resume', LONG, async ($, on) => {
   expect(resumes(seen)).toEqual([])
 })
 
+// A new 5-hour window, opened half an hour from now: it resets 3.5 hours after the paused one.
+const NEW_WINDOW = new Date(NOW + 30 * 60_000 + 5 * 3_600_000).toISOString()
+
+test('an early reset resumes an active pause at once', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await doWork($)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
+  await endTurn($)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 2, resetsAt: NEW_WINDOW }]
+  await seen.clock.advance(60_000)
+
+  expect(pauseOf(seen)?.status).toBe('done')
+  expect(resumes(seen)).toHaveLength(1)
+  // The old wake does not resume it a second time.
+  for (let left = WAKE - NOW; left > 0; left -= 10 * 60_000) await seen.clock.advance(Math.min(10 * 60_000, left))
+  expect(resumes(seen)).toHaveLength(1)
+})
+
+test('an early reset ends a cancelled pause without resuming', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 2, resetsAt: NEW_WINDOW }]
+  await seen.clock.advance(60_000)
+
+  expect(pauseOf(seen)?.status).toBe('done')
+  expect(resumes(seen)).toEqual([])
+})
+
+test('a lower reading of the same window keeps the pause', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 70, resetsAt: RESET }]
+  await seen.clock.advance(60_000)
+
+  expect(pauseOf(seen)?.status).toBe('cancelled')
+})
+
 test(
   'a session that changed nothing only waits near the limit, and is not set to work after',
   LONG,

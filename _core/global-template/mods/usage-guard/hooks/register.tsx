@@ -6,7 +6,7 @@ import { catchUpOf, caughtUpText, missedArmText, parseSavedArm, quietResumePromp
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
-import { armFor, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, joinPause } from './plan'
+import { armFor, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly, joinPause } from './plan'
 import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
 import { drawArmLine, drawCards } from './cards'
@@ -76,8 +76,7 @@ async function tryClaim($: EngineInterface, name: string): Promise<boolean | nul
   }
 }
 
-// A helper that fails counts as a win, as before claims existed, so a missing `node` never stops
-// the wrap-up.
+// A helper that fails counts as a win, as before claims existed, so a missing `node` never stops the wrap-up.
 async function claim($: EngineInterface, name: string): Promise<boolean> {
   return (await tryClaim($, name)) !== false
 }
@@ -112,9 +111,8 @@ async function cardPath($: EngineInterface): Promise<string> {
 
 const readCard = async ($: EngineInterface) => readJson<UsageCard>($, await cardPath($))
 
-// One card per event, shared by every session: the first session to reach the
-// event writes it, so a card someone already dismissed is not raised again by
-// the next session reaching the same event.
+// One card per event, shared by every session: the first session to reach the event writes it, so a card someone
+// already dismissed is not raised again by the next session reaching the same event.
 async function showCard($: EngineInterface, id: string, text: string): Promise<void> {
   if ((await readCard($))?.id === id) return
   await $.fs.write(await cardPath($), JSON.stringify({ id, text, dismissed: false }, null, 2))
@@ -570,6 +568,9 @@ async function check($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
   const sessionId = await $.session.id()
   let pause = await readPause($)
+  // A banked reset ends the pause early (isResetEarly): an active one resumes now, a cancelled one stops holding.
+  if (pause && isResetEarly(pause, (await $.session.usage()).rateLimits, live.wrapUpAt, now))
+    return pause.status === 'active' ? resume($, pause.resetsAt) : writePause($, { ...pause, status: 'done' })
   const isLive = pause?.status === 'active' && pause.wakeAt > now
 
   if (!isLive) {
@@ -577,13 +578,12 @@ async function check($: EngineInterface): Promise<void> {
     const hot = hotLimits(rateLimits, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const planned = planPause(hot, live.delayMinutes, sessionId)
-    // One pause per reset: a cancelled or finished one is not re-armed by the
-    // same high reading, nor by a stale one for a reset it was extended past.
+    // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
+    // stale one for a reset it was extended past.
     if (covers(pause, planned)) return
     pause = planned
-    // Of several sessions crossing the line together, one writes the pause. The
-    // others write the same pause only if the winner has not yet, so a cancel
-    // written in between is not undone.
+    // Of several sessions crossing the line together, one writes the pause. The others write the same pause
+    // only if the winner has not yet, so a cancel written in between is not undone.
     await claim($, `pause-${resetKey(planned)}`)
     // Read again after the claim: another session may have paused for a different reset meanwhile.
     const shared = await readPause($)

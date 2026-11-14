@@ -127,6 +127,27 @@ export const CLAIM =
 
 export const resetKey = (pause: Pause) => String(Date.parse(pause.episode ?? pause.resetsAt))
 
+/** How much later than the pause's own reset a window must reset to count as a new window. */
+const NEW_WINDOW_MS = 60 * 60_000
+
+/**
+ * A pause, active or cancelled and before its wake, whose every limit now reads under the wrap-up line in a
+ * new window: the plan reset early (a banked reset, for one), so the pause holds nothing anymore. Without
+ * this it held until the old reset, and the tasks mod's keep-going stayed quiet all that time. A window
+ * counts as new only when it resets well after the pause's own reset, so a session's older reading of the
+ * same window never ends a pause.
+ */
+export function isResetEarly(pause: Pause, limits: readonly SessionRateLimit[], wrapUpAt: number, now: number) {
+  const isHolding = (pause.status === 'active' || pause.status === 'cancelled') && pause.wakeAt > now
+  const pausedUntil = Date.parse(pause.resetsAt)
+  const isClear = (kind: string) => {
+    const limit = limits.find(item => item.kind === kind)
+    const resetsAt = Date.parse(limit?.resetsAt ?? '')
+    return limit !== undefined && limit.percentUsed < wrapUpAt && resetsAt - pausedUntil >= NEW_WINDOW_MS
+  }
+  return isHolding && pause.kinds.length > 0 && pause.kinds.every(isClear)
+}
+
 // A pause that already reaches a planned reset: the plan is part of it. Weekly usage only falls at its
 // reset, so a fresh reading after an extension plans that later reset; an earlier one is a stale reading.
 export const covers = (pause: Pause | undefined, planned: Pause) =>
