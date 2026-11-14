@@ -6,7 +6,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  CLAUDE_URL, GH_URL, GIT_URL, NODE_INDEX_URL, NODE_SCHEDULE_URL, UV_URL,
   checkTools, compareVersions, fixFor, localVersions, nodeFinding, normalize, releaseFinding,
   sayFor,
 } from "../../helper/hooks/tool-versions.mjs";
@@ -214,13 +213,24 @@ for (const [name, platform, answers, want] of localRows) {
   });
 }
 
-// Answers from `replies` by URL, rejects a URL whose reply is an Error, and
-// records every URL it was asked for.
+// The sources by their literal addresses, not the script's constants, so a script
+// that reads the wrong address fails instead of following it.
+const NODE_INDEX_URL = "https://nodejs.org/dist/index.json";
+const NODE_SCHEDULE_URL = "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json";
+const GIT_URL = "https://api.github.com/repos/git-for-windows/git/releases?per_page=30";
+const GH_URL = "https://api.github.com/repos/cli/cli/releases?per_page=30";
+const UV_URL = "https://api.github.com/repos/astral-sh/uv/releases?per_page=30";
+const CLAUDE_STABLE_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/stable";
+const CLAUDE_LATEST_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest";
+
+// Answers from `replies` by URL and records every URL it was asked for. A URL with
+// no reply, or whose reply is an Error, rejects, as an unreachable source does.
 function fakeFetch(replies) {
   const calls = [];
   const fetchJson = async (url) => {
     calls.push(url);
     const reply = replies[url];
+    if (reply === undefined) throw new Error(`no fake for ${url}`);
     if (reply instanceof Error) throw reply;
     return reply;
   };
@@ -237,7 +247,7 @@ const replies = {
   [GIT_URL]: [release("v2.56.1.windows.3")],
   [GH_URL]: [release("v2.80.1", "Security fix.")],
   [UV_URL]: [release("0.9.0")],
-  [CLAUDE_URL]: { version: "2.1.0" },
+  [CLAUDE_STABLE_URL]: { version: "2.1.0" },
 };
 
 const versions = { node: "24.22.2", git: "2.56.1.3", gh: "2.80.0", uv: "0.8.0", claude: "2.1.0" };
@@ -291,7 +301,7 @@ test("checkTools: tools come back in order, each with its sentence, fix and comm
 
 const fetchRows = [
   ["Node asks only its two sources", { node: "24.22.2" }, [NODE_INDEX_URL, NODE_SCHEDULE_URL]],
-  ["gh and claude ask only their own", { gh: "2.80.0", claude: "2.1.0" }, [GH_URL, CLAUDE_URL]],
+  ["gh and claude ask only their own", { gh: "2.80.0", claude: "2.1.0" }, [GH_URL, CLAUDE_STABLE_URL]],
   ["no tools found asks nothing", {}, []],
 ];
 
@@ -304,7 +314,10 @@ for (const [name, found, urls] of fetchRows) {
 }
 
 test("checkTools: a CLI between stable and latest is current", async () => {
-  const { fetchJson } = fakeFetch({ [CLAUDE_URL]: { version: "2.1.311" } });
+  const { fetchJson } = fakeFetch({
+    [CLAUDE_STABLE_URL]: { version: "2.1.311" },
+    [CLAUDE_LATEST_URL]: { version: "2.1.325" },
+  });
   const result = await checkTools({
     platform: "linux", today: TODAY, versions: { claude: "2.1.320" }, fetchJson,
   });
