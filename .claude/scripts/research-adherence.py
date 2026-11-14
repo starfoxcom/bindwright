@@ -35,14 +35,9 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# A home-folder environment variable at the start of a cd target, per shell, among those whose value
-# this script shares with that shell: Bash's $HOME, ${HOME}, $USERPROFILE and ${USERPROFILE}
-# (case-sensitive, before a /), and PowerShell's $env:USERPROFILE (case-blind, before a / or a \,
-# both separators to PowerShell). Windows sets no HOME, so PowerShell's $env:HOME is left out.
-HOME_VARIABLES = {
-    "Bash": re.compile(r"^(?:\$(HOME|USERPROFILE)|\$\{(HOME|USERPROFILE)\})(?=/|$)"),
-    "PowerShell": re.compile(r"^\$env:(USERPROFILE)(?=[/\\]|$)", re.I),
-}
+# A Bash cd target of one word that opens with $HOME or ${HOME}: bare, or in one pair of double
+# quotes, with no other quote in it.
+BASH_HOME = re.compile(r'^(?P<quote>"?)\$(?:HOME|\{HOME\})(?P<rest>/[^\'"]*)?(?P=quote)$')
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
@@ -86,20 +81,13 @@ def unquote(word):
     return word.strip("'\"")
 
 
-def expand_home(path, shell):
-    """A cd target with a leading home-folder variable replaced by its value, when `shell` would
-    expand it: the shell's own spelling, a set variable, and a word that is not single-quoted.
-    Anything else is left as written, so the folder stays inside the repo and a search from it
-    stays counted."""
-    if path.startswith("'"):
-        return path
-    path = unquote(path)
-    match = HOME_VARIABLES[shell].match(path)
-    value = match and os.environ.get(next(name for name in match.groups() if name))
-    if not value:
-        return path
-    rest = path[match.end():]
-    return value + (rest.replace("\\", "/") if shell == "PowerShell" else rest)
+def expand_home(words, shell):
+    """A cd target's words as one path, with Bash's $HOME replaced by its value when the target is
+    one plain word (BASH_HOME) and HOME is set. Anything else is left as written, so the folder
+    stays inside the repo and a search from it stays counted."""
+    match = BASH_HOME.match(words[0]) if shell == "Bash" and len(words) == 1 else None
+    home = os.environ.get("HOME")
+    return home + (match.group("rest") or "") if match and home else " ".join(words)
 
 
 def resolve(path, base):
@@ -340,7 +328,7 @@ def shell_search(command, repo, shell):
             words = split_words(moved.group(2) or "")
             target = words[0] if words else None
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
-            base = repo.root if back else resolve(expand_home(" ".join(words), shell), base)
+            base = repo.root if back else resolve(expand_home(words, shell), base)
             continue
         if SHELL_SEARCH.search(head):
             search = words_search(split_words(head))
