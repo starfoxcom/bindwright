@@ -4,10 +4,10 @@ Bindwright sets a repo up for agentic coding: the rules, session skills, guard h
 
 ## Install
 
-From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen. Or from Bindwright's own marketplace, in a Claude Code session:
+From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen. Or from the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in a Claude Code session:
 
 ```
-/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
+/plugin install bindwright --marketplace starfoxcom/wrights
 ```
 
 Then open a session in your project's folder and run `/bindwright:setup`. The first time, it asks to install Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the files attached to the plugin's GitHub release (one for Node, one for a computer with Python and no Node), checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Say yes and setup goes on; `/bindwright:update` keeps the helper at the plugin's version.
