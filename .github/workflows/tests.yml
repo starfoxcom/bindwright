@@ -96,6 +96,21 @@ jobs:
           if grep -q "skipped=" python-tests.txt; then echo "::error::Python tests were skipped"; exit 1; fi
           grep -qE "^Ran [1-9][0-9]* tests? in" python-tests.txt || { echo "::error::No Python tests ran"; exit 1; }
 
+      # The helper's bash parser ships built from Go source. Rebuilding it with
+      # the one Go release that gives the same bytes proves the shipped file is
+      # that source. Go comes from go.dev, checked against its SHA-256; the
+      # step runs once the parser's source is on the branch.
+      - name: Bash parser rebuild
+        if: hashFiles('tools/shell-words-bash/check_build.py') != ''
+        env:
+          GO_ARCHIVE: go1.27.4.linux-amd64.tar.gz
+          GO_SHA256: 7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$GO_ARCHIVE" "https://go.dev/dl/$GO_ARCHIVE"
+          echo "$GO_SHA256  $RUNNER_TEMP/$GO_ARCHIVE" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$GO_ARCHIVE" -C "$RUNNER_TEMP"
+          PATH="$RUNNER_TEMP/go/bin:$PATH" python3 tools/shell-words-bash/check_build.py
+
       # Not behind the engine check: the review gate's script ships on main
       # first, and every PR's gate runs it.
       - name: Review gate tests
