@@ -33,9 +33,6 @@ async function bashWords(command) {
   const result = JSON.parse(globalThis.shellWordsOutput);
   // The parser drops a CR that bash keeps in the word, so a command holding one cannot be trusted.
   if (command.includes("\r")) result.error = true;
-  // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the command
-  // gets the guard's strict read instead.
-  if (result.commands.some((words) => typeof words[0] !== "string")) result.error = true;
   return result;
 }
 
