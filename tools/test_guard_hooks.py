@@ -539,8 +539,10 @@ class GuardHookTest(unittest.TestCase):
                 ('& $git commit -m "--file=x"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
-        # A brace expansion is built at run time, so the file it names is never read as a literal.
-        for command in ("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt"):
+        # A brace expansion or a pattern is built at run time, so the file it names is never read
+        # as a literal, quotes inside it included (`ms["g"]` is the pattern `ms[g]`).
+        for command in ("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
+                        'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), "text the shell builds at run time")
 

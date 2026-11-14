@@ -72,7 +72,7 @@ func (r reader) word(word *syntax.Word) any {
 	if slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
 		_, expands := part.(*syntax.BraceExp)
 		return expands
-	}) {
+	}) || isGlob(word) {
 		return r.dynamicWord(word)
 	}
 	var value strings.Builder
@@ -89,9 +89,6 @@ func (r reader) word(word *syntax.Word) any {
 func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 	switch part := part.(type) {
 	case *syntax.Lit:
-		if isGlob(part.Value) {
-			return "", false
-		}
 		return unescape(unquotedEscape, part.Value), true
 	case *syntax.SglQuoted:
 		return part.Value, !part.Dollar
@@ -112,11 +109,26 @@ func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 	return "", false
 }
 
-// isGlob reports whether bash can expand the text as a file pattern: a `*` or `?`, or a `[`
-// with a `]` after it. A lone `[`, the test command, stays itself.
-func isGlob(text string) bool {
-	open := strings.Index(text, "[")
-	return strings.ContainsAny(text, "*?") || open >= 0 && strings.Contains(text[open+1:], "]")
+// isGlob reports whether bash can expand the word as a file pattern: an unquoted `*` or `?`, or
+// an unquoted `[` with an unquoted `]` after it, wherever quotes split them (`ms["g"]` is the
+// pattern `ms[g]`). A lone `[`, the test command, stays itself.
+func isGlob(word *syntax.Word) bool {
+	open := false
+	for _, part := range word.Parts {
+		lit, unquoted := part.(*syntax.Lit)
+		if !unquoted {
+			continue
+		}
+		for _, char := range lit.Value {
+			switch {
+			case char == '*' || char == '?' || char == ']' && open:
+				return true
+			case char == '[':
+				open = true
+			}
+		}
+	}
+	return false
 }
 
 func (r reader) assignment(assign *syntax.Assign) assignment {
