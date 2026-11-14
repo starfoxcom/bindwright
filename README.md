@@ -18,10 +18,10 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 
 From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen.
 
-Or from Bindwright's own marketplace, in Claude Code, once per computer:
+Or from the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in Claude Code, once per computer:
 
 ```
-/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
+/plugin install bindwright --marketplace starfoxcom/wrights
 ```
 
 In the Claude desktop app, from the marketplace, where `/plugin` does not run:
@@ -30,7 +30,7 @@ In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 2. Paste this and send it. Wait until Claude says it is done.
 
    ```
-   Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.
+   Install the Bindwright plugin: run claude plugin install bindwright --marketplace starfoxcom/wrights in the shell. If claude is not found, add the marketplace named wrights (a github source, repo starfoxcom/wrights) under extraKnownMarketplaces and "bindwright@wrights": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.
    ```
 
 3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
