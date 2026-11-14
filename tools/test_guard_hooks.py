@@ -753,6 +753,10 @@ class GuardHookTest(unittest.TestCase):
                 ("git config $SCOPE core.hooksPath /x", setting, "Bash"),
                 ("git config unset $SCOPE core.hooksPath", setting, "Bash"),
                 ("git $OPTS commit --no-verify -m x", hooks, "Bash"),
+                ("git config $X set core.hooksPath /x", setting, "Bash"),
+                ("git config $X unset core.hooksPath", setting, "Bash"),
+                ("git config $X remove-section hook", setting, "Bash"),
+                ("git config $X rename-section core other", setting, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -773,7 +777,8 @@ class GuardHookTest(unittest.TestCase):
                         'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push",
                         'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0",
                         "git commit -uno -m x", "git commit -Sn0key -m x", 'git config "$KEY" v',
-                        'git config user.name "$N"', "git $OPTS log -n 5"), lambda command: self.attr(command)):
+                        'git config user.name "$N"', "git $OPTS log -n 5",
+                        "git config $X get core.hooksPath"), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
 
