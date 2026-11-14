@@ -27,7 +27,8 @@ async function ownerFile($: EngineInterface, folder: string): Promise<string> {
 /** Names this instance as the owner of the session's current id, in `folder` (which must exist), as of now. */
 export async function claim($: EngineInterface, folder: string): Promise<void> {
   try {
-    await $.fs.write(await ownerFile($, folder), `${INSTANCE} ${String(await $.clock.now()).padStart(TIME_DIGITS, '0')}`)
+    const renewedAt = String(await $.clock.now()).padStart(TIME_DIGITS, '0')
+    await $.fs.write(await ownerFile($, folder), `${INSTANCE} ${renewedAt}`)
   } catch {
     // No owner file: every instance stays active, as before.
   }
