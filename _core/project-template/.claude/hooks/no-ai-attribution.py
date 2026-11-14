@@ -53,9 +53,9 @@ reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0` or `false` set
 by the command, `lefthook uninstall`). Options are read as git reads them,
 bundled (`-nm x`) or shortened (`--no-veri`), so a message that names one
-passes. A word built at run time counts for the text the shell gives its
-start whatever runs (`--trailer=$WHO`, `"-C$SHA"`), and one that can expand
-to no word (`$OPTS`, `"$@"`) is also read as absent.
+passes. A word built at run time counts for the literal text around its
+run-time parts (`--trailer=$WHO`, `"-C$SHA"`, `"$S.hooksPath"`), and one
+that can expand to no word (`$OPTS`, `"$@"`) is also read as absent.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
 against a command built to slip past it. No text check can be one. These
@@ -205,10 +205,12 @@ BYPASS_REASONS = {
     "unread": ("this git call has more words built at run time than the guard reads every way;"
                " split it, or write some of them out."),
 }
+CMDLET = re.compile(r"[a-z]+-[a-z]+")  # program() gives names lowercase
+CMDLET_ALIASES = {"ls", "dir", "gci", "cp", "copy", "cpi", "mv", "move", "mi", "rm", "del", "erase", "ri",
+                  "rd", "rmdir", "ni", "md", "sl", "cd", "gc", "cat", "type", "sc", "select", "where",
+                  "sort", "ft", "fl", "gm", "iwr", "irm", "saps", "start", "kill", "spps", "gps", "ps"}
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
-# Stands for the part of a word the shell builds at run time: no option letter or setting name.
-UNKNOWN_REST = "\0"
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
 # value (`-m -n`) is never read as an option. A long option may be shortened to any unique
 # prefix of at least the length given.
@@ -313,7 +315,7 @@ def parse(cmd, shell, cwd):
         return None, None, NO_NODE if node_too_old(node) else BROKEN
     words = [word for command in data["commands"] for word in command]
     if not isinstance(data.get("assignments"), list) or any(
-            isinstance(word, dict) and "canBeEmpty" not in word for word in words):
+            isinstance(word, dict) and "shape" not in word for word in words):
         return None, None, OLD_HELPER
     if data.get("error"):
         return None, None, UNREAD
@@ -378,10 +380,12 @@ def body_file(flag, value, readers="@<"):
     return value
 
 
-def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", value_letters=None):
-    """Every file the words' flags in `flags` name as a body."""
+def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", value_letters=None,
+               attached=ATTACHED):
+    """Every file the words' flags in `flags` name as a body; `attached` are the short flags read
+    with a value written onto them."""
     files = []
-    for flag, value in flag_values(words, ATTACHED, message_flags, value_letters):
+    for flag, value in flag_values(words, attached, message_flags, value_letters):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value, readers)
@@ -444,7 +448,12 @@ def resolve(value, places):
         yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
 
 
-def command_files(words):
+def is_cmdlet(name):
+    """Whether a PowerShell command name is a cmdlet: Verb-Noun, or one of its built-in aliases."""
+    return bool(CMDLET.fullmatch(name)) or name in CMDLET_ALIASES
+
+
+def command_files(words, shell="bash"):
     """The body files one command names."""
     name = program(words)
     if name in TEXT_TOOLS:
@@ -469,8 +478,11 @@ def command_files(words):
     letters = None if "git" not in names and not built_git else "".join(
         [ANY_VALUE_LETTERS] * built_git + [git_value_letters(run) for run in inner if program(run) == "git"])
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
-    return (body_files(words, flags, message, readers, letters)
-            + [f for run in inner for f in command_files(run)])
+    # A PowerShell cmdlet's parameter is a whole name (`Stop-Process -Force`), never a flag with
+    # its value written onto it; a native program (`curl.exe -Fx=@f`) keeps getopt's reading.
+    attached = () if shell == "powershell" and is_cmdlet(name) else ATTACHED
+    return (body_files(words, flags, message, readers, letters, attached)
+            + [f for run in inner for f in command_files(run, shell)])
 
 
 def folder_targets(words):
@@ -509,12 +521,12 @@ def folder_places(commands, cwd):
     return places
 
 
-def parsed_files(commands, cwd):
+def parsed_files(commands, cwd, shell="bash"):
     """(path, error) for every body file the parsed commands name, in order, a relative one
     read in every folder the command may run in."""
     places = folder_places(commands, cwd)
     for words in commands:
-        for value in command_files(words):
+        for value in command_files(words, shell):
             if value != "-":
                 yield from resolve(value, places)
 
@@ -621,13 +633,14 @@ def config_sets_hooks(rest):
 
 def git_route(words):
     """The kind of route past the hooks one git call takes, or None. A word built at run time is
-    read as its literal start and an unknown rest (`--trailer=$WHO`), and each one the parser says
-    can expand to nothing is also read as no word, apart from the others (`git $OPTS commit`)."""
+    read as its literal text with a NUL for each part built at run time (`--trailer=$WHO`,
+    `"$S.hooksPath"`), and each one the parser says can expand to nothing is also read as no
+    word, apart from the others (`git $OPTS commit`)."""
     head, rest = words[:1], words[1:]
     run_time = [i for i, word in enumerate(rest) if not isinstance(word, str) and word["canBeEmpty"]]
     if len(run_time) > MAX_RUN_TIME_WORDS:
         return "unread"
-    known = [word if isinstance(word, str) else str(word["prefix"]) + UNKNOWN_REST for word in rest]
+    known = [word if isinstance(word, str) else str(word["shape"]) for word in rest]
     for empty in itertools.product((False, True), repeat=len(run_time)):
         dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
         reading = [word for i, word in enumerate(known) if i not in dropped]
@@ -756,7 +769,7 @@ def main():
             deny(problem)
         sys.exit(0)
     # A command that writes nothing is checked only for the routes past the hooks.
-    for path, error in (parsed_files(parsed, cwd) if writes else ()):
+    for path, error in (parsed_files(parsed, cwd, shell) if writes else ()):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.")
         try:

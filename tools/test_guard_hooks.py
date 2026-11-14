@@ -781,6 +781,10 @@ class GuardHookTest(unittest.TestCase):
                 ('git commit "--trailer=Co-authored-by: $WHO" -m x', trailer, "Bash"),
                 ('git commit "--reuse-message=$SHA"', reuse, "Bash"), ('git commit "-C$SHA"', reuse, "Bash"),
                 ('git "${!nope@}" -c core.hooksPath=/x commit -m x', setting, "Bash"),
+                ('git config "$SECTION.hooksPath" /x', setting, "Bash"),
+                ('git -c "$S.hooksPath=/x" commit -m x', setting, "Bash"),
+                ("git --config-env=$S.hooksPath=NAME commit -m x", setting, "Bash"),
+                ("git commit -${Q}n -m x", hooks, "Bash"), ("git commit -{n,q} -m x", hooks, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -790,6 +794,11 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, because, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, because)
+        # A PowerShell parameter (`-Force`, `-Format`) is a whole name, never `-F` with a file.
+        for command in ('Stop-Process -Name app -Force; gh api repos/o/r/actions/runners',
+                        'Get-Date -Format "dddd"; gh issue list --repo o/r --json number'):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, tool="PowerShell"))
         # Past ten words that can expand to nothing, a git call is refused rather than read part way.
         self.assert_denied(self.attr("git commit -m x $a $b $c $d $e $f $g $h $i $j $k"), "built at run time")
         # Each option keeps git's own meaning, a value is never an option, and a read passes.
@@ -806,7 +815,8 @@ class GuardHookTest(unittest.TestCase):
                         'git config user.name "$N"', "git $OPTS log -n 5",
                         "git config $X get core.hooksPath", 'git commit -m "$MSG" -- -n',
                         "git commit -m x $a $b $c $d $e $f $g $h $i $j", 'git commit -m"$MSG"',
-                        'git push origin "$BRANCH"'), lambda command: self.attr(command)):
+                        'git push origin "$BRANCH"', 'export "PATH=$HOME/bin:$PATH" && git push',
+                        'local "x=$1"; git push'), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
 
