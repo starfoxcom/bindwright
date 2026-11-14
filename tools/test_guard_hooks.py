@@ -346,6 +346,11 @@ class GuardHookTest(unittest.TestCase):
         self.addCleanup(os.remove, path)
         return path
 
+    def test_a_body_file_after_the_apostrophe_idiom_is_read(self):
+        # `'it'\''s'` closes a quote, escapes one and reopens: the body file after it is a flag.
+        path = self.body_file(f"Done.\n\n{AI_TRAILER}\n").replace("\\", "/")
+        self.assert_denied(self.attr(f"gh pr create --title 'it'\\''s done' --body-file {path}"))
+
     def test_a_clean_quoted_body_file_after_stop_parsing_passes(self):
         # After `--%` the program splits the raw text itself; the strict read takes it, quotes and all.
         folder = tempfile.mkdtemp()
