@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **Setup and the doctor flag tools behind on releases.** They read the newest release of Node on your line (and whether your line still gets security fixes), Git for Windows, the GitHub CLI, uv and the Claude Code CLI, put a security release first, and offer each upgrade command on a yes. Only the tools on this computer are checked, and nothing about you or the repo is sent.
+
 ### Changed
 
 - **The plugin handles no credential, so the directory has nothing to hold.** `/bindwright:local-runners` no longer fetches a runner's registration code: the user runs the registration in their own terminal, and `config.sh` asks them for the code GitHub shows on the repo's runner page. Taking a runner off works the same way. Setup's helper download names the home folder as a placeholder instead of an environment variable. The pack's directory check now refuses any line that names an environment variable or a credential word beside a network call, the pattern the directory's policy scan holds for a reviewer, and reads skill frontmatter only in the form `key: text` or `key: "JSON string"`.
