@@ -35,9 +35,10 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# A Bash cd target of one word that opens with $HOME or ${HOME}: bare, or in one pair of double
-# quotes, with no other quote in it.
-BASH_HOME = re.compile(r'^(?P<quote>"?)\$(?:HOME|\{HOME\})(?P<rest>/[^\'"]*)?(?P=quote)$')
+# A Bash cd target of one word that opens with $HOME or ${HOME}, bare or in one pair of double
+# quotes, whose rest holds only characters Bash leaves literal (shlex.quote's safe set): no other
+# expansion, glob, escape or quote.
+BASH_HOME = re.compile(r'^(?P<quote>"?)\$(?:HOME|\{HOME\})(?P<rest>/[\w@%+=:,./-]*)?(?P=quote)$')
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")

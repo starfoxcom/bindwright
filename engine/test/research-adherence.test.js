@@ -185,6 +185,11 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["an unpaired brace", bash("cd $HOME}/scratch && grep -rn foo ."), "fallback"],
     ["a backslash after $HOME in Bash is an escape", bash("cd $HOME\\scratch; grep -rn foo ."), "fallback"],
     ["$USERPROFILE is not read", bash("cd $USERPROFILE/scratch; grep -rn foo ."), "fallback"],
+    ["another variable after $HOME", bash('cd "$HOME/$PROJ" && grep -rn foo .'), "fallback"],
+    ["a command substitution after $HOME", bash("cd $HOME/$(basename x) && grep -rn foo ."), "fallback"],
+    ["a backtick after $HOME", bash('cd "$HOME/`cat x`" && grep -rn foo .'), "fallback"],
+    ["a glob after $HOME", bash("cd $HOME/scr* && grep -rn foo ."), "fallback"],
+    ["a backslash later in the path", bash("cd $HOME/scr\\atch; grep -rn foo ."), "fallback"],
     ["PowerShell's home variables are not read", ps("cd $env:USERPROFILE/scratch; rg foo ."), "fallback"],
     // Only a cd target is expanded: a search path or a tool's path is read as written.
     ["a search path is read as written", bash('rg foo "$HOME/scratch"'), "fallback"],
