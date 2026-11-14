@@ -781,6 +781,15 @@ class GuardHookTest(unittest.TestCase):
                 ('git commit "--trailer=Co-authored-by: $WHO" -m x', trailer, "Bash"),
                 ('git commit "--reuse-message=$SHA"', reuse, "Bash"), ('git commit "-C$SHA"', reuse, "Bash"),
                 ('git "${!nope@}" -c core.hooksPath=/x commit -m x', setting, "Bash"),
+                ('git config "$SECTION.hooksPath" /x', setting, "Bash"),
+                ('git -c "$S.hooksPath=/x" commit -m x', setting, "Bash"),
+                ("git --config-env=$S.hooksPath=NAME commit -m x", setting, "Bash"),
+                ("git commit -${Q}n -m x", hooks, "Bash"), ("git commit -{n,q} -m x", hooks, "Bash"),
+                ('git config "$s.hooksPath" /x', setting, "PowerShell"),
+                ('git -c "$s.hooksPath=/x" commit -m x', setting, "PowerShell"),
+                ('export "LEFTHOOK=$X" && git commit -m x', lefthook, "Bash"),
+                ("git commit -${Q}m -n", hooks, "Bash"), ("git push -${Q}o --no-verify", hooks, "Bash"),
+                ('export "LEFTHOOK+=$Z" && git commit -m x', lefthook, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -806,9 +815,43 @@ class GuardHookTest(unittest.TestCase):
                         'git config user.name "$N"', "git $OPTS log -n 5",
                         "git config $X get core.hooksPath", 'git commit -m "$MSG" -- -n',
                         "git commit -m x $a $b $c $d $e $f $g $h $i $j", 'git commit -m"$MSG"',
-                        'git push origin "$BRANCH"'), lambda command: self.attr(command)):
+                        'git push origin "$BRANCH"', 'export "PATH=$HOME/bin:$PATH" && git push',
+                        'local "x=$1"; git push'), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
+
+    def test_cmdlet_parameters_stay_whole_and_unknown_names_stay_unread(self):
+        # A PowerShell parameter (`-Force`, `-Format`) is a whole name, never `-F` with a file.
+        for command in ('Stop-Process -Name app -Force; gh api repos/o/r/actions/runners',
+                        'Get-Date -Format "dddd"; gh issue list --repo o/r --json number'):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, tool="PowerShell"))
+        # A program a cmdlet runs still reads a file through a flag written onto its value, and a
+        # declaration whose name is built at run time stays unreadable.
+        self.assert_denied(self.attr('Start-Process curl.exe -ArgumentList "-Fbody=@notes.md"'
+                                     ' https://api.github.com/x', tool="PowerShell"), "notes.md")
+        for command in ('export "$KV" && git push', 'export "A"=$X && git commit -m x',
+                        'export "A=$@" && git commit -m x', 'export "A=${U:-$@}" && git commit -m x'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "could not read this command")
+        # An `env` bundle whose letters are built at run time may take the next word or not, each
+        # bundle on its own.
+        for command in ("env -${Q}u FOO LEFTHOOK=0 git commit -m x",
+                        "env --unset=${V} -${Q}u FOO LEFTHOOK=0 git commit -m x",
+                        "env -${A}u FOO -${B}i LEFTHOOK=0 git commit -m x", "env -$Qu LEFTHOOK=0 git commit -m x",
+                        'env -"$Q"u LEFTHOOK=0 git commit -m x', "env -$(echo u) FOO LEFTHOOK=0 git commit -m x",
+                        "env -`echo u` FOO LEFTHOOK=0 git commit -m x"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "lefthook")
+        # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
+        for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$éam" -n'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool="PowerShell"), "no-verify")
+        # A hyphenated native program (no approved verb) keeps getopt's attached read, and git run
+        # through a cmdlet under a Windows wrapper name is still git.
+        for command in ('ssh-agent $GIT commit "-Fnotes.txt"', 'Start-Process git.cmd commit "-Fnotes.txt"'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool="PowerShell"), "notes.txt")
 
     def test_shapes_the_grammars_reject_are_read_as_the_shell_reads_them(self):
         # A here-doc with a redirect or a command on its first line, a redirect target in several
