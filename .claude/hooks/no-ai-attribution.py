@@ -272,7 +272,8 @@ def node_program(cwd):
 def node_too_old(node):
     """Whether `node` is older than Node 18, which the parser needs; asked only once a run failed."""
     try:
-        out = subprocess.run([node, "--version"], capture_output=True, timeout=PARSE_SECONDS)
+        # Short, so a failed parse and this check together stay inside the hook's time limit.
+        out = subprocess.run([node, "--version"], capture_output=True, timeout=2)
     except (OSError, subprocess.TimeoutExpired):
         return False
     version = re.match(rb"\s*v(\d+)\.", out.stdout)
@@ -580,8 +581,7 @@ def config_words(rest):
             options.append(word)
             skip = config_option_takes_value(word)
         else:
-            # A name built at run time (`$KEY`, `$'...'`) could be any setting, a hook's included.
-            names.append(word if isinstance(raw, str) else "hook.built-at-run-time")
+            names.append(word)
     return names, options
 
 

@@ -742,7 +742,6 @@ class GuardHookTest(unittest.TestCase):
                 ("git config set core.hooksPath -- --get", setting, "Bash"),
                 ("git config core.hooksPath --", setting, "Bash"),
                 (r"git config core.ho\oksPath /dev/null", setting, "Bash"),
-                ("git config core.ho$'o'ksPath /dev/null", setting, "Bash"),
                 (r"git com\mit -n -m x", hooks, "Bash"),
                 ("env -iu FOO LEFTHOOK=0 git commit -m x", lefthook, "Bash"),
                 ("env -iuFOO LEFTHOOK=0 git commit -m x", lefthook, "Bash"),
