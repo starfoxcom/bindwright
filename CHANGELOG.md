@@ -22,6 +22,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **Setup cleans up any earlier code-search tool, not one named tool.** When FindWright is picked, `/bindwright:setup` asks whether an earlier code-search tool is still set up, shows the search hooks and servers that may belong to one, and offers to take out the one the user names, whatever the tool, and `/bindwright:remove` leaves any such program installed. A project whose saved answers name a tool setup no longer offers keeps working as a custom tool.
 
+- **A feature that needs a tool either gets it or stays off.** When the size check, the mods or FindWright are picked and what they need is missing (Python and lizard; a newer CLI and Node; a newer Node), setup offers to install it before writing anything. A no, or an install that fails, turns that feature off and says so, instead of writing a check that fails on every run or quietly skipping the question.
+
 ### Fixed
 
 - Setup offers FindWright, and `/close-session` records its hit rate, only on Node 22.16 or later on the 22 line, or 24 or later, which its full-text index needs; on Node 22.13 to 22.15 it used to be offered and then fail to build its index.
