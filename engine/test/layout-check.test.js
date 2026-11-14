@@ -15,7 +15,7 @@ import { findBrowser } from "../../helper/hooks/layout-check.mjs";
 
 const CLI = fileURLToPath(new URL("../../helper/hooks/layout-check.mjs", import.meta.url));
 // Covers the check's own 90 s wait for a cold browser start, plus the page loads.
-const SPAWN_TIMEOUT_MS = 150000;
+const SPAWN_TIMEOUT_MS = 180000;
 const browser = findBrowser(process.env, process.platform);
 const SKIP = browser ? false : "no Chrome, Chromium or Edge installed";
 
