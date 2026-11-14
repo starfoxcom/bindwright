@@ -757,6 +757,9 @@ class GuardHookTest(unittest.TestCase):
                 ("git config $X unset core.hooksPath", setting, "Bash"),
                 ("git config $X remove-section hook", setting, "Bash"),
                 ("git config $X rename-section core other", setting, "Bash"),
+                ("git $OPTS commit -m \"$MSG\" --no-verify", hooks, "Bash"),
+                ("git config $SCOPE core.hooksPath \"$DIR\"", setting, "Bash"),
+                ("git config \"$@\" core.hooksPath /x", setting, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -766,6 +769,8 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, because, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, because)
+        # Past ten words that can expand to nothing, a git call is refused rather than read part way.
+        self.assert_denied(self.attr("git commit -m x $a $b $c $d $e $f $g $h $i $j $k"), "built at run time")
         # Each option keeps git's own meaning, a value is never an option, and a read passes.
         for command, result in self.each(
                 ("git commit -m -n", 'git commit -m "say --no-verify"', "git commit -m x -- -n",
@@ -778,7 +783,8 @@ class GuardHookTest(unittest.TestCase):
                         'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0",
                         "git commit -uno -m x", "git commit -Sn0key -m x", 'git config "$KEY" v',
                         'git config user.name "$N"', "git $OPTS log -n 5",
-                        "git config $X get core.hooksPath"), lambda command: self.attr(command)):
+                        "git config $X get core.hooksPath", 'git commit -m "$MSG" -- -n',
+                        "git commit -m x $a $b $c $d $e $f $g $h $i $j"), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
 

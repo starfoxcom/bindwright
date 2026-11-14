@@ -74,6 +74,7 @@ Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
 exit 0 otherwise. A read-only command is blocked only for the routes above,
 or when the parser it needs is missing or cannot read it.
 """
+import itertools
 import json
 import os
 import re
@@ -198,7 +199,11 @@ BYPASS_REASONS = {
     "trailer": "--trailer is not allowed; write the message body directly.",
     "reuse": "reusing another commit's message (-C / -c / --reuse-message) cannot be scanned.",
     "lefthook": "turning lefthook off removes the commit-msg attribution check.",
+    "unread": ("this git call has more words built at run time than the guard reads every way;"
+               " split it, or write some of them out."),
 }
+# Each word built at run time doubles the readings of one git call; past this many, it is refused.
+MAX_RUN_TIME_WORDS = 10
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
 # value (`-m -n`) is never read as an option. A long option may be shortened to any unique
 # prefix of at least the length given.
@@ -607,14 +612,33 @@ def config_sets_hooks(rest):
     return len(names) >= (1 if unsets else 2) and names_hooks(names[0])
 
 
+def can_be_empty(word):
+    """Whether a word the shell builds at run time can expand to no word at all: an unquoted
+    expansion (`$OPTS`, a command's output) or the arguments (`"$@"`) can; any other quoted
+    word or a glob always leaves one."""
+    if isinstance(word, str):
+        return False
+    text = text_of(word)
+    if "$@" in text or "${@" in text:
+        return True
+    return not any(quote in text for quote in "\"'") and any(sign in text for sign in "$`")
+
+
 def git_route(words):
-    """The kind of route past the hooks one git call takes, or None. Each word built at run time
-    is read both ways the shell can expand it: as one word the guard cannot read, and as no word,
-    which an empty unquoted one becomes (`git $OPTS commit`, `git config $SCOPE set ...`)."""
+    """The kind of route past the hooks one git call takes, or None. A word built at run time is
+    one word the guard cannot read, and each one that can expand to nothing is also read as no
+    word, apart from the others (`git $OPTS commit`)."""
     head, rest = words[:1], words[1:]
-    as_unread = [word if isinstance(word, str) else "" for word in rest]
-    as_empty = [word for word in rest if isinstance(word, str)]
-    return literal_git_route(head + as_unread) or literal_git_route(head + as_empty)
+    run_time = [i for i, word in enumerate(rest) if can_be_empty(word)]
+    if len(run_time) > MAX_RUN_TIME_WORDS:
+        return "unread"
+    for empty in itertools.product((False, True), repeat=len(run_time)):
+        dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
+        reading = [word if isinstance(word, str) else "" for i, word in enumerate(rest) if i not in dropped]
+        route = literal_git_route(head + reading)
+        if route:
+            return route
+    return None
 
 
 def literal_git_route(words):
