@@ -197,6 +197,27 @@ test('near the compaction a turn end with no workable task gets one prompt to ca
   expect(seen.prompts[0]).toContain('ended near the compaction')
 })
 
+// Near the compaction, with a task that needs no one, the turn's end itself is refused once; far from it,
+// on the engine's repeat stop, or with every task on hold, the turn ends.
+test('near the compaction a turn end with a workable task is refused once', async ($, on) => {
+  const { seen } = world(on, [task('1', 'in_progress')])
+  let tokens = 100_000
+  const context = () => ({ tokens, window: 200_000, breakdown: { autoCompactThreshold: 160_000 } })
+  on('session.usage', () => ({ value: { context: context() } }) as never)
+  on('settings.read', () => ({ value: {} }) as never)
+  seen.files.set('C:/Users/me/.claude.json', '{}')
+  on('classic.Stop', () => ({}) as never)
+  const event = (repeat: boolean) =>
+    ({ hook_event_name: 'Stop', stop_hook_active: repeat, background_tasks: [], session_crons: [] }) as never
+  const stop = (repeat = false) => $.classic.Stop(event(repeat))
+  expect((await stop()) as { block?: string }).not.toHaveProperty('block')
+  tokens = 125_000
+  expect(((await stop()) as { block?: string }).block).toContain('task #1 "task 1" needs no one. Continue it now.')
+  expect((await stop(true)) as { block?: string }).not.toHaveProperty('block')
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '1', metadata: { hold: 'Alex' } } as never)
+  expect((await stop()) as { block?: string }).not.toHaveProperty('block')
+})
+
 test('the setting turns it off', { options: { keepGoing: false } }, async ($, on) => {
   const { seen, clock } = world(on, [task('1', 'in_progress')])
   await turnEnds($, clock)
