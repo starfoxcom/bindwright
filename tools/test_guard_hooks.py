@@ -838,7 +838,9 @@ class GuardHookTest(unittest.TestCase):
         # bundle on its own.
         for command in ("env -${Q}u FOO LEFTHOOK=0 git commit -m x",
                         "env --unset=${V} -${Q}u FOO LEFTHOOK=0 git commit -m x",
-                        "env -${A}u FOO -${B}i LEFTHOOK=0 git commit -m x"):
+                        "env -${A}u FOO -${B}i LEFTHOOK=0 git commit -m x", "env -$Qu LEFTHOOK=0 git commit -m x",
+                        'env -"$Q"u LEFTHOOK=0 git commit -m x', "env -$(echo u) FOO LEFTHOOK=0 git commit -m x",
+                        "env -`echo u` FOO LEFTHOOK=0 git commit -m x"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), "lefthook")
         # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.

@@ -340,6 +340,12 @@ def text_of(word):
     return word if isinstance(word, str) else str(word.get("dynamic", ""))
 
 
+def shape_of(word):
+    """A word's literal value, or its text with a NUL for each part built at run time: what an
+    option reader may trust, whichever way the source spells the expansion (`$Q`, `"$Q"`, `${Q}`)."""
+    return word if isinstance(word, str) else str(word["shape"])
+
+
 def program(words):
     if not words or not isinstance(words[0], str):
         return ""
@@ -662,7 +668,7 @@ def git_route(words):
     run_time = [i for i, word in enumerate(rest) if not isinstance(word, str) and word["canBeEmpty"]]
     if len(run_time) > MAX_RUN_TIME_WORDS:
         return "unread"
-    known = [word if isinstance(word, str) else str(word["shape"]) for word in rest]
+    known = [shape_of(word) for word in rest]
     for empty in itertools.product((False, True), repeat=len(run_time)):
         dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
         reading = [word for i, word in enumerate(known) if i not in dropped]
@@ -714,15 +720,15 @@ def env_words(args):
     (`-${Q}u`) may or may not take the next word, so every reading is followed at once: `states`
     holds, per reading still alive, whether the next word is an option's value."""
     found, states = [], {False}
-    for text in (text_of(w) for w in args):
-        following = set()
+    for word in args:
+        shape, following = shape_of(word), set()
         for skip in states:
             if skip:
                 following.add(False)
-            elif text.startswith("-"):
-                following |= env_option_skips(text)
-            elif re.match(r"\w+=", text):
-                found.append(text)
+            elif shape.startswith("-"):
+                following |= env_option_skips(shape)
+            elif re.match(r"\w+=", shape):
+                found.append(text_of(word))
                 following.add(False)
         states = following
         if not states:
