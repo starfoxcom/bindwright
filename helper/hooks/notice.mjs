@@ -7,9 +7,11 @@
 // on any error. Node 18+.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+
+import { writeFileAtomic } from "./write-file.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readState, repoKey, stateFileIn } from "./counts.mjs";
 
@@ -53,14 +55,11 @@ function readJson(path) {
 // Today's entries only, which also clears a damaged cache.
 const todays = (shown, today) => Object.entries(shown ?? {}).filter(([, day]) => day === today);
 
-// Writes the cache, keeping today's entries another session saved meanwhile,
-// through a temporary file so no reader sees it half written.
+// Writes the cache, keeping today's entries another session saved meanwhile.
 function save(cacheFile, cache, today) {
   for (const [key, day] of todays(readJson(cacheFile)?.shown, today)) cache.shown[key] ??= day;
-  mkdirSync(dirname(cacheFile), { recursive: true });
-  const temp = `${cacheFile}.${process.pid}.tmp`;
-  writeFileSync(temp, `${JSON.stringify(cache)}\n`);
-  renameSync(temp, cacheFile);
+  writeFileAtomic(cacheFile, `${JSON.stringify(cache)}
+`);
 }
 
 // The notice text, or null. `fetchLatest()` gives the released version or
