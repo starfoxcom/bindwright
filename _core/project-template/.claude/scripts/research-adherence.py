@@ -184,10 +184,10 @@ class Search:
                 not is_outside(p, repo.root) for p, word in zip(named, self.paths)
                 if os.path.exists(p) or re.search(r"[/\\]", word))
         # A word with a folder in it is a named path even once it is gone (a deleted temp clone).
-        paths = [p for p, word in zip(named, self.paths)
-                 if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
-                 or re.search(r"[/\\]", word)] or [base]
-        inside = [p for p in expand_wildcards(paths) if not is_outside(p, repo.root)]
+        kept = [(p, word) for p, word in zip(named, self.paths)
+                if os.path.exists(p) or WILDCARD.search(os.path.basename(p))
+                or re.search(r"[/\\]", word)] or [(base, "")]
+        inside = [p for p in expand_wildcards(kept) if not is_outside(p, repo.root)]
         if not inside:
             return False
         if self.globs or self.types:
@@ -198,12 +198,15 @@ class Search:
         return any(repo.holds_code(p) for p in inside)
 
 
-def expand_wildcards(paths):
-    """Each wildcard path replaced by what it matches, as the shell expands it; one that matches
-    nothing stays, since the shell then passes it on as written."""
+def expand_wildcards(named):
+    """Each (path, word) pair's path, a wildcard replaced by what it matches as the shell expands it.
+
+    One that matches nothing stays, since the shell then passes it on as written, and so does a
+    quoted one, which the shell leaves for the tool (a `git grep` pathspec)."""
     expanded = []
-    for path in paths:
-        matches = glob.glob(path) if WILDCARD.search(os.path.basename(path)) else []
+    for path, word in named:
+        is_expanded = WILDCARD.search(os.path.basename(path)) and not re.search(r"['\"]", word)
+        matches = glob.glob(path) if is_expanded else []
         expanded += [os.path.normcase(m) for m in matches] or [path]
     return expanded
 
@@ -324,8 +327,10 @@ def words_search(words, is_text_search=True):
         # named with it; a listing's is its -Filter.
         is_filter = (not is_text_search and WILDCARD.search(piece)
                      and not re.search(r"['\"/\\]", piece))
-        # A listing is a cmdlet, which reads a quoted `~` as home; a text search is a native tool.
-        (globs if is_filter else paths).append(literal(piece) if is_text_search else unquote(piece))
+        # A text search's word keeps its quotes, which `resolve` and `expand_wildcards` read: the shell
+        # expands no quoted wildcard, and a native tool takes a quoted `~` as a folder name. A listing
+        # is a cmdlet, which reads `~` as home either way.
+        (globs if is_filter else paths).append(piece if is_text_search else unquote(piece))
     return Search(paths, globs, types, filters_named_files=tool != "rg")
 
 

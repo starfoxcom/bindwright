@@ -43,7 +43,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
   const scratch = join(base, "scratch");
   // A folder is judged by the files git tracks in it: code, docs only, or a mix.
   for (const file of ["src/app.py", "engine/src/x.js", "docs/guide.md", ".claude/rules/a.md",
-    ".claude/hooks/h.py", "README.md"]) {
+    ".claude/hooks/h.py", "README.md", "package.json"]) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), "x\n");
   }
@@ -148,6 +148,8 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["-e names the pattern, so the next word is a path", bash("grep -rn -e foo src"), "fallback"],
     ["-e with only a folder outside", bash(`rg -e foo "${scratch}"`), null],
     ["a git grep pathspec of docs", bash("git grep foo -- '*.md'"), null],
+    // A quoted pathspec reaches any depth; the shell never expands it.
+    ["a quoted pathspec matching only data at the top", bash("git grep foo -- '*.js*'"), "fallback"],
     // An exclude pathspec leaves files out; it never says what the search reads.
     ["a git :! pathspec leaves docs out", bash("git grep -n foo -- ':!*.md'"), "fallback"],
     ["an unquoted :! pathspec", bash("git grep -n foo -- :!*.md"), "fallback"],
