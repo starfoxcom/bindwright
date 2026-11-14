@@ -206,6 +206,9 @@ BYPASS_REASONS = {
                " split it, or write some of them out."),
 }
 CMDLET = re.compile(r"[a-z]+-[a-z]+")  # program() gives names lowercase
+# An attached value that can only read a file (`-Fbody=@notes.md`, `-d@body.json`): no cmdlet
+# parameter name holds `=` or `@`.
+ATTACHED_FILE_READ = re.compile(r"-F[^=]*=[\"']?[@<]|-d[\"']?@")
 CMDLET_ALIASES = {"ls", "dir", "gci", "cp", "copy", "cpi", "mv", "move", "mi", "rm", "del", "erase", "ri",
                   "rd", "rmdir", "ni", "md", "sl", "cd", "gc", "cat", "type", "sc", "select", "where",
                   "sort", "ft", "fl", "gm", "iwr", "irm", "saps", "start", "kill", "spps", "gps", "ps"}
@@ -334,13 +337,14 @@ def program(words):
     return name[:-4] if name.endswith(".exe") else name
 
 
-def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None):
+def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None, attached_only=None):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
     {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
     never a flag. With `value_letters`, so is the word after a git cluster ending in -m whose
-    earlier letters take no value."""
+    earlier letters take no value. With `attached_only`, a short flag's attached value is read
+    only from a word that pattern matches."""
     cluster = re.compile(r"-(?:(?![m%s])[a-z])*m" % value_letters) if value_letters is not None else None
     message = False
     for i, word in enumerate(words):
@@ -353,7 +357,7 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None
                    or (cluster is not None and cluster.fullmatch(text) is not None))
         if text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
-        elif text[:2] in short and len(text) > 2:
+        elif text[:2] in short and len(text) > 2 and (attached_only is None or attached_only.match(text)):
             flag, value = text[:2], text[2:]
         elif built:
             continue
@@ -381,11 +385,11 @@ def body_file(flag, value, readers="@<"):
 
 
 def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", value_letters=None,
-               attached=ATTACHED):
-    """Every file the words' flags in `flags` name as a body; `attached` are the short flags read
-    with a value written onto them."""
+               attached_only=None):
+    """Every file the words' flags in `flags` name as a body; with `attached_only`, a short
+    flag's attached value counts only in a word that pattern matches."""
     files = []
-    for flag, value in flag_values(words, attached, message_flags, value_letters):
+    for flag, value in flag_values(words, ATTACHED, message_flags, value_letters, attached_only):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value, readers)
@@ -479,9 +483,9 @@ def command_files(words, shell="bash"):
         [ANY_VALUE_LETTERS] * built_git + [git_value_letters(run) for run in inner if program(run) == "git"])
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
     # A PowerShell cmdlet's parameter is a whole name (`Stop-Process -Force`), never a flag with
-    # its value written onto it; a native program (`curl.exe -Fx=@f`) keeps getopt's reading.
-    attached = () if shell == "powershell" and is_cmdlet(name) else ATTACHED
-    return (body_files(words, flags, message, readers, letters, attached)
+    # its value written onto it, but a program it runs may still read a file that way.
+    attached_only = ATTACHED_FILE_READ if shell == "powershell" and is_cmdlet(name) else None
+    return (body_files(words, flags, message, readers, letters, attached_only)
             + [f for run in inner for f in command_files(run, shell)])
 
 

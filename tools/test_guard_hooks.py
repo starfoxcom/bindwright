@@ -785,6 +785,9 @@ class GuardHookTest(unittest.TestCase):
                 ('git -c "$S.hooksPath=/x" commit -m x', setting, "Bash"),
                 ("git --config-env=$S.hooksPath=NAME commit -m x", setting, "Bash"),
                 ("git commit -${Q}n -m x", hooks, "Bash"), ("git commit -{n,q} -m x", hooks, "Bash"),
+                ('git config "$s.hooksPath" /x', setting, "PowerShell"),
+                ('git -c "$s.hooksPath=/x" commit -m x', setting, "PowerShell"),
+                ('export "LEFTHOOK=$X" && git commit -m x', lefthook, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -794,11 +797,6 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, because, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, because)
-        # A PowerShell parameter (`-Force`, `-Format`) is a whole name, never `-F` with a file.
-        for command in ('Stop-Process -Name app -Force; gh api repos/o/r/actions/runners',
-                        'Get-Date -Format "dddd"; gh issue list --repo o/r --json number'):
-            with self.subTest(command=command):
-                self.assert_passes(self.attr(command, tool="PowerShell"))
         # Past ten words that can expand to nothing, a git call is refused rather than read part way.
         self.assert_denied(self.attr("git commit -m x $a $b $c $d $e $f $g $h $i $j $k"), "built at run time")
         # Each option keeps git's own meaning, a value is never an option, and a read passes.
@@ -819,6 +817,18 @@ class GuardHookTest(unittest.TestCase):
                         'local "x=$1"; git push'), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
+
+    def test_cmdlet_parameters_stay_whole_and_unknown_names_stay_unread(self):
+        # A PowerShell parameter (`-Force`, `-Format`) is a whole name, never `-F` with a file.
+        for command in ('Stop-Process -Name app -Force; gh api repos/o/r/actions/runners',
+                        'Get-Date -Format "dddd"; gh issue list --repo o/r --json number'):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, tool="PowerShell"))
+        # A program a cmdlet runs still reads a file through a flag written onto its value, and a
+        # declaration whose name is built at run time stays unreadable.
+        self.assert_denied(self.attr('Start-Process curl.exe -ArgumentList "-Fbody=@notes.md"'
+                                     ' https://api.github.com/x', tool="PowerShell"), "notes.md")
+        self.assert_denied(self.attr('export "$KV" && git push'), "could not read this command")
 
     def test_shapes_the_grammars_reject_are_read_as_the_shell_reads_them(self):
         # A here-doc with a redirect or a command on its first line, a redirect target in several
