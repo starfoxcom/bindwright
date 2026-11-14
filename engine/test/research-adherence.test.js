@@ -184,8 +184,12 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["an unpaired brace is not a home path", bash("cd $HOME}/scratch && grep -rn foo ."), "fallback"],
     ["a single-quoted $HOME is a plain folder name", bash("cd '$HOME/scratch'; grep -rn foo ."), "fallback"],
     ["a single-quoted $env:HOME is a plain folder name", ps("cd '$env:HOME/scratch'; rg foo ."), "fallback"],
+    // Each shell expands only its own spelling, and Bash reads a backslash as an escape.
+    ["PowerShell's $USERPROFILE is another variable", ps("cd $USERPROFILE/scratch; rg foo ."), "fallback"],
+    ["Bash's $env:HOME is not an environment variable", bash("cd $env:HOME/scratch; rg foo ."), "fallback"],
+    ["a backslash after $HOME in Bash is an escape", bash("cd $HOME\\scratch; rg foo ."), "fallback"],
     // Only a cd target is expanded: a search path or a tool's path is read as written.
-    ["a search path is read as written", bash("rg foo '$HOME/scratch'"), "fallback"],
+    ["a search path is read as written", bash('rg foo "$HOME/scratch"'), "fallback"],
     ["a Grep path is read as written", grep({ path: "$HOME/scratch" }), "fallback"],
     ["a home path into the repo still counts", bash('cd "$HOME/repo" && grep -rn foo src/'), "fallback"],
     ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],

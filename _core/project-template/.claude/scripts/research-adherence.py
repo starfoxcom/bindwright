@@ -35,10 +35,13 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# A home-folder variable at the start of a cd target: Bash's $HOME, ${HOME} and $USERPROFILE (names
-# are case-sensitive), and PowerShell's $env:HOME and $env:USERPROFILE (case-blind).
-HOME_VARIABLE = re.compile(r"^(?:\$(HOME|USERPROFILE)|\$\{(HOME|USERPROFILE)\}"
-                           r"|\$(?i:env):((?i:HOME|USERPROFILE)))(?=[/\\]|$)")
+# A home-folder environment variable at the start of a cd target, per shell: Bash's $HOME, ${HOME},
+# $USERPROFILE and ${USERPROFILE} (case-sensitive, before a /), and PowerShell's $env:HOME and
+# $env:USERPROFILE (case-blind, before a / or a \).
+HOME_VARIABLES = {
+    "Bash": re.compile(r"^(?:\$(HOME|USERPROFILE)|\$\{(HOME|USERPROFILE)\})(?=/|$)"),
+    "PowerShell": re.compile(r"^\$env:(HOME|USERPROFILE)(?=[/\\]|$)", re.I),
+}
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
@@ -82,14 +85,15 @@ def unquote(word):
     return word.strip("'\"")
 
 
-def expand_home(path):
-    """A cd target with a leading home-folder variable replaced by its value, when the shell would
-    expand it: the variable is set and the word is not single-quoted. Anything else is left as
-    written, so the folder stays inside the repo and a search from it stays counted."""
+def expand_home(path, shell):
+    """A cd target with a leading home-folder variable replaced by its value, when `shell` would
+    expand it: the shell's own spelling, a set variable, and a word that is not single-quoted.
+    Anything else is left as written, so the folder stays inside the repo and a search from it
+    stays counted."""
     if path.startswith("'"):
         return path
     path = unquote(path)
-    match = HOME_VARIABLE.match(path)
+    match = HOME_VARIABLES[shell].match(path)
     value = match and os.environ.get(next(name for name in match.groups() if name))
     return value + path[match.end():] if value else path
 
@@ -318,8 +322,9 @@ def words_search(words, is_text_search=True):
     return Search(paths, globs, types)
 
 
-def shell_search(command, repo):
-    """True when a command line runs a code search of its own inside the repo."""
+def shell_search(command, repo, shell):
+    """True when a command line, run by `shell` ("Bash" or "PowerShell"), runs a code search of its
+    own inside the repo."""
     base = repo.root
     for part in re.split(r"&&|\|\||;|\n", unquote_separators(command)):
         stages = part.split("|")
@@ -331,7 +336,7 @@ def shell_search(command, repo):
             words = split_words(moved.group(2) or "")
             target = words[0] if words else None
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
-            base = repo.root if back else resolve(expand_home(" ".join(words)), base)
+            base = repo.root if back else resolve(expand_home(" ".join(words), shell), base)
             continue
         if SHELL_SEARCH.search(head):
             search = words_search(split_words(head))
@@ -369,7 +374,7 @@ def classify(name, args, root=None):
         return "fallback" if tool_search(name, args).reads_code(repo.root, repo) else None
     if name in ("Bash", "PowerShell"):
         command = args.get("command", "")
-        if shell_search(command, repo):
+        if shell_search(command, repo, name):
             return "bypass" if BYPASS in command else "fallback"
     return None
 
