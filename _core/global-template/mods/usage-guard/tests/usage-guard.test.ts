@@ -1,7 +1,8 @@
 import type { SessionRateLimit } from 'claude-code'
 import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { bringForward, isResetEarly, NO_WORK_NOTICE, planArm, WRAP_UP_ARGS } from '../hooks/plan'
+import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_NOTICE, planArm } from '../hooks/plan'
+import { unfenced, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
   cardOf,
@@ -363,7 +364,7 @@ test('a pause over two limits ends early once both read in new windows', LONG, a
   expect(resumes(seen)).toHaveLength(1)
 })
 
-test('an arm due before the old wake stands down when the pause ends early', LONG, async ($, on) => {
+test('an arm not yet due keeps its own time when the pause ends early', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await doWork($)
@@ -374,9 +375,11 @@ test('an arm due before the old wake stands down when the pause ends early', LON
   await seen.clock.advance(60_000)
 
   expect(resumes(seen)).toHaveLength(1)
-  expect(resumes(seen)[0]).toContain('check CI')
-  await advanceToWake(seen)
-  expect(resumes(seen)).toHaveLength(1)
+  expect(resumes(seen)[0]).not.toContain('check CI')
+  // The arm fires at the 5-hour reset it was set for, with its reason.
+  for (let step = 0; step < 7; step++) await seen.clock.advance(10 * 60_000)
+  expect(resumes(seen)).toHaveLength(2)
+  expect(resumes(seen)[1]).toContain('check CI')
 })
 
 // A weekly pause whose reset is two days out, ended early by a banked reset: the weekly reads 3% in a new window.
@@ -423,6 +426,55 @@ for (const [name, current, isWritten] of BRING_FORWARD) {
     expect(forward).toEqual(isWritten ? { ...FIVE_HOUR_PAUSE, wakeAt: NOW, isBroughtForward: true } : undefined)
   })
 }
+
+test('after an early end, a stale weekly reading beside a hot 5-hour one pauses for 5h only', LONG, async ($, on) => {
+  const seen = world(on)
+  await endWeeklyEarly($, seen)
+  await doWork($)
+  seen.limits = [
+    fresh(96, new Date(NOW + 3 * HOUR).toISOString()),
+    { kind: 'seven_day', percentUsed: 97, resetsAt: afterReset(48 * HOUR) },
+  ]
+  await endTurn($)
+
+  expect(pauseOf(seen)?.kinds).toEqual(['five_hour'])
+})
+
+test('after an early end, a stale weekly reading stays dropped after a later pause', LONG, async ($, on) => {
+  const seen = world(on)
+  await endWeeklyEarly($, seen)
+  const later: Pause = { ...FIVE_HOUR_PAUSE, status: 'done', resetsAt: new Date(NOW + 30 * 60_000).toISOString() }
+  seen.files.set(PAUSE_FILE, JSON.stringify(later))
+  await doWork($)
+  seen.limits = [{ kind: 'seven_day', percentUsed: 97, resetsAt: afterReset(48 * HOUR) }]
+  await endTurn($)
+
+  expect(pauseOf(seen)).toEqual(later)
+})
+
+const FENCE: Fence = { seven_day: afterReset(48 * HOUR) }
+const weekly = (hours: number): SessionRateLimit => ({
+  kind: 'seven_day',
+  percentUsed: 97,
+  resetsAt: afterReset(hours * HOUR),
+})
+const FENCED: [string, SessionRateLimit, boolean][] = [
+  ['a reading of the fenced window is stale', weekly(48), false],
+  ['a reading of an older window is stale', weekly(47), false],
+  ['a reading of a later window is fresh', weekly(49), true],
+  ['a limit with no fence is fresh', { kind: 'five_hour', percentUsed: 97, resetsAt: RESET }, true],
+]
+for (const [name, limit, isFresh] of FENCED) {
+  test(`fence: ${name}`, () => {
+    expect(unfenced([limit], FENCE)).toEqual(isFresh ? [limit] : [])
+  })
+}
+
+test('fence: an early end fences each paused limit at its own reset and keeps a later fence', () => {
+  const pause: Pause = { ...FIVE_HOUR_PAUSE, ...BOTH }
+  const fence = fenceAfter({ five_hour: afterReset(HOUR) }, pause)
+  expect(fence).toEqual({ five_hour: afterReset(HOUR), seven_day: afterReset(48 * HOUR) })
+})
 
 test('a lower reading of the same window keeps the pause', LONG, async ($, on) => {
   const seen = world(on)

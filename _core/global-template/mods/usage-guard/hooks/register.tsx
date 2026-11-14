@@ -7,10 +7,10 @@ import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
 import { armFor, bringForward, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly } from './plan'
-import { joinPause } from './plan'
+import { fenceAfter, joinPause, unfenced } from './plan'
 import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
-import { dataDir, pausePath, readJson, readPause, writePause } from './files'
+import { dataDir, pausePath, readFence, readJson, readPause, writeFence, writePause } from './files'
 import { drawArmLine, drawCards } from './cards'
 import { register as adopt } from './adopt'
 import { register as phone } from './phone'
@@ -320,7 +320,6 @@ async function resumeWork($: EngineInterface, text: string, reason?: string): Pr
 
 async function armWake($: EngineInterface, pause: Pause): Promise<void> {
   live.wakeTimer?.cancel()
-  live.wakeAt = pause.wakeAt
   const wait = Math.max(0, pause.wakeAt - (await $.clock.now()))
   live.wakeTimer = $.clock.after(wait, () => {
     live.wakeTimer = undefined
@@ -544,15 +543,17 @@ async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): P
   const forward = bringForward(pause, current, now)
   if (!forward) return current ?? pause
   await writePause($, forward)
+  await writeFence($, fenceAfter(await readFence($), forward))
   return forward
 }
 
-// An arm due before the old wake stands down, as it would have there: moved onto this reset, resume() counts it.
-async function resumeEarly($: EngineInterface, pause: Pause): Promise<void> {
+// An arm already due stands down, as at the pause's own wake: moved onto this reset, resume() counts it. An arm
+// still ahead keeps its own time.
+async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
   live.wakeTimer?.cancel()
   live.wakeTimer = undefined
   const held = await read($, armedWake)
-  const moved = held && held.wakeAt <= (live.wakeAt ?? 0) && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+  const moved = held && held.wakeAt <= now && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
   if (moved) await setArm($, moved).then(() => scheduleArm($, moved))
   return resume($, pause.resetsAt)
 }
@@ -564,12 +565,13 @@ async function check($: EngineInterface): Promise<void> {
   let pause = await readPause($)
   if (pause) pause = await endIfResetEarly($, pause, now)
   // A wake brought forward (another session saw the early reset) resumes now, not at this timer's old wake.
-  if (pause && live.wakeTimer && pause.status !== 'cancelled' && pause.wakeAt <= now) return resumeEarly($, pause)
+  if (pause && live.wakeTimer && pause.status !== 'cancelled' && pause.wakeAt <= now) return resumeEarly($, pause, now)
   const isLive = pause?.status === 'active' && pause.wakeAt > now
 
   if (!isLive) {
     const { rateLimits } = await $.session.usage()
-    const hot = hotLimits(rateLimits, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
+    const fresh = unfenced(rateLimits, await readFence($))
+    const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const planned = planPause(hot, live.delayMinutes, sessionId)
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a

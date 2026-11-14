@@ -13,8 +13,6 @@ export type Live = {
   workSession?: string
   isStatusShown: boolean
   wakeTimer?: Timer
-  /** The pause wake `wakeTimer` counts down to: an arm due before it stands down if the wake comes early. */
-  wakeAt?: number
   /** The wake the person armed by hand (`armedWake`), counting down in this module. */
   armTimer?: Timer
   /** A wrap-up due when the running turn ends: the pause it is for. */

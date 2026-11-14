@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { Pause } from './plan'
+import type { Fence, Pause } from './plan'
 
 // The mod's data folder and the shared pause file, read and written the same way by every part of the mod.
 
@@ -32,4 +32,13 @@ export async function readPause($: EngineInterface): Promise<Pause | undefined> 
 
 export async function writePause($: EngineInterface, pause: Pause): Promise<void> {
   await $.fs.write(await pausePath($), JSON.stringify(pause, null, 2))
+}
+
+/** The early-reset fence (see `Fence`): its own file, so a later pause written over the pause file keeps it. */
+export async function readFence($: EngineInterface): Promise<Fence> {
+  return (await readJson<Fence>($, `${await dataDir($)}/fence.json`)) ?? {}
+}
+
+export async function writeFence($: EngineInterface, fence: Fence): Promise<void> {
+  await $.fs.write(`${await dataDir($)}/fence.json`, JSON.stringify(fence, null, 2))
 }
