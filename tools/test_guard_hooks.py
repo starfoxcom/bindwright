@@ -536,6 +536,10 @@ class GuardHookTest(unittest.TestCase):
                 ('$GIT commit -m "--file=x"', "Bash")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
+        # A brace expansion is built at run time, so the file it names is never read as a literal.
+        for command in ("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "text the shell builds at run time")
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""

@@ -60,7 +60,8 @@ func (r reader) dynamicWord(node syntax.Node) dynamic {
 }
 
 // word is the literal value bash gives the word, or a dynamic marker when any part of it is
-// expanded at run time: a parameter, a substitution, a glob, or an ANSI-C or locale string.
+// expanded at run time: a parameter, a substitution, a glob, a brace expansion, or an ANSI-C or
+// locale string.
 func (r reader) word(word *syntax.Word) any {
 	var value strings.Builder
 	for _, part := range word.Parts {
@@ -76,7 +77,8 @@ func (r reader) word(word *syntax.Word) any {
 func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 	switch part := part.(type) {
 	case *syntax.Lit:
-		if strings.ContainsAny(part.Value, "*?[") {
+		// A glob, or a brace expansion ({a,b}, {1..3}), which the parser leaves inside the literal.
+		if strings.ContainsAny(part.Value, "*?[{") {
 			return "", false
 		}
 		return unescape(unquotedEscape, part.Value), true
