@@ -53,7 +53,7 @@ Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: se
 
 Work out this run's plan once, from the engine, never from the settings files by hand (it resolves their layers and drops values it ignores), and follow it in every later step: step 2 asks exactly the questions it lists. Run the engine with `--settings <repo root>` (the current folder outside a repo). With a `bw1-` code, also run it a second, separate time with `--code <the code>` and no `--write`, which writes nothing and prints the files the code would write.
 
-- **Step 2's questions:** on `global`, every one. Otherwise each setting or mod whose entry is missing or not `from` `"personal"` (a project's or `local.json`'s answer does not answer a computer question).
+- **Step 2's questions:** step 2's own list, each question kept or skipped by its own rule: on `global`, every one; otherwise each one (a setting, an extra or a mod) whose entry is missing or not `from` `"personal"` (a project's or `local.json`'s answer does not answer a computer question), plus the counts question when `counts.mjs status` prints `"asked": false`.
 - **Size check:** open on a run that sets up a project: closed on `global`, and on a first run outside a git repo, which sets up only the computer. With a code, open only when `.github/scripts/size_check.py` is among its files.
 - **FindWright:** open when the plan asks the code-search question, when the resolved `codeResearch` is `findwright`, or when a code's `.claude/skills/find/SKILL.md` names FindWright.
 - **Mods:** open when the plan asks about any mod, or when a mod's entry wants it (`want` true, the project's `required` included) while `installed` shows it `false` or leaves it out.
