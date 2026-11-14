@@ -205,13 +205,23 @@ BYPASS_REASONS = {
     "unread": ("this git call has more words built at run time than the guard reads every way;"
                " split it, or write some of them out."),
 }
-CMDLET = re.compile(r"[a-z]+-[a-z]+")  # program() gives names lowercase
+# PowerShell's approved verbs (Get-Verb): a cmdlet is named <verb>-<noun>; program() gives names lowercase.
+CMDLET = re.compile(r"([a-z]+)-[a-z]+")
+CMDLET_VERBS = {"add", "approve", "assert", "backup", "block", "build", "checkpoint", "clear", "close",
+                "compare", "complete", "compress", "confirm", "connect", "convert", "convertfrom",
+                "convertto", "copy", "debug", "deny", "deploy", "disable", "disconnect", "dismount",
+                "edit", "enable", "enter", "exit", "expand", "export", "find", "format", "get",
+                "grant", "group", "hide", "import", "initialize", "install", "invoke", "join", "limit",
+                "lock", "measure", "merge", "mount", "move", "new", "open", "optimize", "out", "ping",
+                "pop", "protect", "publish", "push", "read", "receive", "redo", "register", "remove",
+                "rename", "repair", "request", "reset", "resize", "resolve", "restart", "restore",
+                "resume", "revoke", "save", "search", "select", "send", "set", "show", "skip", "split",
+                "start", "step", "stop", "submit", "suspend", "switch", "sync", "test", "trace",
+                "unblock", "undo", "uninstall", "unlock", "unprotect", "unpublish", "unregister",
+                "update", "use", "wait", "watch", "write"}
 # An attached value that can only read a file (`-Fbody=@notes.md`, `-d@body.json`): no cmdlet
 # parameter name holds `=` or `@`.
 ATTACHED_FILE_READ = re.compile(r"-F[^=]*=[\"']?[@<]|-d[\"']?@")
-CMDLET_ALIASES = {"ls", "dir", "gci", "cp", "copy", "cpi", "mv", "move", "mi", "rm", "del", "erase", "ri",
-                  "rd", "rmdir", "ni", "md", "sl", "cd", "gc", "cat", "type", "sc", "select", "where",
-                  "sort", "ft", "fl", "gm", "iwr", "irm", "saps", "start", "kill", "spps", "gps", "ps"}
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
@@ -453,8 +463,9 @@ def resolve(value, places):
 
 
 def is_cmdlet(name):
-    """Whether a PowerShell command name is a cmdlet: Verb-Noun, or one of its built-in aliases."""
-    return bool(CMDLET.fullmatch(name)) or name in CMDLET_ALIASES
+    """Whether a PowerShell command name is a cmdlet: an approved verb, a hyphen and a noun."""
+    match = CMDLET.fullmatch(name)
+    return bool(match) and match.group(1) in CMDLET_VERBS
 
 
 def command_files(words, shell="bash"):
@@ -484,7 +495,7 @@ def command_files(words, shell="bash"):
     readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
     # A PowerShell cmdlet's parameter is a whole name (`Stop-Process -Force`), never a flag with
     # its value written onto it, but a program it runs may still read a file that way.
-    attached_only = ATTACHED_FILE_READ if shell == "powershell" and is_cmdlet(name) else None
+    attached_only = ATTACHED_FILE_READ if shell == "powershell" and is_cmdlet(name) and not built_git else None
     return (body_files(words, flags, message, readers, letters, attached_only)
             + [f for run in inner for f in command_files(run, shell)])
 
@@ -557,7 +568,7 @@ def option_words(subcommand, rest):
             for k, letter in enumerate(word[1:], 1):
                 options.append("-" + letter)
                 if letter in letters:
-                    skip = k == len(word) - 1
+                    skip = k == len(word) - 1 and not is_uncertain(word)
                     break
                 if letter in ATTACHED_VALUES.get(subcommand, ""):  # `-uno`: the rest is its value
                     break
@@ -583,7 +594,13 @@ def takes_next_word(word, short, long):
         return "=" not in word and any(abbreviates(word, option, shortest) for option, shortest in long.items())
     letters = word[1:]
     first = next((i for i, letter in enumerate(letters) if "-" + letter in short), None)
-    return first == len(letters) - 1
+    return first == len(letters) - 1 and not is_uncertain(word)
+
+
+def is_uncertain(word):
+    """Whether a bundle holds a part built at run time, a glob or a brace, so its letters at run time
+    are unknown and none of them may be taken to read the next word (`-${Q}m -n`)."""
+    return any(sign in word for sign in "\0*?[{")
 
 
 def config_option_takes_value(word):

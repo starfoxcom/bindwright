@@ -275,11 +275,12 @@ func shellWords(source string) result {
 				switch word := r.word(assign.Value).(type) {
 				case string:
 					if name, value, sets := strings.Cut(word, "="); sets {
-						out.Assignments = append(out.Assignments, assignment{Name: name, Value: value})
+						out.Assignments = append(out.Assignments, assignment{Name: strings.TrimSuffix(name, "+"), Value: value})
 					}
 				case dynamic:
+					// `export "A+=$X"` appends to A.
 					if name, _, named := strings.Cut(word.Prefix, "="); named {
-						out.Assignments = append(out.Assignments, assignment{Name: name, Value: word})
+						out.Assignments = append(out.Assignments, assignment{Name: strings.TrimSuffix(name, "+"), Value: word})
 					} else {
 						out.Error = true
 					}

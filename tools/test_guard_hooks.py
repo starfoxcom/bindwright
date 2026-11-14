@@ -788,6 +788,8 @@ class GuardHookTest(unittest.TestCase):
                 ('git config "$s.hooksPath" /x', setting, "PowerShell"),
                 ('git -c "$s.hooksPath=/x" commit -m x', setting, "PowerShell"),
                 ('export "LEFTHOOK=$X" && git commit -m x', lefthook, "Bash"),
+                ("git commit -${Q}m -n", hooks, "Bash"), ("git push -${Q}o --no-verify", hooks, "Bash"),
+                ('export "LEFTHOOK+=$Z" && git commit -m x', lefthook, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -829,6 +831,8 @@ class GuardHookTest(unittest.TestCase):
         self.assert_denied(self.attr('Start-Process curl.exe -ArgumentList "-Fbody=@notes.md"'
                                      ' https://api.github.com/x', tool="PowerShell"), "notes.md")
         self.assert_denied(self.attr('export "$KV" && git push'), "could not read this command")
+        # A hyphenated native program (no approved verb) keeps getopt's attached read.
+        self.assert_denied(self.attr('ssh-agent $GIT commit "-Fnotes.txt"', tool="PowerShell"), "notes.txt")
 
     def test_shapes_the_grammars_reject_are_read_as_the_shell_reads_them(self):
         # A here-doc with a redirect or a command on its first line, a redirect target in several
