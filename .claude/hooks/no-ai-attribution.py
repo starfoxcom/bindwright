@@ -542,10 +542,15 @@ def names_hook_section(section):
     return section in ("hook", "core") or section.startswith("hook.")
 
 
-def config_sets_hooks(rest):
-    """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
-    holds them; a read passes."""
-    names, skip, unsets, sections, ended = [], False, False, False, False
+def config_option_takes_value(word):
+    """Whether a `git config` option reads the next word as its value."""
+    return word in CONFIG_VALUE_SHORT or ("=" not in word and any(
+        abbreviates(word, option, shortest) for option, shortest in CONFIG_VALUE_OPTIONS.items()))
+
+
+def config_words(rest):
+    """(the names and values `git config` reads, its options), or None when it is a read."""
+    names, options, skip, ended = [], [], False, False
     for word in (text_of(w) for w in rest):
         # The old form (`git config <name> <value>`) stops reading options at the first name, so a
         # later `--get` is the value it stores.
@@ -557,14 +562,24 @@ def config_sets_hooks(rest):
             ended = True
         elif word.startswith("-") and not legacy and not ended:
             if word.startswith("--get") or word in ("-l", "--list"):
-                return False
-            unsets = unsets or abbreviates(word, "--unset-all", "--uns")
-            sections = (sections or abbreviates(word, "--remove-section", "--rem")
-                        or abbreviates(word, "--rename-section", "--ren"))
-            skip = word in CONFIG_VALUE_SHORT or ("=" not in word and any(
-                abbreviates(word, option, shortest) for option, shortest in CONFIG_VALUE_OPTIONS.items()))
+                return None
+            options.append(word)
+            skip = config_option_takes_value(word)
         else:
             names.append(word)
+    return names, options
+
+
+def config_sets_hooks(rest):
+    """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
+    holds them; a read passes."""
+    read = config_words(rest)
+    if read is None:
+        return False
+    names, options = read
+    unsets = any(abbreviates(o, "--unset-all", "--uns") for o in options)
+    sections = any(abbreviates(o, "--remove-section", "--rem") or abbreviates(o, "--rename-section", "--ren")
+                   for o in options)
     if names[:1] in (["remove-section"], ["rename-section"]):
         sections, names = True, names[1:]
     if sections:
