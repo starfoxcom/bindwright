@@ -841,8 +841,15 @@ class GuardHookTest(unittest.TestCase):
                         "env -${A}u FOO -${B}i LEFTHOOK=0 git commit -m x"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), "lefthook")
-        # A hyphenated native program (no approved verb) keeps getopt's attached read.
-        self.assert_denied(self.attr('ssh-agent $GIT commit "-Fnotes.txt"', tool="PowerShell"), "notes.txt")
+        # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
+        for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$étém" -n'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool="PowerShell"), "no-verify")
+        # A hyphenated native program (no approved verb) keeps getopt's attached read, and git run
+        # through a cmdlet under a Windows wrapper name is still git.
+        for command in ('ssh-agent $GIT commit "-Fnotes.txt"', 'Start-Process git.cmd commit "-Fnotes.txt"'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, tool="PowerShell"), "notes.txt")
 
     def test_shapes_the_grammars_reject_are_read_as_the_shell_reads_them(self):
         # A here-doc with a redirect or a command on its first line, a redirect target in several

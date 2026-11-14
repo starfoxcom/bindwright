@@ -25,9 +25,10 @@ function dynamic(node, prefix = "", canBeEmpty = true, shape = "\0") {
   return { dynamic: node.text, prefix, shape, canBeEmpty };
 }
 
-// PowerShell text with a NUL for each variable, `${...}` or `$(...)` in it.
+// PowerShell text with a NUL for each variable, `${...}` or `$(...)` in it. An automatic variable
+// (`$$`, `$^`, `$?`) is one part, and any other `$` counts as one too, so no variable is read as text.
 function psShape(text) {
-  return text.replace(/\$\{[^}]*\}|\$\([^)]*\)|\$[\w:]+/g, "\0");
+  return text.replace(/\$\{[^}]*\}|\$\([^)]*\)|\$[$^?]|\$[\p{L}\p{N}_:]+|\$/gu, "\0");
 }
 
 // Bash is read by mvdan.cc/sh's parser, built to WebAssembly from tools/shell-words-bash, which

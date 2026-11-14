@@ -344,7 +344,8 @@ def program(words):
     if not words or not isinstance(words[0], str):
         return ""
     name = os.path.basename(words[0].replace("\\", "/")).lower()
-    return name[:-4] if name.endswith(".exe") else name
+    # Windows runs `git.exe`, `git.cmd` and `git.bat` alike when the command says `git`.
+    return re.sub(r"\.(exe|cmd|bat|com)$", "", name)
 
 
 def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None, attached_only=None):
