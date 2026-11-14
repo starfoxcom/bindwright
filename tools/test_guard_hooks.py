@@ -533,7 +533,8 @@ class GuardHookTest(unittest.TestCase):
                 (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
                 (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
                 # A run-time program gets the strict read, which takes flag-like message text as a flag.
-                ('$GIT commit -m "--file=x"', "Bash")):
+                ('$GIT commit -m "--file=x"', "Bash"),
+                ('& $git commit -m "--file=x"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
         # A brace expansion is built at run time, so the file it names is never read as a literal.

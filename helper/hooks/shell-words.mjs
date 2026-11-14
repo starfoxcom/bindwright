@@ -2,9 +2,8 @@
 //
 //   node shell-words.mjs bash|powershell < command
 //
-// Prints one JSON object: {"error": <the command holds syntax it could not read>, "commands":
-// [[word, ...], ...], "assignments": [{"name": ..., "value": <word>}, ...]}, the commands and
-// the variables they set (`A=1 git`, `export A=1`, PowerShell's `$env:A = 1`) in source
+// Prints one JSON object: {"error": <the command holds syntax it could not read, or a shape
+// the guard leaves to its strict read>, "commands": [[word, ...], ...]}, commands in source
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
@@ -21,7 +20,7 @@ function dynamic(node) {
 }
 
 // Bash is read by mvdan.cc/sh's parser, built to WebAssembly from tools/shell-words-bash, which
-// prints the result object itself.
+// prints the result object itself and marks arrays and backslash-ended comments unreadable.
 async function bashWords(command) {
   globalThis.crypto ??= (await import("node:crypto")).webcrypto;
   await import(pathToFileURL(path.join(PARSERS, "go-wasm-exec.mjs")).href);
@@ -30,13 +29,9 @@ async function bashWords(command) {
   const { instance } = await WebAssembly.instantiate(module, go.importObject);
   globalThis.shellWordsInput = command;
   await go.run(instance);
-  const result = JSON.parse(globalThis.shellWordsOutput);
+  const { error, commands } = JSON.parse(globalThis.shellWordsOutput);
   // The parser drops a CR that bash keeps in the word, so a command holding one cannot be trusted.
-  if (command.includes("\r")) result.error = true;
-  // A program built at run time (`$GIT`) cannot be told apart from its arguments, so the command
-  // gets the guard's strict read instead.
-  if (result.commands.some((words) => typeof words[0] !== "string")) result.error = true;
-  return result;
+  return { error: error || command.includes("\r"), commands };
 }
 
 // PowerShell: the literal value of one command element, or a dynamic marker.
@@ -78,45 +73,31 @@ function psCommand(node) {
   return words;
 }
 
-// `$env:A = "1"`: the name as written, and the value when it is a plain word or string.
-function psAssignment(node) {
-  const [left, , right] = node.namedChildren;
-  const literal = /^(["']?)([\w.-]*)\1$/.exec(right?.text ?? "");
-  return { name: left?.text.trim() ?? "", value: literal ? literal[2] : dynamic(right ?? node) };
-}
-
-// The PowerShell grammar fails on a bare word joined to a quoted string that holds a bracket
-// (`query='{a}'`), which PowerShell reads as one word. Moving the quote to the word's start
-// (`'query={a}'`) reads the same, so a failed parse is tried once more that way.
-const PS_JOINED_QUOTE = /(^|[\s;|(])([A-Za-z_][\w.-]*=)(['"])/g;
-
 async function powershellWords(command) {
   const { Parser, Language } = await import(pathToFileURL(path.join(PARSERS, "web-tree-sitter.mjs")).href);
   await Parser.init({ locateFile: (name) => path.join(PARSERS, name) });
   const parser = new Parser();
   parser.setLanguage(await Language.load(path.join(PARSERS, "tree-sitter-powershell.wasm")));
   // PowerShell takes typographic quotes as quotes; the grammar knows only the plain ones.
-  const source = command.replace(/[“”„]/g, '"').replace(/[‘’‚‛]/g, "'");
-  let tree = parser.parse(source);
-  if (tree.rootNode.hasError) {
-    const moved = parser.parse(source.replace(PS_JOINED_QUOTE, "$1$3$2"));
-    if (!moved.rootNode.hasError) tree = moved;
-  }
+  const tree = parser.parse(command.replace(/[“”„]/g, '"').replace(/[‘’‚‛]/g, "'"));
   let unreadable = tree.rootNode.hasError;
   const commands = [];
-  const assignments = [];
   (function walk(node) {
-    if (node.type === "assignment_expression") assignments.push(psAssignment(node));
     if (node.type === "command") commands.push(psCommand(node));
-    // After `--%` the program splits the raw text by its own rules.
-    if (node.type === "stop_parsing") unreadable = true;
+    // An array's words reach a command later, wherever it runs: the strict read takes it. So
+    // does `--%`, after which the program splits the raw text by its own rules.
+    if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
-  return { error: unreadable, commands, assignments };
+  return { error: unreadable, commands };
 }
 
 export async function shellWords(shell, command) {
-  return shell === "bash" ? bashWords(command) : powershellWords(command);
+  const result = await (shell === "bash" ? bashWords(command) : powershellWords(command));
+  // A program built at run time (`$GIT`, `& $git`) cannot be told apart from its arguments, so
+  // the command gets the guard's strict read instead.
+  if (result.commands.some((words) => typeof words[0] !== "string")) result.error = true;
+  return result;
 }
 
 // Node gives this module its real path, symlinks resolved, so the path it was started by is
