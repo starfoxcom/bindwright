@@ -196,10 +196,13 @@ class Search:
         if self.globs or self.types:
             return (any(is_code_name(g) for g in self.globs)
                     or any(t not in NON_CODE_TYPES for t in self.types)
-                    or (not self.filters_named_files and any(
-                        (os.path.isfile(p) or WILDCARD.search(os.path.basename(p))) and is_code_name(p)
-                        for p in inside)))
+                    or (not self.filters_named_files and any(map(names_code_file, inside))))
         return any(repo.holds_code(p) for p in inside)
+
+
+def names_code_file(path):
+    """True when a named path is a code file, or a wildcard whose name can match one."""
+    return (os.path.isfile(path) or bool(WILDCARD.search(os.path.basename(path)))) and is_code_name(path)
 
 
 def split_words(head):
