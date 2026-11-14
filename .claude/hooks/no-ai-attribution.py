@@ -22,7 +22,7 @@ What is scanned, for any git write, gh write or GitHub API call:
     for a git write; --body-file / --notes-file / --input / -F and
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
-    (tree-sitter, `hooks/shell-words.mjs`), so each flag belongs to one
+    (`hooks/shell-words.mjs`), so each flag belongs to one
     command. Every command's flags are read, a wrapper's (`env`, `sudo`,
     `xargs`) included, except a text tool's (`awk -F,`, `grep -F word`),
     git's in a read (`git log -F`), and gh's `--template`. A flag inside

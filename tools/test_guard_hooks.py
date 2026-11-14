@@ -464,6 +464,8 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
+                # `[` is the test command, not a pattern, so the command is read as written.
+                ('[ -n "$X" ] && git commit -m "--file=x is gone"', "Bash"),
                 ('git commit -nm "--file=x is gone"', "Bash"),
                 ('git merge -nm "--file=x is gone" feature', "Bash"),
                 ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
@@ -533,9 +535,16 @@ class GuardHookTest(unittest.TestCase):
                 (f'pwsh -Command Get-Content "{path}" | gh pr comment 5 --body-file -', "Bash"),
                 (f'powershell -NoProfile -Command gc "{path}" | gh pr comment 5 --body-file -', "PowerShell"),
                 # A run-time program gets the strict read, which takes flag-like message text as a flag.
-                ('$GIT commit -m "--file=x"', "Bash")):
+                ('$GIT commit -m "--file=x"', "Bash"),
+                ('& $git commit -m "--file=x"', "PowerShell")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool=tool), f"found in file {path}" if path in command else None)
+        # A brace expansion or a pattern is built at run time, so the file it names is never read
+        # as a literal, quotes inside it included (`ms["g"]` is the pattern `ms[g]`).
+        for command in ("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
+                        'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "text the shell builds at run time")
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""
@@ -660,7 +669,7 @@ class GuardHookTest(unittest.TestCase):
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
             rows = re.findall(r"^\| `([^`]+)` \|.*\| `([0-9a-f]{64})` \|$", fh.read(), re.M)
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 5)
         for name, digest in rows:
             with self.subTest(name), open(os.path.join(HELPER, "parsers", name), "rb") as fh:
                 self.assertEqual(hashlib.sha256(fh.read()).hexdigest(), digest)
