@@ -1,5 +1,4 @@
 /* Bindwright page. Tokens and rules: docs/v2/DESIGN.md. */
-@property --hue { syntax: "<number>"; inherits: true; initial-value: 150; }
 
 :root {
   --hue: 150;
@@ -17,7 +16,6 @@
   --info: oklch(0.74 0.13 245);
   color-scheme: dark;
   scroll-padding: 96px 0;
-  transition: --hue 380ms cubic-bezier(.2, .8, .2, 1);
 }
 @media (prefers-reduced-motion: no-preference) {
   :root { scroll-behavior: smooth; }
@@ -472,6 +470,5 @@ footer {
 @keyframes reveal-fallback { to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { transition: none; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
