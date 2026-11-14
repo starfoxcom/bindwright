@@ -5,7 +5,7 @@ import { ADOPT_GRACE_MS, ADOPT_MAX_AGE_MS } from '../hooks/arms'
 import type { Pause } from '../hooks/plan'
 import { KEPT_MAX_AGE_MS, parseSaved, pickSaved, shouldResumeOwn } from '../hooks/saved'
 import type { World } from './world'
-import { CLAIMS_DIR, doWork, endTurn, KEY, mountCard, NOW, RESET, start, WAKE, world } from './world'
+import { CLAIMS_DIR, doWork, endTurn, KEY, mountCard, NOW, PAUSE_FILE, RESET, start, WAKE, world } from './world'
 
 // A session that saved its work at a pause's wrap-up and was closed before the reset: a later session in
 // the same project offers the work (take it here, keep it for that session, or drop it), never by itself.
@@ -185,6 +185,30 @@ test('saved work taken elsewhere after the offer showed is not resumed twice', L
   await seen.clock.advance(1_000)
   expect(takeOvers(seen)).toEqual([])
   expect(await ui.find({ type: 'Text', text: /^Another session already resumed that work\.$/ })).toBeDefined()
+})
+
+test('saved work a closed session misses shows just past the reset, with no 15-minute wait', LONG, async ($, on) => {
+  const seen = world(on)
+  const pause: Pause = { ...DONE, status: 'active', wakeAt: WAKE }
+  seen.files.set(PAUSE_FILE, JSON.stringify(pause))
+  leaveSaved(seen, { ...SAVED, wakeAt: WAKE })
+  await start($)
+  const ui = await offered($, seen)
+  expect(await ui.find({ key: 'usage-adopt' })).toBeUndefined()
+  // In 10-minute steps, as in usage-guard.test.ts: one long jump stopped short on a slow CI runner.
+  const step = 10 * 60_000
+  for (let left = WAKE - NOW + ADOPT_GRACE_MS + 1_000; left > 0; left -= step) {
+    await seen.clock.advance(Math.min(step, left))
+  }
+  // The look past the wake fires inside the last step; its reads may still be running when the step
+  // returns. Settling lets that work finish without moving the clock, so the next 15-minute scan
+  // cannot be what shows the card.
+  let take = await ui.find({ key: 'usage-adopt-take' })
+  for (let tries = 0; !take && tries < 20; tries++) {
+    await seen.clock.settle()
+    take = await ui.find({ key: 'usage-adopt-take' })
+  }
+  expect(take).toBeDefined()
 })
 
 for (const key of ['usage-adopt-take', 'usage-adopt-keep', 'usage-adopt-drop']) {
