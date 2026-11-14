@@ -1,6 +1,9 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { hasEngineWake, hasPendingWake, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS, workable } from './keepgoing'
+import {
+  hasEngineWake, hasPendingWake, isNearCompaction, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS,
+  nearCompactionText, workable,
+} from './keepgoing'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { PANE, phoneText } from './view'
 import type { EngineTask, Mirror, TaskArgs } from './mirror'
@@ -263,22 +266,56 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
   return $.fs.read(`${dir}/${name}`).then(String, () => undefined)
 }
 
+// Whether the person turned automatic compaction off: `DISABLE_AUTO_COMPACT` or `DISABLE_COMPACT`, or
+// auto-compact off in /config (`autoCompactEnabled`, in the settings or the global config). An unreadable
+// global config counts as off, since it may hold the switch.
+async function isAutoCompactOff($: EngineInterface): Promise<boolean> {
+  const isSet = (value: string | undefined) => Boolean(value) && !/^(0|false)$/i.test(value ?? '')
+  if (isSet(await $.env.get('DISABLE_AUTO_COMPACT').catch(() => undefined))) return true
+  if (isSet(await $.env.get('DISABLE_COMPACT').catch(() => undefined))) return true
+  const settings = (await $.settings.read().catch(() => ({}))) as { autoCompactEnabled?: unknown }
+  if (settings.autoCompactEnabled === false) return true
+  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
+  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const file = (configured ? `${configured}/.claude.json` : `${home}/.claude.json`).replace(/\\/g, '/')
+  try {
+    return (JSON.parse(String(await $.fs.read(file))) as { autoCompactEnabled?: unknown }).autoCompactEnabled === false
+  } catch {
+    return true
+  }
+}
+
+// Whether a compaction is coming soon: the context near the auto-compaction point, with auto-compaction on.
+// False when the engine cannot say.
+async function isContextNearCompaction($: EngineInterface): Promise<boolean> {
+  try {
+    const { context } = await $.session.usage({ breakdown: 'summary' })
+    if (!isNearCompaction(context.tokens, context.breakdown?.autoCompactThreshold)) return false
+  } catch {
+    return false
+  }
+  return !(await isAutoCompactOff($))
+}
+
 // A turn that ended with work nobody has to wait for gets a prompt to carry on, unless something else
 // wakes the session (background work, a scheduled wake, a CI watch, a plan-limit pause) or the last prompts
-// changed nothing on the list.
+// changed nothing on the list. Near the compaction a turn's end gets one even with no workable task: the
+// next step it announced is the work.
 async function keepGoing($: EngineInterface): Promise<void> {
   if (live.isTurnRunning) return
   const mirror = await mirrorOf($)
   const tasks = workable(mirror)
-  if (tasks.length === 0 || live.hasEngineWake) return
+  if (live.hasEngineWake) return
+  if (tasks.length === 0 && !(await isContextNearCompaction($))) return
   const ciWatch = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
   if (hasPendingWake(ciWatch, await $.clock.now())) return
   if (isPauseHolding(await peerFile($, 'usage-guard', 'pause.json'), await $.clock.now())) return
   const isIdle = live.idlePrompts > 0 && live.promptedAt === mirror.changedAt
-  if (isIdle && live.idlePrompts >= MAX_IDLE_PROMPTS) return
+  // With no task to name, one prompt: a turn that still ends after it waits on a person.
+  if (isIdle && live.idlePrompts >= (tasks.length > 0 ? MAX_IDLE_PROMPTS : 1)) return
   live.idlePrompts = isIdle ? live.idlePrompts + 1 : 1
   live.promptedAt = mirror.changedAt
-  await $.prompt.submit({ text: keepGoingText(tasks) })
+  await $.prompt.submit({ text: tasks.length > 0 ? keepGoingText(tasks) : nearCompactionText() })
 }
 
 // The settings file at the session's start, before any tool call: the settings module follows it from

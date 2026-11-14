@@ -15,6 +15,10 @@ export type Pause = {
   resetsAt: string
   wakeAt: number
   triggeredBy: string
+  /** Each paused limit's own reset, by kind: `resetsAt` is only the latest of them. Missing in older files. */
+  resets?: Record<string, string>
+  /** Its wake was brought forward by an early reset: it covers no plan, since the fence drops stale readings. */
+  isBroughtForward?: boolean
   /** The reset the first pause of this run named. Kept when a later limit extends the pause, so the
    * wrap-up, stop and resume claims (keyed on it) still run once per session. */
   episode?: string
@@ -81,6 +85,7 @@ export function planPause(hot: readonly SessionRateLimit[], delayMinutes: number
     kinds: hot.map(limit => limit.kind),
     percentUsed: Math.max(...hot.map(limit => limit.percentUsed)),
     resetsAt,
+    resets: Object.fromEntries(hot.map(limit => [limit.kind, limit.resetsAt ?? ''])),
     wakeAt: Date.parse(resetsAt) + delayMinutes * 60_000,
     triggeredBy: sessionId,
   }
@@ -127,10 +132,68 @@ export const CLAIM =
 
 export const resetKey = (pause: Pause) => String(Date.parse(pause.episode ?? pause.resetsAt))
 
+/** How much later than the pause's own reset a window must reset to count as a new window. */
+const NEW_WINDOW_MS = 60 * 60_000
+
+/**
+ * A pause, active or cancelled and before its wake, whose every limit now reads under the wrap-up line in a
+ * new window: the plan reset early (a banked reset, for one), so the pause holds nothing anymore. A window
+ * counts as new only when it resets well after that limit's own paused reset, so a session's older reading
+ * of the same window never ends a pause.
+ */
+export function isResetEarly(pause: Pause, limits: readonly SessionRateLimit[], wrapUpAt: number, now: number) {
+  const isHolding = (pause.status === 'active' || pause.status === 'cancelled') && pause.wakeAt > now
+  const isClear = (kind: string) => {
+    const limit = limits.find(item => item.kind === kind)
+    const resetsAt = Date.parse(limit?.resetsAt ?? '')
+    const pausedUntil = pausedReset(pause, kind)
+    return limit !== undefined && limit.percentUsed < wrapUpAt && resetsAt - pausedUntil >= NEW_WINDOW_MS
+  }
+  return isHolding && pause.kinds.length > 0 && pause.kinds.every(isClear)
+}
+
+/**
+ * The pause to write when `judged` is brought forward to `now`, or undefined when the file changed since it was
+ * read: a cancel or an extension another session wrote meanwhile wins over the early end.
+ */
+export function bringForward(judged: Pause, current: Pause | undefined, now: number): Pause | undefined {
+  if (!current || JSON.stringify(current) !== JSON.stringify(judged)) return undefined
+  return { ...current, wakeAt: now, isBroughtForward: true }
+}
+
+/** When a limit the pause covers was set to reset, in ms; NaN for a limit it does not cover. */
+export function pausedReset(pause: Pause, kind: string): number {
+  return pause.kinds.includes(kind) ? Date.parse(pause.resets?.[kind] ?? pause.resetsAt) : NaN
+}
+
 // A pause that already reaches a planned reset: the plan is part of it. Weekly usage only falls at its
 // reset, so a fresh reading after an extension plans that later reset; an earlier one is a stale reading.
-export const covers = (pause: Pause | undefined, planned: Pause) =>
-  pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
+// A pause brought forward covers nothing: the fence already dropped every reading of the windows it paused.
+export function covers(pause: Pause | undefined, planned: Pause): boolean {
+  if (pause?.isBroughtForward) return false
+  return pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
+}
+
+/**
+ * Per limit kind, the latest reset of a window that ended early. A reading of that window or an older one is
+ * stale (an idle session keeps its last reading), so it never plans a pause, whatever pause the file holds.
+ */
+export type Fence = Record<string, string>
+
+/** The fence after `pause` ended early: each of its limits fenced at its paused reset, the later one kept. */
+export function fenceAfter(fence: Fence, pause: Pause): Fence {
+  const next = { ...fence }
+  for (const kind of pause.kinds) {
+    const reset = pause.resets?.[kind] ?? pause.resetsAt
+    if (!(Date.parse(reset) <= Date.parse(next[kind] ?? ''))) next[kind] = reset
+  }
+  return next
+}
+
+/** The limits whose window resets after its fence: fresh readings, and every limit with no fence. */
+export function unfenced(limits: readonly SessionRateLimit[], fence: Fence): SessionRateLimit[] {
+  return limits.filter(limit => !(Date.parse(limit.resetsAt ?? '') <= Date.parse(fence[limit.kind] ?? '')))
+}
 
 // A pause another session wrote since this one read the file: joined, never replaced. A later reset
 // extends it in place and keeps its episode, so no session wraps up or stops its work twice.
@@ -141,6 +204,7 @@ export function joinPause(shared: Pause, planned: Pause): Pause {
     resetsAt: planned.resetsAt,
     wakeAt: planned.wakeAt,
     kinds: [...new Set([...shared.kinds, ...planned.kinds])],
+    resets: { ...shared.resets, ...planned.resets },
     percentUsed: Math.max(shared.percentUsed, planned.percentUsed),
     episode: shared.episode ?? shared.resetsAt,
   }

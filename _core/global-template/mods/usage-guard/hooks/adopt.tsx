@@ -6,6 +6,7 @@ import { ADOPT_GRACE_MS, adoptReason, offerText, parseSavedArm, pickOffer } from
 import { drawCards } from './cards'
 import type { Pause } from './plan'
 import { armFor, CLAIM, resumePrompt } from './plan'
+import { dataDir, readPause } from './files'
 import { keptReason, parseSaved, pickSaved, resumeClaim, SAVED_FILE, savedOfferText } from './saved'
 import { shouldResumeOwn, takeOverReason, workClaims } from './saved'
 import type { Card } from './texts'
@@ -27,26 +28,12 @@ const NOTHING_OFFERED = 'No closed session in this project has a missed resume.'
 
 type Choice = 'take' | 'keep' | 'drop'
 
-async function dataDir($: EngineInterface): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  return `${configured ?? `${home}/.claude`}/mods-data/usage-guard`.replace(/\\/g, '/')
-}
-
 async function timeText($: EngineInterface, ms: number): Promise<string> {
   if (!scan.zone) {
     const run = await $.process.run(READ_ZONE, { timeoutMs: 10_000 }).catch(() => undefined)
     scan.zone = (run?.exitCode === 0 ? zoneOf(run.stdout) : undefined) ?? { offsetMinutes: 0, name: 'UTC' }
   }
   return formatLocal(ms, scan.zone)
-}
-
-async function readPause($: EngineInterface): Promise<Pause | undefined> {
-  try {
-    return JSON.parse(String(await $.fs.read(`${await dataDir($)}/pause.json`))) as Pause
-  } catch {
-    return undefined
-  }
 }
 
 const savedPath = async ($: EngineInterface, record: SavedWork) =>

@@ -5,7 +5,10 @@ Markdown, text, JSON, YAML or a PNG, JPEG, GIF, WebP or ICO image; a text file
 that is not UTF-8, holds a NUL byte or starts with `#!`; a package manager's
 configuration; command hooks, mods or local MCP servers; or a skill whose
 frontmatter carries keys outside the allowed list (`allowed-tools` among them).
-The packer runs this on every pack, so a release never meets a refusal.
+It also refuses what the directory's policy scan holds for a reviewer as a
+credential forward: a line that names an environment variable or a credential
+word (token, secret, password, credential, API key) beside a network call.
+The packer runs this on every pack, so a release never meets a refusal or a hold.
 
     python tools/directory_check.py DIR      -> lists each problem, exits 1 on any
 
@@ -14,6 +17,7 @@ Standard library only.
 
 import json
 import os
+import re
 import sys
 
 TEXT_EXTENSIONS = {".md", ".txt", ".json", ".yaml", ".yml"}
@@ -36,23 +40,64 @@ DECLARATION_FILES = {"hooks/hooks.json", ".mcp.json"}
 MANIFEST_CODE_KEYS = {"hooks", "mcpServers", "modules", "lspServers"}
 # The frontmatter keys this plugin's skills use; all are core skill keys.
 SKILL_KEYS = {"name", "description", "disable-model-invocation", "argument-hint"}
+# The one frontmatter line form the check reads: `key: plain text` or `key: "JSON string"`.
+# A plain value holds no `: ` or ` #`, which YAML reads as a nested map or a comment,
+# and starts with none of YAML's indicator characters.
+FRONTMATTER_LINE = re.compile(r"([a-z][a-z-]*): (\S.*)")
+YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
+# What the policy scan reads as a call over the network, and as a credential beside one.
+NETWORK_CALL = re.compile(r"https?://|\b(?:curl|wget|Invoke-WebRequest|iwr)\b|\bgh api\b|--url\b", re.I)
+CREDENTIAL = re.compile(
+    r"\$\{?[A-Za-z_]\w*|\$env:\w+|%[A-Za-z_]\w*%"
+    r"|token|secret|passw(?:or)?d|credential|api[ _-]?key|bearer|authorization",
+    re.I,
+)
 
 
 def _is_webp(data):
     return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
 
 
-def _frontmatter_keys(text):
-    if not text.startswith("---\n"):
-        return []
-    end = text.find("\n---", 4)
-    if end == -1:
-        return ["(unclosed frontmatter)"]
-    keys = []
-    for line in text[4:end].splitlines():
-        if line and not line[0].isspace() and ":" in line:
-            keys.append(line.split(":", 1)[0].strip())
-    return keys
+def _frontmatter_value_ok(value):
+    if value.startswith('"'):
+        try:
+            return isinstance(json.loads(value), str)
+        except ValueError:
+            return False
+    return value[0] not in YAML_INDICATORS and ": " not in value and " #" not in value and not value.endswith(":")
+
+
+def _frontmatter_problems(rel, text):
+    """The skill's frontmatter lines the check cannot read, else its keys the directory refuses."""
+    lines = text.split("\n")
+    if lines[0] != "---":
+        # Parsers read `---` after a BOM or before any whitespace (a form feed, a lone CR, a Unicode
+        # space) as an opener, so any first line that starts that way is refused, not skipped.
+        looks_open = re.match(r"[﻿\s]*---", lines[0]) is not None
+        return ["%s opens its frontmatter with more than an exact --- line" % rel] if looks_open else []
+    if "---" not in lines[1:]:
+        return ["%s has unclosed frontmatter" % rel]
+    body = lines[1:lines.index("---", 1)]
+    matches = [FRONTMATTER_LINE.fullmatch(line) for line in body]
+    # isprintable() is False for a tab, a lone CR and every other character YAML may read as a line break.
+    unread = [
+        line for line, m in zip(body, matches)
+        if not (line.isprintable() and m and _frontmatter_value_ok(m.group(2)))
+    ]
+    if unread:
+        return ['%s has frontmatter lines outside `key: text` or `key: "JSON string"`: %s' % (rel, " | ".join(unread))]
+    extra = [m.group(1) for m in matches if m.group(1) not in SKILL_KEYS]
+    return ["%s has frontmatter keys the directory refuses: %s" % (rel, ", ".join(extra))] if extra else []
+
+
+def _credential_forwards(rel, text):
+    """Each line that names a credential or an environment variable beside a network call."""
+    return [
+        "%s:%d names %s beside a network call, which the directory holds as a credential forward"
+        % (rel, number, CREDENTIAL.search(line).group(0))
+        for number, line in enumerate(text.split("\n"), 1)
+        if NETWORK_CALL.search(line) and CREDENTIAL.search(line)
+    ]
 
 
 def _text_problems(rel, data):
@@ -64,10 +109,10 @@ def _text_problems(rel, data):
         return ["%s is not UTF-8" % rel]
     if text.lstrip("﻿").startswith("#!"):
         return ["%s starts with #!" % rel]
-    problems = []
+    text = text.replace("\r\n", "\n")
+    problems = _credential_forwards(rel, text)
     if rel.endswith("SKILL.md") or rel.startswith(("agents/", "commands/")):
-        extra = [k for k in _frontmatter_keys(text.replace("\r\n", "\n")) if k not in SKILL_KEYS]
-        problems += ["%s has frontmatter keys the directory refuses: %s" % (rel, ", ".join(extra))] if extra else []
+        problems += _frontmatter_problems(rel, text)
     if rel == ".claude-plugin/plugin.json":
         code = sorted(MANIFEST_CODE_KEYS & set(json.loads(text)))
         problems += ["plugin.json declares %s" % ", ".join(code)] if code else []

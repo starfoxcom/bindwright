@@ -5,6 +5,7 @@ export default {
   "meta.title": "Bindwright",
   "meta.description": "Bindwright escribe los archivos que Claude Code lee sobre tu proyecto, así sabe cómo "
     + "trabajas desde el primer mensaje.",
+  "meta.card": "El logo de Bindwright junto a la frase: Claude recuerda cómo te gusta trabajar.",
   "skip.link": "Ir a la instalación",
   "nav.site": "Sitio",
   "nav.home": "Inicio",
@@ -282,7 +283,7 @@ export default {
   "settings.code-research.text": "<a href=\"https://github.com/starfoxcom/findwright\">findwright</a> "
     + "indexa cada archivo que el proyecto sigue, código, docs y configuración por igual, "
     + "y responde preguntas en lenguaje normal, nombres y búsquedas con regex, con respuestas cortas. "
-    + "Viene con Bindwright. none usa la búsqueda integrada: sin índice, y más lenta.",
+    + "Es un plugin aparte, que setup instala. none usa la búsqueda integrada: sin índice, y más lenta.",
   "settings.code-research.value": "findwright",
   "settings.work-language.title": "Idioma de trabajo",
   "settings.work-language.text": "El idioma de las respuestas, los mensajes de commit y los comentarios del código, "
@@ -414,7 +415,8 @@ export default {
   "mods.all.text": "Cada mod encendido a la vez: la configuración con la que se construye este proyecto.",
   "mods.all.value": "Los 10 activados",
   "mods.ci-watch.title": "<code>ci-watch</code>",
-  "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan.",
+  "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan. Tras varias "
+    + "rondas en rojo, frena los cambios hasta que la sesión investigue una mejor solución.",
   "mods.ci-watch.value": "Activado",
   "mods.compact-handoff.title": "<code>compact-handoff</code>",
   "mods.compact-handoff.text": "Lleva tus palabras y un traspaso a través de cada compactación.",

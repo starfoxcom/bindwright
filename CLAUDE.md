@@ -12,7 +12,7 @@ When canonical templates evolve in `_core/`, re-bind with `node engine/cli.js --
 
 Start any "where is X / how does Y work / find usages of Z" task with FindWright's `find` (a question or a name) or `search` (regexes over every tracked file), not Grep, Glob or raw `grep`/`rg`. `/find` holds the full sequence.
 
-A global hook (`~/.claude/hooks/findwright-first.py`) blocks Grep, Glob and raw greps while this repo has a FindWright index (`.findwright/index.db`). The index updates itself on every call, so it never needs a sync, and `/close-session` records FindWright's hit rate.
+FindWright's search hook, which `/findwright:setup` adds, blocks Grep, Glob and raw greps while this repo has a FindWright index (`.findwright/index.db`). The index updates itself on every call, so it never needs a sync, and `/close-session` records FindWright's hit rate.
 
 Fallback to Grep/Glob is allowed when:
 1. FindWright returned nothing usable for two differently worded queries

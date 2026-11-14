@@ -25,6 +25,7 @@ All in `src/rules.js`:
 - A project sends at most once every 20 hours, and a window that overlaps one already counted is refused, so a send whose answer was lost and is sent again never counts twice.
 - At most 200 new projects a day across all senders.
 - Five sends a minute per IP through Cloudflare's rate limiter (`wrangler.jsonc`); the Worker never stores the IP.
+- `GET /total` answers from a saved copy that one read every 5 minutes refreshes, so page loads never scan the projects table more often than that.
 - Bodies over 1 KB are refused before parsing.
 
 These keep casual inflation out, but an anonymous counter cannot prove a count is real, so the page shows these numbers apart from the maintainer's own.
@@ -34,7 +35,7 @@ These keep casual inflation out, but an anonymous counter cannot prove a count i
 From this folder, signed in with `npx wrangler@4.152.0 login` (wrangler stays pinned to a release at least two weeks old, so a hijacked new release never runs here; move the pin on purpose):
 
 ```
-npx wrangler@4.152.0 d1 execute bindwright-counter --remote --file schema.sql   # first time only
+npx wrangler@4.152.0 d1 execute bindwright-counter --remote --file schema.sql   # first time, and after schema.sql gains a table
 npx wrangler@4.152.0 deploy
 ```
 

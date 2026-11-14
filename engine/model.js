@@ -307,7 +307,7 @@ export function expandAnswers(saved) {
 }
 
 // Removed tools that installed a search hook of their own: one kept as a custom tool gets no Bindwright hook beside it.
-const REMOVED_TOOLS_WITH_OWN_HOOK = ["tokensave"];
+export const REMOVED_TOOLS_WITH_OWN_HOOK = ["tokensave"];
 
 /** Whether the answers keep a removed tool that brings its own search hook. */
 export function bringsOwnHook(advanced) {

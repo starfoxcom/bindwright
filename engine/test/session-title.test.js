@@ -215,6 +215,19 @@ test("SessionStart with an unchanged title prints the request and no title", { s
   assert.ok(again.additionalContext.includes("session-titles"));
 }));
 
+test("after a compaction or a resume, SessionStart names the written purpose and asks for a rewrite", { skip }, () =>
+  withLayout((layout) => {
+    writeProject(layout, "Demo");
+    purposeInTitles(layout, "fix the login bug");
+    for (const source of ["compact", "resume"]) {
+      const { additionalContext } = hookOutput(runHook(layout, { ...event(), source }).out);
+      assert.match(additionalContext, /purpose as "fix the login bug"/, source);
+      assert.match(additionalContext, /If the work has moved on/, source);
+    }
+    const fresh = hookOutput(runHook(layout, { ...event(), source: "startup" }).out);
+    assert.match(fresh.additionalContext, /Once the session's focus is clear/);
+  }));
+
 test("a new purpose after a title was set prints the new title, once", { skip }, () => withLayout((layout) => {
   writeProject(layout, "Demo");
   runHook(layout, event());

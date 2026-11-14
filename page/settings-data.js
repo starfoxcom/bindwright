@@ -15,8 +15,8 @@ export const COMPUTER = [
     id: "code-research",
     title: "Code search",
     text: "findwright indexes every file the project tracks, code, docs and config alike, and answers "
-      + "plain questions, names and regex searches with short answers. It ships with Bindwright. "
-      + "none uses the built-in search: no index, and slower.",
+      + "plain questions, names and regex searches with short answers. "
+      + "It is a plugin of its own, which setup installs. none uses the built-in search: no index, and slower.",
     value: "findwright",
     keys: ["advanced.codeResearch", "advanced.codeResearchCustom"],
     options: ["findwright", "none"],
@@ -318,7 +318,12 @@ export const FIXED = [
 
 // One row per mod in the engine's MODS list, in the same order. The title is the mod's name.
 export const MODS_ROWS = [
-  { id: "ci-watch", text: "Watches pull request checks and wakes the session when they finish.", value: "On" },
+  {
+    id: "ci-watch",
+    text: "Watches pull request checks and wakes the session when they finish. After repeated red rounds, "
+      + "it holds changes until the session researches a better fix.",
+    value: "On",
+  },
   { id: "compact-handoff", text: "Carries your words and a hand-off across compactions.", value: "On" },
   { id: "mods", text: "A pane listing your mods and their commands.", value: "On" },
   { id: "runners", text: "Shows your local CI runners, with start and stop buttons.", value: "Off" },

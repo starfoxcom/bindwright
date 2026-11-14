@@ -18,10 +18,10 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 
 From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen.
 
-Or from Bindwright's own marketplace, in Claude Code, once per computer:
+Or from the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in Claude Code, once per computer:
 
 ```
-/plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json
+/plugin install bindwright --marketplace starfoxcom/wrights
 ```
 
 In the Claude desktop app, from the marketplace, where `/plugin` does not run:
@@ -30,7 +30,7 @@ In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 2. Paste this and send it. Wait until Claude says it is done.
 
    ```
-   Install the Bindwright plugin: run claude plugin install bindwright --marketplace https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json in the shell. If claude is not found, add that marketplace (named bindwright, a url source) under extraKnownMarketplaces and "bindwright@bindwright": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.
+   Install the Bindwright plugin: run claude plugin install bindwright --marketplace starfoxcom/wrights in the shell. If claude is not found, add the marketplace named wrights (a github source, repo starfoxcom/wrights) under extraKnownMarketplaces and "bindwright@wrights": true under enabledPlugins in ~/.claude/settings.json, keeping the rest.
    ```
 
 3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
@@ -81,9 +81,10 @@ The plugin writes only into the project you run it in and, for the extras you sa
 |---|---|---|---|
 | Helper install | A download of the helper file the plugin pins, from the plugin's release on `github.com`; nothing about you or the repo | When setup or `/bindwright:update` installs it, after your yes | Answer no; setup then stops |
 | Plugin version check | A plain request for the released version number from `raw.githubusercontent.com`; nothing about you or the repo | At most once a day, when `/start-session` runs | Disable the plugin (`/plugin`) |
+| Tool release check | Plain requests for the newest release numbers of Node (`nodejs.org`, and its release schedule from `raw.githubusercontent.com`), Git for Windows, the GitHub CLI and uv (`api.github.com`) and the Claude Code CLI (`registry.npmjs.org`), only for the tools this computer has; nothing about you or the repo | When setup or `/bindwright:doctor` runs | Nothing to stop: it sends nothing about you |
 | Review counts, opt-in | A random project id, the project kind you picked, and six numbers: your merged pull requests that the AI review checked, caught a problem in, sent to a deeper review, held back 3 or more rounds, and merged, plus the red review rounds summed over them, with the start and end time of the span they cover. The first send covers the project's past pull requests; a history past 500 goes out in daily batches only if you say yes. Cloudflare sees your IP address for its rate limiter; the counter never stores it, only the country Cloudflare reads from it, and publishes just how many projects each country has ([`counter/`](counter/README.md)) | At most once a day per set-up repo, only after a yes at setup | `/bindwright:setup global`, or `node ~/.bindwright/helper/node_modules/bindwright/hooks/counts.mjs share off` |
 | GitHub, through your own `gh` login | The counts read your merged pull requests; setup and `/bindwright:code-style` read and create what you ask for (repos, boards, issues) | When that step runs | Answer no to the step |
-| FindWright's meaning model, when you pick FindWright | A plain download of the model's two files from Hugging Face, checked against pinned SHA-256 sums; nothing about you or the repo | Once, on the first search | Pick another code-search tool, or set `FINDWRIGHT_MEANING=off` |
+| FindWright, when you pick it | Setup installs the FindWright plugin from `github.com`; FindWright's own setup then downloads its helper and meaning model, as its README lists; nothing about you or the repo | When setup runs, after your yes | Pick another code-search tool |
 | The page | Reads the community totals from the counter, and its fonts from Google Fonts | On page load | Nothing to stop: it sends nothing about you |
 
 ## Maintenance & contributing

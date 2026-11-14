@@ -43,7 +43,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
   const scratch = join(base, "scratch");
   // A folder is judged by the files git tracks in it: code, docs only, or a mix.
   for (const file of ["src/app.py", "engine/src/x.js", "docs/guide.md", ".claude/rules/a.md",
-    ".claude/hooks/h.py", "README.md"]) {
+    ".claude/hooks/h.py", "README.md", "package.json"]) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), "x\n");
   }
@@ -148,6 +148,32 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["-e names the pattern, so the next word is a path", bash("grep -rn -e foo src"), "fallback"],
     ["-e with only a folder outside", bash(`rg -e foo "${scratch}"`), null],
     ["a git grep pathspec of docs", bash("git grep foo -- '*.md'"), null],
+    // A quoted pathspec reaches any depth; the shell never expands it.
+    ["a quoted pathspec matching only data at the top", bash("git grep foo -- '*.js*'"), "fallback"],
+    // An exclude pathspec leaves files out; it never says what the search reads.
+    ["a git :! pathspec leaves docs out", bash("git grep -n foo -- ':!*.md'"), "fallback"],
+    ["an unquoted :! pathspec", bash("git grep -n foo -- :!*.md"), "fallback"],
+    ["a :(exclude) pathspec", bash("git grep -n foo -- ':(exclude)*.md'"), "fallback"],
+    // A positional wildcard is one more path beside the folders named with it.
+    ["a grep wildcard beside a code folder", bash("grep -rn foo *.md engine/"), "fallback"],
+    ["an rg wildcard after a code folder", bash("rg foo engine *.md"), "fallback"],
+    ["a wildcard of docs alone", bash("grep -rn foo *.md"), null],
+    // A wildcard is judged by its name, never expanded; one with no extension by its folder.
+    ["a bare wildcard in a docs folder", bash("cd docs; grep -rn foo *"), null],
+    ["a wildcard under a docs folder", bash("grep -rn foo docs/*"), null],
+    // ripgrep and ack search a named file whatever -t or -g says; grep's --include filters it.
+    ["an rg code wildcard beside a docs type", bash("rg -tmd foo src/*.py"), "fallback"],
+    ["an rg code wildcard that matches nothing here", bash("rg -tmd foo *.py"), "fallback"],
+    ["an rg code file beside a docs glob", bash("rg foo -g '*.md' src/app.py"), "fallback"],
+    ["a grep code wildcard filtered to docs", bash("grep -rn --include=*.md foo src/*.py"), null],
+    ["an ack code wildcard beside a docs type", bash("ack --type=markdown foo *.py"), "fallback"],
+    ["an rg wildcard of a docs folder beside a docs type", bash("rg -tmd foo docs/*"), null],
+    // Bash and a native tool take a quoted ~ as a folder under the current one.
+    ["a quoted ~ in a cd is a folder name", bash('cd "~/scratch"; grep -rn foo .'), "fallback"],
+    ["a quoted ~ search path is a folder name", bash('rg foo "~/scratch"'), "fallback"],
+    // A PowerShell cmdlet reads a quoted ~ as the home folder.
+    ["a quoted ~ in Set-Location is home", ps('Set-Location "~/scratch"; rg foo'), null],
+    ["a quoted ~ in a listing is home", ps('Get-ChildItem -Recurse "~/scratch" | sls foo'), null],
     ["Glob of code", { name: "Glob", args: { pattern: "**/*.py" } }, "fallback"],
     ["Glob of a docs folder", { name: "Glob", args: { pattern: "docs/**" } }, null],
     ["Glob whose pattern points outside the repo",

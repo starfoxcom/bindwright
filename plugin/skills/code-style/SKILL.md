@@ -29,7 +29,7 @@ Collect the emails they commit with: `git config user.email`, and the author ema
 
 ## 4. Count and pick
 
-Find the helper as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing it on a yes when it is missing or holds another version than the plugin. Run `python "<helper>/engine/authored.py" --before <cutoff> --email <each email> <every repo folder>` (any Python 3.8+; with "never" as the answer, use tomorrow's date). It prints, per language, the lines they wrote and the files they wrote most of. On `{"error": ...}`, show it and stop.
+Find the helper as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing it on a yes when it is missing or holds another version than the plugin, then taking out a FindWright copy from an older Bindwright as setup's step 0 paragraph of that name says. Run `python "<helper>/engine/authored.py" --before <cutoff> --email <each email> <every repo folder>` (any Python 3.8+; with "never" as the answer, use tomorrow's date). It prints, per language, the lines they wrote and the files they wrote most of. On `{"error": ...}`, show it and stop.
 
 Take the languages that hold at least 5% of their lines, up to five. Say in one line what you found: languages, lines and years.
 

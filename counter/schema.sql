@@ -25,3 +25,15 @@ CREATE TABLE IF NOT EXISTS new_projects (
   id  TEXT NOT NULL,
   PRIMARY KEY (day, id)
 );
+
+-- The last GET /total answer, so a read costs one row. The first read after
+-- rules.js TOTALS_MAX_AGE_IN_SECONDS claims the refresh by moving refreshed_at,
+-- so one request per period recomputes; every other read gets this copy.
+CREATE TABLE IF NOT EXISTS totals_copy (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  refreshed_at INTEGER NOT NULL,  -- milliseconds since the epoch, 0 before the first read
+  body         TEXT NOT NULL      -- the answer as JSON
+);
+
+INSERT OR IGNORE INTO totals_copy (id, refreshed_at, body) VALUES (1, 0,
+  '{"projects":0,"checked":0,"caught":0,"deep":0,"merged":0,"stalled":0,"rounds":0,"countries":[],"top":[]}');

@@ -6,9 +6,11 @@ import { catchUpOf, caughtUpText, missedArmText, parseSavedArm, quietResumePromp
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
-import { armFor, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, joinPause } from './plan'
+import { armFor, bringForward, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly } from './plan'
+import { fenceAfter, joinPause, unfenced } from './plan'
 import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
+import { dataDir, pausePath, readFence, readJson, readPause, writeFence, writePause } from './files'
 import { drawArmLine, drawCards } from './cards'
 import { register as adopt } from './adopt'
 import { register as phone } from './phone'
@@ -33,32 +35,6 @@ const armNote = atom({ plugin: 'usage-guard', key: 'armNote' } as const, null)
 // Module state (live.ts): a hot reload starts it over, safe since the pause lives in the shared file.
 const live: Live = newLive()
 
-async function dataDir($: EngineInterface): Promise<string> {
-  if (live.dir) return live.dir
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  return (live.dir = `${configured ?? `${home}/.claude`}/mods-data/usage-guard`.replace(/\\/g, '/'))
-}
-
-async function pausePath($: EngineInterface): Promise<string> {
-  return `${await dataDir($)}/pause.json`
-}
-
-// One of this mod's JSON files, or undefined when it is missing or unreadable.
-async function readJson<T>($: EngineInterface, path: string): Promise<T | undefined> {
-  try {
-    return JSON.parse(String(await $.fs.read(path))) as T
-  } catch {
-    return undefined
-  }
-}
-
-const readPause = async ($: EngineInterface) => readJson<Pause>($, await pausePath($))
-
-async function writePause($: EngineInterface, pause: Pause): Promise<void> {
-  await $.fs.write(await pausePath($), JSON.stringify(pause, null, 2))
-}
-
 async function runClaimHelper($: EngineInterface, name: string): Promise<{ exitCode: number; stdout: string }> {
   return $.process.run(['node', '-e', CLAIM, await dataDir($), name.replace(/[^\w-]/g, '_')], { timeoutMs: 10_000 })
 }
@@ -76,8 +52,7 @@ async function tryClaim($: EngineInterface, name: string): Promise<boolean | nul
   }
 }
 
-// A helper that fails counts as a win, as before claims existed, so a missing `node` never stops
-// the wrap-up.
+// A helper that fails counts as a win, as before claims existed, so a missing `node` never stops the wrap-up.
 async function claim($: EngineInterface, name: string): Promise<boolean> {
   return (await tryClaim($, name)) !== false
 }
@@ -112,9 +87,8 @@ async function cardPath($: EngineInterface): Promise<string> {
 
 const readCard = async ($: EngineInterface) => readJson<UsageCard>($, await cardPath($))
 
-// One card per event, shared by every session: the first session to reach the
-// event writes it, so a card someone already dismissed is not raised again by
-// the next session reaching the same event.
+// One card per event, shared by every session: the first session to reach the event writes it, so a card someone
+// already dismissed is not raised again by the next session reaching the same event.
 async function showCard($: EngineInterface, id: string, text: string): Promise<void> {
   if ((await readCard($))?.id === id) return
   await $.fs.write(await cardPath($), JSON.stringify({ id, text, dismissed: false }, null, 2))
@@ -331,13 +305,8 @@ async function resumeArmed($: EngineInterface, armedFor: string, text: string, a
 async function hadWork($: EngineInterface, pause: Pause): Promise<boolean | null> {
   const name = `work-${resetKey(pause)}-${await $.session.id()}`
   if (live.handled.has(name)) return true
-  live.handled.add(name)
-  try {
-    const { exitCode, stdout } = await runClaimHelper($, name)
-    return exitCode === 0 ? stdout.trim() === 'taken' : null
-  } catch {
-    return null
-  }
+  const won = await tryClaim($, name)
+  return won === null ? null : !won
 }
 
 // Never the project's /start-session: a ritual that proposes a plan and waits for an OK would wake the
@@ -565,25 +534,53 @@ async function act($: EngineInterface, pause: Pause): Promise<void> {
   } else if (!live.wakeTimer) await armWake($, pause)
 }
 
+// A plan that reset before the pause's wake (a banked reset, for one) brings the wake to now for every session:
+// an active pause resumes them, a cancelled one stays cancelled and only stops holding. A failed read is no reset.
+async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): Promise<Pause> {
+  const { rateLimits } = await $.session.usage().catch(() => ({ rateLimits: [] }))
+  if (!isResetEarly(pause, rateLimits, live.wrapUpAt, now)) return pause
+  const current = await readPause($)
+  const forward = bringForward(pause, current, now)
+  if (!forward) return current ?? pause
+  await writePause($, forward)
+  await writeFence($, fenceAfter(await readFence($), forward))
+  return forward
+}
+
+// An arm already due, or already moved onto this pause, stands down as at the pause's own wake: brought to now on
+// this reset, resume() counts it and its own timer then clears it. An arm still ahead keeps its own time.
+async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
+  live.wakeTimer?.cancel()
+  live.wakeTimer = undefined
+  const held = await read($, armedWake)
+  const isStandingDown = held && (held.wakeAt <= now || held.resetsAt === pause.resetsAt)
+  const moved = isStandingDown && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+  if (moved) await setArm($, moved).then(() => scheduleArm($, moved))
+  return resume($, pause.resetsAt)
+}
+
 async function check($: EngineInterface): Promise<void> {
   await readSettings($)
   const now = await $.clock.now()
   const sessionId = await $.session.id()
   let pause = await readPause($)
+  if (pause) pause = await endIfResetEarly($, pause, now)
+  // A wake brought forward (another session saw the early reset) resumes now, not at this timer's old wake.
+  if (pause && live.wakeTimer && pause.status !== 'cancelled' && pause.wakeAt <= now) return resumeEarly($, pause, now)
   const isLive = pause?.status === 'active' && pause.wakeAt > now
 
   if (!isLive) {
     const { rateLimits } = await $.session.usage()
-    const hot = hotLimits(rateLimits, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
+    const fresh = unfenced(rateLimits, await readFence($))
+    const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const planned = planPause(hot, live.delayMinutes, sessionId)
-    // One pause per reset: a cancelled or finished one is not re-armed by the
-    // same high reading, nor by a stale one for a reset it was extended past.
+    // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
+    // stale one for a reset it was extended past.
     if (covers(pause, planned)) return
     pause = planned
-    // Of several sessions crossing the line together, one writes the pause. The
-    // others write the same pause only if the winner has not yet, so a cancel
-    // written in between is not undone.
+    // Of several sessions crossing the line together, one writes the pause. The others write the same pause
+    // only if the winner has not yet, so a cancel written in between is not undone.
     await claim($, `pause-${resetKey(planned)}`)
     // Read again after the claim: another session may have paused for a different reset meanwhile.
     const shared = await readPause($)

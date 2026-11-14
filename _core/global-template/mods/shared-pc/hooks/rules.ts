@@ -23,7 +23,7 @@ export const RULES: RuleList & { projects: Record<string, RuleList> } = {
   //   },
   projects: {},
   light: [
-    String.raw`^(git|gh|tokensave)\b`,
+    String.raw`^(git|gh)\b`,
     String.raw`(^|\s)--(version|help)\b`,
     String.raw`^(flutter|dart)\s+test\s+\S+_test\.dart\s*$`,
     String.raw`^(flutter|dart)\s+analyze\s+\S+\.dart\s*$`,

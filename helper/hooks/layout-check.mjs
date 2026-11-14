@@ -24,9 +24,11 @@ const DEFAULT_WIDTHS = [390, 1280];
 const DEFAULT_HEIGHT = 900;
 // A broken page could flood the log, so each width lists this many findings and counts the rest.
 const REPORT_LIMIT = 20;
-const LOAD_TIMEOUT_MS = 15000;
-// A browser's first start on a fresh machine (a CI runner) takes over 10 s; later ones are quick.
-const PORT_TIMEOUT_MS = 30000;
+// A browser's first page load on a fresh machine is slow too; the wait ends at the load event.
+const LOAD_TIMEOUT_MS = 30000;
+// A browser's first start on a fresh machine (a CI runner) can take over 30 s; later ones are
+// quick. The wait ends as soon as the port file appears, so a long limit costs a fast start nothing.
+const PORT_TIMEOUT_MS = 90000;
 const CALL_TIMEOUT_MS = 30000;
 // How long the browser gets to close itself before it is killed.
 const CLOSE_GRACE_MS = 2000;
@@ -120,6 +122,13 @@ function launchArgs(userDataDir) {
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-gpu",
+    // No updater or background downloads competing with the page, and no throttling of a
+    // page the headless browser never shows.
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
     "about:blank",
   ];
 }

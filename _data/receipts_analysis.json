@@ -26,7 +26,7 @@
       "date": "2026-03-26",
       "rule": "CLAUDE.md",
       "project": "businessapp",
-      "one_line_impact": "Project-level entry rules: session-start ritual, DoD verification, tokensave-first directive"
+      "one_line_impact": "Project-level entry rules: session-start ritual, DoD verification, code-research-first directive"
     },
     {
       "date": "2026-03-29",
@@ -81,7 +81,7 @@
         "avg_duration_min": 1006.6,
         "avg_tool_errors": 2.29,
         "avg_lines_added": 1129,
-        "tokensave_calls_total": 41
+        "code_research_calls_total": 41
       },
       {
         "week_start": "2026-04-13",
@@ -91,7 +91,7 @@
         "avg_duration_min": 11282.0,
         "avg_tool_errors": 8.0,
         "avg_lines_added": 2580,
-        "tokensave_calls_total": 7
+        "code_research_calls_total": 7
       },
       {
         "week_start": "2026-04-20",
@@ -101,7 +101,7 @@
         "avg_duration_min": 664.8,
         "avg_tool_errors": 3.89,
         "avg_lines_added": 1088,
-        "tokensave_calls_total": 21
+        "code_research_calls_total": 21
       },
       {
         "week_start": "2026-04-27",
@@ -111,7 +111,7 @@
         "avg_duration_min": 161.3,
         "avg_tool_errors": 2.7,
         "avg_lines_added": 458,
-        "tokensave_calls_total": 66
+        "code_research_calls_total": 66
       },
       {
         "week_start": "2026-05-04",
@@ -121,7 +121,7 @@
         "avg_duration_min": 145.6,
         "avg_tool_errors": 3.23,
         "avg_lines_added": 482,
-        "tokensave_calls_total": 28
+        "code_research_calls_total": 28
       },
       {
         "week_start": "2026-05-11",
@@ -131,12 +131,12 @@
         "avg_duration_min": 198.0,
         "avg_tool_errors": 2.33,
         "avg_lines_added": 747,
-        "tokensave_calls_total": 0
+        "code_research_calls_total": 0
       }
     ]
   },
   "tool_usage_shift": {
-    "methodology": "First half vs second half of all sessions by chronological order. Tokensave rule adoption was gradual (memory file + global CLAUDE.md updates over multiple sessions), so a single date pivot is misleading; the dataset-half split is the cleanest empirical cut.",
+    "methodology": "First half vs second half of all sessions by chronological order. Code-research rule adoption was gradual (memory file + global CLAUDE.md updates over multiple sessions), so a single date pivot is misleading; the dataset-half split is the cleanest empirical cut.",
     "first_half_window": {
       "from": "2026-04-06",
       "to": "2026-05-01",
@@ -153,7 +153,7 @@
       "Glob": 3.86,
       "Bash": 42.5,
       "Task": 0.0,
-      "tokensave_*": 2.5,
+      "code_research_*": 2.5,
       "Edit": 15.15,
       "Write": 6.51
     },
@@ -163,11 +163,11 @@
       "Glob": 3.7,
       "Bash": 45.57,
       "Task": 0.0,
-      "tokensave_*": 0.91,
+      "code_research_*": 0.91,
       "Edit": 15.37,
       "Write": 4.52
     },
-    "first_tokensave_invocation_date": "2026-04-06"
+    "first_code_research_invocation_date": "2026-04-06"
   },
   "rule_deltas": [
     {
@@ -285,7 +285,7 @@
     "estimated_pro_ceiling_tokens": 150000,
     "estimated_pro_period_sessions_for_same_work": 222,
     "estimated_pro_period_blocked_sessions": 38,
-    "estimated_savings_from_discipline_during_max_period": "Without the token-efficiency + tokensave-first + visual-slice rules baked in, the same 131 Max-period sessions would have spread across roughly 222 Pro-shaped sessions \u2014 meaning ~38 sessions would have hit the Pro ceiling and forced wasted re-rolls or context-loss restarts. Per-token API price is identical across plans; the meaningful axis is session continuity, not unit cost.",
+    "estimated_savings_from_discipline_during_max_period": "Without the token-efficiency + code-research-first + visual-slice rules baked in, the same 131 Max-period sessions would have spread across roughly 222 Pro-shaped sessions \u2014 meaning ~38 sessions would have hit the Pro ceiling and forced wasted re-rolls or context-loss restarts. Per-token API price is identical across plans; the meaningful axis is session continuity, not unit cost.",
     "disclaimer": "ALL Pro-period projections are ESTIMATES. The plan-level token cap mechanic is approximate. Real-world Pro behavior may also include 5-hour rolling-window cooldowns and message-count caps not modeled here. Use these numbers as directional, not exact."
   },
   "receipts": [
@@ -329,7 +329,7 @@
     "memory_files_businessapp": 24,
     "skills_invokable_now": 11,
     "most_dramatic_efficiency_gain": "-18.4% change in tool-errors-per-session after modding.md landed (2026-04-25) \u2014 measured on 12 sessions before vs 131 after.",
-    "tokensave_calls_per_session_now_vs_before": {
+    "code_research_calls_per_session_now_vs_before": {
       "first_half": 1.61,
       "second_half": 0.68
     },

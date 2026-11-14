@@ -2,11 +2,14 @@
 // `gh pr merge` (which drops one), and the folder it ran in. Pure, no engine access.
 
 // Matched on the command with its quoted text and here-doc bodies blanked (see `commandWords`), and on
-// the subcommand word: `git commit -m "explain the push"` is not a push. Global options may come first.
-const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*`
+// the subcommand word: `git commit -m "explain the push"` is not a push. Global options may come first;
+// `-c` and `-C` always take the next word as their value, so a value (`-c push.default=x`) is never read
+// as the subcommand.
+const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-(?![Cc](?:\s|$))[\w-]+(?:=\S+)?))*`
 const GH_OPTS = String.raw`(?:\s+(?:-R\s+\S+|--repo[=\s]\S+))*`
 const AT_START = String.raw`(?:^|[\s;&|({])`
 const PUSH = `${AT_START}git${GIT_OPTS}\\s+push\\b`
+const COMMIT_OR_PUSH = new RegExp(`${AT_START}git${GIT_OPTS}\\s+(?:commit|push)(?![\\w-])`)
 const PUSH_OR_PR = new RegExp(`${PUSH}|${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+create\\b`)
 const PR_MERGE = new RegExp(`${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+merge\\b([^|;&\\n]*)`)
 
@@ -62,6 +65,11 @@ function maskedCommand(command: string, isPowerShell: boolean): string {
 
 export function isPushOrPr(command: string, isPowerShell = false): boolean {
   return PUSH_OR_PR.test(commandWords(command, isPowerShell))
+}
+
+// A step back holds these until it is done: the fix waits for the research.
+export function isCommitOrPush(command: string, isPowerShell = false): boolean {
+  return COMMIT_OR_PUSH.test(commandWords(command, isPowerShell))
 }
 
 // A merged PR's watch is noise: the chat already says it merged. Returns the

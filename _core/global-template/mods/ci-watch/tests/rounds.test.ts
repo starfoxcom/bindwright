@@ -1,7 +1,8 @@
-import { expect, test } from 'claude-code/testing'
+import { type Engine, expect, test } from 'claude-code/testing'
 
+import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
-import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch } from '../hooks/rounds'
+import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
 
@@ -51,7 +52,7 @@ const failed = (outcome: Watch['outcome']): Watch =>
   ({ repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: { build: 'fail' }, stablePolls: 2, outcome }) as Watch
 
 test('only a red wake at a due count carries the research step', () => {
-  expect(wakeText(failed('failed'), undefined, 3)).toContain('research how the community solves this problem')
+  expect(wakeText(failed('failed'), undefined, 3)).toContain('look up at least three different ways the community')
   expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 fix rounds in a row')
   expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 fix rounds')
   expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 fix rounds')
@@ -60,16 +61,114 @@ test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
 
-// Nothing is refused any more: a push at any count goes through, and the count's file is no one's to guard.
-test('a push at any red count is never refused', async ($, on) => {
-  const { seen } = world(on)
+// A latched step back counts distinct topics and ends at the third.
+test('a step back counts each topic once and ends at three', () => {
+  expect(withTopic([], ' How Others Solve It ')).toEqual(['how others solve it'])
+  expect(withTopic(['a'], 'A')).toEqual(['a'])
+  expect(withTopic(['a'], '  ')).toEqual(['a'])
+  expect(withTopic(['a', 'b'], 'c')).toBeUndefined()
+})
+
+type World = ReturnType<typeof world>
+const editInput = { tool: 'Edit', file_path: 'C:/repo/a.ts', old_string: 'a', new_string: 'b' }
+
+// The PR's red rounds in a row before this push, then the push's own round settles red.
+async function redRound($: Engine, { seen, clock }: World, before: number) {
+  seed(seen, reds(before))
+  seen.bucket = 'fail'
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let i = 0; i < 6; i++) await clock.advance(30_000)
+}
+
+// The red wake that asks for a step back latches it: edits, commits and pushes wait for three distinct
+// lookups, and nothing else does.
+test('a step back holds edits, commits and pushes until three distinct lookups ran', async ($, on) => {
+  const w = world(on)
+  const tools = ['Edit', 'Write', 'WebSearch', 'WebFetch', 'Agent'] as const
+  on('tool.call', { tool: tools }, async ($, e) =>
+    (e as { url?: string }).url === 'https://down.example' ? { result: 'down', isError: true } : { result: 'done' })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  for (const n of [6, 13]) {
-    seed(seen, reds(n))
-    for (const tool of ['Bash', 'PowerShell']) {
-      const answer = await $.tool.call({ tool, command: 'git push origin feature/x' } as never)
-      expect(answer).not.toHaveProperty('deny')
-    }
+  const call = (input: Record<string, unknown>) => $.tool.call(input as never)
+  const bash = (command: string) => call({ tool: 'Bash', command })
+  await redRound($, w, 5)
+  const held = [
+    () => bash('git push origin feature/x'),
+    () => call({ tool: 'PowerShell', command: 'git push' }),
+    () => bash('git -C . commit -m "fix it"'),
+    () => bash('git commit>commit.log -m "fix it"'),
+    () => call(editInput),
+    () => call({ tool: 'Write', file_path: 'C:/repo/a.ts', content: 'b' }),
+  ]
+  for (const attempt of held) expect(await attempt()).toHaveProperty('deny')
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('3 more to go')
+  const notHeld = ['git log --grep push', 'git stash push', 'echo "then git push"', 'git commit-graph write',
+    'git -c commit.gpgsign=false rebase --continue', 'git -c push.default=current status']
+  for (const command of notHeld) {
+    expect(await bash(command)).not.toHaveProperty('deny')
+  }
+  expect(await call({ tool: 'Bash', command: 'git push', agentId: 'helper' })).not.toHaveProperty('deny')
+  await call({ tool: 'WebSearch', query: 'how others solve it' })
+  await call({ tool: 'WebSearch', query: ' How others solve it' })
+  await call({ tool: 'WebFetch', url: 'https://down.example' })
+  await call({ tool: 'Agent', subagent_type: 'general-purpose', prompt: 'look around' })
+  // A subagent's own lookups (the pages a web-fetch agent reads) are not the main session's.
+  await call({ tool: 'WebFetch', url: 'https://example.com/inner', agentId: 'fetcher' })
+  await call({ tool: 'WebSearch', query: 'inner search', agentId: 'fetcher' })
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('2 more to go')
+  // Lookups sent together all count.
+  await Promise.all([
+    call({ tool: 'Agent', subagent_type: 'web-fetch', prompt: 'read https://example.com/b' }),
+    call({ tool: 'WebFetch', url: 'https://example.com/c' }),
+  ])
+  expect(await call(editInput)).not.toHaveProperty('deny')
+  expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
+})
+
+// A red wake at a count that is not due latches nothing; a new watch of the PR keeps a latched step back,
+// and only a green round or the user's /ci-watch stop lifts it without lookups.
+test('only a due red wake latches a step back, and only lookups, green or a stop lift it', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: 'Edit' }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const edit = () => $.tool.call(editInput as never)
+  await redRound($, w, 3)
+  expect(await edit()).not.toHaveProperty('deny')
+  w.seen.head = 'b2'
+  await redRound($, w, 5)
+  expect(await edit()).toHaveProperty('deny')
+  // A head pushed from elsewhere restarts the settled watch on the next poll, and the step back stays.
+  w.seen.head = 'c3'
+  w.seen.bucket = 'pending'
+  for (let i = 0; i < 6; i++) await w.clock.advance(30_000)
+  expect(await edit()).toHaveProperty('deny')
+  await $.tool.call({ tool: 'mcp__ci-watch__watch', pr: 7, repo: 'o/r' } as never)
+  expect(await edit()).toHaveProperty('deny')
+  // A green round on the PR ends it: the problem it asked about is fixed.
+  w.seen.bucket = 'pass'
+  for (let i = 0; i < 6; i++) await w.clock.advance(30_000)
+  expect(await edit()).not.toHaveProperty('deny')
+  w.seen.head = 'd4'
+  await redRound($, w, 5)
+  expect(await edit()).toHaveProperty('deny')
+  await $.command.run({ command: 'ci-watch', args: 'stop', origin: { kind: 'composer' } } as never)
+  expect(await edit()).not.toHaveProperty('deny')
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  expect(await edit()).not.toHaveProperty('deny')
+})
+
+// A resume joins the saved copy of a watch that settled meanwhile: a step back latched in memory stays
+// unless that copy went green.
+test('a resume keeps a latched step back unless the saved copy went green', async () => {
+  const base: Watch = { repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: {}, stablePolls: 0 }
+  const rows: [Watch['outcome'], string[] | undefined][] = [['failed', ['a']], ['passed', undefined]]
+  for (const [outcome, kept] of rows) {
+    // The engine as followId uses it: the resumed id, and that id's saved state.
+    const saved = JSON.stringify({ watches: [{ ...base, outcome }] })
+    const engine = { session: { id: async () => 's2' }, fs: { read: async () => saved } }
+    const watches = [{ ...base, stepBackTopics: ['a'] }]
+    const memory: Memory = { watches, stateId: 's1', isUnsaved: false, generation: 0 }
+    await followId(engine as never, 'C:/data', memory)
+    expect([outcome, memory.watches[0]?.stepBackTopics]).toEqual([outcome, kept])
   }
 })
 
