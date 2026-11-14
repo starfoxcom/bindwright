@@ -6,7 +6,8 @@ import { catchUpOf, caughtUpText, missedArmText, parseSavedArm, quietResumePromp
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
-import { armFor, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly, joinPause } from './plan'
+import { armFor, bringForward, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly } from './plan'
+import { joinPause } from './plan'
 import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
 import { dataDir, pausePath, readJson, readPause, writePause } from './files'
@@ -539,8 +540,11 @@ async function act($: EngineInterface, pause: Pause): Promise<void> {
 async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): Promise<Pause> {
   const { rateLimits } = await $.session.usage().catch(() => ({ rateLimits: [] }))
   if (!isResetEarly(pause, rateLimits, live.wrapUpAt, now)) return pause
-  await writePause($, { ...pause, wakeAt: now })
-  return { ...pause, wakeAt: now }
+  const current = await readPause($)
+  const forward = bringForward(pause, current, now)
+  if (!forward) return current ?? pause
+  await writePause($, forward)
+  return forward
 }
 
 // An arm due before the old wake stands down, as it would have there: moved onto this reset, resume() counts it.

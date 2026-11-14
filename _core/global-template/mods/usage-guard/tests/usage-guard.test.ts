@@ -1,7 +1,7 @@
 import type { SessionRateLimit } from 'claude-code'
 import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { isResetEarly, NO_WORK_NOTICE, planArm, WRAP_UP_ARGS } from '../hooks/plan'
+import { bringForward, isResetEarly, NO_WORK_NOTICE, planArm, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
   cardOf,
@@ -378,6 +378,51 @@ test('an arm due before the old wake stands down when the pause ends early', LON
   await advanceToWake(seen)
   expect(resumes(seen)).toHaveLength(1)
 })
+
+// A weekly pause whose reset is two days out, ended early by a banked reset: the weekly reads 3% in a new window.
+async function endWeeklyEarly($: Engine, seen: World): Promise<void> {
+  await start($)
+  await doWork($)
+  seen.limits = [{ kind: 'seven_day', percentUsed: 97, resetsAt: afterReset(48 * HOUR) }]
+  await endTurn($)
+  seen.limits = [{ kind: 'seven_day', percentUsed: 3, resetsAt: afterReset(7 * 24 * HOUR) }]
+  await seen.clock.advance(60_000)
+}
+
+test('after an early end, a 5-hour limit hit before the old weekly reset pauses again', LONG, async ($, on) => {
+  const seen = world(on)
+  await endWeeklyEarly($, seen)
+  expect(pauseOf(seen)?.status).toBe('done')
+  await doWork($)
+  seen.limits = [fresh(96, new Date(NOW + 3 * HOUR).toISOString()), { ...seen.limits[0]!, percentUsed: 4 }]
+  await endTurn($)
+
+  expect(pauseOf(seen)?.status).toBe('active')
+  expect(pauseOf(seen)?.kinds).toEqual(['five_hour'])
+})
+
+test('after an early end, an older reading of the paused window does not pause again', LONG, async ($, on) => {
+  const seen = world(on)
+  await endWeeklyEarly($, seen)
+  await doWork($)
+  seen.limits = [{ kind: 'seven_day', percentUsed: 97, resetsAt: afterReset(48 * HOUR) }]
+  await endTurn($)
+
+  expect(pauseOf(seen)?.status).toBe('done')
+})
+
+const BRING_FORWARD: [string, Pause | undefined, boolean][] = [
+  ['an unchanged file is brought forward', FIVE_HOUR_PAUSE, true],
+  ['a cancel written since the read wins', { ...FIVE_HOUR_PAUSE, status: 'cancelled' }, false],
+  ['an extension written since the read wins', { ...FIVE_HOUR_PAUSE, resetsAt: afterReset(48 * HOUR) }, false],
+  ['a file gone since the read writes nothing', undefined, false],
+]
+for (const [name, current, isWritten] of BRING_FORWARD) {
+  test(`bring forward: ${name}`, () => {
+    const forward = bringForward(FIVE_HOUR_PAUSE, current, NOW)
+    expect(forward).toEqual(isWritten ? { ...FIVE_HOUR_PAUSE, wakeAt: NOW, isBroughtForward: true } : undefined)
+  })
+}
 
 test('a lower reading of the same window keeps the pause', LONG, async ($, on) => {
   const seen = world(on)

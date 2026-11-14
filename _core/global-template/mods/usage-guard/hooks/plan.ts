@@ -17,6 +17,8 @@ export type Pause = {
   triggeredBy: string
   /** Each paused limit's own reset, by kind: `resetsAt` is only the latest of them. Missing in older files. */
   resets?: Record<string, string>
+  /** Its wake was brought forward by an early reset: from then on it covers only readings of the windows it paused. */
+  isBroughtForward?: boolean
   /** The reset the first pause of this run named. Kept when a later limit extends the pause, so the
    * wrap-up, stop and resume claims (keyed on it) still run once per session. */
   episode?: string
@@ -144,16 +146,36 @@ export function isResetEarly(pause: Pause, limits: readonly SessionRateLimit[], 
   const isClear = (kind: string) => {
     const limit = limits.find(item => item.kind === kind)
     const resetsAt = Date.parse(limit?.resetsAt ?? '')
-    const pausedUntil = Date.parse(pause.resets?.[kind] ?? pause.resetsAt)
+    const pausedUntil = pausedReset(pause, kind)
     return limit !== undefined && limit.percentUsed < wrapUpAt && resetsAt - pausedUntil >= NEW_WINDOW_MS
   }
   return isHolding && pause.kinds.length > 0 && pause.kinds.every(isClear)
 }
 
+/**
+ * The pause to write when `judged` is brought forward to `now`, or undefined when the file changed since it was
+ * read: a cancel or an extension another session wrote meanwhile wins over the early end.
+ */
+export function bringForward(judged: Pause, current: Pause | undefined, now: number): Pause | undefined {
+  if (!current || JSON.stringify(current) !== JSON.stringify(judged)) return undefined
+  return { ...current, wakeAt: now, isBroughtForward: true }
+}
+
+/** When a limit the pause covers was set to reset, in ms; NaN for a limit it does not cover. */
+export function pausedReset(pause: Pause, kind: string): number {
+  return pause.kinds.includes(kind) ? Date.parse(pause.resets?.[kind] ?? pause.resetsAt) : NaN
+}
+
 // A pause that already reaches a planned reset: the plan is part of it. Weekly usage only falls at its
 // reset, so a fresh reading after an extension plans that later reset; an earlier one is a stale reading.
-export const covers = (pause: Pause | undefined, planned: Pause) =>
-  pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
+// A pause brought forward covers a plan only when each planned limit reads a window it paused.
+export function covers(pause: Pause | undefined, planned: Pause): boolean {
+  if (pause?.isBroughtForward) {
+    const plannedReset = (kind: string) => Date.parse(planned.resets?.[kind] ?? planned.resetsAt)
+    return planned.kinds.every(kind => plannedReset(kind) <= pausedReset(pause, kind))
+  }
+  return pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
+}
 
 // A pause another session wrote since this one read the file: joined, never replaced. A later reset
 // extends it in place and keeps its episode, so no session wraps up or stops its work twice.
