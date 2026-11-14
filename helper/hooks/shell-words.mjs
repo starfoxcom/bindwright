@@ -105,8 +105,9 @@ async function powershellWords(command) {
   (function walk(node) {
     if (node.type === "assignment_expression") assignments.push(psAssignment(node));
     if (node.type === "command") commands.push(psCommand(node));
-    // After `--%` the program splits the raw text by its own rules.
-    if (node.type === "stop_parsing") unreadable = true;
+    // An array's words reach a command later, wherever it runs: the strict read takes it. So
+    // does `--%`, after which the program splits the raw text by its own rules.
+    if (node.type === "array" || node.type === "stop_parsing") unreadable = true;
     for (const c of node.namedChildren) walk(c);
   })(tree.rootNode);
   return { error: unreadable, commands, assignments };

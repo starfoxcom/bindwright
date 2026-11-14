@@ -479,6 +479,8 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
+                # `[` is the test command, not a pattern, so the command is read as written.
+                ('[ -n "$X" ] && git commit -m "--file=x is gone"', "Bash"),
                 ('git commit -vm "--file=x is gone"', "Bash"),
                 ('git merge -nm "--file=x is gone" feature', "Bash"),
                 ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
@@ -559,8 +561,10 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "Write it as plain commands")
-        # A brace expansion is built at run time, so the file it names is never read as a literal.
-        for command, result in self.each(("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt"),
+        # A brace expansion or a pattern is built at run time, so the file it names is never read
+        # as a literal, quotes inside it included (`ms["g"]` is the pattern `ms[g]`).
+        for command, result in self.each(("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
+                                          'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"),
                                          lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_denied(result, "text the shell builds at run time")
