@@ -4,7 +4,7 @@
 //                                which may hold inline markup such as <b>;
 //   data-t-attr="name:key ..."   each named attribute is the key's text.
 // An element with data-t holds no element of its own tag name.
-import { LANGUAGES, SITE } from "./languages.js";
+import { LANGUAGES, PAGES, SITE } from "./languages.js";
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
 const escapeAttr = (text) => text.replace(/[&<>"]/g, (c) => ESCAPES[c]);
@@ -12,12 +12,33 @@ const escapeAttr = (text) => text.replace(/[&<>"]/g, (c) => ESCAPES[c]);
 // The "../" that climbs from a folder under the site root back to the root.
 const climb = (folder) => "../".repeat(folder.split("/").length - 1);
 
-// The <link rel="alternate"> lines between the alternates markers in <head>.
+// The lines between the alternates markers in <head>: a <link rel="alternate"> per language, then
+// the page's own address in language `code`, as its canonical link and its link-preview URL.
 // `page` is the English page's folder under the site root ("" for index.html).
-export function alternates(page = "") {
+export function alternates(page = "", code = "en") {
   const link = (lang, href) => `<link rel="alternate" hreflang="${lang}" href="${href}">`;
-  return [...LANGUAGES.map((l) => link(l.code, SITE + l.folder + page)), link("x-default", SITE + page)]
-    .join("\n");
+  const own = SITE + LANGUAGES.find((l) => l.code === code).folder + page;
+  return [
+    ...LANGUAGES.map((l) => link(l.code, SITE + l.folder + page)),
+    link("x-default", SITE + page),
+    `<link rel="canonical" href="${own}">`,
+    `<meta property="og:url" content="${own}">`,
+  ].join("\n");
+}
+
+// The sitemap search engines read: every page in every language, each listing its translations.
+export function sitemap() {
+  const entry = (page) => (l) => {
+    const links = LANGUAGES.map((other) =>
+      `    <xhtml:link rel="alternate" hreflang="${other.code}" href="${SITE + other.folder + page}"/>`);
+    return `  <url>\n    <loc>${SITE + l.folder + page}</loc>\n${links.join("\n")}\n  </url>`;
+  };
+  const urls = PAGES.flatMap(({ path }) => LANGUAGES.map(entry(path)));
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${urls.join("\n")}
+</urlset>
+`;
 }
 
 // The links in the header's language switch: every language but this one, to
@@ -51,7 +72,7 @@ export function renderLanguage(html, code, words, page = "") {
   };
   return html
     .replace(/<html lang="[^"]*"/, `<html lang="${code}"`)
-    .replace(/(<!-- alternates -->\n)[\s\S]*?(\n<!-- \/alternates -->)/, `$1${alternates(page)}$2`)
+    .replace(/(<!-- alternates -->\n)[\s\S]*?(\n<!-- \/alternates -->)/, `$1${alternates(page, code)}$2`)
     .replace(/(<nav[^>]*\sdata-langs[^>]*>\s*)[\s\S]*?(\s*<\/nav>)/, `$1${switchLinks(code, page)}$2`)
     .replace(/<(\w+)([^>]*?)\sdata-t="([\w.-]+)"([^>]*)>[\s\S]*?<\/\1\s*>/g,
       (m, tag, before, key, after) => `<${tag}${before} data-t="${key}"${after}>${text(key)}</${tag}>`)
