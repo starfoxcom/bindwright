@@ -6,6 +6,7 @@
 // source that cannot be read leaves its tool out of the findings. Node 18+.
 
 import { execFileSync, execSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const NODE_INDEX_URL = "https://nodejs.org/dist/index.json";
@@ -324,7 +325,8 @@ async function main() {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-// Run as a script, not when a test imports it.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Run as a script, not when a test imports it. Node gives this module its real path, symlinks
+// resolved, so the path it was started by is resolved too before the two are compared.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   main().catch(() => {});
 }
