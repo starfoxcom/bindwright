@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- The link-preview card. Render it to social-card.png at 1200x630:
+     msedge --headless --hide-scrollbars --window-size=1200,630 --screenshot=social-card.png social-card.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bindwright card</title>
+<link
+href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200..900&family=Fragment+Mono&display=block"
+  rel="stylesheet">
+<style>
+  :root {
+    --canvas: oklch(0.20 0.006 240);
+    --rule: oklch(0.34 0.008 240);
+    --text: oklch(0.97 0 0);
+    --text-2: oklch(0.80 0.01 240);
+    --accent: oklch(0.80 0.13 150);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: var(--canvas);
+    color: var(--text);
+    font-family: "Hubot Sans", system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 64px;
+    padding: 0 96px;
+  }
+  svg { width: 272px; height: 272px; flex: none; }
+  h1 { font-size: 104px; font-weight: 800; font-stretch: 110%; letter-spacing: -0.02em; line-height: 1; }
+  p { margin-top: 28px; font-size: 40px; font-weight: 500; line-height: 1.25; color: var(--text-2); text-wrap: balance; }
+  code {
+    display: inline-block;
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 2px solid var(--rule);
+    font: 28px "Fragment Mono", monospace;
+    white-space: nowrap;
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 1024 1024" aria-hidden="true">
+  <path d="M340 240H220V784H340M684 240H804V784H684" fill="none" stroke="#80d08f" stroke-width="88"
+    stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="432" y="352" width="160" height="320" rx="36" fill="#80d08f"/>
+</svg>
+<div>
+  <h1>Bindwright</h1>
+  <p>Claude remembers how you like to work.</p>
+  <code>starfoxcom.github.io/bindwright</code>
+</div>
+</body>
+</html>
