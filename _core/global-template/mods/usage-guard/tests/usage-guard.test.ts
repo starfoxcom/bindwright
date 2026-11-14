@@ -1,7 +1,7 @@
 import type { SessionRateLimit } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { NO_WORK_NOTICE, planArm, WRAP_UP_ARGS } from '../hooks/plan'
+import { isResetEarly, NO_WORK_NOTICE, planArm, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
   cardOf,
@@ -19,6 +19,7 @@ import {
   stopsRun,
   WAKE,
   world,
+  type World,
 } from './world'
 
 
@@ -243,46 +244,152 @@ test('cancel stops the automatic resume', LONG, async ($, on) => {
 
 // A new 5-hour window, opened half an hour from now: it resets 3.5 hours after the paused one.
 const NEW_WINDOW = new Date(NOW + 30 * 60_000 + 5 * 3_600_000).toISOString()
+const HOUR = 3_600_000
+const afterReset = (ms: number) => new Date(Date.parse(RESET) + ms).toISOString()
+const FIVE_HOUR_PAUSE: Pause = {
+  status: 'active',
+  kinds: ['five_hour'],
+  percentUsed: 96,
+  resetsAt: RESET,
+  wakeAt: WAKE,
+  triggeredBy: 'sess-b',
+}
+const fresh = (percentUsed: number, resetsAt?: string): SessionRateLimit => ({
+  kind: 'five_hour',
+  percentUsed,
+  resetsAt,
+})
+const BOTH: Partial<Pause> = {
+  kinds: ['five_hour', 'seven_day'],
+  resetsAt: afterReset(48 * HOUR),
+  resets: { five_hour: RESET, seven_day: afterReset(48 * HOUR) },
+}
+const EARLY_RESETS: [string, Partial<Pause>, SessionRateLimit[], number, boolean][] = [
+  ['a new window an hour after the paused reset ends it', {}, [fresh(2, afterReset(HOUR))], NOW, true],
+  ['a minute short of an hour is the same window', {}, [fresh(2, afterReset(HOUR - 60_000))], NOW, false],
+  ['a reading at the line holds', {}, [fresh(95, afterReset(HOUR))], NOW, false],
+  ['a reading just under the line ends it', {}, [fresh(94.9, afterReset(HOUR))], NOW, true],
+  ['a reading with no reset holds', {}, [fresh(2)], NOW, false],
+  ['a paused kind missing from the reading holds', {}, [], NOW, false],
+  ['a cancelled pause ends', { status: 'cancelled' }, [fresh(2, afterReset(HOUR))], NOW, true],
+  ['a finished pause is not ended again', { status: 'done' }, [fresh(2, afterReset(HOUR))], NOW, false],
+  ['a pause past its wake has nothing to end', {}, [fresh(2, afterReset(HOUR))], WAKE, false],
+  [
+    'every paused kind must read clear',
+    BOTH,
+    [fresh(2, afterReset(HOUR)), { kind: 'seven_day', percentUsed: 97, resetsAt: afterReset(48 * HOUR) }],
+    NOW,
+    false,
+  ],
+  [
+    'each kind is measured against its own paused reset',
+    BOTH,
+    [fresh(2, afterReset(HOUR)), { kind: 'seven_day', percentUsed: 3, resetsAt: afterReset(49 * HOUR) }],
+    NOW,
+    true,
+  ],
+]
+for (const [name, change, limits, now, isEnded] of EARLY_RESETS) {
+  test(`early reset: ${name}`, () => {
+    expect(isResetEarly({ ...FIVE_HOUR_PAUSE, ...change }, limits, 95, now)).toBe(isEnded)
+  })
+}
 
-test('an early reset resumes an active pause at once', LONG, async ($, on) => {
+// This session joins a pause another session wrote, and wraps up with work under it.
+async function joinWithWork($: Engine, seen: World): Promise<void> {
+  seen.files.set(PAUSE_FILE, JSON.stringify(FIVE_HOUR_PAUSE))
+  await doWork($)
+  await seen.clock.advance(60_000)
+  await endTurn($)
+}
+
+async function advanceToWake(seen: World): Promise<void> {
+  for (let left = WAKE - (await seen.clock.now()); left > 0; left -= 10 * 60_000)
+    await seen.clock.advance(Math.min(10 * 60_000, left))
+}
+
+test('an early reset resumes an active pause at once, and its old wake does not again', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await doWork($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
+  seen.limits = [fresh(96, RESET)]
   await endTurn($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 2, resetsAt: NEW_WINDOW }]
+  seen.limits = [fresh(2, NEW_WINDOW)]
   await seen.clock.advance(60_000)
 
   expect(pauseOf(seen)?.status).toBe('done')
   expect(resumes(seen)).toHaveLength(1)
-  // The old wake does not resume it a second time.
-  for (let left = WAKE - NOW; left > 0; left -= 10 * 60_000) await seen.clock.advance(Math.min(10 * 60_000, left))
+  await advanceToWake(seen)
   expect(resumes(seen)).toHaveLength(1)
 })
 
-test('an early reset ends a cancelled pause without resuming', LONG, async ($, on) => {
+test('a session whose wake another session brought forward resumes at its next check', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
+  await joinWithWork($, seen)
+  // The other session saw the new window first and resumed itself.
+  seen.files.set(PAUSE_FILE, JSON.stringify({ ...FIVE_HOUR_PAUSE, status: 'done', wakeAt: NOW + 60_000 }))
+  await seen.clock.advance(2 * 60_000)
+
+  expect(resumes(seen)).toHaveLength(1)
+  await advanceToWake(seen)
+  expect(resumes(seen)).toHaveLength(1)
+})
+
+test('an early reset of a pause cancelled elsewhere ends its hold and resumes nothing', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await joinWithWork($, seen)
+  seen.files.set(PAUSE_FILE, JSON.stringify({ ...FIVE_HOUR_PAUSE, status: 'cancelled' }))
+  seen.limits = [fresh(2, NEW_WINDOW)]
+  await seen.clock.advance(60_000)
+
+  expect(pauseOf(seen)?.status).toBe('cancelled')
+  expect(pauseOf(seen)?.wakeAt).toBeLessThan(WAKE)
+  await advanceToWake(seen)
+  expect(resumes(seen)).toEqual([])
+})
+
+test('a pause over two limits ends early once both read in new windows', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await doWork($)
+  seen.limits = [fresh(96, RESET), { kind: 'seven_day', percentUsed: 97, resetsAt: afterReset(48 * HOUR) }]
   await endTurn($)
-  await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 2, resetsAt: NEW_WINDOW }]
+  seen.limits = [fresh(2, NEW_WINDOW), { kind: 'seven_day', percentUsed: 3, resetsAt: afterReset(7 * 24 * HOUR) }]
   await seen.clock.advance(60_000)
 
   expect(pauseOf(seen)?.status).toBe('done')
-  expect(resumes(seen)).toEqual([])
+  expect(resumes(seen)).toHaveLength(1)
+})
+
+test('an arm due before the old wake stands down when the pause ends early', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await doWork($)
+  seen.limits = [fresh(40, new Date(NOW + HOUR).toISOString()), { kind: 'seven_day', percentUsed: 97, resetsAt: RESET }]
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h "check CI"' } as never)
+  seen.limits = [fresh(2, NEW_WINDOW), { kind: 'seven_day', percentUsed: 3, resetsAt: afterReset(7 * 24 * HOUR) }]
+  await seen.clock.advance(60_000)
+
+  expect(resumes(seen)).toHaveLength(1)
+  expect(resumes(seen)[0]).toContain('check CI')
+  await advanceToWake(seen)
+  expect(resumes(seen)).toHaveLength(1)
 })
 
 test('a lower reading of the same window keeps the pause', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
+  seen.limits = [fresh(99, RESET)]
   await endTurn($)
   await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 70, resetsAt: RESET }]
+  seen.limits = [fresh(70, RESET)]
   await seen.clock.advance(60_000)
 
   expect(pauseOf(seen)?.status).toBe('cancelled')
+  expect(pauseOf(seen)?.wakeAt).toBe(WAKE)
 })
 
 test(

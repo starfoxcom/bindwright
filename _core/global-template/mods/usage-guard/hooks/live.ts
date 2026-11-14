@@ -13,6 +13,8 @@ export type Live = {
   workSession?: string
   isStatusShown: boolean
   wakeTimer?: Timer
+  /** The pause wake `wakeTimer` counts down to: an arm due before it stands down if the wake comes early. */
+  wakeAt?: number
   /** The wake the person armed by hand (`armedWake`), counting down in this module. */
   armTimer?: Timer
   /** A wrap-up due when the running turn ends: the pause it is for. */
@@ -33,8 +35,6 @@ export type Live = {
   catchUpMinutes: number
   /** The folder for saved arms exists: made once per module load, before the first save. */
   isArmsDirMade: boolean
-  /** The data folder, read from the environment once per module load: the 2-second refresh needs it. */
-  dir?: string
 }
 
 /** Runs the mod with its settings: the file's values over the options it loaded with. */

@@ -15,6 +15,8 @@ export type Pause = {
   resetsAt: string
   wakeAt: number
   triggeredBy: string
+  /** Each paused limit's own reset, by kind: `resetsAt` is only the latest of them. Missing in older files. */
+  resets?: Record<string, string>
   /** The reset the first pause of this run named. Kept when a later limit extends the pause, so the
    * wrap-up, stop and resume claims (keyed on it) still run once per session. */
   episode?: string
@@ -81,6 +83,7 @@ export function planPause(hot: readonly SessionRateLimit[], delayMinutes: number
     kinds: hot.map(limit => limit.kind),
     percentUsed: Math.max(...hot.map(limit => limit.percentUsed)),
     resetsAt,
+    resets: Object.fromEntries(hot.map(limit => [limit.kind, limit.resetsAt ?? ''])),
     wakeAt: Date.parse(resetsAt) + delayMinutes * 60_000,
     triggeredBy: sessionId,
   }
@@ -132,17 +135,16 @@ const NEW_WINDOW_MS = 60 * 60_000
 
 /**
  * A pause, active or cancelled and before its wake, whose every limit now reads under the wrap-up line in a
- * new window: the plan reset early (a banked reset, for one), so the pause holds nothing anymore. Without
- * this it held until the old reset, and the tasks mod's keep-going stayed quiet all that time. A window
- * counts as new only when it resets well after the pause's own reset, so a session's older reading of the
- * same window never ends a pause.
+ * new window: the plan reset early (a banked reset, for one), so the pause holds nothing anymore. A window
+ * counts as new only when it resets well after that limit's own paused reset, so a session's older reading
+ * of the same window never ends a pause.
  */
 export function isResetEarly(pause: Pause, limits: readonly SessionRateLimit[], wrapUpAt: number, now: number) {
   const isHolding = (pause.status === 'active' || pause.status === 'cancelled') && pause.wakeAt > now
-  const pausedUntil = Date.parse(pause.resetsAt)
   const isClear = (kind: string) => {
     const limit = limits.find(item => item.kind === kind)
     const resetsAt = Date.parse(limit?.resetsAt ?? '')
+    const pausedUntil = Date.parse(pause.resets?.[kind] ?? pause.resetsAt)
     return limit !== undefined && limit.percentUsed < wrapUpAt && resetsAt - pausedUntil >= NEW_WINDOW_MS
   }
   return isHolding && pause.kinds.length > 0 && pause.kinds.every(isClear)
@@ -162,6 +164,7 @@ export function joinPause(shared: Pause, planned: Pause): Pause {
     resetsAt: planned.resetsAt,
     wakeAt: planned.wakeAt,
     kinds: [...new Set([...shared.kinds, ...planned.kinds])],
+    resets: { ...shared.resets, ...planned.resets },
     percentUsed: Math.max(shared.percentUsed, planned.percentUsed),
     episode: shared.episode ?? shared.resetsAt,
   }
