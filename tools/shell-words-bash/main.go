@@ -4,8 +4,8 @@
 // It runs once inside Node as WebAssembly (GOOS=js GOARCH=wasm): the caller sets the global
 // `shellWordsInput` to the command, runs the module, and reads the global `shellWordsOutput`, a
 // JSON object {"error": bool, "commands": [[word, ...], ...], "assignments": [{"name", "value"}]}.
-// A word is a string, or {"dynamic": <source text>, "prefix": <literal start>, "canBeEmpty": bool}
-// when the shell builds it at run time.
+// A word is a string, or {"dynamic": <source text>, "prefix": <literal start>, "shape": <literal
+// text, NUL for each run-time part>, "canBeEmpty": bool} when the shell builds it at run time.
 package main
 
 import (
@@ -32,6 +32,9 @@ type dynamic struct {
 	Dynamic string `json:"dynamic"`
 	// Prefix is the literal text bash gives the word before its first part built at run time.
 	Prefix string `json:"prefix"`
+	// Shape is the word's literal text with a NUL for each part built at run time
+	// (`"$S.hooksPath"` is "\x00.hooksPath"), so text after an expansion is still read.
+	Shape string `json:"shape"`
 	// CanBeEmpty is whether the word can expand to no word at all.
 	CanBeEmpty bool `json:"canBeEmpty"`
 }
@@ -62,7 +65,43 @@ func (r reader) text(node syntax.Node) string {
 }
 
 func (r reader) dynamicWord(word *syntax.Word) dynamic {
-	return dynamic{Dynamic: r.text(word), Prefix: r.prefix(word), CanBeEmpty: canBeEmpty(word)}
+	return dynamic{Dynamic: r.text(word), Prefix: r.prefix(word), Shape: shape(word), CanBeEmpty: canBeEmpty(word)}
+}
+
+// unknownPart stands for a part of a word bash builds at run time.
+const unknownPart = "\x00"
+
+// shape is the word's text as bash gives it, with unknownPart for each part built at run time.
+// Plain text keeps its glob and brace characters, so `-{n,q}` still shows its letters.
+func shape(word *syntax.Word) string {
+	var value strings.Builder
+	for _, part := range word.Parts {
+		switch part := part.(type) {
+		case *syntax.Lit:
+			value.WriteString(unescape(unquotedEscape, part.Value))
+		case *syntax.SglQuoted:
+			if part.Dollar {
+				value.WriteString(unknownPart)
+			} else {
+				value.WriteString(part.Value)
+			}
+		case *syntax.DblQuoted:
+			if part.Dollar {
+				value.WriteString(unknownPart)
+				continue
+			}
+			for _, inner := range part.Parts {
+				if lit, ok := inner.(*syntax.Lit); ok {
+					value.WriteString(unescape(quotedEscape, lit.Value))
+				} else {
+					value.WriteString(unknownPart)
+				}
+			}
+		default:
+			value.WriteString(unknownPart)
+		}
+	}
+	return value.String()
 }
 
 // prefix is the text bash gives the word's start whatever runs: its leading plain, single-quoted
@@ -230,12 +269,20 @@ func shellWords(source string) result {
 			case assign.Name != nil && !assign.Naked:
 				out.Assignments = append(out.Assignments, r.assignment(assign))
 			case assign.Naked && assign.Value != nil:
-				// `export "A=1"` reaches the parser as one word, which bash splits at its first `=`;
-				// a word built at run time could set any variable.
-				if word, literal := r.word(assign.Value).(string); !literal {
-					out.Error = true
-				} else if name, value, sets := strings.Cut(word, "="); sets {
-					out.Assignments = append(out.Assignments, assignment{Name: name, Value: value})
+				// `export "A=1"` reaches the parser as one word, which bash splits at its first `=`.
+				// A name in the word's certain start (`export "PATH=$HOME/bin"`) is known, its value
+				// built at run time; a name built at run time could be any variable.
+				switch word := r.word(assign.Value).(type) {
+				case string:
+					if name, value, sets := strings.Cut(word, "="); sets {
+						out.Assignments = append(out.Assignments, assignment{Name: name, Value: value})
+					}
+				case dynamic:
+					if name, _, named := strings.Cut(word.Prefix, "="); named {
+						out.Assignments = append(out.Assignments, assignment{Name: name, Value: word})
+					} else {
+						out.Error = true
+					}
 				}
 			}
 		}

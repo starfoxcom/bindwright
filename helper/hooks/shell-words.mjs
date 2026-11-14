@@ -6,7 +6,8 @@
 // [[word, ...], ...], "assignments": [{"name": ..., "value": <word>}, ...]}, the commands and
 // the variables they set (`A=1 git`, `export A=1`, PowerShell's `$env:A = 1`) in source
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
-// {"dynamic": <source text>, "prefix": <literal text before its first expansion>,
+// {"dynamic": <source text>, "prefix": <literal text before its first expansion>, "shape": <its
+// text with a NUL for each expansion>,
 // "canBeEmpty": <it can leave no word>} when the shell builds it at run time (a variable, a
 // substitution, a glob), so its value cannot be known before it runs.
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
@@ -17,10 +18,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const PARSERS = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "parsers");
 const SHELLS = new Set(["bash", "powershell"]);
 
-// A word built at run time: its source, the literal text before its first expansion, and whether
-// it can leave no word at all (PowerShell passes no argument for $null or an empty array).
-function dynamic(node, prefix = "", canBeEmpty = true) {
-  return { dynamic: node.text, prefix, canBeEmpty };
+// A word built at run time: its source, the literal text before its first expansion, its text with
+// a NUL for each expansion, and whether it can leave no word at all (PowerShell passes no
+// argument for $null or an empty array).
+function dynamic(node, prefix = "", canBeEmpty = true, shape = "\0") {
+  return { dynamic: node.text, prefix, shape, canBeEmpty };
+}
+
+// PowerShell text with a NUL for each variable, `${...}` or `$(...)` in it.
+function psShape(text) {
+  return text.replace(/\$\{[^}]*\}|\$\([^)]*\)|\$[\w:]+/g, "\0");
 }
 
 // Bash is read by mvdan.cc/sh's parser, built to WebAssembly from tools/shell-words-bash, which
@@ -51,14 +58,16 @@ function psWord(node) {
     const expands = node.text.search(/[*?$]/);
     if (expands < 0) return psUnescape(node.text);
     const prefix = node.text.slice(0, node.text.search(/[*?$`]/));
-    return dynamic(node, prefix, prefix === "" && node.text.startsWith("$"));
+    return dynamic(node, prefix, prefix === "" && node.text.startsWith("$"), psShape(node.text));
   }
   if (node.type === "verbatim_string_characters" || node.type === "verbatim_string_literal") {
     return node.text.slice(1, -1).replace(/''/g, "'");
   }
   if (node.type === "expandable_string_literal") {
     // A string is always one argument, whatever it expands to.
-    if (node.namedChildren.length) return dynamic(node, /^"([^$`"]*)/.exec(node.text)?.[1] ?? "", false);
+    if (node.namedChildren.length) {
+      return dynamic(node, /^"([^$`"]*)/.exec(node.text)?.[1] ?? "", false, psShape(node.text.slice(1, -1)));
+    }
     return psUnescape(node.text.slice(1, -1)).replace(/""/g, '"');
   }
   if (["array_literal_expression", "unary_expression", "string_literal"].includes(node.type)
