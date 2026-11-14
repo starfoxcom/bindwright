@@ -148,6 +148,17 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["-e names the pattern, so the next word is a path", bash("grep -rn -e foo src"), "fallback"],
     ["-e with only a folder outside", bash(`rg -e foo "${scratch}"`), null],
     ["a git grep pathspec of docs", bash("git grep foo -- '*.md'"), null],
+    // An exclude pathspec leaves files out; it never says what the search reads.
+    ["a git :! pathspec leaves docs out", bash("git grep -n foo -- ':!*.md'"), "fallback"],
+    ["an unquoted :! pathspec", bash("git grep -n foo -- :!*.md"), "fallback"],
+    ["a :(exclude) pathspec", bash("git grep -n foo -- ':(exclude)*.md'"), "fallback"],
+    // A positional wildcard is one more path beside the folders named with it.
+    ["a grep wildcard beside a code folder", bash("grep -rn foo *.md engine/"), "fallback"],
+    ["an rg wildcard after a code folder", bash("rg foo engine *.md"), "fallback"],
+    ["a wildcard of docs alone", bash("grep -rn foo *.md"), null],
+    // A quoted ~ is a folder name to the shell; the home folder is `base`.
+    ["a quoted ~ in a cd is a folder name", bash('cd "~/scratch"; grep -rn foo .'), "fallback"],
+    ["a quoted ~ search path is a folder name", bash('rg foo "~/scratch"'), "fallback"],
     ["Glob of code", { name: "Glob", args: { pattern: "**/*.py" } }, "fallback"],
     ["Glob of a docs folder", { name: "Glob", args: { pattern: "docs/**" } }, null],
     ["Glob whose pattern points outside the repo",

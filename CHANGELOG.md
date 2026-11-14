@@ -26,6 +26,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- `/close-session`'s count of code searches counts three kinds of repo search it left out, which made the hit rate look better than it was: a `git grep` with an exclude pathspec (`':!*.md'`, `:(exclude)`), a search naming a code folder beside a wildcard (`grep -rn foo *.md engine/`), and a search after `cd "~/..."`, whose quoted `~` the shell leaves as a folder name.
 - The anonymous review counts and the once-a-day notice save their state files on Windows even while another process has the file open: the swap is retried for up to half a second instead of failing, and two writers never share a temporary file.
 - **A plan limit that resets early ends its pause.** After a banked or early reset, the usage-guard mod's pause, active or cancelled, held until the old reset time, so the tasks mod's keep-going prompt stayed silent all that while. A pause now ends as soon as every limit it paused for reads under the wrap-up line in a new window: an active one resumes each paused session at its next minute check, and a cancelled one stays cancelled and stops holding without resuming them.
 - FindWright, and `/close-session`'s hit rate, ask for Node 22.16 or later on the 22 line, or 24 or later, which its full-text index needs; Node 22.13 to 22.15 used to count as enough and then failed to build the index.

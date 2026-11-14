@@ -47,6 +47,8 @@ WILDCARD = re.compile(r"[*?\[]")
 # `--glob=x`, `-Include:x`). Every other word only matters when it names a file or folder that exists.
 FILTER_OPTIONS = ("-g", "--glob", "--iglob", "--include", "-t", "--type", "-include", "-filter",
                   "--exclude", "--exclude-dir", "-exclude")
+# A git pathspec that leaves files out (`:!*.md`, `:^x`, `:(exclude)x`); it never says what is read.
+EXCLUDE_PATHSPEC = re.compile(r"^['\"]?:(?:!|\^|\(exclude\))")
 # Their values leave files out; they never say what the search reads.
 EXCLUDE_OPTIONS = ("--exclude", "--exclude-dir", "-exclude")
 TYPE_OPTIONS = ("-t", "--type")
@@ -78,9 +80,15 @@ def unquote(word):
     return word.strip("'\"")
 
 
+def literal(word):
+    """`word` unquoted. A quoted `~` stays a folder name, as Bash and PowerShell leave it."""
+    text = unquote(word)
+    return "./" + text if word[:1] in "'\"" and text.startswith("~") else text
+
+
 def resolve(path, base):
     """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(unquote(path))
+    path = os.path.expanduser(literal(path))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))
@@ -295,10 +303,12 @@ def words_search(words, is_text_search=True):
         # A PowerShell listing's comma list is several paths.
         named = [piece for word in plain for piece in word.split(",") if piece]
     paths = []
-    for piece in named:
-        # An unquoted `*.md` with no folder is a file filter; a quoted one is a pattern.
-        is_filter = WILDCARD.search(piece) and not re.search(r"['\"/\\]", piece)
-        (globs if is_filter else paths).append(unquote(piece))
+    for piece in (p for p in named if not EXCLUDE_PATHSPEC.match(p)):
+        # A text search's positional wildcard (`*.md`) is one more path, judged beside the folders
+        # named with it; a listing's is its -Filter.
+        is_filter = (not is_text_search and WILDCARD.search(piece)
+                     and not re.search(r"['\"/\\]", piece))
+        (globs if is_filter else paths).append(literal(piece))
     return Search(paths, globs, types)
 
 
