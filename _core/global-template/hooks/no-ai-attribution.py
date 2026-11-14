@@ -266,6 +266,16 @@ def node_program(cwd):
     return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
 
 
+def node_too_old(node):
+    """Whether `node` is older than Node 18, which the parser needs; asked only once a run failed."""
+    try:
+        out = subprocess.run([node, "--version"], capture_output=True, timeout=PARSE_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    version = re.match(rb"\s*v(\d+)\.", out.stdout)
+    return version is not None and int(version.group(1)) < 18
+
+
 def parse(cmd, shell, cwd):
     """(each simple command's words, the variables the command sets, "") as the shell reads
     them (helper/hooks/shell-words.mjs); (None, None, why) when the parser is missing, older
@@ -283,9 +293,9 @@ def parse(cmd, shell, cwd):
     except subprocess.TimeoutExpired:
         return None, None, SLOW
     except (OSError, ValueError):
-        return None, None, BROKEN
+        data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return None, None, BROKEN
+        return None, None, NO_NODE if node_too_old(node) else BROKEN
     if not isinstance(data.get("assignments"), list):
         return None, None, OLD_HELPER
     if data.get("error"):
@@ -612,8 +622,9 @@ def env_assignments(words):
 
 
 def turns_lefthook_off(commands, assignments):
-    """Whether the command sets LEFTHOOK to 0, false or a value built at run time (by
-    assignment, `export`, `env` or PowerShell's `$env:`), or runs `lefthook uninstall`."""
+    """Whether the command sets LEFTHOOK to 0 or false (by assignment, `export`, `env` or
+    PowerShell's `$env:`), or to a value built at run time by any of them but `env`, or runs
+    `lefthook uninstall`."""
     settings = [(s.get("name"), s.get("value")) for s in assignments if isinstance(s, dict)]
     settings += [tuple(text.split("=", 1)) for words in commands for text in env_assignments(words)]
     for name, value in settings:

@@ -681,6 +681,16 @@ class GuardHookTest(unittest.TestCase):
                 with self.subTest(helper=helper, command=command):
                     self.assert_denied(result, because)
             self.assert_passes(self.attr("ls -la", helper=helper))
+        # A Node older than 18 cannot run the parser, so the reason names Node, not the helper.
+        old_node = os.path.join(self.home, "old-node")
+        os.makedirs(old_node)
+        for name, text in (("node", '#!/bin/sh\n[ "$1" = --version ] && echo v12.22.9 || exit 1\n'),
+                           ("node.cmd", '@if "%~1"=="--version" (echo v12.22.9) else (exit /b 1)\r\n')):
+            with open(os.path.join(old_node, name), "w", newline="") as f:
+                f.write(text)
+            os.chmod(os.path.join(old_node, name), 0o755)
+        self.assert_denied(self.attr("git commit -m x", path=old_node + os.pathsep + os.environ.get("PATH", "")),
+                           "Install Node")
 
     def test_a_wrapped_gh_keeps_its_template_name(self):
         self.assert_passes(self.attr("env GH_TOKEN=x gh issue create --title t --template bug.md"))
