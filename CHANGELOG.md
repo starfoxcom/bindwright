@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- The review workflows bring Node 22.23.5, a security release, instead of 22.23.4, on a self-hosted Linux runner without its own Node; the download is still checked against pinned SHA-256 sums.
+
 ## [v4.0.0] — 2026-11-12
 
 ### Breaking
