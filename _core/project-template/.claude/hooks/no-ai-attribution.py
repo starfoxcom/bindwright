@@ -700,21 +700,28 @@ def literal_git_route(words):
 
 
 def env_assignments(words):
-    """The `NAME=value` words an `env` in this command sets for the program it runs."""
+    """The `NAME=value` words an `env` in this command sets for the program it runs. A bundle whose
+    letters are built at run time (`-${Q}u`) may or may not take the next word: both readings count."""
     found = []
     for i in range(len(words)):
-        if program(words[i:]) != "env":
-            continue
-        skip = False
-        for text in (text_of(w) for w in words[i + 1:]):
-            if skip:
-                skip = False
-            elif text.startswith("-"):
-                skip = takes_next_word(text, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
-            elif re.match(r"\w+=", text):
-                found.append(text)
-            else:
-                break
+        if program(words[i:]) == "env":
+            for uncertain_skips in (False, True):
+                found += env_words(words[i + 1:], uncertain_skips)
+    return found
+
+
+def env_words(args, uncertain_skips):
+    """The `NAME=value` words before `env`'s program, an uncertain bundle taking the next word or not."""
+    found, skip = [], False
+    for text in (text_of(w) for w in args):
+        if skip:
+            skip = False
+        elif text.startswith("-"):
+            skip = uncertain_skips if is_uncertain(text) else takes_next_word(text, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
+        elif re.match(r"\w+=", text):
+            found.append(text)
+        else:
+            break
     return found
 
 

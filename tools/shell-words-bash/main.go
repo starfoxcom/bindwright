@@ -155,6 +155,22 @@ func canBeEmpty(word *syntax.Word) bool {
 	return true
 }
 
+// staysOneWord reports whether no part of the word can split it into more words: no unquoted
+// expansion (`"A"=$X` exports each word of $X) and no quoted list (`"A=$@"`).
+func staysOneWord(word *syntax.Word) bool {
+	for _, part := range word.Parts {
+		switch part := part.(type) {
+		case *syntax.ParamExp, *syntax.CmdSubst, *syntax.ArithmExp, *syntax.ProcSubst:
+			return false
+		case *syntax.DblQuoted:
+			if slices.ContainsFunc(part.Parts, isList) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // isList reports whether a part is one of the expansions bash's manual gives one word per item
 // inside double quotes, and so none for no items: the arguments (`$@`), an array's items or keys
 // (`${list[@]}`, `${!list[@]}`) and the names of the set variables with a prefix (`${!prefix@}`).
@@ -279,7 +295,7 @@ func shellWords(source string) result {
 					}
 				case dynamic:
 					// `export "A+=$X"` appends to A.
-					if name, _, named := strings.Cut(word.Prefix, "="); named {
+					if name, _, named := strings.Cut(word.Prefix, "="); named && staysOneWord(assign.Value) {
 						out.Assignments = append(out.Assignments, assignment{Name: strings.TrimSuffix(name, "+"), Value: word})
 					} else {
 						out.Error = true

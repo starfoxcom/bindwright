@@ -830,7 +830,12 @@ class GuardHookTest(unittest.TestCase):
         # declaration whose name is built at run time stays unreadable.
         self.assert_denied(self.attr('Start-Process curl.exe -ArgumentList "-Fbody=@notes.md"'
                                      ' https://api.github.com/x', tool="PowerShell"), "notes.md")
-        self.assert_denied(self.attr('export "$KV" && git push'), "could not read this command")
+        for command in ('export "$KV" && git push', 'export "A"=$X && git commit -m x',
+                        'export "A=$@" && git commit -m x'):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), "could not read this command")
+        # An `env` bundle whose letters are built at run time may take the next word or not.
+        self.assert_denied(self.attr("env -${Q}u FOO LEFTHOOK=0 git commit -m x"), "lefthook")
         # A hyphenated native program (no approved verb) keeps getopt's attached read.
         self.assert_denied(self.attr('ssh-agent $GIT commit "-Fnotes.txt"', tool="PowerShell"), "notes.txt")
 
