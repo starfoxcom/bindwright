@@ -35,7 +35,7 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
-# A home-folder variable at the start of a path: Bash's $HOME, ${HOME} and $USERPROFILE (names
+# A home-folder variable at the start of a cd target: Bash's $HOME, ${HOME} and $USERPROFILE (names
 # are case-sensitive), and PowerShell's $env:HOME and $env:USERPROFILE (case-blind).
 HOME_VARIABLE = re.compile(r"^(?:\$(HOME|USERPROFILE)|\$\{(HOME|USERPROFILE)\}"
                            r"|\$(?i:env):((?i:HOME|USERPROFILE)))(?=[/\\]|$)")
@@ -83,9 +83,9 @@ def unquote(word):
 
 
 def expand_home(path):
-    """`path` with a leading home-folder variable replaced by its value, when the shell would expand
-    it: the variable is set and the word is not single-quoted. Anything else is left as written, so
-    the path stays inside the repo and the search stays counted."""
+    """A cd target with a leading home-folder variable replaced by its value, when the shell would
+    expand it: the variable is set and the word is not single-quoted. Anything else is left as
+    written, so the folder stays inside the repo and a search from it stays counted."""
     if path.startswith("'"):
         return path
     path = unquote(path)
@@ -96,7 +96,7 @@ def expand_home(path):
 
 def resolve(path, base):
     """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(unquote(expand_home(path)))
+    path = os.path.expanduser(unquote(path))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))
@@ -331,7 +331,7 @@ def shell_search(command, repo):
             words = split_words(moved.group(2) or "")
             target = words[0] if words else None
             back = moved.group(1).lower() == "popd" or target in RETURN_TARGETS
-            base = repo.root if back else resolve(" ".join(words), base)
+            base = repo.root if back else resolve(expand_home(" ".join(words)), base)
             continue
         if SHELL_SEARCH.search(head):
             search = words_search(split_words(head))
