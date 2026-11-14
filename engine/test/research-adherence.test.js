@@ -166,7 +166,7 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["an rg code wildcard that matches nothing here", bash("rg -tmd foo *.py"), "fallback"],
     ["an rg code file beside a docs glob", bash("rg foo -g '*.md' src/app.py"), "fallback"],
     ["a grep code wildcard filtered to docs", bash("grep -rn --include=*.md foo src/*.py"), null],
-    ["an ack code wildcard beside a docs type", bash("ack --type=md foo *.py"), "fallback"],
+    ["an ack code wildcard beside a docs type", bash("ack --type=markdown foo *.py"), "fallback"],
     ["an rg wildcard of a docs folder beside a docs type", bash("rg -tmd foo docs/*"), null],
     // Bash and a native tool take a quoted ~ as a folder under the current one.
     ["a quoted ~ in a cd is a folder name", bash('cd "~/scratch"; grep -rn foo .'), "fallback"],

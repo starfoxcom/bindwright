@@ -9,8 +9,10 @@ or Glob call, or a shell command that starts with a recursive search (grep
 -r, rg, git grep, or a recursive listing piped into Select-String). Each
 search is judged by what it reads: its file filters (globs, types,
 -Include) when it has any, otherwise the files and folders it names, and a
-folder by the files git tracks in it. A search that reads only docs, logs
-or data files, a filter on another command's output (`... | grep x`), and
+folder by the files git tracks in it. ripgrep and ack also read a file
+named beside a filter, so a code file named there counts. A search that
+reads only docs, logs or data files, a filter on another command's output
+(`... | grep x`), and
 a search of folders outside the repo (a scratchpad, a package cache),
 which the code-research tool has no index for, are not counted. When the
 words cannot be read for sure, the search counts unless it runs outside
