@@ -178,17 +178,20 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["$USERPROFILE in a cd is the home folder", bash("cd $USERPROFILE/scratch && grep -rn foo ."), null],
     ["$env:USERPROFILE in a cd is the home folder", ps("cd $env:USERPROFILE/scratch; rg foo ."), null],
     ["$env:HOME in a cd is the home folder", ps("cd $env:HOME/scratch; rg foo ."), null],
-    // A spelling the shell does not expand: the cd fails and the search reads the repo.
+    // A spelling the shell does not expand stays a plain folder name inside the repo, so it counts.
     ["%USERPROFILE% is a plain folder name", ps("cd %USERPROFILE%/scratch; rg foo ."), "fallback"],
     ["Bash's $home is another variable", bash("cd $home/scratch && grep -rn foo ."), "fallback"],
     ["an unpaired brace is not a home path", bash("cd $HOME}/scratch && grep -rn foo ."), "fallback"],
+    ["a single-quoted $HOME is a plain folder name", bash("cd '$HOME/scratch'; grep -rn foo ."), "fallback"],
+    ["a single-quoted $env:HOME is a plain folder name", ps("cd '$env:HOME/scratch'; rg foo ."), "fallback"],
     ["a home path into the repo still counts", bash('cd "$HOME/repo" && grep -rn foo src/'), "fallback"],
     ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],
   ];
   try {
     const got = classifyAll(root, rows.map(([, call]) => call), { HOME: base, USERPROFILE: base });
     rows.forEach(([label, , want], i) => assert.equal(got[i], want, label));
-    // HOME, since Windows keeps USERPROFILE set for every process.
+    // An unset variable is left unexpanded, so the search stays counted. HOME, since Windows keeps
+    // USERPROFILE set for every process.
     const unset = classifyAll(root, [bash("cd $HOME/scratch && grep -rn foo .")],
       { HOME: undefined, USERPROFILE: base });
     assert.deepEqual(unset, ["fallback"], "an unset $HOME is a plain folder name");

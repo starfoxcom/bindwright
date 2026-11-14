@@ -83,8 +83,12 @@ def unquote(word):
 
 
 def expand_home(path):
-    """`path` with a leading home-folder variable replaced by its value. An unset one stays a plain
-    folder name, as it does for the shell's cd, which then fails and leaves the search where it was."""
+    """`path` with a leading home-folder variable replaced by its value, when the shell would expand
+    it: the variable is set and the word is not single-quoted. Anything else is left as written, so
+    the path stays inside the repo and the search stays counted."""
+    if path.startswith("'"):
+        return path
+    path = unquote(path)
     match = HOME_VARIABLE.match(path)
     value = match and os.environ.get(next(name for name in match.groups() if name))
     return value + path[match.end():] if value else path
@@ -92,7 +96,7 @@ def expand_home(path):
 
 def resolve(path, base):
     """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(expand_home(unquote(path)))
+    path = os.path.expanduser(unquote(expand_home(path)))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))
