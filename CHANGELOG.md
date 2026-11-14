@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Breaking
 
-- **FindWright is a plugin of its own.** Bindwright no longer carries a copy of FindWright or writes its `findwright-first.py` hook. With FindWright as the code-search tool, setup installs the FindWright plugin (`starfoxcom/findwright`) and takes out the old hook; then restart Claude Code and run `/findwright:setup`, which installs its helper and meaning model, registers its server, offers its own search hook and fits the index. Until it runs, FindWright's server points at a file that is gone and searches fall back to the built-in tools. `/close-session` reads the hit rate from FindWright's own helper.
+- **FindWright is a plugin of its own.** Bindwright no longer carries a copy of FindWright or writes its `findwright-first.py` hook. With FindWright as the code-search tool, setup installs the FindWright plugin (`starfoxcom/findwright`) and takes out the old hook; then restart Claude Code and run `/findwright:setup`, which installs its helper and meaning model, registers its server, offers its own search hook and fits the index. On a computer that used the old copy, run `/bindwright:update` (or any `/bindwright:setup`): it takes out the old hook and server, which point at files that are gone, and installs the plugin; then restart and run `/findwright:setup`. `/close-session` reads the hit rate from FindWright's own helper.
 
 ### Added
 
