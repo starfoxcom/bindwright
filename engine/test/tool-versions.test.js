@@ -1,12 +1,14 @@
 // The tool-version check (helper/hooks/tool-versions.mjs): version parsing and
-// comparison, what a finding says about a release gap, and that a source which
-// cannot be read leaves its tool out. No network: every source is a fake.
+// comparison, what a finding says and how it is fixed, what each --version output
+// means, and that a source which cannot be read leaves its tool out. No network and
+// no spawning: every source and command is a fake.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   CLAUDE_URL, GH_URL, GIT_URL, NODE_INDEX_URL, NODE_SCHEDULE_URL, UV_URL,
-  checkTools, compareVersions, fixFor, nodeFinding, normalize, releaseFinding, sayFor,
+  checkTools, compareVersions, fixFor, localVersions, nodeFinding, normalize, releaseFinding,
+  sayFor,
 } from "../../helper/hooks/tool-versions.mjs";
 
 const TODAY = "2026-11-13";
@@ -51,10 +53,18 @@ const index = [
   { version: "v24.22.3", lts: "Krypton", security: true },
   { version: "v24.22.2", lts: "Krypton", security: false },
   { version: "v24.21.0", lts: "Krypton", security: false },
+  { version: "v22.6.0", lts: "Jod", security: false },
+  { version: "v22.5.0", lts: "Jod", security: false },
   { version: "v20.19.5", lts: "Iron", security: false },
   { version: "v25.1.0", lts: false, security: false },
 ];
 const calm = index.map((entry) => ({ ...entry, security: false }));
+// An odd line with a newer, non-LTS line above it and only an older LTS line.
+const oddLine = [
+  { version: "v24.22.3", lts: "Krypton", security: false },
+  { version: "v25.1.0", lts: false, security: false },
+  { version: "v26.0.0", lts: false, security: false },
+];
 const schedule = {
   v20: { end: "2026-04-30" },
   v24: { end: "2028-04-30" },
@@ -70,7 +80,13 @@ const nodeRows = [
   ["the last day of a line has not ended", { have: "24.22.2", index, today: "2028-04-30" },
     { ended: false }],
   ["a line past its end date has ended", { have: "20.19.5", index, today: TODAY },
-    { ended: true, ok: false, lineEnds: "2026-04-30", newestLts: "24.22.3" }],
+    { ended: true, ok: false, lineEnds: "2026-04-30", newestLts: "24.22.3", moveTo: "24.22.3" }],
+  ["an ended odd line points up, not down to the LTS line",
+    { have: "25.1.0", index: oddLine, today: TODAY, schedule: { v25: { end: "2026-04-30" } } },
+    { ended: true, moveTo: "26.0.0" }],
+  ["a malformed end date is no end date",
+    { have: "20.19.5", index, today: TODAY, schedule: { v20: { end: "2026/04/30" } } },
+    { lineEnds: null, ended: false }],
   ["a line missing from the schedule has no end date", { have: "25.1.0", index, today: TODAY },
     { lineEnds: null, ended: false, ok: true }],
   ["a line missing from the index is current as it stands", { have: "26.0.0", index, today: TODAY },
@@ -79,21 +95,31 @@ const nodeRows = [
 
 for (const [name, input, want] of nodeRows) {
   test(`nodeFinding: ${name}`, () => {
-    assertFields(nodeFinding({ ...input, schedule }), want);
+    assertFields(nodeFinding({ schedule, ...input }), want);
   });
 }
 
 const releaseRows = [
   ["behind with a CVE in the notes",
-    { have: "2.56.1", tag: "v2.56.2", notes: "Fixes CVE-2026-12345." },
+    { have: "2.56.1", releases: [{ tag: "v2.56.2", notes: "Fixes CVE-2026-12345." }] },
     { latest: "2.56.2", security: true, ok: false }],
-  ["behind without a security note", { have: "2.56.1", tag: "v2.56.2", notes: "Bug fixes." },
+  ["behind without a security note",
+    { have: "2.56.1", releases: [{ tag: "v2.56.2", notes: "Bug fixes." }] },
     { latest: "2.56.2", security: false, ok: false }],
-  ["behind with no notes", { have: "2.56.1", tag: "v2.56.2", notes: null },
+  ["behind with no notes",
+    { have: "2.56.1", releases: [{ tag: "v2.56.2", notes: null }] },
     { security: false, ok: false }],
-  ["current", { have: "2.56.2", tag: "v2.56.2", notes: null },
+  ["a security release between have and a plain latest",
+    { have: "2.56.1", releases: [
+      { tag: "v2.56.2", notes: "Security fix." },
+      { tag: "v2.56.3", notes: "Bug fixes." },
+    ] },
+    { latest: "2.56.3", security: true, ok: false }],
+  ["current",
+    { have: "2.56.2", releases: [{ tag: "v2.56.2", notes: null }] },
     { latest: "2.56.2", security: false, ok: true }],
-  ["Git's Windows build is current", { have: "2.56.1.3", tag: "v2.56.1.windows.3", notes: null },
+  ["Git's Windows build is current",
+    { have: "2.56.1.3", releases: [{ tag: "v2.56.1.windows.3", notes: null }] },
     { latest: "2.56.1.3", ok: true }],
 ];
 
@@ -103,16 +129,90 @@ for (const [name, input, want] of releaseRows) {
   });
 }
 
+const securityNoteRows = [
+  ["a CVE id", "Fixes CVE-2026-12345.", true],
+  ["a security fix", "Security fix for the credential helper.", true],
+  ["a GHSA id", "Fixes GHSA-4f8r-qqr9-fq8j.", true],
+  ["a vulnerability report form", "Add a private vulnerability report form.", false],
+  ["a link to SECURITY.md", "See SECURITY.md for details.", false],
+  ["the security policy", "Read our security policy.", false],
+  ["no security impact", "This has no security impact.", false],
+];
+
+for (const [name, notes, want] of securityNoteRows) {
+  test(`security note: ${name}`, () => {
+    const releases = [{ tag: "v1.0.1", notes }];
+    const finding = releaseFinding({ id: "gh", have: "1.0.0", releases });
+    assert.equal(finding.security, want);
+  });
+}
+
 test("sayFor: a behind release that fixes security says so", () => {
   const finding = releaseFinding({
-    id: "gh", have: "2.80.0", tag: "v2.80.1", notes: "Security fix.",
+    id: "gh", have: "2.80.0", releases: [{ tag: "v2.80.1", notes: "Security fix." }],
   });
   assert.equal(sayFor(finding), "GitHub CLI 2.80.0 is behind 2.80.1, which fixes security issues.");
 });
 
-test("fixFor: Node on Windows upgrades with winget", () => {
-  assert.equal(fixFor("node", "win32"), "winget upgrade --id OpenJS.NodeJS.LTS");
+const onLts = nodeFinding({ have: "24.22.2", index, today: TODAY, schedule });
+const olderLine = nodeFinding({ have: "22.5.0", index, today: TODAY, schedule });
+const endedOdd = nodeFinding({
+  have: "25.1.0", index: oddLine, today: TODAY, schedule: { v25: { end: "2026-04-30" } },
 });
+const uvBehind = releaseFinding({
+  id: "uv", have: "0.8.0", releases: [{ tag: "0.9.0", notes: null }],
+});
+const ghOnLinux = releaseFinding({
+  id: "gh", have: "2.80.0", releases: [{ tag: "v2.80.1", notes: null }],
+});
+const claudeCurrent = releaseFinding({
+  id: "claude", have: "2.1.0", releases: [{ tag: "2.1.0", notes: null }],
+});
+
+const fixRows = [
+  ["Node behind on the newest LTS line gets the winget command on Windows", onLts, "win32",
+    "winget upgrade --id OpenJS.NodeJS.LTS"],
+  ["Node behind on an older line gets no command", olderLine, "win32", null],
+  ["an ended odd line gets no command", endedOdd, "win32", null],
+  ["uv gets no command", uvBehind, "win32", null],
+  ["gh on Linux gets no command", ghOnLinux, "linux", null],
+  ["a current tool gets no command", claudeCurrent, "win32", null],
+];
+
+for (const [name, finding, platform, command] of fixRows) {
+  test(`fixFor: ${name}`, () => {
+    const { fix, command: got } = fixFor(finding, platform);
+    assert.equal(got, command);
+    assert.equal(typeof fix, "string");
+  });
+}
+
+// Answers each command from `answers`, null for the rest.
+const fakeRun = (answers) => (command) => answers[command] ?? null;
+
+const versionOutputs = {
+  git: "git version 2.47.0.windows.1\n",
+  gh: "gh version 2.104.0 (2026-11-01)\nhttps://github.com/cli/cli/releases/tag/v2.104.0\n",
+  uv: "uv 0.13.8 (abc123 2026-11-01)\n",
+  claude: "2.1.325 (Claude Code)\n",
+};
+
+const localRows = [
+  ["Windows finds Git with the other tools", "win32", versionOutputs,
+    { git: "2.47.0.1", gh: "2.104.0", uv: "0.13.8", claude: "2.1.325" }],
+  ["other platforms do not ask for Git", "linux", versionOutputs,
+    { gh: "2.104.0", uv: "0.13.8", claude: "2.1.325" }],
+  ["a tool whose command fails is left out", "win32", { ...versionOutputs, gh: null },
+    { git: "2.47.0.1", uv: "0.13.8", claude: "2.1.325" }],
+];
+
+for (const [name, platform, answers, want] of localRows) {
+  test(`localVersions: ${name}`, () => {
+    const { node, ...found } = localVersions({ platform, run: fakeRun(answers) });
+    assert.equal(node, process.versions.node);
+    assert.deepEqual(found, want);
+  });
+}
 
 // Answers from `replies` by URL, rejects a URL whose reply is an Error, and
 // records every URL it was asked for.
@@ -127,12 +227,16 @@ function fakeFetch(replies) {
   return { fetchJson, calls };
 }
 
+const release = (tag, notes = null) => ({
+  tag_name: tag, body: notes, draft: false, prerelease: false,
+});
+
 const replies = {
   [NODE_INDEX_URL]: index,
   [NODE_SCHEDULE_URL]: schedule,
-  [GIT_URL]: { tag_name: "v2.56.1.windows.3", body: null },
-  [GH_URL]: { tag_name: "v2.80.1", body: "Security fix." },
-  [UV_URL]: { tag_name: "0.9.0", body: null },
+  [GIT_URL]: [release("v2.56.1.windows.3")],
+  [GH_URL]: [release("v2.80.1", "Security fix.")],
+  [UV_URL]: [release("0.9.0")],
   [CLAUDE_URL]: { version: "2.1.0" },
 };
 
@@ -141,7 +245,10 @@ const versions = { node: "24.22.2", git: "2.56.1.3", gh: "2.80.0", uv: "0.8.0", 
 const checkRows = [
   ["a rejected source leaves its tool out",
     { ...replies, [GIT_URL]: new Error("ENOTFOUND") }, ["git"]],
-  ["a reply without its field leaves its tool out", { ...replies, [GH_URL]: {} }, ["gh"]],
+  ["a reply that is not a list leaves its tool out",
+    { ...replies, [GH_URL]: {} }, ["gh"]],
+  ["a list with no usable release leaves its tool out",
+    { ...replies, [UV_URL]: [{ ...release("0.9.1"), prerelease: true }] }, ["uv"]],
 ];
 
 for (const [name, table, unreachable] of checkRows) {
@@ -155,13 +262,30 @@ for (const [name, table, unreachable] of checkRows) {
   });
 }
 
-test("checkTools: tools come back in order, each with its sentence and fix", async () => {
+test("checkTools: a draft or prerelease is not the latest release", async () => {
+  const table = {
+    ...replies,
+    [UV_URL]: [
+      { ...release("0.10.0"), draft: true },
+      { ...release("0.11.0-rc1"), prerelease: true },
+      release("0.9.0"),
+    ],
+  };
+  const { fetchJson } = fakeFetch(table);
+  const result = await checkTools({
+    platform: "win32", today: TODAY, versions: { uv: "0.8.0" }, fetchJson,
+  });
+  assert.equal(result.tools[0].latest, "0.9.0");
+});
+
+test("checkTools: tools come back in order, each with its sentence, fix and command", async () => {
   const { fetchJson } = fakeFetch(replies);
   const result = await checkTools({ platform: "win32", today: TODAY, versions, fetchJson });
   assert.deepEqual(result.tools.map((tool) => tool.id), ["node", "git", "gh", "uv", "claude"]);
   for (const tool of result.tools) {
     assert.equal(typeof tool.say, "string", tool.id);
     assert.equal(typeof tool.fix, "string", tool.id);
+    assert.ok(tool.command === null || typeof tool.command === "string", tool.id);
   }
 });
 

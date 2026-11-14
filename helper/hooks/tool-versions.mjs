@@ -11,24 +11,33 @@ import { pathToFileURL } from "node:url";
 export const NODE_INDEX_URL = "https://nodejs.org/dist/index.json";
 export const NODE_SCHEDULE_URL =
   "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json";
-export const GIT_URL = "https://api.github.com/repos/git-for-windows/git/releases/latest";
-export const GH_URL = "https://api.github.com/repos/cli/cli/releases/latest";
-export const UV_URL = "https://api.github.com/repos/astral-sh/uv/releases/latest";
+export const GIT_URL = "https://api.github.com/repos/git-for-windows/git/releases?per_page=30";
+export const GH_URL = "https://api.github.com/repos/cli/cli/releases?per_page=30";
+export const UV_URL = "https://api.github.com/repos/astral-sh/uv/releases?per_page=30";
 export const CLAUDE_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest";
 
-// A release note that names a CVE or a security fix marks its release as one.
-const SECURITY_NOTE = /\bCVE-\d{4}-\d{4,}\b|\bsecurity\b/i;
+// A release note that names an advisory (a CVE or GitHub's GHSA id) or a security fix.
+// A bare mention of security or of a vulnerability (a SECURITY.md link, a policy, a
+// report form, a scanner feature, "no security impact") does not count.
+const SECURITY_NOTE = new RegExp([
+  String.raw`\bCVE-\d{4}-\d{4,}\b`,
+  String.raw`\bGHSA(?:-[23456789cfghjmpqrvwx]{4}){3}\b`,
+  String.raw`\bsecurity (?:fix|fixes|release|update|updates|advisory|issue|issues)\b`,
+].join("|"), "i");
 const NAMES = { node: "Node", git: "Git", gh: "GitHub CLI", uv: "uv", claude: "Claude Code CLI" };
 
-const NODE_OTHER_FIX = "Install the newest release of your line from "
-  + "https://nodejs.org/en/download, or update Node with the package manager that installed it.";
-const GH_OTHER_FIX = "Update gh with the package manager that installed it: "
+const NO_UPGRADE = "No upgrade needed.";
+const NODE_FROM = "from https://nodejs.org/en/download, or with the tool that installed Node "
+  + "(winget, nvm, fnm, Volta).";
+const NODE_LTS_COMMAND = "winget upgrade --id OpenJS.NodeJS.LTS";
+const GIT_FIX = "Update Git for Windows from https://gitforwindows.org.";
+const GH_FIX = "Update gh with the tool that installed it: "
   + "https://github.com/cli/cli#installation";
-const GH_FIX = { win32: "winget upgrade --id GitHub.cli", darwin: "brew upgrade gh" };
-const UV_FIX = {
-  win32: "uv self update (or winget upgrade --id astral-sh.uv when it was installed that way)",
-  darwin: "uv self update (or brew upgrade uv when it was installed that way)",
-};
+const GH_COMMANDS = { win32: "winget upgrade --id GitHub.cli", darwin: "brew upgrade gh" };
+const UV_FIX = "Run uv self update when uv came from its standalone installer; "
+  + "otherwise update it the way it was installed (winget, brew, pip or pipx).";
+const CLAUDE_FIX = "Run claude update, or update the CLI with the package manager that "
+  + "installed it.";
 
 const majorOf = (version) => version.split(".")[0];
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -64,6 +73,23 @@ function highest(versions) {
   return best;
 }
 
+// A schedule end that is not a YYYY-MM-DD date would compare wrongly against today,
+// so it counts as no end date.
+const endDateOf = (end) => (
+  typeof end === "string" && /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : null
+);
+
+// Where a Node user on the ended `major` line should move: the newest release on the
+// newest LTS line when that line is above `major`, else the newest release overall,
+// so the target never points to a lower major.
+function moveTargetFor(major, newestLts, releases) {
+  const ltsMajor = newestLts === null ? null : majorOf(newestLts);
+  const onLtsAbove = ltsMajor !== null && Number(ltsMajor) > Number(major);
+  const onLtsLine = (release) => majorOf(release.version) === ltsMajor;
+  const candidates = onLtsAbove ? releases.filter(onLtsLine) : releases;
+  return highest(candidates.map((release) => release.version));
+}
+
 // The Node finding for `have` against nodejs.org's release index and the Release
 // schedule. A line's schedule `end` is the last day it gets security fixes.
 export function nodeFinding({ have, index, schedule, today }) {
@@ -80,50 +106,57 @@ export function nodeFinding({ have, index, schedule, today }) {
   const security = line.some(
     (release) => release.security && compareVersions(release.version, have) > 0,
   );
-  const lineEnds = schedule?.[`v${major}`]?.end ?? null;
+  const lineEnds = endDateOf(schedule?.[`v${major}`]?.end);
   // Dates are YYYY-MM-DD, so comparing the text compares the days.
   const ended = lineEnds !== null && today > lineEnds;
   const withLts = releases.filter((release) => release.lts);
   const newestLts = highest(withLts.map((release) => release.version));
+  const moveTo = moveTargetFor(major, newestLts, releases);
   const ok = compareVersions(latest, have) <= 0 && !ended;
-  return { id: "node", have, latest, security, lineEnds, ended, newestLts, ok };
+  return { id: "node", have, latest, security, lineEnds, ended, newestLts, moveTo, ok };
 }
 
-// The finding for a tool whose latest release is a GitHub release (`tag` is its
-// tag_name, `notes` its body) or an npm version (`tag` is the version, `notes` null).
-export function releaseFinding({ id, have, tag, notes }) {
-  const latest = normalize(tag);
-  return {
-    id,
-    have,
-    latest,
-    security: SECURITY_NOTE.test(notes ?? ""),
-    ok: compareVersions(have, latest) >= 0,
-  };
+// The finding for a release-based tool. `releases` lists its usable releases as
+// { tag, notes }. The latest is the highest tag; a security release is one newer
+// than `have` whose notes say so.
+export function releaseFinding({ id, have, releases }) {
+  const latest = highest(releases.map((release) => normalize(release.tag)));
+  const security = releases.some(
+    (release) => compareVersions(release.tag, have) > 0 && SECURITY_NOTE.test(release.notes ?? ""),
+  );
+  return { id, have, latest, security, ok: compareVersions(have, latest) >= 0 };
 }
 
-// The command, or the instruction, that upgrades tool `id` on `platform`.
-export function fixFor(id, platform) {
-  switch (id) {
-    case "node":
-      return platform === "win32" ? "winget upgrade --id OpenJS.NodeJS.LTS" : NODE_OTHER_FIX;
-    case "git":
-      return "winget upgrade --id Git.Git";
-    case "gh":
-      return GH_FIX[platform] ?? GH_OTHER_FIX;
-    case "uv":
-      return UV_FIX[platform] ?? "uv self update";
-    case "claude":
-      return "claude update";
-    default:
-      throw new Error(`no upgrade command for ${id}`);
+function nodeFix(finding, platform) {
+  if (finding.ended) {
+    const target = finding.moveTo ? `Node ${finding.moveTo}` : "the newest Node";
+    return { fix: `Install ${target} ${NODE_FROM}`, command: null };
   }
+  const onLtsLine = finding.newestLts !== null
+    && majorOf(finding.have) === majorOf(finding.newestLts);
+  const command = platform === "win32" && onLtsLine ? NODE_LTS_COMMAND : null;
+  return { fix: `Install Node ${finding.latest} ${NODE_FROM}`, command };
 }
 
-function nodeSentence({ have, latest, security, lineEnds, ended, newestLts, ok }) {
+const FIX_BY_TOOL = {
+  node: nodeFix,
+  git: () => ({ fix: GIT_FIX, command: "winget upgrade --id Git.Git" }),
+  gh: (_finding, platform) => ({ fix: GH_FIX, command: GH_COMMANDS[platform] ?? null }),
+  uv: () => ({ fix: UV_FIX, command: null }),
+  claude: () => ({ fix: CLAUDE_FIX, command: "claude update" }),
+};
+
+// The fix text and the shell command that applies it, the command null when none is
+// certain to apply. A current tool needs no upgrade.
+export function fixFor(finding, platform) {
+  if (finding.ok) return { fix: NO_UPGRADE, command: null };
+  return FIX_BY_TOOL[finding.id](finding, platform);
+}
+
+function nodeSentence({ have, latest, security, lineEnds, ended, moveTo, ok }) {
   const major = majorOf(have);
   if (ended) {
-    const target = newestLts ? `Node ${majorOf(newestLts)} (LTS)` : "the newest LTS line";
+    const target = moveTo ? `Node ${majorOf(moveTo)}` : "a newer line";
     return `Node ${major} stopped getting security fixes on ${lineEnds}; move to ${target}.`;
   }
   if (ok) return `Node ${have} is current on the ${major} line.`;
@@ -187,14 +220,24 @@ export function localVersions({
   return versions;
 }
 
-// Each tool's sources, and how their replies become a finding. A reply without the
-// field the finding needs makes build return null, so the tool counts as unreachable.
+// A GitHub release that can be the latest: not a draft, not a prerelease, and a tag
+// that reads as a version.
+const isUsableRelease = (release) => isObject(release)
+  && release.draft !== true
+  && release.prerelease !== true
+  && normalize(release.tag_name) !== null;
+
+// Each tool's sources and how their replies become a finding. A reply that is not a
+// list of releases, or holds no usable one, makes build return null, so the tool
+// counts as unreachable.
 function releaseSource(id, url) {
   return {
     urls: [url],
-    build: ([release], have) => {
-      if (!normalize(release?.tag_name)) return null;
-      return releaseFinding({ id, have, tag: release.tag_name, notes: release.body });
+    build: ([releases], have) => {
+      const usable = Array.isArray(releases) ? releases.filter(isUsableRelease) : [];
+      if (usable.length === 0) return null;
+      const list = usable.map((release) => ({ tag: release.tag_name, notes: release.body }));
+      return releaseFinding({ id, have, releases: list });
     },
   };
 }
@@ -214,7 +257,7 @@ const TOOLS = {
     urls: [CLAUDE_URL],
     build: ([pkg], have) => {
       if (!normalize(pkg?.version)) return null;
-      return releaseFinding({ id: "claude", have, tag: pkg.version, notes: null });
+      return releaseFinding({ id: "claude", have, releases: [{ tag: pkg.version, notes: null }] });
     },
   },
 };
@@ -233,7 +276,7 @@ async function findingFor(id, have, { today, fetchJson }) {
 const withText = (finding, platform) => ({
   ...finding,
   say: sayFor(finding),
-  fix: fixFor(finding.id, platform),
+  ...fixFor(finding, platform),
 });
 
 // The findings for the tools in `versions`, in the order node, git, gh, uv, claude.
@@ -261,14 +304,21 @@ async function fetchJson(url) {
   return response.json();
 }
 
+// Prints the one JSON line the doctor reads: the check's result, or the error that
+// stopped it.
 async function main() {
   const platform = process.platform;
-  const result = await checkTools({
-    platform,
-    today: new Date().toLocaleDateString("en-CA"),
-    versions: localVersions({ platform }),
-    fetchJson,
-  });
+  let result;
+  try {
+    result = await checkTools({
+      platform,
+      today: new Date().toLocaleDateString("en-CA"),
+      versions: localVersions({ platform }),
+      fetchJson,
+    });
+  } catch (error) {
+    result = { error: String(error?.message ?? error) };
+  }
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
