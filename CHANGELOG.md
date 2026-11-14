@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Changed
 
 - **The review gate waits for the deep review a blocked routine review asked for.** When the routine review blocks and calls for a deep review, the `Review gate` check stays in progress ("Blocked by the routine review; deep review in progress") until the deep verdict lands, then fails. A CI watcher now wakes once with both verdicts, so every finding is fixed in one round instead of two.
+- **The tasks mod keeps a turn going near the compaction.** When the context is close to the auto-compaction point, a task on the list needs no one and nothing else will wake the session, the mod refuses the turn's end once, so the work goes on instead of stopping on a step the turn announced. A turn that still ends gets the usual prompt to carry on; to stop on purpose, put the open tasks on hold.
 
 ## [v5.0.1] — 2026-11-14
 
