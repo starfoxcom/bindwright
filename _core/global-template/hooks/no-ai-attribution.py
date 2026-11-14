@@ -137,6 +137,9 @@ HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api
 # Commands that may change which hooks run without writing anything.
 GIT_CONFIG_HOOKS = re.compile(
     r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|--re[mn]|\bre(?:move|name)-section\b)", re.I)
+# Text bash rewrites before a program sees it: a backslash escape or an ANSI-C or locale
+# string can spell any word, so the text checks cannot rule such a command out.
+SHELL_ESCAPES = re.compile(r"\\|\$['\"]")
 LEFTHOOK_OFF = re.compile(r"\blefthook\b\W*=|\blefthook\b[^|;&\n]*\buninstall\b", re.I)
 # A line end the shell joins to the next: `\` (an even run of `\` escapes itself) or
 # PowerShell's backtick after a blank.
@@ -542,22 +545,27 @@ def names_hook_section(section):
     return section in ("hook", "core") or section.startswith("hook.")
 
 
+def takes_next_word(word, short, long):
+    """Whether an option reads the next word as its value: a long one by its name (`long` maps
+    each to its shortest prefix), or a short cluster as getopt reads one, where only the last
+    letter can and a value letter before it takes the rest of the word (`-iuFOO`)."""
+    if word.startswith("--"):
+        return "=" not in word and any(abbreviates(word, option, shortest) for option, shortest in long.items())
+    letters = word[1:]
+    first = next((i for i, letter in enumerate(letters) if "-" + letter in short), None)
+    return first == len(letters) - 1
+
+
 def config_option_takes_value(word):
-    """Whether a `git config` option reads the next word as its value: a long one by its name,
-    or a short cluster (`-zt`) whose first value letter ends it; an earlier one holds its value
-    in the rest of the cluster (`-tpath`)."""
-    if not word.startswith("--"):
-        letters = word[1:]
-        first = next((i for i, letter in enumerate(letters) if "-" + letter in CONFIG_VALUE_SHORT), None)
-        return first == len(letters) - 1
-    return "=" not in word and any(
-        abbreviates(word, option, shortest) for option, shortest in CONFIG_VALUE_OPTIONS.items())
+    """Whether a `git config` option reads the next word as its value."""
+    return takes_next_word(word, CONFIG_VALUE_SHORT, CONFIG_VALUE_OPTIONS)
 
 
 def config_words(rest):
     """(the names and values `git config` reads, its options), or None when it is a read."""
     names, options, skip, ended = [], [], False, False
-    for word in (text_of(w) for w in rest):
+    for raw in rest:
+        word = text_of(raw)
         # The old form (`git config <name> <value>`) stops reading options at the first name, so a
         # later `--get` is the value it stores.
         legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
@@ -572,7 +580,8 @@ def config_words(rest):
             options.append(word)
             skip = config_option_takes_value(word)
         else:
-            names.append(word)
+            # A name built at run time (`$KEY`, `$'...'`) could be any setting, a hook's included.
+            names.append(word if isinstance(raw, str) else "hook.built-at-run-time")
     return names, options
 
 
@@ -636,8 +645,7 @@ def env_assignments(words):
             if skip:
                 skip = False
             elif text.startswith("-"):
-                skip = text in ENV_VALUE_SHORT or ("=" not in text and any(
-                    abbreviates(text, option, shortest) for option, shortest in ENV_VALUE_OPTIONS.items()))
+                skip = takes_next_word(text, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
             elif re.match(r"\w+=", text):
                 found.append(text)
             else:
@@ -702,15 +710,20 @@ def main():
     # `LEFT"HOOK"=0`), so the command is checked as written, joined and without its quotes.
     texts = (cmd, joined, re.sub(r"[\"'`]", "", joined))
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    if not (writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)):
+    named = writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+    shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
+    # An escaped bash command goes to the parser even when its text names no route, but only
+    # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
+    if not (named or shell == "bash" and SHELL_ESCAPES.search(cmd)):
         sys.exit(0)
 
     if writes:
         scan_text(cmd, "the command text")
-    shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     parsed, assignments, problem = parse(cmd, shell, cwd)
     if problem:
-        deny(problem)
+        if named:
+            deny(problem)
+        sys.exit(0)
     # A command that writes nothing is checked only for the routes past the hooks.
     for path, error in (parsed_files(parsed, cwd) if writes else ()):
         if error:
