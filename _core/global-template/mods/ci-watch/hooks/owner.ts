@@ -67,7 +67,9 @@ export async function followId($: EngineInterface, folder: string, memory: Memor
   const savedByPr = new Map(saved.map(w => [prOf(w), w]))
   const own = memory.watches.map(w => {
     const there = savedByPr.get(prOf(w))
-    return there && there.headSha === w.headSha && there.outcome && !w.outcome ? there : w
+    if (!there || there.headSha !== w.headSha || !there.outcome || w.outcome) return w
+    // A step back latched in memory stays unless the saved copy went green, which ends it.
+    return there.outcome === 'passed' ? there : { ...there, stepBackTopics: w.stepBackTopics ?? there.stepBackTopics }
   })
   const ownPrs = new Set(own.map(prOf))
   memory.watches = [...saved.filter(w => !ownPrs.has(prOf(w))), ...own]

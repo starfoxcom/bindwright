@@ -6,10 +6,23 @@
 <title data-t="settings.meta.title">Ajustes del plugin · Bindwright</title>
 <meta name="description" data-t-attr="content:settings.meta.description"
   content="Cada ajuste que pregunta o completa la instalación de Bindwright: las opciones de tu computadora, las que se preguntan en cada proyecto y los valores por defecto.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bindwright">
+<meta property="og:title" data-t-attr="content:settings.meta.title" content="Ajustes del plugin · Bindwright">
+<meta property="og:description" data-t-attr="content:settings.meta.description"
+  content="Cada ajuste que pregunta o completa la instalación de Bindwright: las opciones de tu computadora, las que se preguntan en cada proyecto y los valores por defecto.">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="https://starfoxcom.github.io/bindwright/assets/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" data-t-attr="content:meta.card"
+  content="El logo de Bindwright junto a la frase: Claude recuerda cómo te gusta trabajar.">
 <!-- alternates -->
 <link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/settings/">
 <link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/settings/">
 <link rel="alternate" hreflang="x-default" href="https://starfoxcom.github.io/bindwright/page/settings/">
+<link rel="canonical" href="https://starfoxcom.github.io/bindwright/page/es/settings/">
+<meta property="og:url" content="https://starfoxcom.github.io/bindwright/page/es/settings/">
 <!-- /alternates -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Crect width='1024' height='1024' rx='224' fill='%2316191d'/%3E%3Cpath d='M340 240H220V784H340M684 240H804V784H684' fill='none' stroke='%2380d08f' stroke-width='88' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='432' y='352' width='160' height='320' rx='36' fill='%2380d08f'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,7 +60,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <ul class="settings-list">
       <li class="setting" id="s-code-research">
         <h3 data-t="settings.code-research.title">Búsqueda de código</h3>
-        <p data-t="settings.code-research.text"><a href="https://github.com/starfoxcom/findwright">findwright</a> indexa cada archivo que el proyecto sigue, código, docs y configuración por igual, y responde preguntas en lenguaje normal, nombres y búsquedas con regex, con respuestas cortas. Viene con Bindwright. none usa la búsqueda integrada: sin índice, y más lenta.</p>
+        <p data-t="settings.code-research.text"><a href="https://github.com/starfoxcom/findwright">findwright</a> indexa cada archivo que el proyecto sigue, código, docs y configuración por igual, y responde preguntas en lenguaje normal, nombres y búsquedas con regex, con respuestas cortas. Es un plugin aparte, que setup instala. none usa la búsqueda integrada: sin índice, y más lenta.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.code-research.value">findwright</b></span>
       </li>
       <li class="setting" id="s-work-language">
@@ -93,7 +106,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <ul class="settings-list">
       <li class="setting" id="s-ci-watch">
         <h3 data-t="mods.ci-watch.title"><code>ci-watch</code></h3>
-        <p data-t="mods.ci-watch.text">Vigila las revisiones del pull request y despierta la sesión cuando terminan.</p>
+        <p data-t="mods.ci-watch.text">Vigila las revisiones del pull request y despierta la sesión cuando terminan. Tras varias rondas en rojo, frena los cambios hasta que la sesión investigue una mejor solución.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="mods.ci-watch.value">Activado</b></span>
       </li>
       <li class="setting" id="s-compact-handoff">

@@ -9,9 +9,11 @@
 
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+
+import { writeFileAtomic } from "./write-file.mjs";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
@@ -190,12 +192,9 @@ export function readState(file) {
   return { share: parsed?.share === true, projects };
 }
 
-// Written through a temporary file, so no reader sees it half written.
 function writeState(file, state) {
-  mkdirSync(dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.tmp`;
-  writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`);
-  renameSync(temp, file);
+  writeFileAtomic(file, `${JSON.stringify(state, null, 2)}
+`);
 }
 
 // Applies `change` to one repo's entry in a fresh read of the file, so a

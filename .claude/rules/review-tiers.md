@@ -45,7 +45,7 @@ A finding belongs to the PR when the PR causes it: a regression from the base br
 
 - Write this bar into every reviewer prompt from the first round, local or CI, before any finding arrives.
 - When a review reports, sort each finding against the bar before touching code. Fix only what passes it, plus the other copies of that same mistake (§ After a 🔴), with the smallest change, and add no features while fixing.
-- After 3 red rounds in a row, stop patching: look up how others solved the same problem, simplify the design, then continue. Each step back that leaves the PR red leaves one round fewer before the next: research again after 2 more red rounds, then after every red round from the 6th on.
+- After 3 red rounds in a row, stop patching: look up at least three ways others solved the same problem, compare them against each other, take the simplest one that removes the whole class, then continue. One search is a guess. Each step back that leaves the PR red leaves one round fewer before the next: research again after 2 more red rounds, then after every red round from the 6th on.
 
 Without the bar, each fix adds surface for the next round to find, and the rounds never converge.
 
@@ -57,6 +57,10 @@ The review app refuses its token to a run whose copy of `claude-code-review.yml`
 - No AI reviews such a PR in CI, so it is reviewed before merge, one of two ways:
   - **Every commit in it was written in the maintainer's own sessions:** two fresh subagents review the exact head commit that will merge. Neither is a fork of the session that wrote the change, and each gets only the PR's diff and its own prompt. One follows the review steps and the binary verdict rule of the routine-review prompt taken from the base branch's copy of `claude-code-review.yml`, never the PR's own copy. It runs the pre-screen's mechanical checks itself, since the CI pre-screen report does not exist locally. The other reviews as the deep tier, briefed to review the whole diff at that SHA adversarially under the binary verdict rule; the author may add focus points but never narrows that scope. Neither reviewer posts to the PR, applies a label or writes the deep-review trigger phrase; each returns its verdict to the author. Once both give 🟢, a PR comment records the head SHA and both verdict lines, and the merge passes `--match-head-commit <sha>` so it goes through only while that SHA is still the head. Any new commit re-runs both.
   - **Anything else,** including a PR the maintainer opened that carries someone else's commits: it merges only after the maintainer has read its whole diff.
+
+### The first setup PR
+
+The PR that first adds the review workflows has no gate on its base branch to pass: the `Review gate` check fails on it, and the review app refuses its token because the default branch holds no copy of `claude-code-review.yml` yet. So it targets the GitHub default branch, never `develop` when `develop` is not the default, and it is reviewed and merged as the workflow-only path above, with one change: the routine reviewer takes its prompt from the PR's own `claude-code-review.yml`, the files setup wrote, since the base has none. `.github/scripts/setup-review-gate.sh` creates and repairs no ruleset while the default branch lacks `.github/scripts/review_gate.py`, and names any ruleset that already requires `Review gate`: that check comes off until the merge, by the maintainer in the repo's settings. Once it merges, cascade it into `develop` when the project has one (push `develop` first if it exists only on this computer, so the script finds it on GitHub), then run `.github/scripts/setup-review-gate.sh` to protect both branches, and the same command with `--check` to confirm.
 
 For any other failure, fix the cause.
 

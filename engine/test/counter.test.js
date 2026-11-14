@@ -16,6 +16,7 @@ import {
   MAX_ROUNDS_PER_SEND,
   MIN_SEND_GAP_IN_MILLISECONDS,
   checkSend,
+  TOTALS_MAX_AGE_IN_SECONDS,
 } from "../../counter/src/rules.js";
 
 const SCHEMA = readFileSync(new URL("../../counter/schema.sql", import.meta.url), "utf8");
@@ -145,6 +146,17 @@ test("a send adds to the totals, and /total reports kinds and counts only", asyn
     kind: "website", checked: 9, caught: 2, deep: 1, merged: 3, stalled: 1, rounds: 8,
   });
   assert.equal(JSON.stringify(total.body).includes(PROJECT), false, "project ids stay private");
+});
+
+test("/total answers from its saved copy until TOTALS_MAX_AGE_IN_SECONDS passes", async () => {
+  const { store } = newStore();
+  const total = new Request("https://counter.test/total");
+  assert.equal((await run(total, { store })).body.projects, 0, "the first read computes");
+  assert.equal((await run(post(send()), { store })).status, 200);
+  const maxAge = TOTALS_MAX_AGE_IN_SECONDS * 1000;
+  assert.equal((await run(total, { store, time: NOON + maxAge - 1 })).body.projects, 0, "still the copy");
+  assert.equal((await run(total, { store, time: NOON + maxAge })).body.projects, 1, "refreshed");
+  assert.equal((await run(total, { store, time: NOON + maxAge + 1 })).body.projects, 1, "the refresh was saved");
 });
 
 test("a project sends once per gap", async () => {
