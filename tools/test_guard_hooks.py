@@ -670,12 +670,19 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(old, "hooks"))
         with open(os.path.join(old, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write('process.stdout.write(JSON.stringify({error: false, commands: [["git", "commit"]]}));\n')
+        # One that reads run-time words without saying which can expand to nothing is too old too.
+        older = os.path.join(self.home, "older-helper")
+        os.makedirs(os.path.join(older, "hooks"))
+        with open(os.path.join(older, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
+            f.write('process.stdout.write(JSON.stringify({error: false, assignments: [],'
+                    ' commands: [["git", "commit", {dynamic: "$X"}]]}));\n')
         broken = os.path.join(self.home, "broken-helper")
         os.makedirs(os.path.join(broken, "hooks"))
         with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write("process.exit(1);\n")
         for helper, because in ((os.path.join(self.home, "none"), "Run /bindwright:update to install it"),
-                                (old, "older than this guard"), (broken, "reinstall Bindwright's helper")):
+                                (old, "older than this guard"), (older, "older than this guard"),
+                                (broken, "reinstall Bindwright's helper")):
             for command, result in self.each(("git commit -m x", "gh issue create --title t --template bug.md",
                             "git config core.hooksPath /x"), lambda command: self.attr(command, helper=helper)):
                 with self.subTest(helper=helper, command=command):
@@ -738,6 +745,42 @@ class GuardHookTest(unittest.TestCase):
                 ("git config --co --get core.hooksPath /x", setting, "Bash"),
                 ("git config remove-section --global hook.lint", setting, "Bash"),
                 ("git config --rename-section core old", setting, "Bash"),
+                ("git config set -- core.hooksPath --list", setting, "Bash"),
+                ("git config set core.hooksPath -- --get", setting, "Bash"),
+                ("git config core.hooksPath --", setting, "Bash"),
+                (r"git config core.ho\oksPath /dev/null", setting, "Bash"),
+                (r"git com\mit -n -m x", hooks, "Bash"),
+                ("env -iu FOO LEFTHOOK=0 git commit -m x", lefthook, "Bash"),
+                ("env -iuFOO LEFTHOOK=0 git commit -m x", lefthook, "Bash"),
+                ("git config -zt path core.hooksPath /x", setting, "Bash"),
+                ("git config -zf .git/config core.hooksPath /x", setting, "Bash"),
+                ('export "LEFTHOOK=0"', lefthook, "Bash"), ("declare -x LEFT'HOOK'=0", lefthook, "Bash"),
+                ("git com'mit' --no-verify -m x", hooks, "Bash"),
+                ("git con'fig' core.hooksPath /x", setting, "Bash"),
+                ("git config $SCOPE core.hooksPath /x", setting, "Bash"),
+                ("git config unset $SCOPE core.hooksPath", setting, "Bash"),
+                ("git $OPTS commit --no-verify -m x", hooks, "Bash"),
+                ("git config $X set core.hooksPath /x", setting, "Bash"),
+                ("git config $X unset core.hooksPath", setting, "Bash"),
+                ("git config $X remove-section hook", setting, "Bash"),
+                ("git config $X rename-section core other", setting, "Bash"),
+                ("git $OPTS commit -m \"$MSG\" --no-verify", hooks, "Bash"),
+                ("git config $SCOPE core.hooksPath \"$DIR\"", setting, "Bash"),
+                ("git config \"$@\" core.hooksPath /x", setting, "Bash"),
+                ("git -c core.hooksPath=\"$DIR\" commit -m x", setting, "Bash"),
+                ("git --config-env=core.hooksPath=$NAME commit -m x", setting, "Bash"),
+                ("git commit --reuse-message=\"$SHA\"", reuse, "Bash"), ('git commit -C"$SHA"', reuse, "Bash"),
+                ('git commit --trailer="Reviewed-by: $WHO" -m x', trailer, "Bash"),
+                ('git commit -nm"$MSG"', hooks, "Bash"),
+                ('git config $(scope_for "$repo") core.hooksPath /x', setting, "Bash"),
+                ('git ${OPTS:+"$OPTS"} commit --no-verify', hooks, "Bash"),
+                ('git config "${scope[@]}" core.hooksPath /x', setting, "Bash"),
+                ('git -c core.hooksPath=$dir commit -m x', setting, "PowerShell"),
+                ('git -c "core.hooksPath=$HOME/none" commit -m x', setting, "Bash"),
+                ('git "--config-env=core.hooksPath=$NAME" commit -m x', setting, "Bash"),
+                ('git commit "--trailer=Co-authored-by: $WHO" -m x', trailer, "Bash"),
+                ('git commit "--reuse-message=$SHA"', reuse, "Bash"), ('git commit "-C$SHA"', reuse, "Bash"),
+                ('git "${!nope@}" -c core.hooksPath=/x commit -m x', setting, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -747,6 +790,8 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, because, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, because)
+        # Past ten words that can expand to nothing, a git call is refused rather than read part way.
+        self.assert_denied(self.attr("git commit -m x $a $b $c $d $e $f $g $h $i $j $k"), "built at run time")
         # Each option keeps git's own meaning, a value is never an option, and a read passes.
         for command, result in self.each(
                 ("git commit -m -n", 'git commit -m "say --no-verify"', "git commit -m x -- -n",
@@ -757,7 +802,11 @@ class GuardHookTest(unittest.TestCase):
                         '"$S/bin/actionlint.exe" x && git commit -m x',
                         'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push",
                         'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0",
-                        "git commit -uno -m x", "git commit -Sn0key -m x"), lambda command: self.attr(command)):
+                        "git commit -uno -m x", "git commit -Sn0key -m x", 'git config "$KEY" v',
+                        'git config user.name "$N"', "git $OPTS log -n 5",
+                        "git config $X get core.hooksPath", 'git commit -m "$MSG" -- -n',
+                        "git commit -m x $a $b $c $d $e $f $g $h $i $j", 'git commit -m"$MSG"',
+                        'git push origin "$BRANCH"'), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
 

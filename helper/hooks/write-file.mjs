@@ -22,7 +22,12 @@ const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
 export function writeFileAtomic(file, text, { rename = renameSync } = {}) {
   mkdirSync(dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  writeFileSync(temp, text);
+  try {
+    writeFileSync(temp, text);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
   for (let attempt = 1; ; attempt++) {
     try {
       rename(temp, file);

@@ -4,7 +4,8 @@
 // It runs once inside Node as WebAssembly (GOOS=js GOARCH=wasm): the caller sets the global
 // `shellWordsInput` to the command, runs the module, and reads the global `shellWordsOutput`, a
 // JSON object {"error": bool, "commands": [[word, ...], ...], "assignments": [{"name", "value"}]}.
-// A word is a string, or {"dynamic": <source text>} when the shell builds it at run time.
+// A word is a string, or {"dynamic": <source text>, "prefix": <literal start>, "canBeEmpty": bool}
+// when the shell builds it at run time.
 package main
 
 import (
@@ -29,6 +30,10 @@ type result struct {
 
 type dynamic struct {
 	Dynamic string `json:"dynamic"`
+	// Prefix is the literal text bash gives the word before its first part built at run time.
+	Prefix string `json:"prefix"`
+	// CanBeEmpty is whether the word can expand to no word at all.
+	CanBeEmpty bool `json:"canBeEmpty"`
 }
 
 var (
@@ -56,8 +61,74 @@ func (r reader) text(node syntax.Node) string {
 	return r.source[node.Pos().Offset():node.End().Offset()]
 }
 
-func (r reader) dynamicWord(node syntax.Node) dynamic {
-	return dynamic{Dynamic: r.text(node)}
+func (r reader) dynamicWord(word *syntax.Word) dynamic {
+	return dynamic{Dynamic: r.text(word), Prefix: r.prefix(word), CanBeEmpty: canBeEmpty(word)}
+}
+
+// prefix is the text bash gives the word's start whatever runs: its leading plain, single-quoted
+// and double-quoted text, up to the first part built at run time and, in plain text, the first
+// character that could start a glob, a brace or an escape.
+func (r reader) prefix(word *syntax.Word) string {
+	var value strings.Builder
+	for _, part := range word.Parts {
+		lit, plain := part.(*syntax.Lit)
+		if plain {
+			if cut := strings.IndexAny(lit.Value, "*?[{\\"); cut >= 0 {
+				value.WriteString(lit.Value[:cut])
+				return value.String()
+			}
+		}
+		if quoted, ok := part.(*syntax.DblQuoted); ok && !quoted.Dollar {
+			// `"core.hooksPath=$DIR"`: the text before the expansion is certain.
+			for _, inner := range quoted.Parts {
+				innerLit, ok := inner.(*syntax.Lit)
+				if !ok {
+					return value.String()
+				}
+				value.WriteString(unescape(quotedEscape, innerLit.Value))
+			}
+			continue
+		}
+		literal, ok := r.literalPart(part)
+		if !ok {
+			break
+		}
+		value.WriteString(literal)
+	}
+	return value.String()
+}
+
+// canBeEmpty reports whether bash can expand the word to no word: every part is an unquoted
+// expansion (`$OPTS`, `$(cmd)`, `${X:+"$X"}`) or a quoted list of arguments or array items
+// (`"$@"`, `"${list[@]}"`), each of which leaves nothing when empty.
+func canBeEmpty(word *syntax.Word) bool {
+	for _, part := range word.Parts {
+		switch part := part.(type) {
+		case *syntax.ParamExp, *syntax.CmdSubst:
+		case *syntax.DblQuoted:
+			if len(part.Parts) != 1 || !isList(part.Parts[0]) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// isList reports whether a part is one of the expansions bash's manual gives one word per item
+// inside double quotes, and so none for no items: the arguments (`$@`), an array's items or keys
+// (`${list[@]}`, `${!list[@]}`) and the names of the set variables with a prefix (`${!prefix@}`).
+func isList(part syntax.WordPart) bool {
+	param, ok := part.(*syntax.ParamExp)
+	if !ok {
+		return false
+	}
+	if param.Param.Value == "@" || param.Names == syntax.NamesPrefixWords {
+		return true
+	}
+	index, ok := param.Index.(*syntax.Word)
+	return ok && index.Lit() == "@"
 }
 
 // word is the literal value bash gives the word, or a dynamic marker when any part of it is
@@ -155,8 +226,17 @@ func shellWords(source string) result {
 			if assign.Array != nil {
 				out.Error = true
 			}
-			if assign.Name != nil && !assign.Naked {
+			switch {
+			case assign.Name != nil && !assign.Naked:
 				out.Assignments = append(out.Assignments, r.assignment(assign))
+			case assign.Naked && assign.Value != nil:
+				// `export "A=1"` reaches the parser as one word, which bash splits at its first `=`;
+				// a word built at run time could set any variable.
+				if word, literal := r.word(assign.Value).(string); !literal {
+					out.Error = true
+				} else if name, value, sets := strings.Cut(word, "="); sets {
+					out.Assignments = append(out.Assignments, assignment{Name: name, Value: value})
+				}
 			}
 		}
 	}
