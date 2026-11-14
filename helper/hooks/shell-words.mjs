@@ -65,8 +65,9 @@ function psWord(node) {
     return node.text.slice(1, -1).replace(/''/g, "'");
   }
   if (node.type === "expandable_string_literal") {
-    // A string is always one argument, whatever it expands to.
-    if (node.namedChildren.length) {
+    // A string is always one argument, whatever it expands to. The grammar gives no child for a
+    // variable whose name is not ASCII (`"$été"`), which PowerShell still expands.
+    if (node.namedChildren.length || /(?<!`)\$[\p{L}\p{N}_]/u.test(node.text)) {
       return dynamic(node, /^"([^$`"]*)/.exec(node.text)?.[1] ?? "", false, psShape(node.text.slice(1, -1)));
     }
     return psUnescape(node.text.slice(1, -1)).replace(/""/g, '"');

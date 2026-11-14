@@ -842,7 +842,7 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), "lefthook")
         # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
-        for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$étém" -n'):
+        for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$éam" -n'):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool="PowerShell"), "no-verify")
         # A hyphenated native program (no approved verb) keeps getopt's attached read, and git run
