@@ -111,8 +111,7 @@ async function followSession($: EngineInterface): Promise<void> {
   }
 }
 
-// The owner claim and the retirement check live in owner.ts; neither ever rejects a hook. An older
-// owner's name is replaced by this one's, and the watches it saved join memory in followSession.
+// The claim and retirement check (owner.ts) never reject a hook; a taken-over id's watches join in followSession.
 async function claimOwner($: EngineInterface): Promise<void> {
   try {
     const folder = await dataFolder($)
@@ -127,11 +126,10 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
   if (live.isRetiredForGood) return true
   try {
     const folder = await dataFolder($)
-    // Two missed polls: the owner has stopped running.
+    // An owner two polls behind has exited; taking the session back restarts a timer retirement stopped.
     const owner = await ownerOf($, folder, 2 * live.pollMs)
     if (owner === 'older' || owner === 'gone') await claim($, folder)
     if (owner === 'newer') return true
-    // Retired before, this instance stopped its timer; taking the session back starts it again.
     if (owner === 'gone' && live.started !== undefined && live.tick === undefined) armPolling($)
     await followSession($)
     return false
@@ -632,9 +630,8 @@ function armPolling($: EngineInterface): void {
   const period = live.pollMs
   const tick = $.clock.every(period, async () => {
     if (await isRetired($)) {
-      tick.cancel()
       if (live.tick === tick) live.tick = undefined
-      return
+      return void tick.cancel()
     }
     await claimOwner($)
     if (live.pollMs !== period) {
