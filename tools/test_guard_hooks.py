@@ -660,7 +660,7 @@ class GuardHookTest(unittest.TestCase):
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
             rows = re.findall(r"^\| `([^`]+)` \|.*\| `([0-9a-f]{64})` \|$", fh.read(), re.M)
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 5)
         for name, digest in rows:
             with self.subTest(name), open(os.path.join(HELPER, "parsers", name), "rb") as fh:
                 self.assertEqual(hashlib.sha256(fh.read()).hexdigest(), digest)

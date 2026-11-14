@@ -38,3 +38,5 @@ helper/parsers/web-tree-sitter.mjs|line_length|-|vendored: web-tree-sitter, copi
 helper/parsers/web-tree-sitter.mjs|function|*|vendored: web-tree-sitter, copied unchanged (exception 1)
 helper/parsers/web-tree-sitter.mjs|params|*|vendored: web-tree-sitter, copied unchanged (exception 1)
 helper/parsers/web-tree-sitter.mjs|ccn|*|vendored: web-tree-sitter, copied unchanged (exception 1)
+helper/parsers/go-wasm-exec.mjs|line_length|-|vendored: Go's wasm_exec.js loader, copied unchanged (exception 1)
+helper/parsers/go-wasm-exec.mjs|function|*|vendored: Go's wasm_exec.js loader, copied unchanged (exception 1)
