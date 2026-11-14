@@ -408,6 +408,8 @@ function registerTurns(on: On): void {
   on('classic.Stop', async ($, e, next) => {
     live.hasEngineWake = hasEngineWake(e)
     const result = await next(e)
+    // A refusal or a stop a handler beneath already gave stands as it is.
+    if (result.block !== undefined || result.preventContinuation) return result
     const reason = await refusedStop($, e.stop_hook_active).catch(() => undefined)
     return reason ? { ...result, block: reason } : result
   })

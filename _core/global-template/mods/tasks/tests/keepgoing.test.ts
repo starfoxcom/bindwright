@@ -206,16 +206,23 @@ test('near the compaction a turn end with a workable task is refused once', asyn
   on('session.usage', () => ({ value: { context: context() } }) as never)
   on('settings.read', () => ({ value: {} }) as never)
   seen.files.set('C:/Users/me/.claude.json', '{}')
-  on('classic.Stop', () => ({}) as never)
+  let below: object = {}
+  on('classic.Stop', () => below as never)
   const event = (repeat: boolean) =>
     ({ hook_event_name: 'Stop', stop_hook_active: repeat, background_tasks: [], session_crons: [] }) as never
-  const stop = (repeat = false) => $.classic.Stop(event(repeat))
-  expect((await stop()) as { block?: string }).not.toHaveProperty('block')
+  const stop = async (repeat = false) => (await $.classic.Stop(event(repeat))) as { block?: string }
+  expect(await stop()).not.toHaveProperty('block')
   tokens = 125_000
-  expect(((await stop()) as { block?: string }).block).toContain('task #1 "task 1" needs no one. Continue it now.')
-  expect((await stop(true)) as { block?: string }).not.toHaveProperty('block')
+  expect((await stop()).block).toContain('task #1 "task 1" needs no one. Continue it now.')
+  expect(await stop(true)).not.toHaveProperty('block')
+  // A refusal or a stop from a hook beneath stands as it is.
+  below = { block: 'run the tests before you stop' }
+  expect((await stop()).block).toBe('run the tests before you stop')
+  below = { preventContinuation: true }
+  expect(await stop()).not.toHaveProperty('block')
+  below = {}
   await $.tool.call({ tool: 'TaskUpdate', taskId: '1', metadata: { hold: 'Alex' } } as never)
-  expect((await stop()) as { block?: string }).not.toHaveProperty('block')
+  expect(await stop()).not.toHaveProperty('block')
 })
 
 test('the setting turns it off', { options: { keepGoing: false } }, async ($, on) => {
