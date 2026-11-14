@@ -343,6 +343,10 @@ def decide(triage_result, routine=None, escalated=False, deep=None):
         return _check("completed", "success", "No review needed", "The diff has no reviewable files.")
     if routine == "pending":
         return _check("in_progress", None, "Routine review in progress", "Waiting for the routine review's verdict.")
+    if routine == "block" and escalated and deep is None:
+        # Both verdicts land before the check settles, so every finding is fixed in one round.
+        return _check("in_progress", None, "Blocked by the routine review; deep review in progress",
+                      "The routine review found something to fix and asked for a deep review; its verdict follows.")
     if routine != "pass":
         return _failed(routine, "routine")
     if deep == "pass":

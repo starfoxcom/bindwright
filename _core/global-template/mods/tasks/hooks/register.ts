@@ -307,15 +307,30 @@ async function keepGoing($: EngineInterface): Promise<void> {
   const tasks = workable(mirror)
   if (live.hasEngineWake) return
   if (tasks.length === 0 && !(await isContextNearCompaction($))) return
-  const ciWatch = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
-  if (hasPendingWake(ciWatch, await $.clock.now())) return
-  if (isPauseHolding(await peerFile($, 'usage-guard', 'pause.json'), await $.clock.now())) return
+  if (await isWakeComing($)) return
   const isIdle = live.idlePrompts > 0 && live.promptedAt === mirror.changedAt
   // With no task to name, one prompt: a turn that still ends after it waits on a person.
   if (isIdle && live.idlePrompts >= (tasks.length > 0 ? MAX_IDLE_PROMPTS : 1)) return
   live.idlePrompts = isIdle ? live.idlePrompts + 1 : 1
   live.promptedAt = mirror.changedAt
   await $.prompt.submit({ text: tasks.length > 0 ? keepGoingText(tasks) : nearCompactionText() })
+}
+
+// A CI watch or a plan-limit pause that wakes the session by itself.
+async function isWakeComing($: EngineInterface): Promise<boolean> {
+  const ciWatch = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
+  if (hasPendingWake(ciWatch, await $.clock.now())) return true
+  return isPauseHolding(await peerFile($, 'usage-guard', 'pause.json'), await $.clock.now())
+}
+
+// The reason to refuse a turn's end near the compaction while a task needs no one and nothing will wake the
+// session, so the turn goes on instead of ending on a step it announced. Once per stop: the engine marks the
+// next one `stop_hook_active`, which always ends, and the keep-going prompt takes over from there.
+async function refusedStop($: EngineInterface, isRepeat: boolean): Promise<string | undefined> {
+  if (!live.keepGoing || isRepeat || live.hasEngineWake) return undefined
+  const tasks = workable(await mirrorOf($))
+  if (tasks.length === 0 || !(await isContextNearCompaction($)) || (await isWakeComing($))) return undefined
+  return keepGoingText(tasks)
 }
 
 // The settings file at the session's start, before any tool call: the settings module follows it from
@@ -392,7 +407,11 @@ function registerTurns(on: On): void {
   // keep-going look, which waits a moment after the turn completes.
   on('classic.Stop', async ($, e, next) => {
     live.hasEngineWake = hasEngineWake(e)
-    return next(e)
+    const result = await next(e)
+    // A refusal or a stop a handler beneath already gave stands as it is.
+    if (result.block !== undefined || result.preventContinuation) return result
+    const reason = await refusedStop($, e.stop_hook_active).catch(() => undefined)
+    return reason ? { ...result, block: reason } : result
   })
 
   on('turn.complete', async ($, e, next) => {

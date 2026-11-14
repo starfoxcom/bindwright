@@ -409,6 +409,10 @@ class Decide(unittest.TestCase):
             (("reviewable", "pending"), {"deep": "pass"}, "in_progress", None),
             (("reviewable", "pending"), {"deep": "error"}, "completed", "failure"),
             (("reviewable", "block"), {"deep": "pass"}, "completed", "failure"),
+            # A routine block waits for the deep review it asked for, then fails on either verdict.
+            (("reviewable", "block"), {"escalated": True}, "in_progress", None),
+            (("reviewable", "block"), {"escalated": True, "deep": "pass"}, "completed", "failure"),
+            (("reviewable", "block"), {"escalated": True, "deep": "block"}, "completed", "failure"),
             (("reviewable", "pass"), {"escalated": True}, "in_progress", None),
             (("reviewable", "pass"), {"deep": "pass"}, "completed", "success"),
             (("reviewable", "pass"), {"escalated": True, "deep": "pass"}, "completed", "success"),
