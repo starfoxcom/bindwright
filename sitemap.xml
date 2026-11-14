@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://starfoxcom.github.io/bindwright/page/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/"/>
+  </url>
+  <url>
+    <loc>https://starfoxcom.github.io/bindwright/page/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/"/>
+  </url>
+  <url>
+    <loc>https://starfoxcom.github.io/bindwright/page/settings/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/settings/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/settings/"/>
+  </url>
+  <url>
+    <loc>https://starfoxcom.github.io/bindwright/page/es/settings/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/settings/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/settings/"/>
+  </url>
+  <url>
+    <loc>https://starfoxcom.github.io/bindwright/page/compare/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/compare/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/compare/"/>
+  </url>
+  <url>
+    <loc>https://starfoxcom.github.io/bindwright/page/es/compare/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://starfoxcom.github.io/bindwright/page/compare/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://starfoxcom.github.io/bindwright/page/es/compare/"/>
+  </url>
+</urlset>
