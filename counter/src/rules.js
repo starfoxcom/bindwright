@@ -116,3 +116,9 @@ export function dayOf(timeInMilliseconds) {
 function refuse(reason) {
   return { ok: false, reason };
 }
+
+/**
+ * How long `GET /total` answers from its saved copy. Only one read per period recomputes
+ * the totals, so the scans of the projects table cost the same however often the page loads.
+ */
+export const TOTALS_MAX_AGE_IN_SECONDS = 300;
