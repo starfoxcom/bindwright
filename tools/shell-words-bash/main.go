@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -63,6 +64,17 @@ func (r reader) dynamicWord(node syntax.Node) dynamic {
 // expanded at run time: a parameter, a substitution, a glob, a brace expansion, or an ANSI-C or
 // locale string.
 func (r reader) word(word *syntax.Word) any {
+	// Bash's own rule: only a brace holding a comma or a range expands (`{a,b}`, `{1..3}`), never
+	// `{}` or `stash@{0}`. The parser splits a copy, since it rewrites the parts it is given, and
+	// turns a brace that does not expand back into plain text.
+	split := &syntax.Word{Parts: slices.Clone(word.Parts)}
+	syntax.SplitBraces(split)
+	if slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
+		_, expands := part.(*syntax.BraceExp)
+		return expands
+	}) {
+		return r.dynamicWord(word)
+	}
 	var value strings.Builder
 	for _, part := range word.Parts {
 		literal, ok := r.literalPart(part)
@@ -77,8 +89,7 @@ func (r reader) word(word *syntax.Word) any {
 func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 	switch part := part.(type) {
 	case *syntax.Lit:
-		// A glob, or a brace expansion ({a,b}, {1..3}), which the parser leaves inside the literal.
-		if strings.ContainsAny(part.Value, "*?[{") {
+		if isGlob(part.Value) {
 			return "", false
 		}
 		return unescape(unquotedEscape, part.Value), true
@@ -99,6 +110,13 @@ func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 		return value.String(), true
 	}
 	return "", false
+}
+
+// isGlob reports whether bash can expand the text as a file pattern: a `*` or `?`, or a `[`
+// with a `]` after it. A lone `[`, the test command, stays itself.
+func isGlob(text string) bool {
+	open := strings.Index(text, "[")
+	return strings.ContainsAny(text, "*?") || open >= 0 && strings.Contains(text[open+1:], "]")
 }
 
 func (r reader) assignment(assign *syntax.Assign) assignment {

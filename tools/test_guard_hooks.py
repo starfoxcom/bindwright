@@ -464,6 +464,8 @@ class GuardHookTest(unittest.TestCase):
                 ("curl -d '<b>x</b>' https://api.github.com/repos/o/r/issues", "Bash"),
                 ('git commit -m "-F is now parsed"', "Bash"),
                 ('git commit -am "-F is now parsed"', "Bash"),
+                # `[` is the test command, not a pattern, so the command is read as written.
+                ('[ -n "$X" ] && git commit -m "--file=x is gone"', "Bash"),
                 ('git commit -nm "--file=x is gone"', "Bash"),
                 ('git merge -nm "--file=x is gone" feature', "Bash"),
                 ('env A=1 git commit -sm "--file=x is gone"', "Bash"),
