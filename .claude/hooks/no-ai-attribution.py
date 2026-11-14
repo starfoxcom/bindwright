@@ -60,7 +60,8 @@ against a command built to slip past it. No text check can be one. These
 pass unread: message text the shell builds at run time ($VAR, $(...),
 backticks, eval), a body file the command itself writes, a body piped in
 on stdin, a git alias or a git program built at run time whose text does
-not name git (their options are not read as git's), and text a program
+not name git (their options are not read as git's), a `git config` name
+built at run time (`"$KEY"`, `core.ho$'o'ksPath`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
 by hand.
@@ -563,13 +564,15 @@ def config_option_takes_value(word):
 
 
 def config_words(rest):
-    """(the names and values `git config` reads, its options), or None when it is a read."""
+    """(the names and values `git config` reads, None for each built at run time, its options),
+    or None when it is a read."""
     names, options, skip, ended = [], [], False, False
     for raw in rest:
         word = text_of(raw)
         # The old form (`git config <name> <value>`) stops reading options at the first name, so a
-        # later `--get` is the value it stores.
-        legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
+        # later `--get` is the value it stores. A word built at run time could be an option.
+        first = next((name for name in names if name is not None), None)
+        legacy = first is not None and first not in CONFIG_WRITES and first not in CONFIG_READS
         if skip:
             skip = False
         elif word == "--" and not ended and not legacy:
@@ -581,7 +584,7 @@ def config_words(rest):
             options.append(word)
             skip = config_option_takes_value(word)
         else:
-            names.append(word)
+            names.append(word if isinstance(raw, str) else None)
     return names, options
 
 
@@ -597,18 +600,29 @@ def config_sets_hooks(rest):
                    for o in options)
     if names[:1] in (["remove-section"], ["rename-section"]):
         sections, names = True, names[1:]
+    # A word built at run time (`$SCOPE`) is no name to test, but it cannot hide a literal one.
+    literal = [name for name in names if name is not None]
     if sections:
-        return bool(names) and names_hook_section(names[0])
+        return bool(literal) and names_hook_section(literal[0])
     if names[:1] in (["set"], ["unset"]):
-        unsets, names = unsets or names[0] == "unset", names[1:]
+        unsets, names, literal = unsets or names[0] == "unset", names[1:], literal[1:]
     elif names[:1] and names[0] in CONFIG_READS:
         return False
-    return len(names) >= (1 if unsets else 2) and names_hooks(names[0])
+    return len(names) >= (1 if unsets else 2) and bool(literal) and names_hooks(literal[0])
+
+
+def git_subcommand_past_run_time(words):
+    """The index of git's subcommand, reading a word built at run time where it goes as one more
+    option (`git $OPTS commit`)."""
+    i = git_subcommand(words)[0]
+    while i < len(words) and not isinstance(words[i], str):
+        i += git_subcommand(words[i:])[0]
+    return i
 
 
 def git_route(words):
     """The kind of route past the hooks one git call takes, or None."""
-    i = git_subcommand(words)[0]
+    i = git_subcommand_past_run_time(words)
     before = [text_of(w) for w in words[1:i]]
     settings = [v for k, v in zip(before, before[1:]) if k in ("-c", "--config-env")]
     settings += [w.split("=", 1)[1] for w in before if w.startswith("--config-env=")]

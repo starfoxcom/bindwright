@@ -750,6 +750,9 @@ class GuardHookTest(unittest.TestCase):
                 ('export "LEFTHOOK=0"', lefthook, "Bash"), ("declare -x LEFT'HOOK'=0", lefthook, "Bash"),
                 ("git com'mit' --no-verify -m x", hooks, "Bash"),
                 ("git con'fig' core.hooksPath /x", setting, "Bash"),
+                ("git config $SCOPE core.hooksPath /x", setting, "Bash"),
+                ("git config unset $SCOPE core.hooksPath", setting, "Bash"),
+                ("git $OPTS commit --no-verify -m x", hooks, "Bash"),
                 ("cat <<'EOF' > notes.txt; git commit -m x \\\n  --no-verify\nbody\nEOF", hooks, "Bash"),
                 ('git commit --trailer "a: b" -m x', trailer, "Bash"), ("git commit --tr=a:b -m x", trailer, "Bash"),
                 ("git commit -C HEAD", reuse, "Bash"), ("git commit --reuse-mes HEAD", reuse, "Bash"),
@@ -769,7 +772,8 @@ class GuardHookTest(unittest.TestCase):
                         '"$S/bin/actionlint.exe" x && git commit -m x',
                         'git commit -m "LEFTHOOK=0 skips it"', "LEFTHOOK=1 git push",
                         'git commit -m "LEFTHOOK=0"', 'grep -rn "LEFTHOOK=0" docs/', "echo LEFTHOOK=0",
-                        "git commit -uno -m x", "git commit -Sn0key -m x"), lambda command: self.attr(command)):
+                        "git commit -uno -m x", "git commit -Sn0key -m x", 'git config "$KEY" v',
+                        'git config user.name "$N"', "git $OPTS log -n 5"), lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
 
