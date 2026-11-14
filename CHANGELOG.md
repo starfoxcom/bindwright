@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **The review gate waits for the deep review a blocked routine review asked for.** When the routine review blocks and calls for a deep review, the `Review gate` check stays in progress ("Blocked by the routine review; deep review in progress") until the deep verdict lands, then fails. A CI watcher now wakes once with both verdicts, so every finding is fixed in one round instead of two.
+
 ## [v5.0.1] — 2026-11-14
 
 ### Fixed
