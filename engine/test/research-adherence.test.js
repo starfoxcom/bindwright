@@ -27,9 +27,11 @@ calls = json.loads(sys.stdin.read())
 print(json.dumps([module.classify(c["name"], c["args"], root) for c in calls]))
 `;
 
-function classifyAll(root, calls) {
+// `home` is the home folder the shell's ~, $HOME and $env:USERPROFILE name.
+function classifyAll(root, calls, home) {
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
   const r = spawnSync(python, ["-I", "-c", RUNNER, script, root],
-    { input: JSON.stringify(calls), encoding: "utf8" });
+    { input: JSON.stringify(calls), encoding: "utf8", env });
   assert.equal(r.status, 0, r.stderr);
   return JSON.parse(r.stdout);
 }
@@ -168,10 +170,17 @@ test("searches count only inside the repo, wherever the path or a cd points", {
     ["a spaced -Path list reads code", ps("Get-ChildItem -Recurse -Path docs, src | sls x"), "fallback"],
     ["-Path:value keeps the value's case", ps(`Get-ChildItem -Recurse -Path:${join(root, "src")} | sls x`), "fallback"],
     ["ag -f is a switch", bash(`ag -f foo "${scratch}"`), null],
+    // The home folder is `base`, which holds the repo and the folder outside it.
+    ["~ in a cd is the home folder", bash("cd ~/scratch && grep -rn foo ."), null],
+    ["$HOME in a cd is the home folder", bash('cd "$HOME/scratch" && grep -rn foo .'), null],
+    ["${HOME} in a cd is the home folder", bash("cd ${HOME}/scratch && grep -rn foo ."), null],
+    ["$USERPROFILE in a cd is the home folder", bash("cd $USERPROFILE/scratch && grep -rn foo ."), null],
+    ["$env:USERPROFILE in a cd is the home folder", ps("cd $env:USERPROFILE/scratch; rg foo ."), null],
+    ["a home path into the repo still counts", bash('cd "$HOME/repo" && grep -rn foo src/'), "fallback"],
     ["a word after -Path is the filter", ps("Get-ChildItem -Recurse -Path src *.md | sls x"), null],
   ];
   try {
-    const got = classifyAll(root, rows.map(([, call]) => call));
+    const got = classifyAll(root, rows.map(([, call]) => call), base);
     rows.forEach(([label, , want], i) => assert.equal(got[i], want, label));
   } finally {
     rmSync(base, { recursive: true, force: true });

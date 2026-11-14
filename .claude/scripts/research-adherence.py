@@ -35,6 +35,10 @@ PS_LISTING = re.compile(r"^\s*(Get-ChildItem|gci|dir|ls)\s.*-Recurse", re.I)
 PS_SEARCH = re.compile(r"^\s*(sls|Select-String)\s", re.I)
 # Git Bash spells a Windows drive as /p/...; Python reads it as P:/...
 GIT_BASH_DRIVE = re.compile(r"^/([a-zA-Z])/")
+# The home folder as a shell spells it at the start of a path: $HOME, ${HOME}, $USERPROFILE,
+# PowerShell's $env:USERPROFILE and $env:HOME, and cmd's %USERPROFILE%.
+HOME_VARIABLE = re.compile(
+    r"^(?:\$\{?(?:HOME|USERPROFILE)\}?|\$env:(?:HOME|USERPROFILE)|%USERPROFILE%)(?=[/\\]|$)", re.I)
 CD = re.compile(r"^\s*(cd|Set-Location|sl|pushd|popd)(?:\s+(.+?))?\s*$", re.I)
 # Moves whose target the line cannot show: back (cd -, popd) or home (a bare cd).
 RETURN_TARGETS = (None, "-")
@@ -80,7 +84,7 @@ def unquote(word):
 
 def resolve(path, base):
     """The absolute, case-folded form of a path as a shell in `base` reads it."""
-    path = os.path.expanduser(unquote(path))
+    path = os.path.expanduser(HOME_VARIABLE.sub("~", unquote(path)))
     if os.name == "nt":
         path = GIT_BASH_DRIVE.sub(lambda m: m.group(1) + ":/", path)
     return os.path.normcase(os.path.abspath(os.path.join(base, path)))
