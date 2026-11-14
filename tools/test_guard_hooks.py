@@ -549,8 +549,10 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, f"found in file {path}" if path in command else None)
-        # Shapes the parser cannot read (an array, `--%`, a comment ending in a backslash) are
-        # refused with the way out, never guessed at.
+
+    def test_shapes_the_parser_cannot_read_are_refused_with_the_way_out(self):
+        # An array, `--%` and a comment ending in a backslash are never guessed at.
+        path = self.body_file(f"{GENERATED_LINE}\n")
         for (command, tool), result in self.each((
                 ('args=(--title t --template bug.md); gh issue create "${args[@]}"', "Bash"),
                 (f"git commit --% --date=now; sort -F {path}", "PowerShell"),
@@ -561,8 +563,10 @@ class GuardHookTest(unittest.TestCase):
                         lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "Write it as plain commands")
-        # A brace expansion or a pattern is built at run time, so the file it names is never read
-        # as a literal, quotes inside it included (`ms["g"]` is the pattern `ms[g]`).
+
+    def test_brace_and_pattern_words_are_read_as_built_at_run_time(self):
+        # The file such a word names is never read as a literal, quotes inside it included
+        # (`ms["g"]` is the pattern `ms[g]`).
         for command, result in self.each(("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
                                           'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"),
                                          lambda command: self.attr(command)):
