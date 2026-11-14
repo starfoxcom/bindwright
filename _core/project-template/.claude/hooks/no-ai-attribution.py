@@ -543,9 +543,15 @@ def names_hook_section(section):
 
 
 def config_option_takes_value(word):
-    """Whether a `git config` option reads the next word as its value."""
-    return word in CONFIG_VALUE_SHORT or ("=" not in word and any(
-        abbreviates(word, option, shortest) for option, shortest in CONFIG_VALUE_OPTIONS.items()))
+    """Whether a `git config` option reads the next word as its value: a long one by its name,
+    or a short cluster (`-zt`) whose first value letter ends it; an earlier one holds its value
+    in the rest of the cluster (`-tpath`)."""
+    if not word.startswith("--"):
+        letters = word[1:]
+        first = next((i for i, letter in enumerate(letters) if "-" + letter in CONFIG_VALUE_SHORT), None)
+        return first == len(letters) - 1
+    return "=" not in word and any(
+        abbreviates(word, option, shortest) for option, shortest in CONFIG_VALUE_OPTIONS.items())
 
 
 def config_words(rest):
@@ -557,7 +563,7 @@ def config_words(rest):
         legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
         if skip:
             skip = False
-        elif word == "--" and not ended:
+        elif word == "--" and not ended and not legacy:
             # Git reads every word after `--` as a name or value, never as an option.
             ended = True
         elif word.startswith("-") and not legacy and not ended:
