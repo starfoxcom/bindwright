@@ -851,7 +851,10 @@ class GuardHookTest(unittest.TestCase):
         for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE user.name x"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
-        # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
+        # Many such options still end in a refusal, not a guard stopped at its time limit.
+        many = "".join(f"-[z]{i} " for i in range(45))
+        self.assert_denied(self.attr(f"git config {many}core.hooksPath /x"), "hooksPath")
+        # Any PowerShell variable makes a bundle's letters unknown, so it is read both ways.
         for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$éam" -n'):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command, tool="PowerShell"), "no-verify")

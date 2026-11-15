@@ -633,42 +633,44 @@ def config_option_takes_value(word):
 
 
 def config_readings(rest):
-    """Each way `git config` may read its words, as (its names and values, its options), apart from
-    a reading that is a read. An option built at run time may or may not take the next word, so
-    each reading is followed as (skip next, past `--`, names, options)."""
-    readings = {(False, False, (), ())}
+    """Each way `git config` may read its words, as (its first three names and values, whether an
+    option unsets, whether one removes or renames a section), apart from a reading that is a read.
+    An option built at run time may or may not take the next word, so each reading is followed as
+    (skip next, past `--`, names, unsets, sections). Only what the check reads is kept, so readings
+    that differ elsewhere merge and the set stays small."""
+    readings = {(False, False, (), False, False)}
     for raw in rest:
         word, following = text_of(raw), set()
-        for skip, ended, names, options in readings:
+        for skip, ended, names, unsets, sections in readings:
             # The old form (`git config <name> <value>`) stops reading options at the first name, so
             # a later `--get` is the value it stores.
             legacy = bool(names) and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
             if skip:
-                following.add((False, ended, names, options))
+                following.add((False, ended, names, unsets, sections))
             elif word == "--" and not ended and not legacy:
                 # Git reads every word after `--` as a name or value, never as an option.
-                following.add((False, True, names, options))
+                following.add((False, True, names, unsets, sections))
             elif word.startswith("-") and not legacy and not ended:
                 if not (word.startswith("--get") or word in ("-l", "--list")):
-                    following |= {(takes, ended, names, options + (word,))
+                    unset = unsets or abbreviates(word, "--unset-all", "--uns")
+                    section = sections or any(abbreviates(word, o, o[:5])
+                                              for o in ("--remove-section", "--rename-section"))
+                    following |= {(takes, ended, names, unset, section)
                                   for takes in option_skips(word, config_option_takes_value)}
             else:
-                following.add((False, ended, names + (word,), options))
+                following.add((False, ended, (names + (word,))[:3], unsets, sections))
         readings = following
-    return [(list(names), list(options)) for _, _, names, options in readings]
+    return [(list(names), unsets, sections) for _, _, names, unsets, sections in readings]
 
 
 def config_sets_hooks(rest):
     """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
     holds them, in any reading; a read passes."""
-    return any(config_reading_sets_hooks(names, options) for names, options in config_readings(rest))
+    return any(config_reading_sets_hooks(*reading) for reading in config_readings(rest))
 
 
-def config_reading_sets_hooks(names, options):
+def config_reading_sets_hooks(names, unsets, sections):
     """Whether one reading of `git config` sets or unsets a hook setting or drops a section with them."""
-    unsets = any(abbreviates(o, "--unset-all", "--uns") for o in options)
-    sections = any(abbreviates(o, "--remove-section", "--rem") or abbreviates(o, "--rename-section", "--ren")
-                   for o in options)
     if names[:1] in (["remove-section"], ["rename-section"]):
         sections, names = True, names[1:]
     if sections:
