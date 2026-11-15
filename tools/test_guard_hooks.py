@@ -680,14 +680,24 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(shaped, "hooks"))
         with open(os.path.join(shaped, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write('process.stdout.write(JSON.stringify({error: false, assignments: [],'
-                    ' commands: [["git", "commit", {dynamic: "$X", shape: "\\\\u0000"}]]}));\n')
-        broken =os.path.join(self.home, "broken-helper")
+                    ' commands: [["git", "commit", {dynamic: "$X", shape: "x"}]]}));\n')
+        broken = os.path.join(self.home, "broken-helper")
         os.makedirs(os.path.join(broken, "hooks"))
         with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write("process.exit(1);\n")
+        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object.
+        malformed = []
+        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]')):
+            folder = os.path.join(self.home, name + "-helper")
+            os.makedirs(os.path.join(folder, "hooks"))
+            with open(os.path.join(folder, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
+                f.write('process.stdout.write(JSON.stringify({error: false, assignments: [], commands: %s}));\n'
+                        % commands)
+            malformed.append((folder, "reinstall Bindwright's helper"))
         for helper, because in ((os.path.join(self.home, "none"), "Run /bindwright:update to install it"),
                                 (old, "older than this guard"), (older, "older than this guard"),
-                                (shaped, "older than this guard"), (broken, "reinstall Bindwright's helper")):
+                                (shaped, "older than this guard"), (broken, "reinstall Bindwright's helper"),
+                                *malformed):
             for command, result in self.each(("git commit -m x", "gh issue create --title t --template bug.md",
                             "git config core.hooksPath /x"), lambda command: self.attr(command, helper=helper)):
                 with self.subTest(helper=helper, command=command):

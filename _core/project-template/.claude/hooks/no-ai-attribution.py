@@ -329,6 +329,8 @@ def parse(cmd, shell, cwd):
     if not all(isinstance(command, list) for command in data["commands"]):
         return None, None, BROKEN
     words = [word for command in data["commands"] for word in command]
+    if not all(isinstance(word, (str, dict)) for word in words):
+        return None, None, BROKEN
     if not isinstance(data.get("assignments"), list) or any(
             isinstance(word, dict) and not {"shape", "canBeEmpty"} <= word.keys() for word in words):
         return None, None, OLD_HELPER
