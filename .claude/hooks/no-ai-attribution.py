@@ -568,22 +568,39 @@ def abbreviates(word, option, shortest):
 def option_words(subcommand, rest):
     """The options of one git subcommand in every reading, one per letter of a bundle (`-nm` is
     `-n`, `-m`), with every option's value skipped, up to `--`. A bundle built at run time may or
-    may not take the next word (`-${Q}m -- -n`), so `states` holds, per reading still alive,
-    whether the next word is a value."""
-    options, states = [], {False}
+    may not take the next word (`-${Q}m -- -n`), so `readings` maps each reading still alive,
+    as (whether the next word is a value, whether it is the one reading every word plainly), to
+    the options it found. An extra reading that meets a bundle git refuses (`- nit`: git stops at
+    the unknown switch and runs nothing) is dropped with its options."""
     letters = SHORT_VALUES.get(subcommand, ""), ATTACHED_VALUES.get(subcommand, "")
-    for word in (text_of(w) for w in rest):
-        following = {False} if True in states else set()
-        if False in states and word not in ("-", "--") and word.startswith("-"):
+    long = LONG_VALUES.get(subcommand, ())
+    readings, ended = {(False, True): set()}, set()
+    for word in map(text_of, rest):
+        following = {}
+        for (skip, plain), options in readings.items():
+            if skip or not word.startswith("-") or word == "-":
+                following.setdefault((False, plain), set()).update(options)
+                continue
+            if word == "--":
+                ended |= options
+                continue
             parts, takes = option_parts(subcommand, word)
-            options += parts
-            following |= option_skips(word, lambda _: takes, *letters)
-        elif False in states and word != "--":
-            following.add(False)
-        states = following
-        if not states:
+            if not plain and refused_bundle(parts):
+                continue
+            # The plain reading takes a word with an unknown part as taking no next word.
+            plain_answer = takes and not UNKNOWN_PART.search(word)
+            for answer in option_skips(word, lambda _: takes, *letters, long_values=long):
+                following.setdefault((answer, plain and answer == plain_answer), set()).update(options, parts)
+        readings = following
+        if not readings:
             break
-    return options
+    return ended.union(*readings.values())
+
+
+def refused_bundle(parts):
+    """Whether git refuses these switches of a short bundle, at a known character no switch is named
+    by (a space, a colon), before it runs anything."""
+    return any(len(part) == 2 and not part[1].isalnum() and not UNKNOWN_PART.match(part[1]) for part in parts)
 
 
 def option_parts(subcommand, word):
@@ -623,25 +640,26 @@ def takes_next_word(word, short, long):
     return first == len(letters) - 1
 
 
-def option_skips(word, takes, value_letters, optional_letters=""):
+def option_skips(word, takes, value_letters, optional_letters="", long_values=None):
     """Whether an option reads the next word, as the set of its possible answers: both when its
     letters are built at run time, a glob or a brace (`-${Q}f`), so which letters git gets is
-    unknown, unless the known text before that part already names the option's value."""
+    unknown, unless the known text before that part already settles it."""
     unknown = UNKNOWN_PART.search(word)
     if not unknown:
         return {takes(word)}
-    if names_value(word[:unknown.start()], value_letters, optional_letters):
+    if settles_value(word[:unknown.start()], value_letters, optional_letters, long_values):
         return {False}
     return {False, True}
 
 
-def names_value(prefix, value_letters, optional_letters=""):
-    """Whether the known start of an option word already reaches the option that holds its value:
-    `--name=`, or a letter that takes one (`-m`, `-mFix`, `-u`). Its value is read as written in this
-    word, so the word takes no next one; an empty run-time value after a bare letter (`-m"$MSG"`)
-    is not followed."""
+def settles_value(prefix, value_letters, optional_letters="", long_values=None):
+    """Whether the known start of an option word already settles that it takes no next word:
+    `--name=`, a long option no value option starts with (`--amend`, when `long_values` lists them),
+    or a letter that takes a value (`-m`, `-mFix`, `-u`), read as written in this word, so an empty
+    run-time value after a bare letter (`-m"$MSG"`) is not followed."""
     if prefix.startswith("--"):
-        return "=" in prefix
+        named = long_values is not None and not any(o.startswith(prefix) for o in long_values)
+        return "=" in prefix or named
     return any(letter in value_letters or letter in optional_letters for letter in prefix[1:])
 
 

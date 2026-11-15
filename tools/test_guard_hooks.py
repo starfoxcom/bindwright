@@ -852,7 +852,8 @@ class GuardHookTest(unittest.TestCase):
         for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE --get core.hooksPath",
                         'git commit -m"Fix foo? (#12)" -m "- handle nil"',
                         'git commit -m"Release $VERSION" -m "- nit: rename"',
-                        'git commit -m"$MSG" -m "- nit: rename"'):
+                        'git commit -m"$MSG" -m "- nit: rename"', 'git commit -a$FLAGS -m "- nit"',
+                        'git commit --amend$X -m "- nit"'):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
         # A few such options are each read both ways; a call whose readings would outgrow the hook's
