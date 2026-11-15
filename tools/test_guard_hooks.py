@@ -848,7 +848,10 @@ class GuardHookTest(unittest.TestCase):
                                  ("git config -${Q}f FILE core.hooksPath /x", "hooksPath")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), because)
-        for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE --get core.hooksPath"):
+        # A value already written onto its option settles the word, whatever follows the known part.
+        for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE --get core.hooksPath",
+                        'git commit -m"Fix foo? (#12)" -m "- handle nil"',
+                        'git commit -m"Release $VERSION" -m "- nit: rename"'):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
         # A few such options are each read both ways; a call whose readings would outgrow the hook's

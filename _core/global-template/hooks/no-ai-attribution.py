@@ -245,11 +245,13 @@ LONG_VALUES = {
 # `env`'s options that take the next word as their value, each with the shortest prefix GNU env reads.
 ENV_VALUE_OPTIONS = {"--unset": "--u", "--chdir": "--c", "--split-string": "--s", "--argv0": "--a"}
 ENV_VALUE_SHORT = {"-u", "-C", "-S", "-a"}
+ENV_VALUE_LETTERS = "uCSa"
 # `git config`'s options that take the next word as their value, each with the shortest prefix git
 # 2.56 reads as it (an ambiguous prefix makes git refuse the command).
 CONFIG_VALUE_OPTIONS = {"--file": "--fil", "--blob": "--bl", "--type": "--t", "--default": "--d",
                         "--comment": "--co", "--value": "--v"}
 CONFIG_VALUE_SHORT = {"-f", "-t"}
+CONFIG_VALUE_LETTERS = "ft"
 CONFIG_READS = {"get", "list", "edit", "get-regexp", "get-all", "get-urlmatch", "get-color",
                 "get-colorbool"}
 CONFIG_WRITES = {"set", "unset", "remove-section", "rename-section"}
@@ -576,7 +578,8 @@ def option_words(subcommand, rest):
             elif word != "--":
                 parts, takes = option_parts(subcommand, word)
                 options += parts
-                following |= option_skips(word, lambda _: takes)
+                letters = SHORT_VALUES.get(subcommand, ""), ATTACHED_VALUES.get(subcommand, "")
+                following |= option_skips(word, lambda _: takes, *letters)
         states = following
         if not states:
             break
@@ -620,19 +623,40 @@ def takes_next_word(word, short, long):
     return first == len(letters) - 1
 
 
-def option_skips(word, takes):
+def option_skips(word, takes, value_letters, optional_letters=""):
     """Whether an option reads the next word, as the set of its possible answers: both when a part
     of it is built at run time, a glob or a brace (`-${Q}f`), so its letters at run time are
-    unknown, unless an `=` before that part already holds a long option's value."""
+    unknown, unless the known text before that part already holds the option's value."""
     unknown = next((i for i, sign in enumerate(word) if sign in "\0*?[{"), len(word))
-    if unknown == len(word) or word.startswith("--") and "=" in word[:unknown]:
+    if unknown == len(word):
         return {takes(word)}
+    if holds_value(word[:unknown], value_letters, optional_letters):
+        return {False}
     return {False, True}
+
+
+def holds_value(prefix, value_letters, optional_letters=""):
+    """Whether the known start of an option word already holds its value, so the word takes no next
+    one whatever follows: `--name=`, a value letter with text after it (`-mFix`), or a letter whose
+    value is only ever written onto it (`-u`), as getopt reads a value in the same word."""
+    if prefix.startswith("--"):
+        return "=" in prefix
+    for k, letter in enumerate(prefix[1:], 1):
+        if letter in optional_letters:
+            return True
+        if letter in value_letters:
+            return k < len(prefix) - 1
+    return False
 
 
 def config_option_takes_value(word):
     """Whether a `git config` option reads the next word as its value."""
     return takes_next_word(word, CONFIG_VALUE_SHORT, CONFIG_VALUE_OPTIONS)
+
+
+def env_option_takes_value(word):
+    """Whether an `env` option reads the next word as its value."""
+    return takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
 
 
 def config_readings(rest, budget):
@@ -660,7 +684,7 @@ def config_readings(rest, budget):
                     section = sections or any(abbreviates(word, o, o[:5])
                                               for o in ("--remove-section", "--rename-section"))
                     following |= {(takes, ended, names, unset, section)
-                                  for takes in option_skips(word, config_option_takes_value)}
+                                  for takes in option_skips(word, config_option_takes_value, CONFIG_VALUE_LETTERS)}
             else:
                 following.add((False, ended, (names + (word,))[:3], unsets, sections))
         readings = following
@@ -773,7 +797,7 @@ def env_words(args):
             if skip:
                 following.add(False)
             elif shape.startswith("-"):
-                following |= option_skips(shape, lambda w: takes_next_word(w, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS))
+                following |= option_skips(shape, env_option_takes_value, ENV_VALUE_LETTERS)
             elif re.match(r"\w+=", shape):
                 found.append(text_of(word))
                 following.add(False)
