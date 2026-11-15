@@ -637,7 +637,11 @@ def config_readings(rest):
     option unsets, whether one removes or renames a section), apart from a reading that is a read.
     An option built at run time may or may not take the next word, so each reading is followed as
     (skip next, past `--`, names, unsets, sections). Only what the check reads is kept, so readings
-    that differ elsewhere merge and the set stays small."""
+    that differ elsewhere merge. None past MAX_RUN_TIME_WORDS such options, where the readings
+    would outgrow the hook's time limit."""
+    two_way = [w for w in map(text_of, rest) if w.startswith("-") and len(option_skips(w, bool)) > 1]
+    if len(two_way) > MAX_RUN_TIME_WORDS:
+        return None
     readings = {(False, False, (), False, False)}
     for raw in rest:
         word, following = text_of(raw), set()
@@ -663,10 +667,14 @@ def config_readings(rest):
     return [(list(names), unsets, sections) for _, _, names, unsets, sections in readings]
 
 
-def config_sets_hooks(rest):
-    """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
-    holds them, in any reading; a read passes."""
-    return any(config_reading_sets_hooks(*reading) for reading in config_readings(rest))
+def config_route(rest):
+    """"setting" when `git config` sets or unsets a hook setting, or removes or renames a section
+    that holds them, in any reading; "unread" when it has too many readings to follow; a read
+    passes as None."""
+    readings = config_readings(rest)
+    if readings is None:
+        return "unread"
+    return "setting" if any(config_reading_sets_hooks(*reading) for reading in readings) else None
 
 
 def config_reading_sets_hooks(names, unsets, sections):
@@ -713,7 +721,7 @@ def literal_git_route(words):
         return None
     subcommand, rest = words[i], words[i + 1:]
     if subcommand == "config":
-        return "setting" if config_sets_hooks(rest) else None
+        return config_route(rest)
     options = option_words(subcommand, rest)
     if subcommand in NO_VERIFY_SUBCOMMANDS and any(abbreviates(o, "--no-verify", "--no-v") for o in options):
         return "hooks"
