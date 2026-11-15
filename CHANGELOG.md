@@ -17,6 +17,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **Mod rows stack in one fixed order.** Setup lists the mods in the order their rows should stack above the prompt, whatever order they are picked in: the PC queue on top, then runners, the usage pause, CI, tasks, the session row, and the budgets row last, right above the prompt, since it is read most. A mod of your own keeps its place. An existing list is not reordered: to get the order, list the folders in `env.CLAUDE_CODE_PLUGIN_DIRS` of `~/.claude/settings.json` as `shared-pc`, `runners`, `usage-guard`, `ci-watch`, `tasks`, `session-info`, `session-facts`, `compact-handoff`, `skill-check`, `mods`, then restart Claude Code.
 
+### Fixed
+
+- **A review gate waiting for a deep review says how to restart one.** Since v5.1.0 the `Review gate` check stays in progress while the deep review a blocked routine review asked for runs. When that deep run never starts or dies before writing its verdict (its access check fails, its runner is lost), nothing settles the check. Each waiting state's summary now ends with the way out: if no deep run is alive, ask again with a comment starting with `@claude review this PR`.
+
 ## [v5.1.0] — 2026-11-14
 
 ### Changed
