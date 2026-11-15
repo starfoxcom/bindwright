@@ -5,7 +5,8 @@ import { ADOPT_GRACE_MS, ADOPT_MAX_AGE_MS } from '../hooks/arms'
 import type { Pause } from '../hooks/plan'
 import { KEPT_MAX_AGE_MS, parseSaved, pickSaved, shouldResumeOwn } from '../hooks/saved'
 import type { World } from './world'
-import { CLAIMS_DIR, doWork, endTurn, KEY, mountCard, NOW, PAUSE_FILE, RESET, start, WAKE, world } from './world'
+import { CLAIMS_DIR, doWork, endTurn, KEY, moment, mountCard, NOW, PAUSE_FILE, RESET, start, WAKE } from './world'
+import { world } from './world'
 
 // A session that saved its work at a pause's wrap-up and was closed before the reset: a later session in
 // the same project offers the work (take it here, keep it for that session, or drop it), never by itself.
@@ -200,11 +201,12 @@ test('saved work a closed session misses shows just past the reset, with no 15-m
   for (let left = WAKE - NOW + ADOPT_GRACE_MS + 1_000; left > 0; left -= step) {
     await seen.clock.advance(Math.min(step, left))
   }
-  // The look past the wake fires inside the last step; its reads may still be running when the step
-  // returns. Settling lets that work finish without moving the clock, so the next 15-minute scan
-  // cannot be what shows the card.
+  // The look past the wake fires inside the last step; on a slow runner its reads are still running when
+  // the step returns. Waiting in real time without moving the clock lets them finish, so the next
+  // 15-minute scan cannot be what shows the card.
   let take = await ui.find({ key: 'usage-adopt-take' })
-  for (let tries = 0; !take && tries < 20; tries++) {
+  for (let tries = 0; !take && tries < 50; tries++) {
+    await moment(50)
     await seen.clock.settle()
     take = await ui.find({ key: 'usage-adopt-take' })
   }
