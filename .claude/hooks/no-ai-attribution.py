@@ -599,8 +599,15 @@ def option_words(subcommand, rest):
 
 def refused_bundle(parts):
     """Whether git refuses these switches of a short bundle, at a known character no switch is named
-    by (a space, a colon), before it runs anything."""
-    return any(len(part) == 2 and not part[1].isalnum() and not UNKNOWN_PART.match(part[1]) for part in parts)
+    by (a space, a colon), before it runs anything. Only characters before the first unknown part
+    count: that part may hold a value letter, which takes the rest of the word as its value."""
+    for part in parts:
+        letter = part[1:]
+        if len(letter) != 1 or UNKNOWN_PART.match(letter):
+            return False
+        if not letter.isalnum():
+            return True
+    return False
 
 
 def option_parts(subcommand, word):

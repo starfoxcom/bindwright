@@ -845,6 +845,7 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_denied(self.attr(command), "lefthook")
         # So may a git or `git config` bundle built at run time; a reading that takes no route passes.
         for command, because in (("git commit -${Q}m -- -n", "no-verify"),
+                                 ("git commit -${A}m -- -n -${B}:", "no-verify"),
                                  ("git config -${Q}f FILE core.hooksPath /x", "hooksPath")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), because)
