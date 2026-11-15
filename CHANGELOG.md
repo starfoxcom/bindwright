@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The attribution guard reads a git option bundle built at run time both ways.** A bundle whose letters come from a variable (`git commit -${Q}m -- -n`, `git config -${Q}f FILE core.hooksPath /x`) may or may not take the next word as its value, and the guard now follows both readings, as it already did for `env`. When `Q` is empty, the first skips git's hooks and the second sets `core.hooksPath`; both are refused now.
+
 ### Changed
 
 - **Mod rows stack in one fixed order.** Setup lists the mods in the order their rows should stack above the prompt, whatever order they are picked in: the PC queue on top, then runners, the usage pause, CI, tasks, the session row, and the budgets row last, right above the prompt, since it is read most. A mod of your own keeps its place. An existing list is not reordered: to get the order, list the folders in `env.CLAUDE_CODE_PLUGIN_DIRS` of `~/.claude/settings.json` as `shared-pc`, `runners`, `usage-guard`, `ci-watch`, `tasks`, `session-info`, `session-facts`, `compact-handoff`, `skill-check`, `mods`, then restart Claude Code.
