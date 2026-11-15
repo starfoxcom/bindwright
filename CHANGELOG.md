@@ -6,15 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
-<<<<<<< HEAD
-### Fixed
-
-- **The attribution guard reads a git option bundle built at run time both ways.** A bundle whose letters come from a variable (`git commit -${Q}m -- -n`, `git config -${Q}f FILE core.hooksPath /x`) may or may not take the next word as its value, and the guard now follows both readings, as it already did for `env`. When `Q` is empty, the first skips git's hooks and the second sets `core.hooksPath`; both are refused now.
-=======
 ### Added
 
 - **`/bindwright:update` offers to move an old hand-off file into issues.** In a project whose work state lives in GitHub issues, an update that finds an old `*-CONTEXT_*.md` hand-off file at the repo root says `/start-session` no longer reads it, offers to turn its open items (and any in a `ROADMAP.md`) into issues one at a time, as setup does, then offers to delete the hand-off file. Until now only running setup again offered this.
->>>>>>> origin/develop
+
+### Fixed
+
+- **The attribution guard reads a git option bundle built at run time both ways.** A bundle whose letters come from a variable (`git commit -${Q}m -- -n`, `git config -${Q}f FILE core.hooksPath /x`) may or may not take the next word as its value, and the guard now follows both readings, as it already did for `env`. When `Q` is empty, the first skips git's hooks and the second sets `core.hooksPath`; both are refused now.
 
 ### Changed
 
