@@ -20,6 +20,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **A review gate waiting for a deep review says how to restart one.** Since v5.1.0 the `Review gate` check stays in progress while the deep review a blocked routine review asked for runs. When that deep run never starts or dies before writing its verdict (its access check fails, its runner is lost), nothing settles the check. Each waiting state's summary now ends with the way out: if no deep run is alive, ask again with a comment starting with `@claude review this PR`.
+- **The attribution guard refuses a malformed parser reply instead of crashing.** A reply whose run-time words lacked the field saying whether they can expand to nothing, whose commands were not lists, or whose words were neither text nor a run-time word made the guard fail on the git call it read, and a crashed hook lets the call through. Such a reply now refuses the call: as a helper older than the guard when a run-time word lacks a field, as a broken helper otherwise.
 
 ## [v5.1.0] — 2026-11-14
 
