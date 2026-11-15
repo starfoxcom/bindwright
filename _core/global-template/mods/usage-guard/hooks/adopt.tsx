@@ -83,14 +83,15 @@ async function lookForOffer($: EngineInterface, isAsked = false): Promise<void> 
   await update($, state, () => ({ offer: null, saved, text, note: null }))
 }
 
-// One more look just past a coming pause's wake, once per wake: the 15-minute scan alone could leave
-// saved work its closed session missed waiting that long.
+// One more look just past a pause's wake, once per wake: the 15-minute scan alone could leave saved work
+// its closed session missed waiting that long. Timed from the wake, so a look that starts late still runs.
 async function lookAfterWake($: EngineInterface): Promise<void> {
   const pause = await readPause($)
   const now = await $.clock.now()
-  if (pause?.status !== 'active' || pause.wakeAt <= now || scan.lookAfter === pause.wakeAt) return
+  if (pause?.status !== 'active' || scan.lookAfter === pause.wakeAt) return
   scan.lookAfter = pause.wakeAt
-  $.clock.after(pause.wakeAt - now + ADOPT_GRACE_MS + 1_000, () => void lookForOffer($).catch(() => undefined))
+  const wait = Math.max(0, pause.wakeAt + ADOPT_GRACE_MS + 1_000 - now)
+  $.clock.after(wait, () => void lookForOffer($).catch(() => undefined))
 }
 
 // Once per module load: a session's start or a surface joining, or the first tool call after a hot reload.
