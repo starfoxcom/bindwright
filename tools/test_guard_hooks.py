@@ -848,15 +848,19 @@ class GuardHookTest(unittest.TestCase):
                                  ("git config -${Q}f FILE core.hooksPath /x", "hooksPath")):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), because)
-        for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE user.name x"):
+        for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE --get core.hooksPath"):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command))
-        # Up to ten such options are each read both ways; past ten the call is refused as unreadable,
-        # never left to a guard stopped at its time limit.
+        # A few such options are each read both ways; a call whose readings would outgrow the hook's
+        # time limit is refused as unreadable instead, however its words are laid out.
         pairs = "".join(f"-${{Q}}f F{i} " for i in range(9))
-        self.assert_denied(self.attr(f"git config set --all$A core.hooksPath {pairs}/x"), "hooksPath")
-        for many in ("".join(f"-[z]{i} " for i in range(45)) + "core.hooksPath /x",
-                     "set --all$A core.hooksPath " + "".join(f"-${{Q}}f F{i} " for i in range(300)) + "/x"):
+        many = "".join(f"-[z]{i} " for i in range(45))
+        for command in (f"git config set --all$A core.hooksPath {pairs}/x", f"git config {many}core.hooksPath /x"):
+            with self.subTest(command=command[:40]):
+                self.assert_denied(self.attr(command), "hooksPath")
+        padded = "".join(f"-${{Q}}f F{i} " for i in range(10)) + "--local " * 3000 + "$A " * 10
+        for many in ("set --all$A core.hooksPath " + "".join(f"-${{Q}}f F{i} " for i in range(300)) + "/x",
+                     padded + "core.hooksPath /x"):
             with self.subTest(command=many[:40]):
                 self.assert_denied(self.attr(f"git config {many}"), "built at run time")
         # Any PowerShell variable makes a bundle's letters unknown, so it is read both ways.

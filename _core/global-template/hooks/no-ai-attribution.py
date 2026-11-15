@@ -224,6 +224,9 @@ CMDLET_VERBS = {"add", "approve", "assert", "backup", "block", "build", "checkpo
 ATTACHED_FILE_READ = re.compile(r"-F[^=]*=[\"']?[@<]|-d[\"']?@")
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
+# The extra `git config` reading steps one git call may take, past the one reading each word always gets,
+# before it is refused: about a second of work, well inside the hook's limit beside the parser's.
+MAX_READING_STEPS = 300_000
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
 # value (`-m -n`) is never read as an option. A long option may be shortened to any unique
 # prefix of at least the length given.
@@ -632,19 +635,16 @@ def config_option_takes_value(word):
     return takes_next_word(word, CONFIG_VALUE_SHORT, CONFIG_VALUE_OPTIONS)
 
 
-def config_readings(rest):
+def config_readings(rest, budget):
     """Each way `git config` may read its words, as (its first three names and values, whether an
     option unsets, whether one removes or renames a section), apart from a reading that is a read.
     An option built at run time may or may not take the next word, so each reading is followed as
     (skip next, past `--`, names, unsets, sections). Only what the check reads is kept, so readings
-    that differ elsewhere merge. None past MAX_RUN_TIME_WORDS such options, where the readings
-    would outgrow the hook's time limit."""
-    two_way = [w for w in map(text_of, rest) if w.startswith("-") and len(option_skips(w, bool)) > 1]
-    if len(two_way) > MAX_RUN_TIME_WORDS:
-        return None
+    that differ elsewhere merge. Each reading past the first spends one step of `budget` per word."""
     readings = {(False, False, (), False, False)}
     for raw in rest:
         word, following = text_of(raw), set()
+        budget.spend(len(readings) - 1)
         for skip, ended, names, unsets, sections in readings:
             # The old form (`git config <name> <value>`) stops reading options at the first name, so
             # a later `--get` is the value it stores.
@@ -667,13 +667,10 @@ def config_readings(rest):
     return [(list(names), unsets, sections) for _, _, names, unsets, sections in readings]
 
 
-def config_route(rest):
+def config_route(rest, budget):
     """"setting" when `git config` sets or unsets a hook setting, or removes or renames a section
-    that holds them, in any reading; "unread" when it has too many readings to follow; a read
-    passes as None."""
-    readings = config_readings(rest)
-    if readings is None:
-        return "unread"
+    that holds them, in any reading; a read passes as None."""
+    readings = config_readings(rest, budget)
     return "setting" if any(config_reading_sets_hooks(*reading) for reading in readings) else None
 
 
@@ -699,17 +696,36 @@ def git_route(words):
     run_time = [i for i, word in enumerate(rest) if not isinstance(word, str) and word["canBeEmpty"]]
     if len(run_time) > MAX_RUN_TIME_WORDS:
         return "unread"
-    known = [shape_of(word) for word in rest]
-    for empty in itertools.product((False, True), repeat=len(run_time)):
-        dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
-        reading = [word for i, word in enumerate(known) if i not in dropped]
-        route = literal_git_route(head + reading)
-        if route:
-            return route
+    known, budget = [shape_of(word) for word in rest], ReadingBudget(MAX_READING_STEPS)
+    try:
+        for empty in itertools.product((False, True), repeat=len(run_time)):
+            dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
+            reading = [word for i, word in enumerate(known) if i not in dropped]
+            route = literal_git_route(head + reading, budget)
+            if route:
+                return route
+    except BudgetSpent:
+        return "unread"
     return None
 
 
-def literal_git_route(words):
+class BudgetSpent(Exception):
+    """A git call has more readings than the guard can follow inside the hook's time limit."""
+
+
+class ReadingBudget:
+    """The steps left for reading one git call every way; spending past them raises BudgetSpent."""
+
+    def __init__(self, steps):
+        self.left = steps
+
+    def spend(self, steps):
+        self.left -= steps
+        if self.left < 0:
+            raise BudgetSpent()
+
+
+def literal_git_route(words, budget):
     """The route of a git call whose words after the program are all literal, or None."""
     i = git_subcommand(words)[0]
     before = words[1:i]
@@ -721,7 +737,7 @@ def literal_git_route(words):
         return None
     subcommand, rest = words[i], words[i + 1:]
     if subcommand == "config":
-        return config_route(rest)
+        return config_route(rest, budget)
     options = option_words(subcommand, rest)
     if subcommand in NO_VERIFY_SUBCOMMANDS and any(abbreviates(o, "--no-verify", "--no-v") for o in options):
         return "hooks"
