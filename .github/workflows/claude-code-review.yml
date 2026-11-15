@@ -1094,6 +1094,55 @@ jobs:
           echo "::notice::The CLI install runs on Node $NODE_VERSION, brought by this job"
           echo "bin=$RUNNER_TEMP/linux-node/bin" >> "$GITHUB_OUTPUT"
 
+      # The attribution guard in the project's hooks reads every command it
+      # guards with Bindwright's helper, which no runner has. This step installs
+      # the helper release the project pinned in `.bindwright/helper.json`,
+      # read from the PR's base commit so a PR cannot pick what its own review
+      # installs, and checked against the pinned SHA-256. npm runs in the job's
+      # temp folder with no install scripts. Without a pin, or when any step
+      # fails, the guard runs without its parser and refuses every command its
+      # text names, as on any computer without the helper.
+      - name: Install the attribution guard's parser
+        working-directory: ${{ runner.temp }}
+        timeout-minutes: 10
+        continue-on-error: true
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          NODE_BIN: ${{ steps.linux-node.outputs.bin }}
+        run: |
+          set -euo pipefail
+          pin="$(git -C "$GITHUB_WORKSPACE" show "$BASE_SHA:.bindwright/helper.json" 2>/dev/null || true)"
+          if [ -z "$pin" ]; then
+            echo "No .bindwright/helper.json on the base: the guard runs without its parser"
+            exit 0
+          fi
+          if [ -n "$NODE_BIN" ]; then
+            export PATH="$NODE_BIN:$PATH"
+          fi
+          read -r url sum < <(printf '%s' "$pin" | timeout 30 node -e 'let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => { try { const n = JSON.parse(s).node || {}; process.stdout.write(String(n.url) + " " + String(n.sha256) + "\n"); } catch { process.stdout.write("- -\n"); } });') || true
+          release='^https://github\.com/starfoxcom/bindwright/releases/download/v[0-9]+\.[0-9]+\.[0-9]+/bindwright-[0-9]+\.[0-9]+\.[0-9]+\.tgz$'
+          if [[ ! "${url:-}" =~ $release ]] || [[ ! "${sum:-}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::warning::.bindwright/helper.json names no Bindwright helper release: the guard runs without its parser"
+            exit 1
+          fi
+          if ! curl --fail --silent --show-error --location --proto '=https' --retry 2 --max-time 120 -o "$RUNNER_TEMP/bindwright-helper.tgz" "$url"; then
+            echo "::warning::The helper download failed: the guard runs without its parser"
+            exit 1
+          fi
+          if ! printf '%s  %s\n' "$sum" "$RUNNER_TEMP/bindwright-helper.tgz" | sha256sum --check --status; then
+            echo "::warning::The helper download does not match its pinned checksum: the guard runs without its parser"
+            rm -f "$RUNNER_TEMP/bindwright-helper.tgz"
+            exit 1
+          fi
+          timeout 300 npm install --prefix "$RUNNER_TEMP/bindwright-helper" --cache "$RUNNER_TEMP/npm-cache" \
+            --no-save --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/bindwright-helper.tgz"
+          rm -f "$RUNNER_TEMP/bindwright-helper.tgz"
+          helper="$RUNNER_TEMP/bindwright-helper/node_modules/bindwright"
+          test -f "$helper/hooks/shell-words.mjs"
+          echo "BINDWRIGHT_HELPER=$helper" >> "$GITHUB_ENV"
+          echo "::notice::The attribution guard reads commands with the pinned helper"
+
       # One job-private copy of the newest CLI release, so the credits run and
       # the action's review run the same version. The version is read when the
       # job runs, from the npm registry's release channel, and then
