@@ -254,6 +254,8 @@ Run the engine with `--write <repo root>`, passing the answers on standard input
   - `staged`: files the repo already had. The repo's copy is untouched; the new text is at `.bindwright/incoming/<path>`.
   - `skipped`: files whose staged copy already existed from an earlier run. Nothing was written for them.
 
+When the answers keep both `attributionGuard` and `aiReview` on and `localOnly` is not true, copy `${CLAUDE_PLUGIN_ROOT}/helper.json` over `.bindwright/helper.json` (create it when missing). The CI review jobs read that pin from the PR's base and install the helper it names, so the attribution guard can read commands there.
+
 Edits inside `.claude/` ask the user for permission even when edits are otherwise accepted. Before the first one, say that the next steps change the repo's agent settings and rules.
 
 Fill `{{STACK_COMMANDS_ALLOWLIST}}` in `.claude/settings.local.json` now (see step 6). Until it is filled, that file is not valid JSON.
@@ -345,7 +347,7 @@ Tell the user, in plain words, in two parts.
 - Where the work state lives: the board's link and whether it is private, the clean public copy's repo when there is one, or the hand-off file.
 - What still needs them: for a repo with AI review workflows, the one-time GitHub steps those workflows describe (the review's access and the branch rules). With `"localOnly": false` and `gh` signed in, when the default branch does not hold the gate's script yet (`gh api repos/<owner>/<repo>/contents/.github/scripts/review_gate.py` answers "Not Found", not any other error), this is the repo's first setup, and its first pull request goes into the default branch, not `develop`: until the gate's files are there, no review can pass on it. Say that `.claude/rules/review-tiers.md` § "The first setup PR" holds the steps (two local reviews, the merge, the cascade into `develop` and the branch rules after it), and that the next session follows them when the user commits.
 - Which per-project mods are off here, if any, that they stay on in every other project, and that `/bindwright:setup project` changes them. A change applies from the next session start.
-- That `.bindwright/project.json` (their answers) and `.bindwright/pristine.json` (the files as generated, before any merge or fill) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive. With `"localOnly": true` they stay on this computer with the other assistant files, out of every commit.
+- That `.bindwright/project.json` (their answers), `.bindwright/pristine.json` (the files as generated, before any merge or fill) and `.bindwright/helper.json` when step 4 wrote it (the helper the CI reviews install) belong in the commit and are not edited by hand: later updates merge against them, so the repo's own edits survive. With `"localOnly": true` they stay on this computer with the other assistant files, out of every commit.
 - With `"localOnly": true`, each `shared` file from step 4, one at a time: drop it (recommended: delete a new file, `git restore` a changed one) or keep it, for the user to commit when the team wants it.
 - That nothing is committed yet: they can read the changes with `git diff` and `git status`, and commit when happy.
 - That `/bindwright:remove` takes the setup back out at any time, keeping every file they changed.
