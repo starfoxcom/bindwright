@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **The reply style sounds more like a person.** Straight Talk now asks for varied sentences and a colleague's reactions instead of the same report skeleton every reply, and matches the user's register down to swearing: an occasional one where a person would use it, only when the user swears too, never at anyone. It also writes for a reader who loses the thread easily, since that reads well for everyone, and bans bold labels in ordinary explanations.
+
 ### Added
 
 - **`/bindwright:update` offers to move an old hand-off file into issues.** In a project whose work state lives in GitHub issues, an update that finds an old `*-CONTEXT_*.md` hand-off file at the repo root says `/start-session` no longer reads it, offers to turn its open items (and any in a `ROADMAP.md`) into issues one at a time, as setup does, then offers to delete the hand-off file. Until now only running setup again offered this.
