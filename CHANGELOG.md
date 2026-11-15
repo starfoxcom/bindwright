@@ -1,4 +1,5 @@
-# Changelog
+# Changelo- **The attribution guard refuses a mismatched helper instead of crashing.** A parser reply whose run-time words lack the field saying whether they can expand to nothing, or whose commands are not lists, made the guard fail on the first git call with a run-time word, and a crashed hook lets the call through. Such a reply now refuses the call with the reason that the helper is older than the guard.
+g
 
 All notable changes to this project will be documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project follows [SemVer](https://semver.org/) from v1.0.0 onward.
 

@@ -676,13 +676,18 @@ class GuardHookTest(unittest.TestCase):
         with open(os.path.join(older, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write('process.stdout.write(JSON.stringify({error: false, assignments: [],'
                     ' commands: [["git", "commit", {dynamic: "$X"}]]}));\n')
-        broken = os.path.join(self.home, "broken-helper")
+        shaped = os.path.join(self.home, "shaped-helper")
+        os.makedirs(os.path.join(shaped, "hooks"))
+        with open(os.path.join(shaped, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
+            f.write('process.stdout.write(JSON.stringify({error: false, assignments: [],'
+                    ' commands: [["git", "commit", {dynamic: "$X", shape: "\\\\u0000"}]]}));\n')
+        broken =os.path.join(self.home, "broken-helper")
         os.makedirs(os.path.join(broken, "hooks"))
         with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write("process.exit(1);\n")
         for helper, because in ((os.path.join(self.home, "none"), "Run /bindwright:update to install it"),
                                 (old, "older than this guard"), (older, "older than this guard"),
-                                (broken, "reinstall Bindwright's helper")):
+                                (shaped, "older than this guard"), (broken, "reinstall Bindwright's helper")):
             for command, result in self.each(("git commit -m x", "gh issue create --title t --template bug.md",
                             "git config core.hooksPath /x"), lambda command: self.attr(command, helper=helper)):
                 with self.subTest(helper=helper, command=command):
