@@ -56,7 +56,9 @@ A settled conflict does not come back: the update already recorded today's templ
 
 ## 4. Fill and check the new text
 
-Files that were `added`, or merged from new text, can hold placeholders setup fills (`{{TEST_COMMAND}}` and the rest). Search those files for `{{` and fill each placeholder the way setup's step 4 says, reading the repo first and asking only what it cannot answer. Then check that every command and path the new text names exists in the repo. Last, when the `from` that `--releases-since` printed in step 2 is an `x.y.z` version older than its `to`, search the repo's tracked files outside `.bindwright/` for it (`git grep -nF "<from>" -- ':!.bindwright'`) and list each hit that names Bindwright's version for the user to update; the update never edits the project's own docs. Skip the search for any other `from`.
+Files that were `added`, or merged from new text, can hold placeholders setup fills (`{{TEST_COMMAND}}` and the rest). Search those files for `{{` and fill each placeholder the way setup's step 6 says, reading the repo first and asking only what it cannot answer. Then check that every command and path the new text names exists in the repo. Last, when the `from` that `--releases-since` printed in step 2 is an `x.y.z` version older than its `to`, search the repo's tracked files outside `.bindwright/` for it (`git grep -nF "<from>" -- ':!.bindwright'`) and list each hit that names Bindwright's version for the user to update; the update never edits the project's own docs. Skip the search for any other `from`.
+
+When `advanced.tracker` in `.bindwright/project.json` is `github` and the repo root still holds an old hand-off file (`*-CONTEXT_*.md`), say that `/start-session` no longer reads it, since the work state now lives in GitHub issues. Offer to turn its open items, and any in a `ROADMAP.md`, into issues, one at a time, as setup's step 6 does under **Tracker**. Once every open item of the hand-off file is an issue, offer to delete it; on a no, it stays. A `ROADMAP.md` stays either way, since the project may keep one of its own.
 
 ## 5. Offer the removals
 
