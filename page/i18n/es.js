@@ -79,9 +79,9 @@ export default {
   "install.desktop.install.title": "Instala Bindwright",
   "install.desktop.install.text": "Pega esto y envíalo, y espera a que Claude diga que terminó. No necesita Git.",
   "install.desktop.prompt": "Instálame el plugin Bindwright: ejecuta claude plugin install bindwright --marketplace "
-    + "https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json en la terminal. Si no "
-    + "encuentra claude, agrega ese marketplace (llamado bindwright, con origen url) en "
-    + "extraKnownMarketplaces y \"bindwright@bindwright\": true en enabledPlugins de "
+    + "starfoxcom/wrights en la terminal. Si no "
+    + "encuentra claude, agrega el marketplace llamado wrights (con origen github, repo starfoxcom/wrights) en "
+    + "extraKnownMarketplaces y \"bindwright@wrights\": true en enabledPlugins de "
     + "~/.claude/settings.json, sin tocar lo demás.",
   "install.desktop.setup.title": "Ejecuta la configuración",
   "install.desktop.setup.text": "Inicia otra sesión nueva en la misma carpeta, para que cargue el "
