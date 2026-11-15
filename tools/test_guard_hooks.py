@@ -843,6 +843,14 @@ class GuardHookTest(unittest.TestCase):
                         "env -`echo u` FOO LEFTHOOK=0 git commit -m x"):
             with self.subTest(command=command):
                 self.assert_denied(self.attr(command), "lefthook")
+        # So may a git or `git config` bundle built at run time; a reading that takes no route passes.
+        for command, because in (("git commit -${Q}m -- -n", "no-verify"),
+                                 ("git config -${Q}f FILE core.hooksPath /x", "hooksPath")):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command), because)
+        for command in ("git commit -${Q}m x -- -n", "git config -${Q}f FILE user.name x"):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command))
         # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
         for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$éam" -n'):
             with self.subTest(command=command):

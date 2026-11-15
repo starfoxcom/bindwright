@@ -560,26 +560,39 @@ def abbreviates(word, option, shortest):
 
 
 def option_words(subcommand, rest):
-    """The options of one git subcommand, one per letter of a bundle (`-nm` is `-n`, `-m`), with
-    every option's value skipped, up to `--`."""
-    options, skip, letters = [], False, SHORT_VALUES.get(subcommand, "")
+    """The options of one git subcommand in every reading, one per letter of a bundle (`-nm` is
+    `-n`, `-m`), with every option's value skipped, up to `--`. A bundle built at run time may or
+    may not take the next word (`-${Q}m -- -n`), so `states` holds, per reading still alive,
+    whether the next word is a value."""
+    options, states = [], {False}
     for word in (text_of(w) for w in rest):
-        if skip:
-            skip = False
-        elif word == "--":
+        following = set()
+        for skip in states:
+            if skip or not word.startswith("-") or word == "-":
+                following.add(False)
+            elif word != "--":
+                parts, takes = option_parts(subcommand, word)
+                options += parts
+                following |= option_skips(word, lambda _: takes)
+        states = following
+        if not states:
             break
-        elif word.startswith("--"):
-            options.append(word.split("=", 1)[0])
-            skip = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES.get(subcommand, ()))
-        elif word.startswith("-") and len(word) > 1:
-            for k, letter in enumerate(word[1:], 1):
-                options.append("-" + letter)
-                if letter in letters:
-                    skip = k == len(word) - 1 and not is_uncertain(word)
-                    break
-                if letter in ATTACHED_VALUES.get(subcommand, ""):  # `-uno`: the rest is its value
-                    break
     return options
+
+
+def option_parts(subcommand, word):
+    """(the options one git option word holds, whether its last one reads the next word)."""
+    if word.startswith("--"):
+        long = LONG_VALUES.get(subcommand, ())
+        return [word.split("=", 1)[0]], "=" not in word and any(abbreviates(word, o, o[:5]) for o in long)
+    parts = []
+    for k, letter in enumerate(word[1:], 1):
+        parts.append("-" + letter)
+        if letter in SHORT_VALUES.get(subcommand, ""):
+            return parts, k == len(word) - 1
+        if letter in ATTACHED_VALUES.get(subcommand, ""):  # `-uno`: the rest is its value
+            break
+    return parts, False
 
 
 def names_hooks(setting):
@@ -601,13 +614,17 @@ def takes_next_word(word, short, long):
         return "=" not in word and any(abbreviates(word, option, shortest) for option, shortest in long.items())
     letters = word[1:]
     first = next((i for i, letter in enumerate(letters) if "-" + letter in short), None)
-    return first == len(letters) - 1 and not is_uncertain(word)
+    return first == len(letters) - 1
 
 
-def is_uncertain(word):
-    """Whether a bundle holds a part built at run time, a glob or a brace, so its letters at run time
-    are unknown and none of them may be taken to read the next word (`-${Q}m -n`)."""
-    return any(sign in word for sign in "\0*?[{")
+def option_skips(word, takes):
+    """Whether an option reads the next word, as the set of its possible answers: both when a part
+    of it is built at run time, a glob or a brace (`-${Q}f`), so its letters at run time are
+    unknown, unless an `=` before that part already holds a long option's value."""
+    unknown = next((i for i, sign in enumerate(word) if sign in "\0*?[{"), len(word))
+    if unknown == len(word) or word.startswith("--") and "=" in word[:unknown]:
+        return {takes(word)}
+    return {False, True}
 
 
 def config_option_takes_value(word):
@@ -615,36 +632,40 @@ def config_option_takes_value(word):
     return takes_next_word(word, CONFIG_VALUE_SHORT, CONFIG_VALUE_OPTIONS)
 
 
-def config_words(rest):
-    """(the names and values `git config` reads, its options), or None when it is a read."""
-    names, options, skip, ended = [], [], False, False
+def config_readings(rest):
+    """Each way `git config` may read its words, as (its names and values, its options), apart from
+    a reading that is a read. An option built at run time may or may not take the next word, so
+    each reading is followed as (skip next, past `--`, names, options)."""
+    readings = {(False, False, (), ())}
     for raw in rest:
-        word = text_of(raw)
-        # The old form (`git config <name> <value>`) stops reading options at the first name, so a
-        # later `--get` is the value it stores.
-        legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
-        if skip:
-            skip = False
-        elif word == "--" and not ended and not legacy:
-            # Git reads every word after `--` as a name or value, never as an option.
-            ended = True
-        elif word.startswith("-") and not legacy and not ended:
-            if word.startswith("--get") or word in ("-l", "--list"):
-                return None
-            options.append(word)
-            skip = config_option_takes_value(word)
-        else:
-            names.append(word)
-    return names, options
+        word, following = text_of(raw), set()
+        for skip, ended, names, options in readings:
+            # The old form (`git config <name> <value>`) stops reading options at the first name, so
+            # a later `--get` is the value it stores.
+            legacy = bool(names) and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
+            if skip:
+                following.add((False, ended, names, options))
+            elif word == "--" and not ended and not legacy:
+                # Git reads every word after `--` as a name or value, never as an option.
+                following.add((False, True, names, options))
+            elif word.startswith("-") and not legacy and not ended:
+                if not (word.startswith("--get") or word in ("-l", "--list")):
+                    following |= {(takes, ended, names, options + (word,))
+                                  for takes in option_skips(word, config_option_takes_value)}
+            else:
+                following.add((False, ended, names + (word,), options))
+        readings = following
+    return [(list(names), list(options)) for _, _, names, options in readings]
 
 
 def config_sets_hooks(rest):
     """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
-    holds them; a read passes."""
-    read = config_words(rest)
-    if read is None:
-        return False
-    names, options = read
+    holds them, in any reading; a read passes."""
+    return any(config_reading_sets_hooks(names, options) for names, options in config_readings(rest))
+
+
+def config_reading_sets_hooks(names, options):
+    """Whether one reading of `git config` sets or unsets a hook setting or drops a section with them."""
     unsets = any(abbreviates(o, "--unset-all", "--uns") for o in options)
     sections = any(abbreviates(o, "--remove-section", "--rem") or abbreviates(o, "--rename-section", "--ren")
                    for o in options)
@@ -726,7 +747,7 @@ def env_words(args):
             if skip:
                 following.add(False)
             elif shape.startswith("-"):
-                following |= env_option_skips(shape)
+                following |= option_skips(shape, lambda w: takes_next_word(w, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS))
             elif re.match(r"\w+=", shape):
                 found.append(text_of(word))
                 following.add(False)
@@ -734,14 +755,6 @@ def env_words(args):
         if not states:
             break
     return found
-
-
-def env_option_skips(word):
-    """Whether an `env` option takes the next word, as the set of its possible answers."""
-    unknown = next((i for i, sign in enumerate(word) if sign in "\0*?[{"), len(word))
-    if unknown == len(word) or word.startswith("--") and "=" in word[:unknown]:
-        return {takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)}
-    return {False, True}
 
 
 def turns_lefthook_off(commands, assignments):
