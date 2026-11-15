@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:update` offers to move an old hand-off file into issues.** In a project whose work state lives in GitHub issues, an update that finds an old `*-CONTEXT_*.md` hand-off file at the repo root says `/start-session` no longer reads it, offers to turn its open items (and any in a `ROADMAP.md`) into issues one at a time, as setup does, then offers to delete the hand-off file. Until now only running setup again offered this.
+
 ### Changed
 
 - **Mod rows stack in one fixed order.** Setup lists the mods in the order their rows should stack above the prompt, whatever order they are picked in: the PC queue on top, then runners, the usage pause, CI, tasks, the session row, and the budgets row last, right above the prompt, since it is read most. A mod of your own keeps its place. An existing list is not reordered: to get the order, list the folders in `env.CLAUDE_CODE_PLUGIN_DIRS` of `~/.claude/settings.json` as `shared-pc`, `runners`, `usage-guard`, `ci-watch`, `tasks`, `session-info`, `session-facts`, `compact-handoff`, `skill-check`, `mods`, then restart Claude Code.
