@@ -571,7 +571,7 @@ def option_words(subcommand, rest):
     may not take the next word (`-${Q}m -- -n`), so `readings` maps each reading still alive,
     as (whether the next word is a value, whether it is the one reading every word plainly), to
     the options it found. An extra reading that meets a bundle git refuses (`- nit`: git stops at
-    the unknown switch and runs nothing) is dropped with its options."""
+    the unknown switch) ends there, keeping the options it found before it."""
     letters = SHORT_VALUES.get(subcommand, ""), ATTACHED_VALUES.get(subcommand, "")
     long = LONG_VALUES.get(subcommand, ())
     readings, ended = {(False, True): set()}, set()
@@ -586,6 +586,7 @@ def option_words(subcommand, rest):
                 continue
             parts, takes = option_parts(subcommand, word)
             if not plain and refused_bundle(parts):
+                ended |= options
                 continue
             # The plain reading takes a word with an unknown part as taking no next word.
             plain_answer = takes and not UNKNOWN_PART.search(word)
