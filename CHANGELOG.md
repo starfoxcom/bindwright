@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Setup shows what each mod gains and costs.** Before asking which mods to turn on, for the computer or for one project, setup now says for each one what turning it on gets, what it costs (a hold, a wait, a few tokens, a row above the prompt) and what leaving it off gives up, so the choice is made knowing both sides. The mods README holds the same table.
+
 ## [v5.3.1] — 2026-11-15
 
 ### Fixed
