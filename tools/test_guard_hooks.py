@@ -652,6 +652,10 @@ class GuardHookTest(unittest.TestCase):
                 ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
                 ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
                 ('bash -c "g\\it commit --no-verify $FLAGS"', "Bash", "built at run time"),
+                # The inner shell joins a line its own quoting ends in `\`, which the outer text hides.
+                ('bash -c "git \\\\\ncommit -F msg.txt -m x"', "Bash", "found in file"),
+                (f"bash -c 'git \\'\"\ncommit -m x -m '{GENERATED_LINE}'\"", "Bash", "a shell runs"),
+                ('bash -c "git \\\\\ncommit --no-verify $FLAGS"', "Bash", "built at run time"),
                 ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),
                 lambda command, tool, reason: self.attr(command, tool=tool, project=root)):
             with self.subTest(command=command):

@@ -358,20 +358,21 @@ def parse(cmd, shell, cwd, deadline):
     return data["commands"], data["assignments"], ""
 
 
-def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=()):
+def with_nested(commands, assignments, shell, cwd, deadline, found, depth=1, around=()):
     """(groups, assignments, ""): a group (commands, the commands that place their folders, shell)
     for the parsed commands, then one per command string a shell in them may run, whose folder
-    changes move only its own group; (None, None, why) when a string cannot be read."""
+    changes move only its own group; (None, None, why) when one cannot be read. Adds each to found."""
     placing = list(around) + list(commands)
     groups, assignments = [(commands, placing, shell)], list(assignments)
     for inner_shell, strings in filter(None, (shell_strings(w[i:], shell) for w in commands for i in shell_places(w))):
         for text in strings:
+            found.append(text_of(text))
             if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
                 return None, None, NESTED_UNREAD
             inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
             if not problem:
                 inner_groups, inner_assignments, problem = with_nested(
-                    inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing)
+                    inner, inner_assignments, inner_shell, cwd, deadline, found, depth + 1, placing)
             if problem:
                 return None, None, problem
             groups, assignments = groups + inner_groups, assignments + inner_assignments
@@ -385,7 +386,7 @@ def shell_strings(words, caller):
     block after options alone (`pwsh -c { ... }`) is read by the outer parse; None otherwise."""
     name, args = program(words), words[1:]
     if name in POSIX_SHELLS:
-        return "bash", [w for w in args if names_route(text_of(w))]
+        return "bash", [w for w in args if routes_in(text_of(w))[1] or routes_in(shape_of(w))[1]]
     if name not in ("pwsh", "powershell"):
         return None
     args = args[:script_file_at(name, args)]
@@ -394,7 +395,7 @@ def shell_strings(words, caller):
     if options and text_of(last).lstrip().startswith("{"):
         args = args[:-1]
     joined = " ".join(text_of(w) for w in args)
-    return "powershell", [{"dynamic": joined}] if names_route(joined) else []
+    return "powershell", [{"dynamic": joined}] if routes_in(joined)[1] else []
 
 
 def script_file_at(name, args):
@@ -404,7 +405,7 @@ def script_file_at(name, args):
     for i, w in enumerate(args):
         option = w.lstrip("-").lower() if isinstance(w, str) and w.startswith("-") else None
         if option not in ("noprofile", "nop", "nologo", "noninteractive", "noni", "file", "f"):
-            is_script = isinstance(w, str) and w.lower().endswith(".ps1") and not names_route(w)
+            is_script = isinstance(w, str) and w.lower().endswith(".ps1") and not routes_in(w)[1]
             return i if named and is_script else len(args)
         named = named or option in ("file", "f")
     return len(args)
@@ -418,13 +419,13 @@ def shell_places(words):
     return range(data[0] if data else len(words))
 
 
-def names_route(text):
-    """Whether text names a git or GitHub write, or a change to which hooks git runs, as written
-    or with its line ends joined and its quotes and escapes dropped (`g"i"t com\\mit`)."""
-    plain = re.sub(r"[\"'`\\]", "", CONTINUED_LINE.sub(r"\1", text))
-    routes = (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH, GIT_CONFIG_HOOKS, LEFTHOOK_OFF)
-    return any(p.search(t) for p in routes for t in (text, plain))
-
+def routes_in(text):
+    """(writes, names a route): whether text names a git or GitHub write, or a hook change, as
+    written, with line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
+    joined = CONTINUED_LINE.sub(r"\1", text)
+    texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
+    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
+    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
 
 def text_of(word):
     """A word's literal value, or the source text of one the shell builds at run time."""
@@ -959,13 +960,7 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    joined = CONTINUED_LINE.sub(r"\1", cmd)
-    # Joining lines can also hide a match, and so can quotes inside a word (`com'mit'`,
-    # `LEFT"HOOK"=0`) or escapes (`g\it`), so the command is checked as written, joined and
-    # without them.
-    texts = (cmd, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
-    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    named = writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+    writes, named = routes_in(cmd)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     # An escaped bash command goes to the parser even when its text names no route, but only
     # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
@@ -976,12 +971,16 @@ def main():
         scan_text(cmd, "the command text")
     deadline = time.monotonic() + ALL_PARSES_SECONDS
     parsed, assignments, problem = parse(cmd, shell, cwd, deadline)
+    found = []  # A nested string is read only when it names a route, so its problems all refuse.
     if not problem:
-        groups, assignments, problem = with_nested(parsed, assignments, shell, cwd, deadline)
+        groups, assignments, problem = with_nested(parsed, assignments, shell, cwd, deadline, found)
     if problem:
-        if named:
+        if named or found:
             deny(problem)
         sys.exit(0)
+    for text in (t for t in found if routes_in(t)[0]):
+        writes = True
+        scan_text(text, "a command string a shell runs")
     # A command that writes nothing is checked only for the routes past the hooks.
     for path, error in (parsed_files(groups, cwd) if writes else ()):
         if error:
