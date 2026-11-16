@@ -10,7 +10,7 @@
 // layout-page.mjs.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -112,6 +112,19 @@ function parseArgs(argv) {
     else throw new Error(USAGE);
   }
   return options;
+}
+
+// On Windows a Chromium browser with a new profile checks whether the account's password is
+// blank by signing in with an empty one, which Windows logs as a failed sign-in and counts
+// toward locking the account. It skips the check when the profile's Local State already holds
+// an answer no older than the password, so each new profile gets one dated as late as it can
+// be. The browser reads that date only as a string, the way it stores 64-bit numbers.
+const LOCAL_STATE = {
+  password_manager: { os_password_blank: false, os_password_last_changed: "9223372036854775807" },
+};
+
+function seedProfile(userDataDir) {
+  writeFileSync(join(userDataDir, "Local State"), JSON.stringify(LOCAL_STATE));
 }
 
 function launchArgs(userDataDir) {
@@ -283,6 +296,7 @@ async function withBrowser(browserPath, use) {
   const browser = { child: null, spawnError: null, pid: null };
   const removeHandlers = stopOnSignals(() => stopNow(browser, userDataDir));
   try {
+    seedProfile(userDataDir);
     browser.child = spawn(browserPath, launchArgs(userDataDir), { stdio: "ignore" });
     browser.child.on("error", (error) => {
       browser.spawnError = error;
