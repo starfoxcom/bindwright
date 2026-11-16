@@ -1,7 +1,8 @@
 // Bindwright's opt-in review counts. `send <repo root>` counts the user's merged pull
-// requests and posts the review counts to the counter, at most once every 24 hours per
-// repo. A repo's count covers its whole history, from GitHub's first day. A history past
-// one send's cap goes out one batch per cooldown: oldest first when backfill is on,
+// requests, and those closed unmerged with a `dropped:` label, and posts the counts to the
+// counter, at most once every 24 hours per repo. A repo's count covers its whole history,
+// from GitHub's first day. A history past one send's cap goes out one batch per cooldown:
+// oldest first when backfill is on,
 // otherwise only the newest batch is sent. The other commands
 // (`share on|off`, `project <root> <kind>`, `backfill <root> on|off`, `history <root>`,
 // `status`) keep the answer in <config>/bindwright/counts.json. Node 18+, no
@@ -468,9 +469,9 @@ function outcomeChange(outcome, { batch, current }) {
 
 /**
  * The send for one repo, once its cooldown has passed: the next batch of its merged PRs
- * (see `planWindow`). It changes the state only through `changeProject`, after each
- * outcome. `ghJson(args, cwd)`, `post(url, body)` and `now()` are injectable so tests run
- * without gh or the network.
+ * (see `planWindow`), with the PRs closed unmerged in the same window (see `countDrops`).
+ * It changes the state only through `changeProject`, after each outcome. `ghJson(args, cwd)`,
+ * `post(url, body)` and `now()` are injectable so tests run without gh or the network.
  */
 export async function send({
   root,
