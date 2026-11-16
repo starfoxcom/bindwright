@@ -10,6 +10,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **A version check holds each release to its commits.** Setup finds how the project already numbers its releases (its tags, a `VERSION` file or its manifest) and offers to enforce it; with none, it recommends one for the kind of project: semantic versions for anything other code builds on, semantic versions with `-alpha.N`, `-beta.N` and `-rc.N` builds for a game or anything tested in stages before launch, calendar versions (a calver.org format such as `YYYY.MM.MICRO`) for an app or service shipped on a schedule, or none. `/bindwright:update` asks the same once in a project set up before. With either numbering it writes `.github/scripts/version_check.py` and, where the guard hooks live in the repo, a hook that runs it before `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch. For semantic versions it reads the commits since the last release tag and refuses a release smaller than they need: a `feat` needs a minor, a `fix` or `perf` a patch, and a `!` after the type or a `BREAKING CHANGE:` line a major (before 1.0.0, one step less), measured from the last release without a pre-release tag; pre-releases must come in order, alpha before beta before rc before the release. With a Keep a Changelog file, a release's section (not a pre-release's) must hold `### Breaking` for a major and only for one, `### Added` or `### Changed` when a `feat` is in the range, and only `### Fixed` and `### Security` for a patch. For calendar versions it checks the format and that the version comes after the last one. A project that answers none gets nothing. The All settings page lists the new answer.
 
+## [v5.3.1] — 2026-11-15
+
+### Fixed
+
+- **The layout check no longer counts toward locking your Windows account.** On Windows, Chrome and Edge started with a new profile check whether the account's password is blank by signing in with an empty one, and Windows logs that as a failed sign-in. The layout check starts the browser with a new profile on every run, so each run cost one failed sign-in, and ten in ten minutes lock the account under Windows' default policy. Each new profile now carries the answer the browser caches, so it skips the check: a run makes no failed sign-in.
+
 ## [v5.3.0] — 2026-11-15
 
 ### Added
