@@ -151,6 +151,17 @@ For a team project on GitHub, ask one more:
 
 - **Do pull requests need named reviewers?** No (recommended when nothing on GitHub asks for one), or yes: ask for each reviewer's GitHub name, or `<org>/<team>` for a team, up to 10, and save them as `"prReviewers": ["<name>", ...]`. Setup then has each PR request those reviewers and merge only once GitHub reports it approved. No saves `"prReviewers": null`.
 
+### How releases are numbered
+
+Read what the repo shows first: its tags (`git tag --list`) and any `VERSION` file. Then ask:
+
+- **How are this project's releases numbered?**
+  - Semantic versions, such as `v1.4.2`: `"versioning": "semver"`, `"versionFormat": null`. Recommend it when the tags or the `VERSION` file hold versions of that shape.
+  - Calendar versions, such as `2026.11.0`: ask the format in calver.org's tokens joined by dots (`YYYY`, `YY`, `0Y`, `MM`, `0M`, `WW`, `0W`, `DD`, `0D`, `MINOR`, `MICRO`), recommending the one the existing tags fit, such as `YYYY.MM.MICRO`, and save `"versioning": "calver"` with it as `"versionFormat"`.
+  - It does not number its releases: `"versioning": "none"`, `"versionFormat": null`. Recommend it when there are no version tags and no `VERSION` file.
+
+With either numbering, say in one line what it adds: `.github/scripts/version_check.py` and, with the guard hooks in the repo, a hook that runs it before `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch. It blocks a release smaller than its commits need: for semantic versions a `feat` commit needs a minor, a `fix` a patch, and a `!` or a `BREAKING CHANGE:` line a major, read from the commit format `git.md` asks for, and the changelog section must match; for calendar versions only the format and that the version comes after the last one.
+
 ### Where the work state lives
 
 GitHub works here when the repo's remote is on GitHub and `gh auth status` works. When it does not, say why in one line and use the detailed hand-off file (`"tracker": "file"`). Otherwise ask the question below; with `"githubApps": false`, offer only its "GitHub issues only" and hand-off file choices, and skip the board:

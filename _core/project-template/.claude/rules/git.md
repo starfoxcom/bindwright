@@ -188,6 +188,10 @@ Size each release by what its users must do:
 - **Patch:** fixes only.
 
 When a release tool sets the version and the tag, feed it the way its configuration reads and never bump or tag by hand. Otherwise bump every file that carries the version together, and tag the release commit in the style the existing tags use. With a changelog, each change a user must act on goes under `### Breaking`. A project that does not version its releases skips this section.
+<!-- TOGGLE:version_check START -->
+
+`.github/scripts/version_check.py <version>` reads the commits since the last release and refuses a version smaller than they need, or a changelog section that does not match it. Run it before each `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch; where the guard hooks live in the repo, a hook runs it on those commands by itself. Pick the version and the sections it names; never tag around it.
+<!-- TOGGLE:version_check END -->
 
 ## Dead code does not ship
 
