@@ -43,6 +43,8 @@ Run it with `--update <repo root>`. It prints one line of JSON:
 | `unchanged` | Already up to date | Nothing |
 | `skipped` | A staged copy from an earlier run was already there, so the new one was not written; the file keeps its old base | Settle the old copy, then run the update again: it stages the newer text |
 
+When the repo has `.claude/hooks/no-ai-attribution.py` and `.github/workflows/claude-code-review.yml` and `advanced.localOnly` is not true, copy `${CLAUDE_PLUGIN_ROOT}/helper.json` over `.bindwright/helper.json` (create it when missing). The CI review jobs read that pin from the PR's base and install the helper it names, so the attribution guard can read commands there.
+
 Edits inside `.claude/` ask the user for permission even when edits are otherwise accepted. Before the first one, say that the next steps change the repo's agent settings and rules.
 
 ## 3. Settle what was staged
@@ -76,6 +78,6 @@ Tell the user, in plain words and grouped by kind (rules, skills, hooks, workflo
 
 When the update added `.github/scripts/pin_check.py` and also pinned an action to a commit (a `uses:` line in `.github/workflows/` that now ends in `@<40-hex sha>`), say that the deep review on that PR cannot check the new pins: a deep review runs the base branch's `claude.yml`, which does not look pins up yet. So put those `uses:` lines back at their tags for this PR, and pin them in a second PR once it merges.
 
-Then say that `.bindwright/pristine.json` changed too and belongs in the commit, since the next update merges against it, and that nothing is committed: they can read the changes with `git diff` and commit when happy.
+Then say that `.bindwright/pristine.json` changed too and belongs in the commit, since the next update merges against it, as does `.bindwright/helper.json` when step 2 wrote it, and that nothing is committed: they can read the changes with `git diff` and commit when happy.
 
 Do not commit or push.
