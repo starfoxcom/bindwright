@@ -32,13 +32,21 @@ What is scanned, for any git write, gh write or GitHub API call:
     folder and in every folder a `cd` (`builtin cd` and `command cd` too),
     `pushd`, `Set-Location`, `git -C` or `env -C` / `--chdir` in the
     command names, each reached from the folders named before it in
-    the text, since one may run in a child shell or fail. A `cd` a loop or
-    a function runs again, or before one written earlier, is not followed
-    further. One after a folder change it cannot place (`cd -`, a
+    the text, since one may run in a child shell or fail, then again until
+    no folder is added, since a loop or a function may run one again. One
+    after a folder change it cannot place (`cd -`, a
     target built at run time, a folder this computer cannot find) is
     denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. A program built
-    at run time has every file flag of its command read.
+    at run time has every file flag of its command read. A shell's options
+    are never read: each argument of `bash`, `sh`, `zsh` and the like whose
+    text names a write or a hook change is parsed and read like the command,
+    up to three shells deep; one built at run time or nested deeper is
+    denied, as is a nested `pwsh` or `powershell` whose text arguments name
+    one, since PowerShell joins them into a script (but a script block
+    after options alone is read with the command, and words after a `.ps1`
+    file are its parameters). A shell named at run time, or a word after
+    git, gh or a text tool first or after `sudo`-like wrappers, is not read.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with this guard. A command this hook reads is
@@ -86,6 +94,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 # Obfuscation-tolerant: optional zero-width / separator chars between letters.
 _Z = r"[​‌‍⁠﻿\s\-_.*]*"
@@ -124,9 +133,7 @@ ATTRIBUTION = re.compile(
         r"session_[0-9a-z]{20,}",
         r"\U0001F916",                       # robot emoji
         r"\bai" + _Z + r"-?" + _Z + r"(?:assisted|generated|written|authored)",
-    ]),
-    re.I | re.M,
-)
+    ]), re.I | re.M)
 
 # A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
 # `commit-msg`) names no write.
@@ -186,13 +193,20 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
 HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
 CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
 MAX_PLACES = 64  # folders one command may run in before the guard stops placing them
-PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
+PARSE_SECONDS = 6  # one parse
+ALL_PARSES_SECONDS = 9  # every parse of one command, nested strings included: the hook is stopped at 10 s
+MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
+POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
+WRAPPERS = {"sudo", "doas", "env", "command", "builtin", "exec", "nohup", "nice", "time", "xargs"}
 NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
            " command. Install Node, then run /bindwright:update.")
 NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Run /bindwright:update to install it."
 OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update to update it."
 UNREAD = ("the guard's parser could not read this command (an array built at run time, PowerShell's"
           " `--%`, or syntax it rejects). Write it as plain commands.")
+NESTED_UNREAD = ("a shell here runs a command string built at run time (`bash -c \"$CMD\"`), one nested more"
+                 f" than {MAX_NESTED_SHELLS} deep, or one given to a nested PowerShell (`pwsh -Command`), which"
+                 " the guard cannot read. Run the command directly.")
 SLOW = (f"the guard's parser did not answer within {PARSE_SECONDS} s, so the command was not read."
         " Run it again once the computer is less busy.")
 BROKEN = ("the guard's parser failed to run, so the command was not read. Run /bindwright:update to"
@@ -258,8 +272,7 @@ CONFIG_WRITES = {"set", "unset", "remove-section", "rename-section"}
 def deny(reason):
     sys.stdout.write(json.dumps({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
+            "hookEventName": "PreToolUse", "permissionDecision": "deny",
             "permissionDecisionReason": "BLOCKED (no AI attribution): " + reason
                 + " Commits, PRs, issues, comments and releases belong to the maintainer; no AI "
                   "Co-Authored-By, no generated-with line, no session link, no robot emoji.",
@@ -298,37 +311,40 @@ def node_program(cwd):
     return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
 
 
-def node_too_old(node):
+def node_too_old(node, deadline):
     """Whether `node` is older than Node 18, which the parser needs; asked only once a run failed."""
     try:
-        # Short, so a failed parse and this check together stay inside the hook's time limit.
-        out = subprocess.run([node, "--version"], capture_output=True, timeout=2)
+        # Short, and never past the parses' deadline, so the hook answers before it is stopped.
+        out = subprocess.run([node, "--version"], capture_output=True,
+                             timeout=max(0.1, min(2, deadline - time.monotonic())))
     except (OSError, subprocess.TimeoutExpired):
         return False
     version = re.match(rb"\s*v(\d+)\.", out.stdout)
     return version is not None and int(version.group(1)) < 18
 
 
-def parse(cmd, shell, cwd):
+def parse(cmd, shell, cwd, deadline):
     """(each simple command's words, the variables the command sets, "") as the shell reads
     them (helper/hooks/shell-words.mjs); (None, None, why) when the parser is missing, older
-    than this guard, fails or cannot read the command."""
+    than this guard, fails, cannot read the command or has not answered by `deadline`."""
     node, script = node_program(cwd), parser_script()
     if not node:
         return None, None, NO_NODE
     if not script:
         return None, None, NO_HELPER
+    if deadline <= time.monotonic():
+        return None, None, SLOW
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
-                             capture_output=True, timeout=PARSE_SECONDS)
+                             capture_output=True, timeout=min(PARSE_SECONDS, deadline - time.monotonic()))
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except subprocess.TimeoutExpired:
         return None, None, SLOW
     except (OSError, ValueError):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return None, None, NO_NODE if node_too_old(node) else BROKEN
+        return None, None, NO_NODE if node_too_old(node, deadline) else BROKEN
     if not all(isinstance(command, list) for command in data["commands"]):
         return None, None, BROKEN
     words = [word for command in data["commands"] for word in command]
@@ -341,6 +357,75 @@ def parse(cmd, shell, cwd):
         return None, None, UNREAD
     return data["commands"], data["assignments"], ""
 
+
+def with_nested(commands, assignments, shell, cwd, deadline, found, depth=1, around=()):
+    """(groups, assignments, ""): a group (commands, the commands that place their folders, shell)
+    for the parsed commands, then one per command string a shell in them may run, whose folder
+    changes move only its own group; (None, None, why) when one cannot be read. Adds each to found."""
+    placing = list(around) + list(commands)
+    groups, assignments = [(commands, placing, shell)], list(assignments)
+    for inner_shell, strings in filter(None, (shell_strings(w[i:], shell) for w in commands for i in shell_places(w))):
+        for text in strings:
+            found.append(text_of(text))
+            if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
+                return None, None, NESTED_UNREAD
+            inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
+            if not problem:
+                inner_groups, inner_assignments, problem = with_nested(
+                    inner, inner_assignments, inner_shell, cwd, deadline, found, depth + 1, placing)
+            if problem:
+                return None, None, problem
+            groups, assignments = groups + inner_groups, assignments + inner_assignments
+    return groups, assignments, ""
+
+
+def shell_strings(words, caller):
+    """(parser shell, the command strings it may run) for a shell program: each argument of a
+    POSIX shell whose text names a route, a dict when built at run time. PowerShell joins its
+    arguments into a script the guard does not rebuild, so a route they name is a dict; a script
+    block after options alone (`pwsh -c { ... }`) is read by the outer parse; None otherwise."""
+    name, args = program(words), words[1:]
+    if name in POSIX_SHELLS:
+        return "bash", [w for w in args if routes_in(text_of(w))[1] or routes_in(shape_of(w))[1]]
+    if name not in ("pwsh", "powershell"):
+        return None
+    args = args[:script_file_at(name, args)]
+    last = args[-1] if args and caller == "powershell" and not isinstance(args[-1], str) else ""
+    options = all(re.fullmatch(r"-[A-Za-z]+", text_of(w)) for w in args[:-1])
+    if options and text_of(last).lstrip().startswith("{"):
+        args = args[:-1]
+    joined = " ".join(text_of(w) for w in args)
+    return "powershell", [{"dynamic": joined}] if routes_in(joined)[1] else []
+
+
+def script_file_at(name, args):
+    """Index of the .ps1 file a nested PowerShell runs past no-value switches, whose later words
+    are its parameters; `powershell` reads a first plain word as a command, so it needs `-File`."""
+    named = name == "pwsh"
+    for i, w in enumerate(args):
+        option = w.lstrip("-").lower() if isinstance(w, str) and w.startswith("-") else None
+        if option not in ("noprofile", "nop", "nologo", "noninteractive", "noni", "file", "f"):
+            is_script = isinstance(w, str) and w.lower().endswith(".ps1") and not routes_in(w)[1]
+            return i if named and is_script else len(args)
+        named = named or option in ("file", "f")
+    return len(args)
+
+
+def shell_places(words):
+    """Words a shell may start at: those before a git, gh or text tool first or after a wrapper."""
+    end = next((i for i in range(len(words)) if program(words[i:]) not in WRAPPERS), len(words))
+    data = [i for i in range(end + 1) if program(words[i:]) in {"git", "gh"} | TEXT_TOOLS
+            and "=" not in words[i]]
+    return range(data[0] if data else len(words))
+
+
+def routes_in(text):
+    """(writes, names a route): whether text names a git or GitHub write, or a hook change, as
+    written, with line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
+    joined = CONTINUED_LINE.sub(r"\1", text)
+    texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
+    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
+    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
 
 def text_of(word):
     """A word's literal value, or the source text of one the shell builds at run time."""
@@ -620,14 +705,15 @@ def folder_places(commands, cwd):
         first = False
 
 
-def parsed_files(commands, cwd, shell="bash"):
-    """(path, error) for every body file the parsed commands name, in order, a relative one
-    read in every folder the command may run in."""
-    places = folder_places(commands, cwd)
-    for words in commands:
-        for value in command_files(words, shell):
-            if value != "-":
-                yield from resolve(value, places)
+def parsed_files(groups, cwd):
+    """(path, error) for every body file the parsed commands name, in order, each group of
+    `with_nested` read as its shell reads it, a relative file in every folder it may run in."""
+    for commands, placing, shell in groups:
+        places = folder_places(placing, cwd)
+        for words in commands:
+            for value in command_files(words, shell):
+                if value != "-":
+                    yield from resolve(value, places)
 
 
 def abbreviates(word, option, shortest):
@@ -840,10 +926,11 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-def hook_route(commands, assignments):
-    """The kind of route past git's hooks the parsed command takes, or None. A git run through
-    a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run time that names
-    git (`$GIT`)."""
+def hook_route(groups, assignments):
+    """The kind of route past git's hooks the commands of `with_nested`'s groups take, or None.
+    A git run through a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run
+    time that names git (`$GIT`)."""
+    commands = [words for group, _, _ in groups for words in group]
     if turns_lefthook_off(commands, assignments):
         return "lefthook"
     for words in commands:
@@ -873,12 +960,7 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    joined = CONTINUED_LINE.sub(r"\1", cmd)
-    # Joining lines can also hide a match, and so can quotes inside a word (`com'mit'`,
-    # `LEFT"HOOK"=0`), so the command is checked as written, joined and without its quotes.
-    texts = (cmd, joined, re.sub(r"[\"'`]", "", joined))
-    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    named = writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+    writes, named = routes_in(cmd)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     # An escaped bash command goes to the parser even when its text names no route, but only
     # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
@@ -887,13 +969,20 @@ def main():
 
     if writes:
         scan_text(cmd, "the command text")
-    parsed, assignments, problem = parse(cmd, shell, cwd)
+    deadline = time.monotonic() + ALL_PARSES_SECONDS
+    parsed, assignments, problem = parse(cmd, shell, cwd, deadline)
+    found = []  # A nested string is read only when it names a route, so its problems all refuse.
+    if not problem:
+        groups, assignments, problem = with_nested(parsed, assignments, shell, cwd, deadline, found)
     if problem:
-        if named:
+        if named or found:
             deny(problem)
         sys.exit(0)
+    for text in (t for t in found if routes_in(t)[0]):
+        writes = True
+        scan_text(text, "a command string a shell runs")
     # A command that writes nothing is checked only for the routes past the hooks.
-    for path, error in (parsed_files(parsed, cwd, shell) if writes else ()):
+    for path, error in (parsed_files(groups, cwd) if writes else ()):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.")
         try:
@@ -901,7 +990,7 @@ def main():
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
         scan_text(text, f"file {path}")
-    route = hook_route(parsed, assignments)
+    route = hook_route(groups, assignments)
     if route:
         deny(BYPASS_REASONS[route])
     sys.exit(0)

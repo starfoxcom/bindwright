@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -71,8 +72,8 @@ class GuardHookTest(unittest.TestCase):
         # The first Node start on a Windows runner (cold disk cache, the virus scanner reading
         # node.exe) can pass the guard's parse time limit; one start here keeps it out of the rows.
         node = shutil.which("node")
-        if node:
-            subprocess.run([node, os.path.join(HELPER, "hooks", "shell-words.mjs"), "bash"],
+        for shell in ("bash", "powershell") if node else ():
+            subprocess.run([node, os.path.join(HELPER, "hooks", "shell-words.mjs"), shell],
                            input=b"true", capture_output=True, timeout=60)
 
     def setUp(self):
@@ -610,6 +611,69 @@ class GuardHookTest(unittest.TestCase):
         self.assert_denied(self.attr("Invoke-WebRequest https://api.github.com/repos/o/r/issues -Method Post "
                                      "-UserAgent git -inFile msg.txt", tool="PowerShell", project=root),
                            f"found in file {path}")
+
+    def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n", "inner.txt": "x\n",
+                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n"})
+        deep = "git commit -m x"
+        for _ in range(4):
+            deep = f"bash -c {shlex.quote(deep)}"
+        for (command, tool, reason), result in self.each((
+                ("pwsh -co 'git commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                ("pwsh -c 'git' 'commit --no-verify -m \"see git push\"'", "Bash", "nested PowerShell"),
+                ('powershell "git commit --no-verify -m x"', "PowerShell", "nested PowerShell"),
+                ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell", "nested PowerShell"),
+                ("pwsh -Command { git commit --no-verify -m x }", "PowerShell", "--no-verify"),
+                # A script file counts only first, and `powershell` reads a first plain word as a command.
+                ('pwsh -Command "git commit --no-verify -m x; ./x.ps1"', "Bash", "nested PowerShell"),
+                ("powershell ./x.ps1 ';' 'git commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                # From bash a word starting with `{` is text or a brace expansion, never a script block.
+                ("pwsh -c {git,true}' commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                # A block followed by text words is part of the joined script.
+                ("sudo pwsh -c {git commit} --no-verify -m x", "PowerShell", "nested PowerShell"),
+                ("sudo pwsh -c git { commit --no-verify -m x }", "PowerShell", "nested PowerShell"),
+                ("sudo pwsh -c '-not $x; git' { commit --no-verify -m x }", "PowerShell", "nested PowerShell"),
+                # An assignment or an option value named like git is not the program.
+                ("env HOME=/home/git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("sudo -u git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("flock sort bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -c 'git commit -F inner.txt'; bash -c 'cd sub; bash -c \"git commit -F inner.txt\"'",
+                 "Bash", "found in file"),
+                ("bash -c 'g\"i\"t commit --no-verify -m x'", "Bash", "--no-verify"),
+                (deep, "Bash", "nested more than"),
+                ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("sh -ec 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -euo pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -ceo pipefail 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -c 'cd sub && git commit -F inner.txt'", "Bash", "found in file"),
+                ("bash --norc -o pipefail -c -- 'git -c core.hooksPath=x commit -m x'", "Bash", "core.hooksPath"),
+                ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
+                ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
+                ('bash -c "g\\it commit --no-verify $FLAGS"', "Bash", "built at run time"),
+                # The inner shell joins a line its own quoting ends in `\`, which the outer text hides.
+                ('bash -c "git \\\\\ncommit -F msg.txt -m x"', "Bash", "found in file"),
+                (f"bash -c 'git \\'\"\ncommit -m x -m '{GENERATED_LINE}'\"", "Bash", "a shell runs"),
+                ('bash -c "git \\\\\ncommit --no-verify $FLAGS"', "Bash", "built at run time"),
+                ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),
+                lambda command, tool, reason: self.attr(command, tool=tool, project=root)):
+            with self.subTest(command=command):
+                self.assert_denied(result, reason)
+        for (command, tool), result in self.each((
+                ("bash -c 'git commit -F clean.txt'", "Bash"), ("bash -c 'git status --no-verify'", "Bash"),
+                ("bash ./build.sh; git commit -m x", "Bash"), ("pwsh ./x.ps1; git commit -m x", "PowerShell"),
+                ("pwsh ./build.ps1 -c $cfg; git commit -m x", "Bash"),
+                ('gh issue create --label bash --body "git push fails on $BRANCH"', "Bash"),
+                ('sudo gh issue create --label bash --body "use git commit --no-verify to skip"', "Bash"),
+                ("pwsh -NoProfile -Command { git commit -m 'fix: y' }", "PowerShell"),
+                # A child shell's `cd` never moves the commands around it.
+                ("sh -c 'cd /no/such/folder && git commit -m x' && git commit -F clean.txt", "Bash"),
+                ('pwsh ./build.ps1 -Message "git push done"', "Bash"),
+                ('pwsh -NoProfile ./build.ps1 -Message "git push done"', "PowerShell")),
+                lambda command, tool: self.attr(command, tool=tool, project=root)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
 
     def test_a_cd_run_again_moves_on_from_its_last_folder(self):
         # A loop or a function runs a `cd` again from the folder its last run reached.
