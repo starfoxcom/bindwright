@@ -243,6 +243,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <p data-t="settings.board-visibility.text">El tablero guarda cada detalle de ingeniería. Una copia pública limpia es opcional.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.board-visibility.value">Privado</b></span>
       </li>
+      <li class="setting" id="s-pre-commit">
+        <h3 data-t="settings.pre-commit.title">Hook de pre-commit</h3>
+        <p data-t="settings.pre-commit.text"><a href="https://github.com/evilmartians/lefthook">lefthook</a> corre el lint, la revisión de tipos y la de tamaño antes de cada commit, y las pruebas antes de cada push. Muy recomendado donde no corre CI.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.pre-commit.value">Recomendado activado</b></span>
+      </li>
     </ul>
     <!-- /settings:project -->
   </section>
@@ -271,11 +276,6 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <h3 data-t="settings.merge-style.title">Estilo de merge</h3>
         <p data-t="settings.merge-style.text">Cada rama sigue visible en el historial.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.merge-style.value">Commits de merge</b></span>
-      </li>
-      <li class="setting" id="s-pre-commit">
-        <h3 data-t="settings.pre-commit.title">Hook de pre-commit</h3>
-        <p data-t="settings.pre-commit.text">Un equipo recibe <a href="https://github.com/evilmartians/lefthook">lefthook</a>, que corre revisiones antes de cada commit.</p>
-        <span class="setting-value"><span class="setting-label" data-t="settings.default">Por defecto</span> <b data-t="settings.pre-commit.value">Solo en equipo</b></span>
       </li>
       <li class="setting" id="s-guard-location">
         <h3 data-t="settings.guard-location.title">Dónde viven las guardias</h3>

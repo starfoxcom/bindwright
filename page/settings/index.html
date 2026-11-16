@@ -243,6 +243,11 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <p data-t="settings.board-visibility.text">The board holds every engineering detail. A clean public copy is optional.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.board-visibility.value">Private</b></span>
       </li>
+      <li class="setting" id="s-pre-commit">
+        <h3 data-t="settings.pre-commit.title">Pre-commit hook</h3>
+        <p data-t="settings.pre-commit.text"><a href="https://github.com/evilmartians/lefthook">lefthook</a> runs the lint, the type check and the size check before each commit, and the tests before each push. Strongly recommended where no CI runs.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.pre-commit.value">Recommended on</b></span>
+      </li>
     </ul>
     <!-- /settings:project -->
   </section>
@@ -271,11 +276,6 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <h3 data-t="settings.merge-style.title">Merge style</h3>
         <p data-t="settings.merge-style.text">Each branch stays visible in the history.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.merge-style.value">Merge commits</b></span>
-      </li>
-      <li class="setting" id="s-pre-commit">
-        <h3 data-t="settings.pre-commit.title">Pre-commit hook</h3>
-        <p data-t="settings.pre-commit.text">A team gets <a href="https://github.com/evilmartians/lefthook">lefthook</a>, which runs checks before each commit.</p>
-        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.pre-commit.value">Team only</b></span>
       </li>
       <li class="setting" id="s-guard-location">
         <h3 data-t="settings.guard-location.title">Where the guards live</h3>
