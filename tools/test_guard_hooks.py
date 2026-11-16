@@ -881,9 +881,13 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(broken, "hooks"))
         with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write("process.exit(1);\n")
-        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object.
+        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object,
+        # a brace reading that is not a list of strings.
+        built = '[["git", "commit", {dynamic: "{a,b}", shape: "{a,b}", canBeEmpty: false, braces: %s}]]'
         malformed = []
-        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]')):
+        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]'),
+                               ("null-braces", built % "null"), ("number-braces", built % "5"),
+                               ("text-braces", built % '"ab"')):
             folder = os.path.join(self.home, name + "-helper")
             os.makedirs(os.path.join(folder, "hooks"))
             with open(os.path.join(folder, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:

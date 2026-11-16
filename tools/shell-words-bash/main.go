@@ -5,7 +5,8 @@
 // `shellWordsInput` to the command, runs the module, and reads the global `shellWordsOutput`, a
 // JSON object {"error": bool, "commands": [[word, ...], ...], "assignments": [{"name", "value"}]}.
 // A word is a string, or {"dynamic": <source text>, "prefix": <literal start>, "shape": <literal
-// text, NUL for each run-time part>, "canBeEmpty": bool} when the shell builds it at run time.
+// text, NUL for each run-time part>, "canBeEmpty": bool} when the shell builds it at run time;
+// a command word whose braces hold only plain text also has "braces": [string, ...], bash's words.
 package main
 
 import (
