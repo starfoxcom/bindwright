@@ -9,18 +9,21 @@ import { HOST_VARIANTS, withoutActions, withoutGithub } from "./code-host.js";
 import { bindResult, clone, firstDifference, pythonBind } from "./both-engines.js";
 import {
   defaults, LICENSES, CODE_RESEARCH_TOOLS, PRECOMMIT_MANAGERS, ARCHITECTURES, MERGE_STYLES, HOOK_LOCATIONS, DENY_PROFILES, TRACKERS,
+  VERSIONINGS,
 } from "../model.js";
 
 // The custom code-research tool needs its own name and URL to bind.
 const CUSTOM = { name: "My Tool.v2+", url: "https://example.com/tools/my-tool?ref=a&b=1" };
 const withTool = (adv, tool) => ({ ...adv, codeResearch: tool, codeResearchCustom: tool === "custom" ? CUSTOM : null });
+// Calver needs its format to bind.
+const withScheme = (adv, scheme) => ({ ...adv, versioning: scheme, versionFormat: scheme === "calver" ? "YYYY.MM.MICRO" : null });
 
 // Every advanced choice and switch, one at a time, from each of the four presets.
 function oneAtATime() {
   const choices = {
     codeResearch: Object.keys(CODE_RESEARCH_TOOLS), precommit: ["none", ...PRECOMMIT_MANAGERS], architecture: ARCHITECTURES,
     branching: ["gitflow", "trunk"], mergeStyle: MERGE_STYLES, hookLocation: HOOK_LOCATIONS, denyProfile: DENY_PROFILES,
-    tracker: TRACKERS,
+    tracker: TRACKERS, versioning: VERSIONINGS,
   };
   const switches = [
     "aiReview", "deepEscalation", "uiRule", "confidentiality", "cleanRoom", "plainWriting",
@@ -34,7 +37,8 @@ function oneAtATime() {
       for (const [key, values] of Object.entries(choices)) {
         for (const v of values) {
           if (v === base.advanced[key]) continue;
-          const advanced = key === "codeResearch" ? withTool(base.advanced, v) : { ...base.advanced, [key]: v };
+          const fill = { codeResearch: withTool, versioning: withScheme }[key];
+          const advanced = fill ? fill(base.advanced, v) : { ...base.advanced, [key]: v };
           cases.push({ ...clone(base), advanced });
         }
       }
@@ -94,6 +98,7 @@ function seeded(count, codeHost = "github") {
     a.advanced.publicRoadmap = a.advanced.tracker === "github" && bool() ? "starfoxcom/roadmap" : null;
     a.advanced.trackerRepo = a.advanced.tracker === "github" && bool() ? "starfoxcom/tracker" : null;
     a.advanced = withTool(a.advanced, a.advanced.codeResearch);
+    a.advanced = withScheme(a.advanced, pick(VERSIONINGS));
     if (codeHost !== "github") withoutGithub(a, codeHost);
     return a;
   });
@@ -143,6 +148,12 @@ function refused() {
     (a) => { delete a.advanced.codeSizeCheck; },
     (a) => { a.advanced.handoffFile = 1; },
     (a) => { a.advanced.denyProfile = "paranoid"; },
+    (a) => { a.advanced.versioning = "date"; },
+    (a) => { delete a.advanced.versioning; },
+    (a) => { a.advanced.versioning = "calver"; },
+    (a) => { a.advanced.versioning = "calver"; a.advanced.versionFormat = "YYYY.XX"; },
+    (a) => { a.advanced.versioning = "calver"; a.advanced.versionFormat = "YYYY.MM\n"; },
+    (a) => { a.advanced.versioning = "semver"; a.advanced.versionFormat = "YYYY"; },
     (a) => { a.advanced.shippedTextPaths = []; },
     (a) => { a.advanced.shippedTextPaths = ["﻿docs/**"]; },
     (a) => { a.advanced.shippedTextPaths = ["😀".repeat(101)]; },

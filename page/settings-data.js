@@ -211,6 +211,16 @@ export const PROJECT = [
     keys: ["advanced.publicRoadmap"],
     engine: [{ flags: {}, key: "advanced.publicRoadmap", value: null }],
   },
+  {
+    id: "version-check",
+    title: "Version check",
+    text: "Before a release is tagged, checks its version against the commits since the last one, "
+      + "as semver or calver numbers it. none adds no check.",
+    value: "semver when the repo has version tags",
+    keys: ["advanced.versioning", "advanced.versionFormat"],
+    options: ["semver", "calver", "none"],
+    engine: [{ flags: {}, key: "advanced.versioning", value: "none" }],
+  },
 ];
 
 export const FIXED = [
