@@ -45,8 +45,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     denied, as is a nested `pwsh` or `powershell` whose text arguments name
     one, since PowerShell joins them into a script (but a script block
     after options alone is read with the command, and words after a `.ps1`
-    file are its parameters). A shell named at run time (`$SHELL`), or a word
-    after a git, gh or text program (`--label bash`), is not read as one.
+    file are its parameters). A shell named at run time, or a word after
+    git, gh or a text tool first or after `sudo`-like wrappers, is not read.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with this guard. A command this hook reads is
