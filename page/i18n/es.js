@@ -381,9 +381,10 @@ export default {
   "settings.merge-style.text": "Cada rama sigue visible en el historial.",
   "settings.merge-style.value": "Commits de merge",
   "settings.pre-commit.title": "Hook de pre-commit",
-  "settings.pre-commit.text": "Un equipo recibe <a href=\"https://github.com/evilmartians/lefthook\">lefthook</a>, "
-    + "que corre revisiones antes de cada commit.",
-  "settings.pre-commit.value": "Solo en equipo",
+  "settings.pre-commit.text": "<a href=\"https://github.com/evilmartians/lefthook\">lefthook</a> "
+    + "corre el lint, la revisión de tipos y la de tamaño antes de cada commit, "
+    + "y las pruebas antes de cada push. Muy recomendado donde no corre CI.",
+  "settings.pre-commit.value": "Recomendado activado",
   "settings.guard-location.title": "Dónde viven las guardias",
   "settings.guard-location.text": "En el repo, así todo el que lo clone las recibe.",
   "settings.guard-location.value": "En el repo",
