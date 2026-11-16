@@ -201,7 +201,7 @@ test("the tasks mod turns on the task tools it answers and leaves them on; other
     assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "0");
     assert.deepEqual(add("tasks").env_set, ["CLAUDE_CODE_ENABLE_TODO_TOOLS"]);
     assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "1");
-    // Run again on an installed copy (as an update does): the setting holds, nothing to change.
+    // Installed again (a later setup or join): the setting holds, nothing to change.
     const again = add("tasks");
     assert.equal(again.kept_existing, true);
     assert.deepEqual(again.env_set, []);
