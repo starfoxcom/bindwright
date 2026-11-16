@@ -596,34 +596,35 @@ test('the own list tools stand in only where the built-in task tools are missing
     registered.push(e.name)
     return { value: { tool: `mcp__tasks__${e.name}` } }
   })
-  // A user's own MCP server named `tasks`, which the mod must leave alone when it registered nothing.
+  // A user's own MCP server named `tasks`: its tools are never the mod's to answer.
   on('tool.call', { tool: 'mcp__tasks__create' }, () => ({ result: 'from the server' }) as never)
   await $.session.start({ cwd: 'C:/Repos/x' } as never)
-  expect(registered).toEqual(['create', 'update', 'list', 'get'])
+  expect(registered).toEqual(['taskmod_create', 'taskmod_update', 'taskmod_list', 'taskmod_get'])
   await turn($)
-  const made = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'one', description: 'first' } as never)) as
-    never as { result: unknown }
+  const made = (await $.tool.call({ tool: 'mcp__tasks__taskmod_create', subject: 'one', description: 'first' } as
+    never)) as never as { result: unknown }
   // A stand-in has no built-in result mapper, so the model reads the record as text.
   expect(typeof made.result).toBe('string')
   expect(JSON.parse(made.result as string)).toEqual({ task: { id: '1', subject: 'one' } })
-  await $.tool.call({ tool: 'mcp__tasks__update', taskId: '1', status: 'in_progress' } as never)
+  await $.tool.call({ tool: 'mcp__tasks__taskmod_update', taskId: '1', status: 'in_progress' } as never)
   expect(mirror(seen).tasks.map(t => [t.subject, t.status])).toEqual([['one', 'in_progress']])
-  const listed = (await $.tool.call({ tool: 'mcp__tasks__list' } as never)) as never as { result: unknown }
+  const listed = (await $.tool.call({ tool: 'mcp__tasks__taskmod_list' } as never)) as never as { result: unknown }
   expect(listed.result as string).toContain('"subject":"one"')
-  const fromSubagent = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'x', description: 'x',
+  const fromSubagent = (await $.tool.call({ tool: 'mcp__tasks__taskmod_create', subject: 'x', description: 'x',
     agentId: 'a1' } as never)) as never as { deny?: string }
   expect(fromSubagent.deny).toContain('main session')
-  expect(mirror(seen).tasks).toHaveLength(1)
-
-  registered.length = 0
-  offered = ['Read', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']
-  await $.session.start({ cwd: 'C:/Repos/x' } as never)
-  expect(registered).toEqual([])
-  // With no stand-ins registered, a user's own `tasks` MCP server answers its tools, for subagents too.
   for (const agentId of [undefined, 'a1']) {
     const passed = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'y', description: 'y',
-      agentId } as never)) as never as { result?: unknown; deny?: string }
+      agentId } as never)) as never as { result?: unknown }
     expect(passed).toEqual({ result: 'from the server' })
   }
   expect(mirror(seen).tasks).toHaveLength(1)
+
+  // The built-in tools offered, or the stand-ins' names already taken: nothing more is registered.
+  for (const tools of [['Read', 'TaskCreate', 'TaskUpdate'], ['Read', 'mcp__tasks__taskmod_create']]) {
+    registered.length = 0
+    offered = tools
+    await $.session.start({ cwd: 'C:/Repos/x' } as never)
+    expect(registered).toEqual([])
+  }
 })

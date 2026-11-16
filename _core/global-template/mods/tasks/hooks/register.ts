@@ -82,10 +82,7 @@ const live: {
   hasEngineWake: boolean
   // The session the carry-over last ran for: a /clear changes the session with no session.start.
   carriedFor?: string
-  // This mod registered its stand-in list tools, so `mcp__tasks__*` calls are its own to answer.
-  hasOwnTools: boolean
 } = {
-  hasOwnTools: false,
   turn: 0,
   hasEngineWake: false,
   isTurnRunning: false,
@@ -382,7 +379,7 @@ function registerLifecycle(on: On): void {
     await clearEngineStore($).catch(() => undefined)
     await carryOverOnce($)
     await startAlive($)
-    live.hasOwnTools = await registerOwnTools($, HOLD_HELP).catch(() => false)
+    await registerOwnTools($, HOLD_HELP).catch(() => false)
     return result
   })
 
@@ -472,8 +469,8 @@ function registerPrompts(on: On): void {
 // Registers the task tools' answers, the tool-call checks and the hold description.
 function registerTools(on: On): void {
   on('tool.call', async ($, e, next) => {
-    // Only the stand-ins this mod registered: another `tasks` MCP server's tools pass through untouched.
-    const tool = live.hasOwnTools ? builtInName(e.tool) : e.tool
+    // The stand-ins' `taskmod_` names are this mod's alone; any other tool passes through as it is.
+    const tool = builtInName(e.tool)
     // The own tools serve the main session's list only; a subagent keeps the engine's tools, if any.
     if (tool !== e.tool && e.agentId) return { deny: 'This task list belongs to the main session.' } as never
     if (TASK_TOOLS.has(tool) && !e.agentId) {

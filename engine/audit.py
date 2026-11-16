@@ -14,7 +14,7 @@ SESSIONS = 50
 EXAMPLES = 3
 CUT = 100
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
-TASK_TOOLS = ("TaskCreate", "TodoWrite", "mcp__tasks__create")
+TASK_TOOLS = ("TaskCreate", "TodoWrite", "mcp__tasks__taskmod_create")
 EDITS_FOR_TASKS = 3
 
 COMMIT = re.compile(r"(?:^|[\n;&|(][ \t]*)git[ \t]+(?:-C[ \t]+[^ \t\r\n]+[ \t]+)?commit(?![A-Za-z0-9_-])")
