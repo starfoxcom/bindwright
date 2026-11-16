@@ -375,6 +375,15 @@ class Hook(unittest.TestCase):
         ("a release command inside a quoted message",
          'git commit -m "docs: release steps\ngit tag v5.2.2\nthen push"', 0),
         ("a release command inside a here-document", "cat > notes.md <<EOF\ngit tag v5.2.2\nEOF", 0),
+        ("an annotated tag with a message of two words", 'git tag -a v5.3.0 -m "Release v5.3.0"', 0),
+        ("a release command inside a commit message", 'git commit -m "docs: run git tag v5.2.2 first"', 0),
+        ("a release command inside a PR body", 'gh pr create --body "After merge: git tag v5.2.2"', 0),
+        ("a tag after a message holding a bracket", 'git tag -m "notes (final)" v5.2.2', 2),
+        ("a tag after a message holding a pipe", 'git tag -am "a | b" v5.2.2', 2),
+        ("a tag after a message holding a hash", "git tag -m x#y v5.2.2", 2),
+        ("a tag with its errors redirected", "git tag v5.2.2 2>&1 | tail -1", 2),
+        ("a release command in a comment", "# then: git tag v5.2.2", 0),
+        ("a release command after a comment's line", "echo hi # note\ngit tag v5.2.2", 2),
         ("a version built at run time", "git tag $NEXT", 0),
         ("a release made with gh's new alias", "gh release new v5.2.2", 2),
         ("a release PR made with gh's new alias", "gh pr new --head release/v5.2.2", 2),
@@ -396,16 +405,34 @@ class Hook(unittest.TestCase):
         ("an ordinary command", "git log --oneline", 0),
     ]
 
-    def test_rows(self):
+    # Without the parser, a here-document's lines are read as commands.
+    ROUGH_ROWS = [(name, command, 2 if name.endswith("here-document") else code)
+                  for name, command, code in ROWS] + [
+        ("an unclosed quote", 'git tag -m "notes v5.2.2', 0),
+        ("a quoted message naming a short tag", 'git commit -m "docs: run git tag v1 first"', 0),
+        ("a statement starting with an assignment", "A=1 git tag v5.2.2", 2),
+        ("a list of tags", "git tag --list", 0),
+        ("a release listing", "gh release list", 0),
+        ("a fetch of a release branch", "git fetch origin release/1.2.0", 0),
+        ("two gh commands", "gh pr view 5 && gh issue create --title x", 0),
+    ]
+
+    def check_rows(self, rows, helper):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
             as_project(repo, "semver")
-            results = in_parallel(lambda row: run_hook(repo, row[1]), self.ROWS)
-            for (name, _, code), (got_code, err) in zip(self.ROWS, results):
+            results = in_parallel(lambda row: run_hook(repo, row[1], helper=helper or repo), rows)
+            for (name, _, code), (got_code, err) in zip(rows, results):
                 with self.subTest(name):
                     self.assertEqual(got_code, code, err)
                     if code == 2:
                         self.assertIn("Blocked release v5.2.2", err)
                         self.assertIn("feat(mods): add the task panel", err)
+
+    def test_rows(self):
+        self.check_rows(self.ROWS, HELPER)
+
+    def test_without_the_parser_the_rows_read_the_same_but_here_documents(self):
+        self.check_rows(self.ROUGH_ROWS, None)
 
     def test_a_release_PR_from_the_current_branch(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG, branch="release/v5.2.2") as repo:
@@ -428,22 +455,6 @@ class Hook(unittest.TestCase):
                     rows, in_parallel(lambda row: run_hook(repo, row[1]), rows)):
                 with self.subTest(name):
                     self.assertEqual(got, code, err)
-
-    def test_without_the_parser_a_rough_reading_is_checked(self):
-        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
-            as_project(repo, "semver")
-            code, err = run_hook(repo, 'git tag "v5.2.2"', helper=repo)
-            self.assertEqual(code, 2)
-            self.assertIn("v5.2.2", err)
-            for command in ("git tag v5.3.0", "git tag backup", "gh pr create --base develop --head feature/x",
-                            'git commit -m "docs: run git tag v1 first"',
-                            "git log --oneline", "gh pr checks 12 --json name,bucket",
-                            "gh release list", "npm run release", "cat pr.md",
-                            "git fetch origin release/1.2.0", "git tag --list", "git tag -l",
-                            'git commit -m "fix: tag sorting"', "git add src/tag.py",
-                            "gh pr view 5 && gh issue create --title x"):
-                with self.subTest(command):
-                    self.assertEqual(run_hook(repo, command, helper=repo), (0, ""))
 
     def test_malformed_answers_or_input_let_every_command_run(self):
         answers = [{"advanced": "x"}, {"advanced": [1]},

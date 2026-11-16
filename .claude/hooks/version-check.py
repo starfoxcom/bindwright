@@ -20,14 +20,18 @@ so quoted text and here-documents are never taken for commands, and a git or gh
 command behind a wrapper (`env`, `sudo`, `xargs`) is checked too. Options are
 read as getopt reads them (`-am <message>`, `--head=<branch>`). `gh release
 create` is measured at the version's tag when it exists, else at `--target`. A
-version, commit or branch built at run time (`git tag $NEXT`) is out of reach. Without the
-parser (no Node), a rough cut of the command is read instead. The check refusing or failing to
-run blocks the command with the reason.
+version, commit or branch built at run time (`git tag $NEXT`) is out of reach. When the parser
+cannot read the command (no helper or Node, a parse error, out of time), Python's `shlex` reads
+it instead: quoted text stays one word, and an operator or `#` inside quotes cuts nothing, but
+a here-document's lines are read as commands, so a body line such as `git tag v2.0.0` is
+checked. The check refusing or failing to run blocks the command with the reason.
 """
 
+import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -39,8 +43,11 @@ CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 # miss one that does; only a match is read by the shell parser.
 MAY_BE_RELEASE = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
                             re.DOTALL | re.IGNORECASE)
-# A rough cut of a command into statements, for when the shell parser cannot run.
-ROUGH_STATEMENT = re.compile(r"[;&|\n()]+")
+# The rough cut, for when the shell parser cannot run: characters that end a word outside
+# quotes, a backslash-newline the shell joins, and a `#` inside a word, which is no comment.
+ROUGH_PUNCTUATION = "();<>|&\n"
+LINE_JOIN = re.compile(r"\\\r?\n")
+MID_WORD_HASH = re.compile(r"(?<=[^\s;&|()<>\\])#")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 GH_CREATE = ("create", "new")
 RELEASE_BRANCH = re.compile(r"release/(.+)")
@@ -252,15 +259,54 @@ def gh_action(words):
     return words[group], words[action], words[action + 1:]
 
 
+class KeepNewline(io.StringIO):
+    """A stream whose `readline` leaves the newline unread, so the newline that ends a comment
+    still ends its statement for `shlex`."""
+
+    def readline(self, size=-1):
+        line = super().readline(size)
+        if not line.endswith("\n"):
+            return line
+        self.seek(self.tell() - 1)
+        return line[:-1]
+
+
+def rough_tokens(command):
+    """The command's words and operators as `shlex` reads them, quotes kept whole and comments
+    dropped; empty when the text cannot be read (an unclosed quote)."""
+    text = MID_WORD_HASH.sub(r"\\#", LINE_JOIN.sub("", command))
+    lexer = shlex.shlex(KeepNewline(text), posix=True, punctuation_chars=ROUGH_PUNCTUATION)
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    try:
+        return list(lexer)
+    except ValueError:
+        return []
+
+
 def rough_commands(command):
     """Each statement's words as a rough cut reads them, for when the shell parser cannot run:
-    split at separators and blanks, quotes taken off, leading assignments dropped."""
-    commands = []
-    for statement in ROUGH_STATEMENT.split(command):
-        words = [word.strip("'\"") for word in statement.split()]
+    quoted text is one word, statements end at an operator outside quotes, and redirections
+    and leading assignments are dropped. A word built at run time stays as written."""
+    commands, words, is_target = [], [], False
+    for token in rough_tokens(command):
+        is_operator = bool(token) and all(char in ROUGH_PUNCTUATION for char in token)
+        if is_target and not is_operator:
+            is_target = False
+        elif is_operator and ("<" in token or ">" in token):
+            if words and words[-1].isdigit():
+                words.pop()
+            is_target = True
+        elif is_operator:
+            commands.append(words)
+            words, is_target = [], False
+        else:
+            words.append(token)
+    commands.append(words)
+    for index, words in enumerate(commands):
         while words and ASSIGNMENT.match(words[0]):
             words = words[1:]
-        commands.append(words)
+        commands[index] = words
     return commands
 
 
@@ -354,8 +400,9 @@ def read_and_check(command, shell, project):
     if not scheme_and_format:
         return None
     scheme, fmt = scheme_and_format
-    # Without the parser the rough cut is checked the same way: the version check decides.
-    commands = shell_commands(command, shell, project) or rough_commands(command)
+    commands = shell_commands(command, shell, project)
+    if commands is None:
+        commands = rough_commands(command)
     return first_refusal(commands, project, scheme, fmt)
 
 
