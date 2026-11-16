@@ -357,25 +357,27 @@ def parse(cmd, shell, cwd, deadline):
     return data["commands"], data["assignments"], ""
 
 
-def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=(), seen=None):
+def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=()):
     """(groups, assignments, ""): a group (commands, the commands that place their folders, shell)
     for the parsed commands, then one per command string a shell in them may run, whose folder
     changes move only its own group; (None, None, why) when a string cannot be read."""
-    placing, seen = list(around) + list(commands), set() if seen is None else seen
+    placing = list(around) + list(commands)
     groups, assignments = [(commands, placing, shell)], list(assignments)
-    for inner_shell, strings, args in filter(None, (shell_strings(w[i:]) for w in commands for i in range(len(w)))):
+    # A word of a git, gh or text tool command is its data, never a shell it runs.
+    shells = (shell_strings(w[i:]) for w in commands if program(w) not in {"git", "gh"} | TEXT_TOOLS
+              for i in range(len(w)))
+    for inner_shell, strings, args in filter(None, shells):
         # A shell's options are never read: any argument that names a folder may be where it runs.
-        folders = [["cd", w] for w in args if isinstance(w, str) and os.path.isdir(os.path.join(cwd, w))]
+        places = folder_places(placing, cwd) or [cwd]
+        folders = [["cd", os.path.join(place, w)] for place in places for w in args
+                   if isinstance(w, str) and os.path.isdir(os.path.join(place, w))]
         for text in strings:
             if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
                 return None, None, NESTED_UNREAD
-            if (inner_shell, text) in seen:
-                continue
-            seen.add((inner_shell, text))
             inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
             if not problem:
                 inner_groups, inner_assignments, problem = with_nested(
-                    inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing + folders, seen)
+                    inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing + folders)
             if problem:
                 return None, None, problem
             groups, assignments = groups + inner_groups, assignments + inner_assignments
@@ -384,21 +386,26 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=(),
 
 def shell_strings(words):
     """(parser shell, the command strings it may run, its arguments) for a shell program: each
-    argument whose text names a route (for PowerShell, all its arguments joined, as `-Command`
-    joins them), a dict when built at run time; None for any other program."""
+    argument whose text names a route, a dict when built at run time; for PowerShell, one
+    string of its arguments joined, as `-Command` joins them, then each such argument on a line
+    of its own, so a string's first statement keeps its place. None for any other program."""
     name, args = program(words), words[1:]
     if name not in POSIX_SHELLS and name not in ("pwsh", "powershell"):
         return None
-    joined = "shell-arguments " + " ".join(map(text_of, args))
+    lines = ["shell-arguments " + " ".join(map(text_of, args))] + [
+        w for w in args if isinstance(w, str) and names_route(w)]
     candidates = args if name in POSIX_SHELLS else [
-        joined if all(isinstance(w, str) for w in args) else {"dynamic": joined}]
+        "\n".join(lines) if all(isinstance(w, str) for w in args) else {"dynamic": lines[0]}]
     return ("bash" if name in POSIX_SHELLS else "powershell",
             [w for w in candidates if names_route(text_of(w))], args)
 
 
 def names_route(text):
-    """Whether text names a git or GitHub write, or a change to which hooks git runs."""
-    return any(p.search(text) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH, GIT_CONFIG_HOOKS, LEFTHOOK_OFF))
+    """Whether text names a git or GitHub write, or a change to which hooks git runs, as written
+    or with its line ends joined and its quotes and escapes dropped (`g"i"t com\\mit`)."""
+    plain = re.sub(r"[\"'`\\]", "", CONTINUED_LINE.sub(r"\1", text))
+    routes = (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH, GIT_CONFIG_HOOKS, LEFTHOOK_OFF)
+    return any(p.search(t) for p in routes for t in (text, plain))
 
 
 def text_of(word):

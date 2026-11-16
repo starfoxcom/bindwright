@@ -613,8 +613,9 @@ class GuardHookTest(unittest.TestCase):
                            f"found in file {path}")
 
     def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
-        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n",
-                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n"})
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n", "inner.txt": "x\n",
+                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n", "deep.txt": "x\n",
+                                  "sub/deep.txt": "x\n", "sub/deeper/deep.txt": f"{GENERATED_LINE}\n"})
         deep = "git commit -m x"
         for _ in range(4):
             deep = f"bash -c {shlex.quote(deep)}"
@@ -624,6 +625,11 @@ class GuardHookTest(unittest.TestCase):
                 ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("pwsh -wd sub -c 'git commit -F inner.txt'", "Bash", "found in file"),
+                ("pwsh -c 'cd sub; git commit -F inner.txt'", "Bash", "found in file"),
+                ("bash -c 'git commit -F inner.txt'; bash -c 'cd sub; bash -c \"git commit -F inner.txt\"'",
+                 "Bash", "found in file"),
+                ("cd sub && pwsh -wd deeper -c 'git commit -F deep.txt'", "Bash", "found in file"),
+                ("bash -c 'g\"i\"t commit --no-verify -m x'", "Bash", "--no-verify"),
                 (deep, "Bash", "nested more than"),
                 ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("sh -ec 'git commit -n -m x'", "Bash", "--no-verify"),
@@ -645,6 +651,7 @@ class GuardHookTest(unittest.TestCase):
                 ("bash -c 'git commit -F clean.txt'", "Bash"), ("bash -c 'git status --no-verify'", "Bash"),
                 ("bash ./build.sh; git commit -m x", "Bash"), ("pwsh ./x.ps1; git commit -m x", "PowerShell"),
                 ("pwsh ./build.ps1 -c $cfg; git commit -m x", "Bash"),
+                ('gh issue create --label bash --body "git push fails on $BRANCH"', "Bash"),
                 # A child shell's `cd` never moves the commands around it.
                 ("sh -c 'cd /no/such/folder && true' && git commit -F clean.txt", "Bash"),
                 ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell")),
