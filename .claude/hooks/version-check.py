@@ -90,12 +90,13 @@ def parser_script():
     return next((script for script in scripts if os.path.isfile(script)), None)
 
 
-def node_program(project):
-    """The `node` on PATH, or None when the only one is the project's own. Windows looks a bare
-    name up in the current folder first, so a repo could ship its own `node.exe`: that search
-    is switched off, and a relative match or one inside the project is refused."""
+def trusted_program(name, project):
+    """The program on PATH as an absolute path, or None when the first one found is the project's.
+    Windows looks a bare name up in the current folder first, so a repo could ship its own
+    `git.exe` or `node.exe`: that search is switched off, and a relative match or one in the
+    project or the current folder is refused."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    found = shutil.which("node")
+    found = shutil.which(name)
     if not found or not os.path.isabs(found):
         return None
     here = {os.path.normcase(os.path.realpath(folder)) for folder in (project, os.getcwd())}
@@ -105,7 +106,7 @@ def node_program(project):
 def shell_commands(command, shell, project):
     """(each simple command's words, "") as the shell reads them, or (None, why) when the
     parser cannot run or read the command. A word built at run time is None."""
-    node, script = node_program(project), parser_script()
+    node, script = trusted_program("node", project), parser_script()
     if not node or not script:
         return None, NO_PARSER
     try:
@@ -207,8 +208,11 @@ class OutOfTime(Exception):
 
 def git_output(project, *args):
     """What git prints, or "" when it fails. Running out of time is not an answer: it raises."""
+    git = trusted_program("git", project)
+    if not git:
+        return ""
     try:
-        out = subprocess.run(["git", *args], cwd=project, capture_output=True, text=True,
+        out = subprocess.run([git, *args], cwd=project, capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=seconds_left())
     except subprocess.TimeoutExpired:
         raise OutOfTime() from None
@@ -237,17 +241,23 @@ def release_ref(project, version, options):
     return branch_ref(project, target) if target else None
 
 
-def gh_action(words):
-    """(group, action, the action's arguments) of a gh command, skipping the group's options
-    before the action (`gh release -R owner/repo create`); None when this is not gh."""
-    if program(words) != "gh" or len(words) < 3:
-        return None
-    index = 2
+def past_gh_options(words, index):
+    """The index of the first word from `index` on that is not a gh option or its value."""
     while index < len(words) and isinstance(words[index], str) and words[index].startswith("-"):
         index += 2 if words[index] in GH_GROUP_VALUE else 1
-    if index >= len(words):
+    return index
+
+
+def gh_action(words):
+    """(group, action, the action's arguments) of a gh command, skipping the repo option before
+    the group or the action (`gh -R owner/repo release create`); None when this is not gh."""
+    if program(words) != "gh":
         return None
-    return words[1], words[index], words[index + 1:]
+    group = past_gh_options(words, 1)
+    action = past_gh_options(words, group + 1)
+    if action >= len(words):
+        return None
+    return words[group], words[action], words[action + 1:]
 
 
 def may_release(command):

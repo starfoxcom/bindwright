@@ -6,6 +6,7 @@ run, so the machine's own git hooks cannot slow or change it), then runs the
 script or the hook on it the way a session does.
 """
 
+import importlib.util
 import json
 import os
 import pathlib
@@ -15,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, ".github", "scripts", "version_check.py")
@@ -366,6 +368,9 @@ class Hook(unittest.TestCase):
         ("a clustered list of tags", "git tag -ln v5.2.2", 0),
         ("a list with an attached line count", "git tag -n9 v5.2.2", 0),
         ("a list filtered by a commit", "git tag --merged main v5.2.2", 0),
+        ("a release with the repo option before its group", "gh -R o/r release create v5.2.2", 2),
+        ("a release PR with the repo option before its group",
+         "gh --repo o/r pr create --head release/v5.2.2", 2),
         ("a list filtered by a prefix of a filter option", "git tag --cont HEAD v5.2.2", 0),
         ("a release command inside a quoted message",
          'git commit -m "docs: release steps\ngit tag v5.2.2\nthen push"', 0),
@@ -477,6 +482,26 @@ class Hook(unittest.TestCase):
             as_project(repo, "calver", "YYYY.MM.MICRO")
             self.assertEqual(run_hook(repo, "git tag 2026.11.0")[0], 0)
             self.assertEqual(run_hook(repo, "git tag 2026.10.2")[0], 2)
+
+
+class TrustedProgram(unittest.TestCase):
+    # A repo can ship its own git (or node) beside its code; the hook must never run that one.
+    def test_a_program_in_the_project_folder_is_never_picked(self):
+        spec = importlib.util.spec_from_file_location("version_check_hook", HOOK)
+        hook = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hook)
+        here = os.getcwd()
+        with tempfile.TemporaryDirectory() as project, mock.patch.dict(os.environ):
+            planted = os.path.join(project, "git.bat" if os.name == "nt" else "git")
+            pathlib.Path(planted).write_text("exit 0\n")
+            os.chmod(planted, 0o755)
+            os.environ["PATH"] = project + os.pathsep + os.environ["PATH"]
+            os.chdir(project)
+            try:
+                found = hook.trusted_program("git", project)
+            finally:
+                os.chdir(here)
+            self.assertIsNone(found)
 
 
 if __name__ == "__main__":

@@ -33,9 +33,11 @@ error, with the message on stderr. With no earlier tag it says so and exits 0.
 """
 
 import argparse
+import functools
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from typing import NamedTuple
@@ -98,8 +100,22 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
+@functools.lru_cache(maxsize=None)
+def git_program():
+    """git on PATH as an absolute path, found once from the folder the check started in. Windows
+    looks a bare name up in the current folder first, so a repo could ship its own `git.exe`:
+    that search is switched off, and a relative match or one in that folder is refused."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    found = shutil.which("git")
+    here = os.path.normcase(os.path.realpath(os.getcwd()))
+    if not found or not os.path.isabs(found) or os.path.normcase(
+            os.path.realpath(os.path.dirname(found))) == here:
+        raise CheckError("no git found outside the current folder")
+    return found
+
+
 def git(*args):
-    done = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8",
+    done = subprocess.run([git_program(), *args], capture_output=True, text=True, encoding="utf-8",
                           errors="replace", check=False)
     if done.returncode != 0:
         raise CheckError(done.stderr.strip() or "git %s failed" % args[0])
@@ -112,7 +128,7 @@ def move_to_root(args):
     file it names. A bare repo has no top folder and no such files, so it stays put."""
     if args.changelog is not None:
         args.changelog = os.path.abspath(args.changelog)
-    done = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+    done = subprocess.run([git_program(), "rev-parse", "--show-toplevel"], capture_output=True,
                           text=True, encoding="utf-8", errors="replace", check=False)
     if done.returncode == 0 and done.stdout.strip():
         os.chdir(done.stdout.strip())
@@ -331,7 +347,8 @@ def changelog_source(args):
         with open(path, encoding="utf-8", errors="replace") as fh:
             return path, fh.read()
     blob = "%s:CHANGELOG.md" % args.ref
-    exists = subprocess.run(["git", "cat-file", "-e", blob], capture_output=True, check=False)
+    exists = subprocess.run([git_program(), "cat-file", "-e", blob], capture_output=True,
+                            check=False)
     return ("CHANGELOG.md", git("show", blob)) if exists.returncode == 0 else None
 
 
