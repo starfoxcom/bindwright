@@ -19,7 +19,8 @@ What is scanned, for any git write, gh write or GitHub API call:
   * The full command text: inline -m / --body / --title / --notes values,
     here-docs, here-strings and PowerShell -Body all live there.
   * Every file a command names with a body flag (-F / --file / --template
-    for a git write, and -t for git commit; --body-file / --notes-file / --input / -F and
+    for a git write, -F at the end of a cluster (-aF), and -t for git
+    commit; --body-file / --notes-file / --input / -F and
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
     (`hooks/shell-words.mjs`), so each flag belongs to one
@@ -359,7 +360,8 @@ def program(words):
     return re.sub(r"\.(exe|cmd|bat|com)$", "", name)
 
 
-def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None, attached_only=None):
+def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None, attached_only=None,
+                file_letters=None):
     """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
     and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
     value attached to its flag in a word built at run time (`--file=$F`) comes back as
@@ -368,6 +370,9 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None
     earlier letters take no value. With `attached_only`, a short flag's attached value is read
     only from a word that pattern matches."""
     cluster = re.compile(r"-(?:(?![m%s])[a-z])*m" % value_letters) if value_letters is not None else None
+    # With `file_letters`, the value letters of a git subcommand that has -F (`commit`, `tag`), a
+    # cluster ending in -F reads its file like -F alone: `-aF msg.txt`, `-aFmsg.txt`.
+    file_cluster = None if file_letters is None else re.compile(r"-(?:(?![m%s])[a-z])+F(.*)" % file_letters)
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
@@ -377,7 +382,13 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None
         built = isinstance(word, dict)
         message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
                    or (cluster is not None and cluster.fullmatch(text) is not None))
-        if text.startswith("--") and "=" in text:
+        clustered = file_cluster.fullmatch(text) if file_cluster is not None else None
+        if clustered and not clustered.group(1):
+            yield "-F", words[i + 1] if i + 1 < len(words) else None
+            continue
+        if clustered:
+            flag, value = "-F", clustered.group(1)
+        elif text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
         elif text[:2] in short and len(text) > 2 and (attached_only is None or attached_only.match(text)):
             flag, value = text[:2], text[2:]
@@ -407,11 +418,11 @@ def body_file(flag, value, readers="@<"):
 
 
 def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", value_letters=None,
-               attached_only=None):
+               attached_only=None, file_letters=None):
     """Every file the words' flags in `flags` name as a body; with `attached_only`, a short
     flag's attached value counts only in a word that pattern matches."""
     files = []
-    for flag, value in flag_values(words, ATTACHED, message_flags, value_letters, attached_only):
+    for flag, value in flag_values(words, ATTACHED, message_flags, value_letters, attached_only, file_letters):
         name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
         if isinstance(name, str) and name in flags and value is not None:
             found = body_file(name, value, readers)
@@ -440,7 +451,10 @@ def git_files(words):
         return []
     # `-t` is commit's short `--template`; on checkout, branch and switch it means track.
     flags = GIT_FILE_FLAGS | {"-t"} if words[i] == "commit" else GIT_FILE_FLAGS
-    return body_files(words[i:], flags, GIT_MESSAGE_FLAGS, value_letters=git_value_letters(words))
+    # Only a subcommand whose value letters are all known reads a -F cluster (`-bFeature` is a branch).
+    file_letters = GIT_VALUE_LETTERS.get(words[i]) if isinstance(words[i], str) else None
+    return body_files(words[i:], flags, GIT_MESSAGE_FLAGS, value_letters=git_value_letters(words),
+                      file_letters=file_letters)
 
 
 def git_value_letters(words):
