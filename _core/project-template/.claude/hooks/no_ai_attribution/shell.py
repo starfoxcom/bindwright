@@ -14,8 +14,6 @@ TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sor
 PARSE_SECONDS = 6  # one parse
 MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
 POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
-# A shell option that turns brace expansion off (`bash +B`) or names it (`+o braceexpand`).
-BRACES_OFF = re.compile(r"\+[A-Za-z]*B|braceexpand$")
 WRAPPERS = {"sudo", "doas", "env", "command", "builtin", "exec", "nohup", "nice", "time", "xargs"}
 NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
            " command. Install Node, then run /bindwright:update.")
@@ -97,9 +95,25 @@ def parse(cmd, shell, cwd, deadline):
     if not isinstance(data.get("assignments"), list) or any(
             isinstance(word, dict) and not {"shape", "canBeEmpty"} <= word.keys() for word in words):
         return None, None, OLD_HELPER
+    if any(isinstance(word, dict) and not all(isinstance(each, str) for each in word.get("braces", []))
+           for word in words):
+        return None, None, BROKEN
     if data.get("error"):
         return None, None, UNREAD
-    return data["commands"], data["assignments"], ""
+    return with_brace_readings(data["commands"]), data["assignments"], ""
+
+
+def with_brace_readings(commands):
+    """Each command, then, when a word of it is a brace of plain text, the same command with that
+    word as bash expands it (`{-F,msg.txt}` is `-F msg.txt`). Both are checked, since a shell that
+    does not expand braces (dash, `set +B`) runs the first and bash runs the second."""
+    read = []
+    for words in commands:
+        read.append(words)
+        if any(isinstance(word, dict) and word.get("braces") for word in words):
+            read.append([each for word in words for each in (
+                word["braces"] if isinstance(word, dict) and word.get("braces") else [word])])
+    return read
 
 
 def with_nested(commands, assignments, shell, cwd, deadline, found, depth=1, around=()):
@@ -130,11 +144,7 @@ def shell_strings(words, caller):
     block after options alone (`pwsh -c { ... }`) is read by the outer parse; None otherwise."""
     name, args = program(words), words[1:]
     if name in POSIX_SHELLS:
-        strings = [w for w in args if routes_in(text_of(w))[1] or routes_in(shape_of(w))[1]]
-        if name != "bash" or any(not isinstance(w, str) or BRACES_OFF.match(w) for w in args):
-            # The parser reads braces as bash does; a `set +B` first keeps them run-time words.
-            strings = [f"set +B\n{w}" if isinstance(w, str) else w for w in strings]
-        return "bash", strings
+        return "bash", [w for w in args if routes_in(text_of(w))[1] or routes_in(shape_of(w))[1]]
     if name not in ("pwsh", "powershell"):
         return None
     args = args[:script_file_at(name, args)]

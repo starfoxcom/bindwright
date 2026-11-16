@@ -623,14 +623,14 @@ class GuardHookTest(unittest.TestCase):
                 else:
                     self.assert_passes(result)
 
-    def test_braces_stay_run_time_where_the_shell_may_not_expand_them(self):
-        # dash and `set +B` keep `{,}` as a word, so git gets `-m '{,}' -n` and skips its hooks;
-        # bash drops it, and the same command is a commit with the message `-n`.
+    def test_a_brace_is_read_both_as_written_and_as_bash_expands_it(self):
+        # A shell that does not expand braces (dash, `set +B`) gives git `-m '{,}' -n`, which skips
+        # the hooks; bash gives `{-n,-m} x` as `-n -m x`. Either reading is refused.
         for (command, refused), result in self.each((
-                ("sh -c 'git commit -m {,} -n'", True), ("bash +B -c 'git commit -m {,} -n'", True),
-                ("set +B; git commit -m {,} -n", True), ("set $OPTS; git commit -m {,} -n", True),
-                ("bash -c 'git commit -m {,} -n'", False),
-                ("git commit -m x " + "{,}" * 30, False)),
+                ("git commit -m {,} -n", True), ("sh -c 'git commit -m {,} -n'", True),
+                ("shopt -u -o braceexpand; git commit -m {,} -n", True), ("git commit {-n,-m} x", True),
+                ("bash -c 'git commit {-n,-m} x'", True), ("git commit -m x " + "{,}" * 30, False),
+                ("git commit -m {a,b}", False)),
                 lambda command, refused: self.attr(command)):
             with self.subTest(command=command):
                 if refused:
@@ -1095,7 +1095,13 @@ class GuardHookTest(unittest.TestCase):
                 lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
                                                       capture_output=True, timeout=60)):
             with self.subTest(command=command):
-                self.assertEqual(json.loads(result.stdout)["commands"], [words], result.stderr)
+                # A brace keeps its run-time word and carries bash's reading in `braces`.
+                read = [each for word in json.loads(result.stdout)["commands"][0]
+                        for each in (word.get("braces", [word]) if isinstance(word, dict) else [word])]
+                self.assertEqual(read, words, result.stderr)
+        # Bash expands `$HOME` again after `{$,x}HOME`, and `{A..c}` passes the backtick: no reading.
+        out = subprocess.run(["node", script, "bash"], input=b"echo {$,x}HOME {A..c}", capture_output=True, timeout=60)
+        self.assertFalse([w for w in json.loads(out.stdout)["commands"][0][1:] if "braces" in w], out.stderr)
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:

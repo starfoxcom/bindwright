@@ -24,8 +24,9 @@ What is scanned, for any git write, gh write or GitHub API call:
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
     (`hooks/shell-words.mjs`), so each flag belongs to one
-    command, and a brace of plain text is read as the words bash makes
-    (`{-F,msg.txt}` is `-F msg.txt`). Every command's flags are read, a wrapper's (`env`, `sudo`,
+    command. A brace of plain text is read both as text built at run time
+    and as the words bash makes of it (`{-F,msg.txt}` as `-F msg.txt`),
+    since a shell may or may not expand it. Every command's flags are read, a wrapper's (`env`, `sudo`,
     `xargs`) included, except a text tool's (`awk -F,`, `grep -F word`),
     git's in a read (`git log -F`), and gh's `--template`. A flag inside
     quoted text, a here-doc, a here-string or the value of -m / --body /
