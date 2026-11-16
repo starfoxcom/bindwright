@@ -334,7 +334,8 @@ export function carriedText(carried: readonly MirrorTask[]): string {
   const parts = carried.map(task => `#${task.id} "${task.subject}"${task.hold ? ` (on hold: ${task.hold})` : ''}`)
   return (
     `[tasks] The previous session in this folder left unfinished: ${parts.join('; ')}. ` +
-    'Check them against the hand-off: recreate the ones still valid with TaskCreate, leave the rest.'
+    'Check them against the hand-off: recreate the ones still valid with TaskCreate ' +
+    '(or mcp__tasks__create where that is missing), leave the rest.'
   )
 }
 
@@ -365,6 +366,6 @@ export function pickPredecessor(
 export function nudgeText(tools: number): string {
   return (
     `[tasks] This turn ran ${tools} tool calls with no task list. If the work has 3+ steps, create the tasks ` +
-    `now (TaskCreate) and keep their status current.`
+    `now (TaskCreate, or mcp__tasks__create where that is missing) and keep their status current.`
   )
 }

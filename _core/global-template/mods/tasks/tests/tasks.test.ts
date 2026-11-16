@@ -584,3 +584,33 @@ test('a bare /task-list typed over Remote Control answers with the phone text', 
   const answer = (await $.command.run(bridge as never)) as { text: string }
   expect(answer.text.split('\n')).toEqual(['📋 No task list in this session.', '/task-list help for more'])
 })
+
+// Where the session offers no TaskCreate, the mod brings its own four list tools and answers them from the
+// same list; where it does, it adds none, so the model never sees two sets.
+test('the own list tools stand in only where the built-in task tools are missing', async ($, on) => {
+  const seen = world(on)
+  const registered: string[] = []
+  let offered = ['Read', 'Bash']
+  on('tool.list', () => ({ value: offered.map(name => ({ name })) }) as never)
+  on('tool.register', ($, e) => {
+    registered.push(e.name)
+    return { value: { tool: `mcp__tasks__${e.name}` } }
+  })
+  await $.session.start({ cwd: 'C:/Repos/x' } as never)
+  expect(registered).toEqual(['create', 'update', 'list', 'get'])
+  await turn($)
+  await $.tool.call({ tool: 'mcp__tasks__create', subject: 'one', description: 'first' } as never)
+  await $.tool.call({ tool: 'mcp__tasks__update', taskId: '1', status: 'in_progress' } as never)
+  expect(mirror(seen).tasks.map(t => [t.subject, t.status])).toEqual([['one', 'in_progress']])
+  const listed = (await $.tool.call({ tool: 'mcp__tasks__list' } as never)) as never as { result: unknown }
+  expect(JSON.stringify(listed.result)).toContain('one')
+  const fromSubagent = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'x', description: 'x',
+    agentId: 'a1' } as never)) as never as { deny?: string }
+  expect(fromSubagent.deny).toContain('main session')
+  expect(mirror(seen).tasks).toHaveLength(1)
+
+  registered.length = 0
+  offered = ['Read', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']
+  await $.session.start({ cwd: 'C:/Repos/x' } as never)
+  expect(registered).toEqual([])
+})
