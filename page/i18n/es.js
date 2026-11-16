@@ -237,7 +237,7 @@ export default {
   "evidence.legend.rebuiltStalled": "reconstruidos, con otra investigación",
   "evidence.legend.dropped": "descartados, sin arreglo",
   "evidence.legend.retired": "descartados, ya no hacían falta",
-  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y naranja, tomaron "
+  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos al menos una vez tomaron "
     + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {

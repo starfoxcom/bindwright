@@ -105,7 +105,7 @@ export default {
   "evidence.legend.rebuiltStalled": "rebuilt, then researched again",
   "evidence.legend.dropped": "dropped, no fix found",
   "evidence.legend.retired": "dropped, no longer needed",
-  "evidence.detail": "The AI reviewed {checked} of them. The {held} held back, yellow and orange, took "
+  "evidence.detail": "The AI reviewed {checked} of them. The {held} held back at least once took "
     + "{rounds} fix rounds on average. {deep} of the {checked} touched risky code, like security or "
     + "saved data, and also got a deeper review.",
   "evidence.note": {
