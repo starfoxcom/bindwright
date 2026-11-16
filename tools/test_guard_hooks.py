@@ -66,6 +66,15 @@ def settings_command(name):
 
 @unittest.skipIf(SH is None, "needs a POSIX sh on PATH (Git Bash on Windows)")
 class GuardHookTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # The first Node start on a Windows runner (cold disk cache, the virus scanner reading
+        # node.exe) can pass the guard's parse time limit; one start here keeps it out of the rows.
+        node = shutil.which("node")
+        if node:
+            subprocess.run([node, os.path.join(HELPER, "hooks", "shell-words.mjs"), "bash"],
+                           input=b"true", capture_output=True, timeout=60)
+
     def setUp(self):
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
