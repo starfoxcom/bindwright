@@ -46,7 +46,7 @@ type dynamic struct {
 	// Braces, for a command word whose braces hold only plain text, is the words bash's brace
 	// expansion makes of it (`{-F,msg.txt}` is "-F", "msg.txt"). The word stays built at run time,
 	// since a shell that does not expand braces (dash, `set +B`) gives it as written.
-	Braces []string `json:"braces,omitempty"`
+	Braces *[]string `json:"braces,omitempty"`
 }
 
 var (
@@ -227,10 +227,10 @@ func (r reader) word(word *syntax.Word) any {
 }
 
 // braceWords is the words bash's brace expansion makes of a word whose braces hold only plain
-// text, dropping the empty unquoted ones as bash does; nil for any other word, or one past
-// maxBraceWords. A word made with `$` or a backtick (`{$,x}HOME` makes `$HOME`) has none, since
-// bash expands it again.
-func (r reader) braceWords(word *syntax.Word) []string {
+// text, dropping the empty unquoted ones as bash does, so `{,}` makes an empty list; nil for any
+// other word, or one past maxBraceWords. A word made with `$` or a backtick (`{$,x}HOME` makes
+// `$HOME`) has none, since bash expands it again.
+func (r reader) braceWords(word *syntax.Word) *[]string {
 	split := &syntax.Word{Parts: slices.Clone(word.Parts)}
 	syntax.SplitBraces(split)
 	if !slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
@@ -250,10 +250,7 @@ func (r reader) braceWords(word *syntax.Word) []string {
 			values = append(values, value)
 		}
 	}
-	if len(values) == 0 {
-		return nil
-	}
-	return values
+	return &values
 }
 
 // literalValue is the word's value when every part is literal text.

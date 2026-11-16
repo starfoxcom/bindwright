@@ -615,6 +615,7 @@ class GuardHookTest(unittest.TestCase):
         clean = self.body_file("Plain body.\n").replace("\\", "/")
         for (command, flags), result in self.each((
                 (f"git commit {{-F,{flagged}}}", True), (f"gh pr create --title t {{--body-file,{flagged}}}", True),
+                (f"gh pr create --title {{,}} --title --body-file {flagged}", True),
                 (f"git commit {{-F,{clean}}}", False)),
                 lambda command, flags: self.attr(command)):
             with self.subTest(command=command):
@@ -629,7 +630,8 @@ class GuardHookTest(unittest.TestCase):
         for (command, refused), result in self.each((
                 ("git commit -m {,} -n", True), ("sh -c 'git commit -m {,} -n'", True),
                 ("shopt -u -o braceexpand; git commit -m {,} -n", True), ("git commit {-n,-m} x", True),
-                ("bash -c 'git commit {-n,-m} x'", True), ("git commit -m x " + "{,}" * 30, False),
+                ("bash -c 'git commit {-n,-m} x'", True), ("git commit -m {,} -m -n", True),
+                ("git commit -m x " + "{,}" * 30, False),
                 ("git commit -m {a,b}", False)),
                 lambda command, refused: self.attr(command)):
             with self.subTest(command=command):

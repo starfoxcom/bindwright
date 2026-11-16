@@ -114,9 +114,9 @@ def with_brace_readings(commands):
     read = []
     for words in commands:
         read.append(words)
-        if any(isinstance(word, dict) and word.get("braces") for word in words):
+        if any(isinstance(word, dict) and "braces" in word for word in words):
             read.append([each for word in words for each in (
-                word["braces"] if isinstance(word, dict) and word.get("braces") else [word])])
+                word["braces"] if isinstance(word, dict) and "braces" in word else [word])])
     return read
 
 
