@@ -42,6 +42,10 @@ CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 MAY_BE_RELEASE = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
                             re.DOTALL | re.IGNORECASE)
 GH_CREATE = ("create", "new")
+# The rest of an option word built at run time, and the key `read_options` records when a run-time
+# word may be any option at all.
+RUN_TIME_VALUE = "\0"
+UNKNOWN_OPTION = "-\0"
 RELEASE_BRANCH = re.compile(r"release/(.+)")
 
 # Options that take a value, so it is never the version.
@@ -106,7 +110,7 @@ def trusted_program(name, project):
 
 def shell_commands(command, shell, project):
     """Each simple command's words as the shell reads them, or None when the parser cannot run
-    or read the command. A word built at run time is None."""
+    or read the command. A word built at run time is a RunTime."""
     node, script = trusted_program("node", project), parser_script()
     if not node or not script:
         return None
@@ -123,12 +127,21 @@ def shell_commands(command, shell, project):
     # One entry of another shape makes the whole reply unread, never a command skipped.
     if not all(isinstance(words, list) and all(map(is_word, words)) for words in commands):
         return None
-    return [[word if isinstance(word, str) else None for word in words] for words in commands]
+    return [[word if isinstance(word, str) else RunTime(word.get("prefix")) for word in words]
+            for words in commands]
 
 
 def is_word(word):
     """Whether the parser's word is text, or its marker for a word built at run time."""
     return isinstance(word, str) or isinstance(word, dict) and isinstance(word.get("dynamic"), str)
+
+
+class RunTime:
+    """A word the shell builds at run time, with the literal text before its first expansion
+    (`--notes=` of `--notes="$NOTES"`, `dist/` of `dist/*.zip`)."""
+
+    def __init__(self, prefix):
+        self.prefix = prefix if isinstance(prefix, str) else ""
 
 
 def long_name(name, names):
@@ -145,9 +158,17 @@ def read_options(args, takes_value):
     while index < len(args):
         word, index = args[index], index + 1
         if word == "--":
-            found += args[index:]
+            found += [None if isinstance(rest, RunTime) else rest for rest in args[index:]]
             break
-        if word is None or not word.startswith("-") or word == "-":
+        if isinstance(word, RunTime):
+            word = run_time_word(word.prefix, takes_value)
+            if word is None:
+                found.append(None)
+                continue
+            if word == UNKNOWN_OPTION:
+                options[UNKNOWN_OPTION] = None
+                continue
+        if not word.startswith("-") or word == "-":
             found.append(word)
         elif word.startswith("--"):
             name, has_value, value = word.partition("=")
@@ -166,7 +187,27 @@ def read_options(args, takes_value):
                     value, index = args[index], index + 1
                 options[name] = value
                 break
-    return found, options
+    return found, {name: None if is_run_time(value) else value for name, value in options.items()}
+
+
+def is_run_time(value):
+    """Whether an option's value is built at run time: a whole word, or the rest of one."""
+    return isinstance(value, RunTime) or isinstance(value, str) and RUN_TIME_VALUE in value
+
+
+def run_time_word(prefix, takes_value):
+    """How `read_options` reads a word built at run time, from its literal start: None for a
+    positional (`dist/*.zip`), the start plus RUN_TIME_VALUE for an option whose value is built
+    at run time (`--notes=$NOTES`, `-m"$MSG"`), or UNKNOWN_OPTION when the start cannot name its
+    option (`$FLAG`, `-$F`, `--ta$X`), so any option may have been given."""
+    if prefix and not prefix.startswith("-"):
+        return None
+    if prefix.startswith("--"):
+        named = "=" in prefix and prefix.partition("=")[0] != "--"
+        return prefix + RUN_TIME_VALUE if named else UNKNOWN_OPTION
+    if any("-" + char in takes_value for char in prefix[1:]):
+        return prefix + RUN_TIME_VALUE
+    return UNKNOWN_OPTION
 
 
 def program(words):
@@ -202,7 +243,7 @@ def release_from_git(words):
         return None
     found, options = read_options(rest[1:], TAG_VALUE)
     named = {long_name(option, TAG_NOT_CREATING) for option in options}
-    if not found or TAG_NOT_CREATING & named:
+    if not found or UNKNOWN_OPTION in options or TAG_NOT_CREATING & named:
         return None
     return found[0], (found[1] if len(found) > 1 else "HEAD")
 
@@ -272,14 +313,13 @@ def release_from_gh(words, project):
         return None
     group, action, args = parts
     if group == "release" and action in GH_CREATE:
-        # A word built at run time may be `--target=<branch>`, so the release's commit is unknown.
         found, options = read_options(args, RELEASE_VALUE)
-        if not found or None in found:
+        if not found or found[0] is None or UNKNOWN_OPTION in options:
             return None
         return found[0], release_ref(project, found[0], options)
     if group == "pr" and action in GH_CREATE:
-        found, options = read_options(args, PR_VALUE)
-        if None in found:
+        _, options = read_options(args, PR_VALUE)
+        if UNKNOWN_OPTION in options:
             return None
         named = "--head" if "--head" in options else "-H"
         head = options.get(named)
