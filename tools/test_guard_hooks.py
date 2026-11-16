@@ -599,8 +599,17 @@ class GuardHookTest(unittest.TestCase):
                 lambda command: self.attr(command, project=root)):
             with self.subTest(command=command):
                 self.assert_denied(result, f"found in file {path}")
-        # -S takes its key attached, so `F` is the key and msg.txt a path to commit.
-        self.assert_passes(self.attr("git commit -SF msg.txt", project=root))
+        # -S takes its key attached, so `F` is the key and msg.txt a path to commit; on other
+        # subcommands a capital F is another option's value (`-bFeature-x` names a branch).
+        for command, result in self.each(
+                ("git commit -SF msg.txt", "git checkout -bFeature-x origin/develop && git push -u origin x",
+                 "git push -oFoo=bar origin x"), lambda command: self.attr(command, project=root)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+        # A cmdlet's whole-name -InFile keeps reading its file when the command names git.
+        self.assert_denied(self.attr("Invoke-WebRequest https://api.github.com/repos/o/r/issues -Method Post "
+                                     "-inFile msg.txt; git status", tool="PowerShell", project=root),
+                           f"found in file {path}")
 
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
         # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy. A `cd` in a
