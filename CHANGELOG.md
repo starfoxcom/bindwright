@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **A version check holds each release to its commits.** Setup asks how the project numbers its releases: semantic versions, calendar versions (with a calver.org format such as `YYYY.MM.MICRO`), or none. With either numbering it writes `.github/scripts/version_check.py` and, where the guard hooks live in the repo, a hook that runs it before `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch. For semantic versions it reads the commits since the last release tag and refuses a release smaller than they need: a `feat` needs a minor, a `fix` or `perf` a patch, and a `!` after the type or a `BREAKING CHANGE:` line a major (before 1.0.0, one step less). With a Keep a Changelog file, the release's section must hold `### Breaking` for a major and only for one, `### Added` or `### Changed` when a `feat` is in the range, and only `### Fixed` and `### Security` for a patch. For calendar versions it checks the format and that the version comes after the last one. Existing projects get nothing until they choose: run `/bindwright:setup` in the project to pick a numbering. The All settings page lists the new answer.
+
 ## [v5.3.0] — 2026-11-15
 
 ### Added
