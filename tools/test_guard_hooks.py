@@ -347,6 +347,9 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_passes(self.attr(command, project=root))
         shutil.copytree(os.path.join(REPO, "_core", "global-template", "hooks", "no_ai_attribution"),
                         os.path.join(hooks, "no_ai_attribution"))  # what the cp line does
+        # A file beside the hook never stands in for a module the guard imports.
+        with open(os.path.join(hooks, "subprocess.py"), "w", encoding="utf-8") as f:
+            f.write("raise SystemExit(3)\n")
         self.assert_denied(self.attr("git commit --no-verify -m x", project=root), "--no-verify")
 
     def test_attribution_next_to_repo_name_is_denied(self):

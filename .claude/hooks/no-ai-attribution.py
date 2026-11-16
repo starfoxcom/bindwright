@@ -88,6 +88,7 @@ Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
 exit 0 otherwise. A read-only command is blocked only for the routes above,
 or when the parser it needs is missing or cannot read it.
 """
+import importlib.util
 import json
 import os
 import re
@@ -209,16 +210,21 @@ def readers(named):
     """The package's readers, loaded only here so the Attribution workflow can import this file
     alone; without the package, a command that names a route is refused, as without the parser."""
     sys.dont_write_bytecode = True  # no __pycache__ beside a hook a repo may commit
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    here = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+    # Loaded by its own path, never through sys.path, so no other file beside the hook can stand
+    # in for a module the guard imports.
+    folder = os.path.join(here, "no_ai_attribution")
+    spec = importlib.util.spec_from_file_location(
+        "no_ai_attribution", os.path.join(folder, "__init__.py"), submodule_search_locations=[folder])
     try:
-        import no_ai_attribution
-        no_ai_attribution.routes_in = routes_in
+        package = sys.modules["no_ai_attribution"] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(package)
+        package.routes_in = routes_in
         from no_ai_attribution.files import parsed_files
         from no_ai_attribution.routes import hook_route
         from no_ai_attribution.shell import parse, with_nested
-    except ImportError:
+    except (ImportError, OSError):
         if named:
-            here = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
             deny("the folder no_ai_attribution/ beside this guard, which reads the command, is missing."
                  " Copy it back from Bindwright's helper: `cp -r ~/.bindwright/helper/node_modules/bindwright"
                  f"/_core/global-template/hooks/no_ai_attribution \"{here}/\"` (`helper/python/bindwright`"
