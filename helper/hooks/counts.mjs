@@ -1,7 +1,8 @@
 // Bindwright's opt-in review counts. `send <repo root>` counts the user's merged pull
-// requests and posts the review counts to the counter, at most once every 24 hours per
-// repo. A repo's count covers its whole history, from GitHub's first day. A history past
-// one send's cap goes out one batch per cooldown: oldest first when backfill is on,
+// requests, and those closed unmerged with a `dropped:` label, and posts the counts to the
+// counter, at most once every 24 hours per repo. A repo's count covers its whole history,
+// from GitHub's first day. A history past one send's cap goes out one batch per cooldown:
+// oldest first when backfill is on,
 // otherwise only the newest batch is sent. The other commands
 // (`share on|off`, `project <root> <kind>`, `backfill <root> on|off`, `history <root>`,
 // `status`) keep the answer in <config>/bindwright/counts.json. Node 18+, no
@@ -58,6 +59,11 @@ const GH_TIMEOUT_IN_MILLISECONDS = 10 * 60 * 1000;
 const GH_OUTPUT_LIMIT_IN_BYTES = 256 * 1024 * 1024;
 const POST_TIMEOUT_IN_MILLISECONDS = 2000;
 const DEEP_LABEL = "needs-deep-review";
+// A line anywhere in a PR's body that says it rebuilds one closed at the review rules' hard stop.
+const REBUILDS = /^Rebuilds #\d+\b/im;
+// The label a PR closed unmerged carries to say why, by the count it adds to: no fix was found,
+// or it had no reason left to exist.
+export const DROP_LABELS = Object.freeze({ dropped: "dropped: no fix", retired: "dropped: not needed" });
 const BOT_LOGINS = new Set(["claude", "claude[bot]"]);
 const ESCALATION_REQUEST = /@claude review/i;
 const LIST_ITEM = /^\s*([-+]|\*\s|\d+[.)])/;
@@ -146,17 +152,22 @@ function hasDeepLabel(pr) {
 
 /**
  * Counts the review numbers of merged PRs, as `gh pr list --json
- * number,labels,comments` returns them. A PR with a verdict is checked; each of its red
- * review rounds adds to `rounds`, it is caught with one and stalled with STALL_ROUNDS.
- * Each count is capped at MAX_PER_COUNT, and `rounds` at MAX_ROUNDS.
+ * number,labels,comments,body` returns them. A PR with a verdict is checked; each of its red
+ * review rounds adds to `rounds`, it is caught with one and stalled with STALL_ROUNDS. A
+ * checked PR whose body opens a line with `Rebuilds #N` is also rebuilt, and rebuiltCaught and
+ * rebuiltStalled the same way. Each count is capped at MAX_PER_COUNT, and `rounds` at MAX_ROUNDS.
  *
  * ```js
  * countPrs([{ labels: [], comments: [{ author: { login: "claude" }, body: "🟢 LGTM" }] }]);
- * // { checked: 1, caught: 0, deep: 0, merged: 1, stalled: 0, rounds: 0 }
+ * // { checked: 1, caught: 0, deep: 0, merged: 1, stalled: 0, rounds: 0,
+ * //   rebuilt: 0, rebuiltCaught: 0, rebuiltStalled: 0 }
  * ```
  */
 export function countPrs(prs) {
-  const counts = { checked: 0, caught: 0, deep: 0, merged: prs.length, stalled: 0, rounds: 0 };
+  const counts = {
+    checked: 0, caught: 0, deep: 0, merged: prs.length, stalled: 0, rounds: 0,
+    rebuilt: 0, rebuiltCaught: 0, rebuiltStalled: 0,
+  };
   for (const pr of prs) {
     const rounds = roundsOf(pr);
     if (rounds.length === 0) continue;
@@ -166,6 +177,10 @@ export function countPrs(prs) {
     if (redRounds >= STALL_ROUNDS) counts.stalled += 1;
     counts.rounds += redRounds;
     if (hasDeepLabel(pr)) counts.deep += 1;
+    if (!REBUILDS.test(pr.body ?? "")) continue;
+    counts.rebuilt += 1;
+    if (redRounds > 0) counts.rebuiltCaught += 1;
+    if (redRounds >= STALL_ROUNDS) counts.rebuiltStalled += 1;
   }
   return capped(counts);
 }
@@ -295,6 +310,24 @@ async function listPrs(search, fields, cwd, ghJson) {
   const prs = await ghJson(prListArgs(search, fields), cwd);
   if (!Array.isArray(prs)) throw new Error("gh did not return a list");
   return prs;
+}
+
+/**
+ * The PRs closed unmerged in the window of a send's merges (its `merged:` search read as
+ * `closed:`), counted by DROP_LABELS: `{ dropped, retired }`, each capped at MAX_PER_COUNT.
+ */
+export async function countDrops(search, cwd, ghJson = runGhJson) {
+  const closed = search.replace("merged:", "closed:");
+  const counts = {};
+  for (const [name, label] of Object.entries(DROP_LABELS)) {
+    const prs = await ghJson([
+      "pr", "list", "--state", "closed", "--author", "@me",
+      "--search", `${closed} is:unmerged label:"${label}"`, "--json", "number", "--limit", String(SEARCH_LIMIT),
+    ], cwd);
+    if (!Array.isArray(prs)) throw new Error("gh did not return a list");
+    counts[name] = Math.min(prs.length, MAX_PER_COUNT);
+  }
+  return counts;
 }
 
 // Whether a search holds at most BATCH_CAP PRs, so one batch can carry all of them.
@@ -436,9 +469,9 @@ function outcomeChange(outcome, { batch, current }) {
 
 /**
  * The send for one repo, once its cooldown has passed: the next batch of its merged PRs
- * (see `planWindow`). It changes the state only through `changeProject`, after each
- * outcome. `ghJson(args, cwd)`, `post(url, body)` and `now()` are injectable so tests run
- * without gh or the network.
+ * (see `planWindow`), with the PRs closed unmerged in the same window (see `countDrops`).
+ * It changes the state only through `changeProject`, after each outcome. `ghJson(args, cwd)`,
+ * `post(url, body)` and `now()` are injectable so tests run without gh or the network.
  */
 export async function send({
   root,
@@ -462,9 +495,10 @@ export async function send({
     return failed();
   }
   if (!batch) return;
-  const prs = await listPrs(batch.search, "number,labels,comments", key, ghJson).catch(() => null);
-  if (!prs) return failed();
-  const counts = countPrs(prs);
+  const prs = await listPrs(batch.search, "number,labels,comments,body", key, ghJson).catch(() => null);
+  const drops = await countDrops(batch.search, key, ghJson).catch(() => null);
+  if (!prs || !drops) return failed();
+  const counts = { ...countPrs(prs), ...drops };
   if (Object.values(counts).every((count) => count === 0)) {
     return changeProject(stateFile, key, { since: batch.nextSince, ...cooldownFrom(current) });
   }

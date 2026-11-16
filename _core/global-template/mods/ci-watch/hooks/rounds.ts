@@ -50,7 +50,8 @@ export const isHardStop = (red: number) => red >= HARD_STOP
 
 const REBUILD =
   'close it without merging (`gh pr close` with a comment that says why), then rebuild the change from its ' +
-  "base branch in a new PR, with this round's findings fixed in the rebuild; the new PR starts its own count."
+  "base branch in a new PR, with this round's findings fixed in the rebuild and a `Rebuilds #<old number>` " +
+  'line in its body; the new PR starts its own count.'
 
 export function researchText(pr: string, red: number): string {
   const after = isHardStop(red)

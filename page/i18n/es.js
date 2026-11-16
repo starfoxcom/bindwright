@@ -210,6 +210,10 @@ export default {
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
   "evidence.fixed.label": "se detuvieron 1 o 2 rondas hasta corregir el problema",
   "evidence.stalled.label": "tomaron 3 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
+  "evidence.rebuilt.label": "se reconstruyeron desde cero tras 10 rondas en rojo y pasaron sin otra investigación",
+  "evidence.rebuiltStalled.label": "se reconstruyeron, necesitaron investigar de nuevo y aun así se integraron",
+  "evidence.dropped.label": "se descartaron porque no se encontró arreglo",
+  "evidence.retired.label": "se descartaron porque ya no hacían falta",
   "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión "
     + "y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",
@@ -221,11 +225,19 @@ export default {
   "evidence.part.passed": "a la primera",
   "evidence.part.fixed": "corregidos en 1 o 2 rondas",
   "evidence.part.stalled": "corregidos tras investigar más a fondo",
+  "evidence.part.rebuilt": "reconstruidos",
+  "evidence.part.rebuiltStalled": "reconstruidos, otra investigación",
+  "evidence.part.dropped": "descartados",
+  "evidence.part.retired": "ya no hacían falta",
   "evidence.legend.skipped": "no necesitaron revisión",
   "evidence.legend.passed": "pasaron la primera revisión",
   "evidence.legend.fixed": "corregidos en 1 o 2 rondas",
   "evidence.legend.stalled": "tomaron 3 rondas o más",
-  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y rojo, tomaron "
+  "evidence.legend.rebuilt": "reconstruidos tras 10 rondas en rojo",
+  "evidence.legend.rebuiltStalled": "reconstruidos, con otra investigación",
+  "evidence.legend.dropped": "descartados, sin arreglo",
+  "evidence.legend.retired": "descartados, ya no hacían falta",
+  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos al menos una vez tomaron "
     + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {
