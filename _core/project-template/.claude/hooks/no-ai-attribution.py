@@ -79,7 +79,8 @@ started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
 by hand.
 
-The repo registers this file through run-hook.sh, which skips it when
+Its reading lives in the no_ai_attribution/ folder beside it, which ships
+and installs with it. The repo registers this file through run-hook.sh, which skips it when
 ~/.claude/hooks/no-ai-attribution.py exists and ~/.claude/settings.json
 names it outside a permission rule.
 
@@ -87,14 +88,13 @@ Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent
 exit 0 otherwise. A read-only command is blocked only for the routes above,
 or when the parser it needs is missing or cannot read it.
 """
-import itertools
+import importlib.util
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
 import time
+
 
 # Obfuscation-tolerant: optional zero-width / separator chars between letters.
 _Z = r"[​‌‍⁠﻿\s\-_.*]*"
@@ -134,7 +134,6 @@ ATTRIBUTION = re.compile(
         r"\U0001F916",                       # robot emoji
         r"\bai" + _Z + r"-?" + _Z + r"(?:assisted|generated|written|authored)",
     ]), re.I | re.M)
-
 # A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
 # `commit-msg`) names no write.
 _WORD_START = r"(?<![\w./\\:-])"
@@ -151,67 +150,16 @@ HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api
 # Commands that may change which hooks run without writing anything.
 GIT_CONFIG_HOOKS = re.compile(
     r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|--re[mn]|\bre(?:move|name)-section\b)", re.I)
-# Text bash rewrites before a program sees it: a backslash escape or an ANSI-C or locale
-# string can spell any word, so the text checks cannot rule such a command out.
-SHELL_ESCAPES = re.compile(r"\\|\$['\"]")
 LEFTHOOK_OFF = re.compile(r"\blefthook\b\W*=|\blefthook\b[^|;&\n]*\buninstall\b", re.I)
 # A line end the shell joins to the next: `\` (an even run of `\` escapes itself) or
 # PowerShell's backtick after a blank.
 CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
+# Text bash rewrites before a program sees it: a backslash escape or an ANSI-C or locale
+# string can spell any word, so the text checks cannot rule such a command out.
+SHELL_ESCAPES = re.compile(r"\\|\$['\"]")
 
 PATH_TOKEN = re.compile(r"(?<!:/)(?<![\w])(?:[A-Za-z]:|~)?(?:[\\/][\w.\-]+)+")
-
-# With the parser: every command's file flags are read, except a text tool's, git's
-# in a read (where -F or --file means something else) and gh's `--template` (a template
-# name). Any other git subcommand, an alias included, is read as a write. A wrapper (`env`,
-# `sudo`, `xargs`) or any other program has its flags read.
-GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "reflog", "diff", "blame",
-             "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
-GIT_FILE_FLAGS = {"-F", "--file", "--template"}
-GIT_WORD = re.compile(r"\bgit\b", re.I)  # `$GIT`, `$(command -v git)`
-FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
-DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
-BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
-              "-infile"} | FORM_FLAGS | DATA_FLAGS
-# The word after one of these is message text, even when it starts with a dash. Each
-# program has its own: `-m` is git's message but gh's `--merge` switch.
-GIT_MESSAGE_FLAGS = {"-m", "--message"}
-MESSAGE_FLAGS = {"-b", "--body", "-t", "--title", "--notes", "--subject", "--message"}
-GH_MESSAGE_FLAGS = MESSAGE_FLAGS | {"-n"}  # gh's -n is --notes; git's is a switch
-# `-am msg`: git's switches, then -m takes the next word. The first letter that takes a value
-# takes the rest of the word instead (`-mcalm` is the message "calm"). Besides m, these
-# lowercase letters take one in each git write that has -m (`git <subcommand> -h`); an alias
-# or a subcommand built at run time may be any of them.
-GIT_VALUE_LETTERS = {"commit": "ctu", "tag": "u", "notes": "c", "merge": "s", "commit-tree": "p"}
-ANY_VALUE_LETTERS = "cpstu"
-ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fmsg`, `-d@body`)
-TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
-              "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
-READ_CMDLETS = {"get-content", "gc"}
-GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
-                     "--super-prefix", "--attr-source"}
-HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
-CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
-MAX_PLACES = 64  # folders one command may run in before the guard stops placing them
-PARSE_SECONDS = 6  # one parse
 ALL_PARSES_SECONDS = 9  # every parse of one command, nested strings included: the hook is stopped at 10 s
-MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
-POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
-WRAPPERS = {"sudo", "doas", "env", "command", "builtin", "exec", "nohup", "nice", "time", "xargs"}
-NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
-           " command. Install Node, then run /bindwright:update.")
-NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Run /bindwright:update to install it."
-OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update to update it."
-UNREAD = ("the guard's parser could not read this command (an array built at run time, PowerShell's"
-          " `--%`, or syntax it rejects). Write it as plain commands.")
-NESTED_UNREAD = ("a shell here runs a command string built at run time (`bash -c \"$CMD\"`), one nested more"
-                 f" than {MAX_NESTED_SHELLS} deep, or one given to a nested PowerShell (`pwsh -Command`), which"
-                 " the guard cannot read. Run the command directly.")
-SLOW = (f"the guard's parser did not answer within {PARSE_SECONDS} s, so the command was not read."
-        " Run it again once the computer is less busy.")
-BROKEN = ("the guard's parser failed to run, so the command was not read. Run /bindwright:update to"
-          " reinstall Bindwright's helper.")
-LEFTHOOK_OFF_VALUES = {"0", "false"}
 BYPASS_REASONS = {
     "hooks": "git hook bypass (--no-verify / -n) is not allowed.",
     "setting": ("setting core.hooksPath or a hook. setting changes which hooks git runs;"
@@ -222,51 +170,6 @@ BYPASS_REASONS = {
     "unread": ("this git call has more words built at run time than the guard reads every way;"
                " split it, or write some of them out."),
 }
-# PowerShell's approved verbs (Get-Verb): a cmdlet is named <verb>-<noun>; program() gives names lowercase.
-CMDLET = re.compile(r"([a-z]+)-[a-z]+")
-CMDLET_VERBS = {"add", "approve", "assert", "backup", "block", "build", "checkpoint", "clear", "close",
-                "compare", "complete", "compress", "confirm", "connect", "convert", "convertfrom",
-                "convertto", "copy", "debug", "deny", "deploy", "disable", "disconnect", "dismount",
-                "edit", "enable", "enter", "exit", "expand", "export", "find", "format", "get",
-                "grant", "group", "hide", "import", "initialize", "install", "invoke", "join", "limit",
-                "lock", "measure", "merge", "mount", "move", "new", "open", "optimize", "out", "ping",
-                "pop", "protect", "publish", "push", "read", "receive", "redo", "register", "remove",
-                "rename", "repair", "request", "reset", "resize", "resolve", "restart", "restore",
-                "resume", "revoke", "save", "search", "select", "send", "set", "show", "skip", "split",
-                "start", "step", "stop", "submit", "suspend", "switch", "sync", "test", "trace",
-                "unblock", "undo", "uninstall", "unlock", "unprotect", "unpublish", "unregister",
-                "update", "use", "wait", "watch", "write"}
-# An attached value that can only read a file (`-Fbody=@notes.md`, `-d@body.json`): no cmdlet
-# parameter name holds `=` or `@`.
-ATTACHED_FILE_READ = re.compile(r"-F[^=]*=[\"']?[@<]|-d[\"']?@")
-# Each word built at run time doubles the readings of one git call; past this many, it is refused.
-MAX_RUN_TIME_WORDS = 10
-# Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
-# value (`-m -n`) is never read as an option. A long option may be shortened to any unique
-# prefix of at least the length given.
-NO_VERIFY_SUBCOMMANDS = {"commit", "am", "merge", "push", "rebase"}
-SHORT_VALUES = {"commit": "cCFmt", "am": "C", "merge": "mFsX", "push": "o", "rebase": "sXx"}
-# Letters whose value is optional and only ever written onto them (`-uno`, `-S<keyid>`).
-ATTACHED_VALUES = {"commit": "uS", "am": "S", "merge": "S", "rebase": "S"}
-LONG_VALUES = {
-    "commit": {"--author", "--date", "--file", "--message", "--reedit-message", "--reuse-message",
-               "--fixup", "--squash", "--template", "--trailer", "--cleanup", "--pathspec-from-file"},
-    "am": {"--directory", "--exclude", "--include", "--patch-format", "--resolvemsg", "--whitespace"},
-    "merge": {"--strategy", "--strategy-option", "--message", "--file", "--into-name", "--cleanup"},
-    "push": {"--push-option", "--repo", "--receive-pack", "--exec"},
-    "rebase": {"--strategy", "--strategy-option", "--exec", "--onto"},
-}
-# `env`'s options that take the next word as their value, each with the shortest prefix GNU env reads.
-ENV_VALUE_OPTIONS = {"--unset": "--u", "--chdir": "--c", "--split-string": "--s", "--argv0": "--a"}
-ENV_VALUE_SHORT = {"-u", "-C", "-S", "-a"}
-# `git config`'s options that take the next word as their value, each with the shortest prefix git
-# 2.56 reads as it (an ambiguous prefix makes git refuse the command).
-CONFIG_VALUE_OPTIONS = {"--file": "--fil", "--blob": "--bl", "--type": "--t", "--default": "--d",
-                        "--comment": "--co", "--value": "--v"}
-CONFIG_VALUE_SHORT = {"-f", "-t"}
-CONFIG_READS = {"get", "list", "edit", "get-regexp", "get-all", "get-urlmatch", "get-color",
-                "get-colorbool"}
-CONFIG_WRITES = {"set", "unset", "remove-section", "rename-section"}
 
 
 def deny(reason):
@@ -288,135 +191,10 @@ def strip_paths(text):
     return PATH_TOKEN.sub("<path>", text)
 
 
-def parser_script():
-    """The shell parser in Bindwright's helper, which setup installs per computer with npm
-    or pip; None when neither copy is there."""
-    helper = os.path.join(os.path.expanduser("~"), ".bindwright", "helper")
-    folders = [os.environ.get("BINDWRIGHT_HELPER")] if os.environ.get("BINDWRIGHT_HELPER") else [
-        os.path.join(helper, "node_modules", "bindwright"), os.path.join(helper, "python", "bindwright")]
-    scripts = [os.path.join(folder, "hooks", "shell-words.mjs") for folder in folders]
-    return next((script for script in scripts if os.path.isfile(script)), None)
-
-
-def node_program(cwd):
-    """The `node` on PATH, or None when the only one is the session folder's own. On Windows a
-    bare name is looked up in the current folder first, so a repo could ship its own
-    `node.exe`: that search is switched off, and a match that is relative (a `.` on PATH) or
-    sits in the session folder is refused."""
-    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    found = shutil.which("node")
-    if not found or not os.path.isabs(found):
-        return None
-    here = {os.path.normcase(os.path.realpath(folder)) for folder in (cwd, os.getcwd())}
-    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
-
-
-def node_too_old(node, deadline):
-    """Whether `node` is older than Node 18, which the parser needs; asked only once a run failed."""
-    try:
-        # Short, and never past the parses' deadline, so the hook answers before it is stopped.
-        out = subprocess.run([node, "--version"], capture_output=True,
-                             timeout=max(0.1, min(2, deadline - time.monotonic())))
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    version = re.match(rb"\s*v(\d+)\.", out.stdout)
-    return version is not None and int(version.group(1)) < 18
-
-
-def parse(cmd, shell, cwd, deadline):
-    """(each simple command's words, the variables the command sets, "") as the shell reads
-    them (helper/hooks/shell-words.mjs); (None, None, why) when the parser is missing, older
-    than this guard, fails, cannot read the command or has not answered by `deadline`."""
-    node, script = node_program(cwd), parser_script()
-    if not node:
-        return None, None, NO_NODE
-    if not script:
-        return None, None, NO_HELPER
-    if deadline <= time.monotonic():
-        return None, None, SLOW
-    try:
-        # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
-        out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
-                             capture_output=True, timeout=min(PARSE_SECONDS, deadline - time.monotonic()))
-        data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
-    except subprocess.TimeoutExpired:
-        return None, None, SLOW
-    except (OSError, ValueError):
-        data = None
-    if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return None, None, NO_NODE if node_too_old(node, deadline) else BROKEN
-    if not all(isinstance(command, list) for command in data["commands"]):
-        return None, None, BROKEN
-    words = [word for command in data["commands"] for word in command]
-    if not all(isinstance(word, (str, dict)) for word in words):
-        return None, None, BROKEN
-    if not isinstance(data.get("assignments"), list) or any(
-            isinstance(word, dict) and not {"shape", "canBeEmpty"} <= word.keys() for word in words):
-        return None, None, OLD_HELPER
-    if data.get("error"):
-        return None, None, UNREAD
-    return data["commands"], data["assignments"], ""
-
-
-def with_nested(commands, assignments, shell, cwd, deadline, found, depth=1, around=()):
-    """(groups, assignments, ""): a group (commands, the commands that place their folders, shell)
-    for the parsed commands, then one per command string a shell in them may run, whose folder
-    changes move only its own group; (None, None, why) when one cannot be read. Adds each to found."""
-    placing = list(around) + list(commands)
-    groups, assignments = [(commands, placing, shell)], list(assignments)
-    for inner_shell, strings in filter(None, (shell_strings(w[i:], shell) for w in commands for i in shell_places(w))):
-        for text in strings:
-            found.append(text_of(text))
-            if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
-                return None, None, NESTED_UNREAD
-            inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
-            if not problem:
-                inner_groups, inner_assignments, problem = with_nested(
-                    inner, inner_assignments, inner_shell, cwd, deadline, found, depth + 1, placing)
-            if problem:
-                return None, None, problem
-            groups, assignments = groups + inner_groups, assignments + inner_assignments
-    return groups, assignments, ""
-
-
-def shell_strings(words, caller):
-    """(parser shell, the command strings it may run) for a shell program: each argument of a
-    POSIX shell whose text names a route, a dict when built at run time. PowerShell joins its
-    arguments into a script the guard does not rebuild, so a route they name is a dict; a script
-    block after options alone (`pwsh -c { ... }`) is read by the outer parse; None otherwise."""
-    name, args = program(words), words[1:]
-    if name in POSIX_SHELLS:
-        return "bash", [w for w in args if routes_in(text_of(w))[1] or routes_in(shape_of(w))[1]]
-    if name not in ("pwsh", "powershell"):
-        return None
-    args = args[:script_file_at(name, args)]
-    last = args[-1] if args and caller == "powershell" and not isinstance(args[-1], str) else ""
-    options = all(re.fullmatch(r"-[A-Za-z]+", text_of(w)) for w in args[:-1])
-    if options and text_of(last).lstrip().startswith("{"):
-        args = args[:-1]
-    joined = " ".join(text_of(w) for w in args)
-    return "powershell", [{"dynamic": joined}] if routes_in(joined)[1] else []
-
-
-def script_file_at(name, args):
-    """Index of the .ps1 file a nested PowerShell runs past no-value switches, whose later words
-    are its parameters; `powershell` reads a first plain word as a command, so it needs `-File`."""
-    named = name == "pwsh"
-    for i, w in enumerate(args):
-        option = w.lstrip("-").lower() if isinstance(w, str) and w.startswith("-") else None
-        if option not in ("noprofile", "nop", "nologo", "noninteractive", "noni", "file", "f"):
-            is_script = isinstance(w, str) and w.lower().endswith(".ps1") and not routes_in(w)[1]
-            return i if named and is_script else len(args)
-        named = named or option in ("file", "f")
-    return len(args)
-
-
-def shell_places(words):
-    """Words a shell may start at: those before a git, gh or text tool first or after a wrapper."""
-    end = next((i for i in range(len(words)) if program(words[i:]) not in WRAPPERS), len(words))
-    data = [i for i in range(end + 1) if program(words[i:]) in {"git", "gh"} | TEXT_TOOLS
-            and "=" not in words[i]]
-    return range(data[0] if data else len(words))
+def scan_text(text, where):
+    hit = ATTRIBUTION.search(strip_paths(text))
+    if hit:
+        deny(f"attribution marker '{hit.group(0).strip()}' found in {where}.")
 
 
 def routes_in(text):
@@ -427,525 +205,33 @@ def routes_in(text):
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
     return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
 
-def text_of(word):
-    """A word's literal value, or the source text of one the shell builds at run time."""
-    return word if isinstance(word, str) else str(word.get("dynamic", ""))
 
-
-def shape_of(word):
-    """A word's literal value, or its text with a NUL for each part built at run time: what an
-    option reader may trust, whichever way the source spells the expansion (`$Q`, `"$Q"`, `${Q}`)."""
-    return word if isinstance(word, str) else str(word["shape"])
-
-
-def program(words):
-    if not words or not isinstance(words[0], str):
-        return ""
-    name = os.path.basename(words[0].replace("\\", "/")).lower()
-    # Windows runs `git.exe`, `git.cmd` and `git.bat` alike when the command says `git`.
-    return re.sub(r"\.(exe|cmd|bat|com)$", "", name)
-
-
-def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None, attached_only=None,
-                file_letters=None):
-    """(flag, value) for each word that can carry a value: `--flag value`, `--flag=value`,
-    and a short flag in `short` written with its value attached (`-Fmsg`, `-d@body`). A
-    value attached to its flag in a word built at run time (`--file=$F`) comes back as
-    {"dynamic": <its text>}. The word after one of `message_flags` is that message's text,
-    never a flag. With `value_letters`, so is the word after a git cluster ending in -m whose
-    earlier letters take no value. With `attached_only`, a short flag's attached value is read
-    only from a word that pattern matches."""
-    cluster = re.compile(r"-(?:(?![m%s])[a-z])*m" % value_letters) if value_letters is not None else None
-    # With `file_letters`, the value letters of a git subcommand that has -F (`commit`, `tag`), a
-    # cluster ending in -F reads its file like -F alone: `-aF msg.txt`, `-aFmsg.txt`.
-    file_cluster = None if file_letters is None else re.compile(r"-(?:(?![m%s])[a-z])+F(.*)" % file_letters)
-    message = False
-    for i, word in enumerate(words):
-        text = text_of(word)
-        if message or not text.startswith("-"):
-            message = False
-            continue
-        built = isinstance(word, dict)
-        message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
-                   or (cluster is not None and cluster.fullmatch(text) is not None))
-        clustered = file_cluster.fullmatch(text) if file_cluster is not None else None
-        if clustered and not clustered.group(1):
-            yield "-F", words[i + 1] if i + 1 < len(words) else None
-            continue
-        if clustered:
-            flag, value = "-F", clustered.group(1)
-        elif text.startswith("--") and "=" in text:
-            flag, value = text.split("=", 1)
-        elif text[:2] in short and len(text) > 2 and (attached_only is None or attached_only.match(text)):
-            flag, value = text[:2], text[2:]
-        elif built:
-            continue
-        else:
-            yield word, words[i + 1] if i + 1 < len(words) else None
-            continue
-        yield flag, {"dynamic": value} if built else value
-
-
-def body_file(flag, value, readers="@<"):
-    """The file a body flag's value names, a run-time word whose file cannot be told, or None.
-    A form field reads a file when its value, after the first `=`, starts with one of
-    `readers`: `@` for gh, `@` or `<` for curl."""
-    text = text_of(value)
-    if flag in FORM_FLAGS and "=" in text:
-        field = text.split("=", 1)[1]
-        if not field.lstrip("\"'")[:1] or field.lstrip("\"'")[:1] not in readers:
-            return None
-        return value if isinstance(value, dict) else field[1:]
-    if flag in DATA_FLAGS:
-        if not text.lstrip("\"'").startswith("@"):  # curl -d reads a file only after @
-            return None
-        return value if isinstance(value, dict) else text[1:]
-    return value
-
-
-def body_files(words, flags=BODY_FLAGS, message_flags=MESSAGE_FLAGS, readers="@<", value_letters=None,
-               attached_only=None, file_letters=None):
-    """Every file the words' flags in `flags` name as a body; with `attached_only`, a short
-    flag's attached value counts only in a word that pattern matches."""
-    files = []
-    for flag, value in flag_values(words, ATTACHED, message_flags, value_letters, attached_only, file_letters):
-        name = flag.lower() if isinstance(flag, str) and flag.lower() == "-infile" else flag
-        if isinstance(name, str) and name in flags and value is not None:
-            found = body_file(name, value, readers)
-            if found is not None:
-                files.append(found)
-    return files
-
-
-def git_subcommand(words):
-    """(index of git's subcommand, the folders its `-C` options name, in order)."""
-    folders, i = [], 1
-    while i < len(words) and text_of(words[i]).startswith("-"):
-        if isinstance(words[i], str) and words[i] in GIT_VALUE_OPTIONS and i + 1 < len(words):
-            if words[i] == "-C":
-                folders.append(words[i + 1])
-            i += 1
-        i += 1
-    return i, folders
-
-
-def git_files(words):
-    """The body files of any git subcommand but a read. When the subcommand is built at run
-    time (`git $OPTS commit`), every file flag after it is read."""
-    i = git_subcommand(words)[0]
-    if i >= len(words) or (isinstance(words[i], str) and words[i] in GIT_READS):
-        return []
-    # `-t` is commit's short `--template`; on checkout, branch and switch it means track.
-    flags = GIT_FILE_FLAGS | {"-t"} if words[i] == "commit" else GIT_FILE_FLAGS
-    # Only a subcommand whose value letters are all known reads a -F cluster (`-bFeature` is a branch).
-    file_letters = GIT_VALUE_LETTERS.get(words[i]) if isinstance(words[i], str) else None
-    return body_files(words[i:], flags, GIT_MESSAGE_FLAGS, value_letters=git_value_letters(words),
-                      file_letters=file_letters)
-
-
-def git_value_letters(words):
-    """The lowercase letters other than m that take a value in this git command's subcommand."""
-    i = git_subcommand(words)[0]
-    subcommand = words[i] if i < len(words) and isinstance(words[i], str) else None
-    return GIT_VALUE_LETTERS.get(subcommand, ANY_VALUE_LETTERS)
-
-
-def get_content_files(words):
-    files = [v for f, v in flag_values(words) if isinstance(f, str)
-             and f.lower() in ("-path", "-literalpath") and v is not None]
-    positional = [w for w in words[1:] if not (isinstance(w, str) and w.startswith("-"))]
-    return files or positional[:1]
-
-
-def resolve(value, places):
-    """(path, error) for each file a body flag's value may name, or an error saying why it
-    cannot be told before the command runs. A relative file is read in each of `places`
-    that holds it, or in the first when none does; `places` is None after a folder change
-    the command text cannot place."""
-    if isinstance(value, dict):
-        yield None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
-        return
-    path = os.path.expanduser(value)
-    if os.path.isabs(path):
-        yield path, None
-    elif places is None:
-        yield None, (f"a relative body file {value} after a folder change the command text cannot tell"
-                     " (such as `cd -`, a target built at run time or a folder this computer cannot find)")
-    else:
-        paths = [os.path.join(place, path) for place in places]
-        yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
-
-
-def is_cmdlet(name):
-    """Whether a PowerShell command name is a cmdlet: an approved verb, a hyphen and a noun."""
-    match = CMDLET.fullmatch(name)
-    return bool(match) and match.group(1) in CMDLET_VERBS
-
-
-def command_files(words, shell="bash"):
-    """The body files one command names."""
-    name = program(words)
-    if name in TEXT_TOOLS:
-        return []
-    if name == "git":
-        return git_files(words)
-    if name == "gh":
-        return body_files(words, BODY_FLAGS - {"--template"}, GH_MESSAGE_FLAGS, "@")
-    if name in READ_CMDLETS:
-        return get_content_files(words)
-    # Every flag is read. A word naming git, gh or Get-Content may be a wrapped program (`env
-    # A=1 git commit`, `sudo gh ...`, `pwsh -Command Get-Content x`) or just an argument
-    # (`sudo -u git`, a URL ending in /gh), so each is also read with its own rules, and only
-    # its own exceptions (gh's --template, git's -m) are taken off the outer read.
-    inner = [words[i:] for i in range(1, len(words)) if program(words[i:]) in {"git", "gh"} | READ_CMDLETS]
-    names = {program(run) for run in inner}
-    # git's own reads take its --template; elsewhere it names one, unless a word built at run
-    # time names git (`timeout 5 $GIT commit`). Then git's -m is a message too.
-    built_git = any(is_run_time_git(w) for w in words)
-    flags = BODY_FLAGS if built_git else BODY_FLAGS - {"--template"}
-    message = MESSAGE_FLAGS | (GIT_MESSAGE_FLAGS if "git" in names or built_git else set())
-    letters = None if "git" not in names and not built_git else "".join(
-        [ANY_VALUE_LETTERS] * built_git + [git_value_letters(run) for run in inner if program(run) == "git"])
-    readers = "@" if "gh" in names else "@<"  # gh reads a form field's file only after =@
-    # A PowerShell cmdlet's parameter is a whole name (`Stop-Process -Force`), never a flag with
-    # its value written onto it, but a program it runs may still read a file that way.
-    attached_only = ATTACHED_FILE_READ if shell == "powershell" and is_cmdlet(name) and not built_git else None
-    return (body_files(words, flags, message, readers, letters, attached_only)
-            + [f for run in inner for f in command_files(run, shell)])
-
-
-def folder_targets(words):
-    """The folders one command names to move to: a `cd`-style command's targets (home for a
-    bare `cd`, none for `popd` or a bare `pushd`), or the `-C` folders of an env or a git it runs."""
-    words = past_cd_wrapper(words)
-    name = program(words)
-    if name in CD_COMMANDS:
-        targets = [w for w in words[1:] if text_of(w) == "-" or not text_of(w).startswith("-")]
-        return targets or (["~"] if name in HOME_COMMANDS else [])
-    # A text tool's `env` is a word it reads (`rg TODO env -C 3`), not a program it runs.
-    envs = [] if name in TEXT_TOOLS else [folder for i in range(len(words)) if program(words[i:]) == "env"
-                                          for folder in env_folders(words[i + 1:])]
-    return envs + [folder for i in range(len(words)) if program(words[i:]) == "git" or is_run_time_git(words[i])
-                   for folder in git_subcommand(words[i:])[1]]
-
-
-def past_cd_wrapper(words):
-    """The words after `builtin` or `command` (and `command -p`), which run the shell's own
-    `cd`; `command -v` and `-V` only print, so their words stay as they are."""
-    if program(words) == "builtin":
-        return words[1:]
-    if program(words) != "command":
-        return words
-    rest = words[1:]
-    while rest and rest[0] == "-p":
-        rest = rest[1:]
-    return words if rest and text_of(rest[0]).startswith("-") else rest
-
-
-def env_folders(args):
-    """The folders `env -C <dir>` or `--chdir` moves its program to, read before that program. A
-    word built at run time there that is not an assignment (`--chdir="$D"`, `$OPTS`) may name a
-    folder, so it comes back as one, which `folder_places` cannot place."""
-    folders, i = [], 0
-    while i < len(args) and args[i] != "--":
-        word, i = args[i], i + 1
-        if not isinstance(word, str):
-            if not re.match(r"\w+=", shape_of(word)):
-                return folders + [word]
-            continue
-        if word.startswith("--"):
-            name, has_value, value = word.partition("=")
-            if abbreviates(name, "--chdir", ENV_VALUE_OPTIONS["--chdir"]):
-                folders += [value] if has_value else args[i:i + 1]
-            i += takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
-        elif word.startswith("-") and len(word) > 1:
-            at = word.find("C")
-            if at > 0 and all("-" + letter not in ENV_VALUE_SHORT for letter in word[1:at]):
-                folders += [word[at + 1:]] if word[at + 1:] else args[i:i + 1]
-            i += takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
-        elif not re.match(r"\w+=", word):
-            break
-    return folders
-
-
-def is_run_time_git(word):
-    """Whether a word built at run time names git (`$GIT`, `$(command -v git)`)."""
-    return isinstance(word, dict) and GIT_WORD.search(text_of(word)) is not None
-
-
-def folder_places(commands, cwd):
-    """Every folder a command may run in: the start folder, and each folder a folder change
-    in the command names, reached from any folder found before it in the text, since a `cd`
-    may run in a child shell or fail, so the shell may be in any of them. The changes are then
-    applied again until no folder is added, since a loop or a function may run a `cd` again.
-    None when a target cannot be placed: one built at run time, or one this computer cannot
-    find, such as a saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made
-    later, or when the folders pass MAX_PLACES."""
-    targets = [target for words in commands for target in folder_targets(words)]
-    if not all(isinstance(target, str) for target in targets):
-        return None
-    places, seen, first = [cwd], {os.path.realpath(cwd)}, True
-    while True:
-        count = len(places)
-        for target in map(os.path.expanduser, targets):
-            reached = [target] if os.path.isabs(target) else [os.path.join(place, target) for place in places]
-            found = [place for place in reached if os.path.isdir(place)]
-            if first and not found:
-                return None
-            # A link keeps its own name in the first pass, since Windows reads `link\..` by name;
-            # the repeated passes compare real paths, so a link back to a parent cannot keep adding.
-            for place in found:
-                if place not in places if first else os.path.realpath(place) not in seen:
-                    seen.add(os.path.realpath(place))
-                    places.append(place)
-        if len(places) == count:
-            return places
-        if len(places) > MAX_PLACES:
-            return None
-        first = False
-
-
-def parsed_files(groups, cwd):
-    """(path, error) for every body file the parsed commands name, in order, each group of
-    `with_nested` read as its shell reads it, a relative file in every folder it may run in."""
-    for commands, placing, shell in groups:
-        places = folder_places(placing, cwd)
-        for words in commands:
-            for value in command_files(words, shell):
-                if value != "-":
-                    yield from resolve(value, places)
-
-
-def abbreviates(word, option, shortest):
-    """Whether git reads `word` as the long option `option` (any prefix from `shortest` on)."""
-    name = word.split("=", 1)[0]
-    return len(name) >= len(shortest) and option.startswith(name)
-
-
-def option_words(subcommand, rest):
-    """The options of one git subcommand, one per letter of a bundle (`-nm` is `-n`, `-m`), with
-    every option's value skipped, up to `--`."""
-    options, skip, letters = [], False, SHORT_VALUES.get(subcommand, "")
-    for word in (text_of(w) for w in rest):
-        if skip:
-            skip = False
-        elif word == "--":
-            break
-        elif word.startswith("--"):
-            options.append(word.split("=", 1)[0])
-            skip = "=" not in word and any(abbreviates(word, o, o[:5]) for o in LONG_VALUES.get(subcommand, ()))
-        elif word.startswith("-") and len(word) > 1:
-            for k, letter in enumerate(word[1:], 1):
-                options.append("-" + letter)
-                if letter in letters:
-                    skip = k == len(word) - 1 and not is_uncertain(word)
-                    break
-                if letter in ATTACHED_VALUES.get(subcommand, ""):  # `-uno`: the rest is its value
-                    break
-    return options
-
-
-def names_hooks(setting):
-    setting = setting.lower()
-    return "hookspath" in setting or setting.startswith("hook.")
-
-
-def names_hook_section(section):
-    """Whether removing or renaming this section drops hook settings (`core` holds hooksPath)."""
-    section = section.lower()
-    return section in ("hook", "core") or section.startswith("hook.")
-
-
-def takes_next_word(word, short, long):
-    """Whether an option reads the next word as its value: a long one by its name (`long` maps
-    each to its shortest prefix), or a short cluster as getopt reads one, where only the last
-    letter can and a value letter before it takes the rest of the word (`-iuFOO`)."""
-    if word.startswith("--"):
-        return "=" not in word and any(abbreviates(word, option, shortest) for option, shortest in long.items())
-    letters = word[1:]
-    first = next((i for i, letter in enumerate(letters) if "-" + letter in short), None)
-    return first == len(letters) - 1 and not is_uncertain(word)
-
-
-def is_uncertain(word):
-    """Whether a bundle holds a part built at run time, a glob or a brace, so its letters at run time
-    are unknown and none of them may be taken to read the next word (`-${Q}m -n`)."""
-    return any(sign in word for sign in "\0*?[{")
-
-
-def config_option_takes_value(word):
-    """Whether a `git config` option reads the next word as its value."""
-    return takes_next_word(word, CONFIG_VALUE_SHORT, CONFIG_VALUE_OPTIONS)
-
-
-def config_words(rest):
-    """(the names and values `git config` reads, its options), or None when it is a read."""
-    names, options, skip, ended = [], [], False, False
-    for raw in rest:
-        word = text_of(raw)
-        # The old form (`git config <name> <value>`) stops reading options at the first name, so a
-        # later `--get` is the value it stores.
-        legacy = names and names[0] not in CONFIG_WRITES and names[0] not in CONFIG_READS
-        if skip:
-            skip = False
-        elif word == "--" and not ended and not legacy:
-            # Git reads every word after `--` as a name or value, never as an option.
-            ended = True
-        elif word.startswith("-") and not legacy and not ended:
-            if word.startswith("--get") or word in ("-l", "--list"):
-                return None
-            options.append(word)
-            skip = config_option_takes_value(word)
-        else:
-            names.append(word)
-    return names, options
-
-
-def config_sets_hooks(rest):
-    """Whether `git config` sets or unsets a hook setting, or removes or renames a section that
-    holds them; a read passes."""
-    read = config_words(rest)
-    if read is None:
-        return False
-    names, options = read
-    unsets = any(abbreviates(o, "--unset-all", "--uns") for o in options)
-    sections = any(abbreviates(o, "--remove-section", "--rem") or abbreviates(o, "--rename-section", "--ren")
-                   for o in options)
-    if names[:1] in (["remove-section"], ["rename-section"]):
-        sections, names = True, names[1:]
-    if sections:
-        return bool(names) and names_hook_section(names[0])
-    if names[:1] in (["set"], ["unset"]):
-        unsets, names = unsets or names[0] == "unset", names[1:]
-    elif names[:1] and names[0] in CONFIG_READS:
-        return False
-    return len(names) >= (1 if unsets else 2) and names_hooks(names[0])
-
-
-def git_route(words):
-    """The kind of route past the hooks one git call takes, or None. A word built at run time is
-    read as its literal text with a NUL for each part built at run time (`--trailer=$WHO`,
-    `"$S.hooksPath"`), and each one the parser says can expand to nothing is also read as no
-    word, apart from the others (`git $OPTS commit`)."""
-    head, rest = words[:1], words[1:]
-    run_time = [i for i, word in enumerate(rest) if not isinstance(word, str) and word["canBeEmpty"]]
-    if len(run_time) > MAX_RUN_TIME_WORDS:
-        return "unread"
-    known = [shape_of(word) for word in rest]
-    for empty in itertools.product((False, True), repeat=len(run_time)):
-        dropped = {i for i, is_empty in zip(run_time, empty) if is_empty}
-        reading = [word for i, word in enumerate(known) if i not in dropped]
-        route = literal_git_route(head + reading)
-        if route:
-            return route
-    return None
-
-
-def literal_git_route(words):
-    """The route of a git call whose words after the program are all literal, or None."""
-    i = git_subcommand(words)[0]
-    before = words[1:i]
-    settings = [v for k, v in zip(before, before[1:]) if k in ("-c", "--config-env")]
-    settings += [w.split("=", 1)[1] for w in before if w.startswith("--config-env=")]
-    if any(names_hooks(s) for s in settings):
-        return "setting"
-    if i >= len(words):
-        return None
-    subcommand, rest = words[i], words[i + 1:]
-    if subcommand == "config":
-        return "setting" if config_sets_hooks(rest) else None
-    options = option_words(subcommand, rest)
-    if subcommand in NO_VERIFY_SUBCOMMANDS and any(abbreviates(o, "--no-verify", "--no-v") for o in options):
-        return "hooks"
-    if subcommand in ("commit", "am") and "-n" in options:
-        return "hooks"
-    if subcommand != "commit":
-        return None
-    if any(abbreviates(o, "--trailer", "--tr") for o in options):
-        return "trailer"
-    reuses = ("--reuse-message", "--reedit-message")
-    if any(o in ("-C", "-c") or any(abbreviates(o, r, r[:5]) for r in reuses) for o in options):
-        return "reuse"
-    return None
-
-
-def env_assignments(words):
-    """The `NAME=value` words an `env` in this command sets for the program it runs."""
-    found = []
-    for i in range(len(words)):
-        if program(words[i:]) == "env":
-            found += env_words(words[i + 1:])
-    return found
-
-
-def env_words(args):
-    """The `NAME=value` words before `env`'s program. An option whose letters are built at run time
-    (`-${Q}u`) may or may not take the next word, so every reading is followed at once: `states`
-    holds, per reading still alive, whether the next word is an option's value."""
-    found, states = [], {False}
-    for word in args:
-        shape, following = shape_of(word), set()
-        for skip in states:
-            if skip:
-                following.add(False)
-            elif shape.startswith("-"):
-                following |= env_option_skips(shape)
-            elif re.match(r"\w+=", shape):
-                found.append(text_of(word))
-                following.add(False)
-        states = following
-        if not states:
-            break
-    return found
-
-
-def env_option_skips(word):
-    """Whether an `env` option takes the next word, as the set of its possible answers."""
-    unknown = next((i for i, sign in enumerate(word) if sign in "\0*?[{"), len(word))
-    if unknown == len(word) or word.startswith("--") and "=" in word[:unknown]:
-        return {takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)}
-    return {False, True}
-
-
-def turns_lefthook_off(commands, assignments):
-    """Whether the command sets LEFTHOOK to 0 or false (by assignment, `export`, `env` or
-    PowerShell's `$env:`), or to a value built at run time by any of them but `env`, or runs
-    `lefthook uninstall`."""
-    settings = [(s.get("name"), s.get("value")) for s in assignments if isinstance(s, dict)]
-    settings += [tuple(text.split("=", 1)) for words in commands for text in env_assignments(words)]
-    for name, value in settings:
-        name = re.sub(r"^\$\{?(?:env:)?|\}$", "", str(name), flags=re.I).lower()
-        if name == "lefthook" and (not isinstance(value, str) or value.strip("'\"").lower() in LEFTHOOK_OFF_VALUES):
-            return True
-    for words in commands:
-        for i in range(len(words)):
-            if program(words[i:]) == "lefthook":
-                rest = [text_of(w) for w in words[i + 1:] if not text_of(w).startswith("-")]
-                if rest[:1] == ["uninstall"]:
-                    return True
-    return False
-
-
-def hook_route(groups, assignments):
-    """The kind of route past git's hooks the commands of `with_nested`'s groups take, or None.
-    A git run through a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run
-    time that names git (`$GIT`)."""
-    commands = [words for group, _, _ in groups for words in group]
-    if turns_lefthook_off(commands, assignments):
-        return "lefthook"
-    for words in commands:
-        for i, word in enumerate(words):
-            if program(words[i:]) == "git" or is_run_time_git(word):
-                route = git_route(words[i:])
-                if route:
-                    return route
-    return None
-
-
-def scan_text(text, where):
-    hit = ATTRIBUTION.search(strip_paths(text))
-    if hit:
-        deny(f"attribution marker '{hit.group(0).strip()}' found in {where}.")
+def readers(named):
+    """The package's readers, loaded only here so the Attribution workflow can import this file
+    alone; without the package, a command that names a route is refused, as without the parser."""
+    sys.dont_write_bytecode = True  # no __pycache__ beside a hook a repo may commit
+    here = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+    # Loaded by its own path, never through sys.path, so no other file beside the hook can stand
+    # in for a module the guard imports.
+    folder = os.path.join(here, "no_ai_attribution")
+    spec = importlib.util.spec_from_file_location(
+        "no_ai_attribution", os.path.join(folder, "__init__.py"), submodule_search_locations=[folder])
+    try:
+        package = sys.modules["no_ai_attribution"] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(package)
+        package.routes_in = routes_in
+        from no_ai_attribution.files import parsed_files
+        from no_ai_attribution.routes import hook_route
+        from no_ai_attribution.shell import parse, with_nested
+    except (ImportError, OSError):
+        if named:
+            deny("the folder no_ai_attribution/ beside this guard, which reads the command, is missing."
+                 " Copy it back from Bindwright's helper: `cp -r ~/.bindwright/helper/node_modules/bindwright"
+                 f"/_core/global-template/hooks/no_ai_attribution \"{here}/\"` (`helper/python/bindwright`"
+                 " after a pip install), or `git checkout -- .claude/hooks/no_ai_attribution` where the"
+                 " repo commits it.")
+        sys.exit(0)
+    return parse, with_nested, parsed_files, hook_route
 
 
 def main():
@@ -966,6 +252,7 @@ def main():
     # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
     if not (named or shell == "bash" and SHELL_ESCAPES.search(cmd)):
         sys.exit(0)
+    parse, with_nested, parsed_files, hook_route = readers(named)
 
     if writes:
         scan_text(cmd, "the command text")

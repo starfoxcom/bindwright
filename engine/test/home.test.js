@@ -123,6 +123,26 @@ test("the installed push guard runs through its launcher and blocks a force push
   });
 });
 
+test("the installed attribution guard brings its modules and refuses an AI co-author", { skip }, () => {
+  withHome((dir) => {
+    const guard = join(engine, "..", "_core", "global-template", "hooks", "no-ai-attribution.py");
+    assert.equal(home(dir, "install-hook", guard, "--python", python, "--matcher", "Bash|PowerShell").status, 0);
+    const { command, args } = settings(dir).hooks.PreToolUse[0].hooks[0];
+    const trailer = "Co-Authored-By: " + "Cla" + "ude <noreply@" + "anthropic.com>";
+    const call = spawnSync(command, args, { encoding: "utf8",
+      input: JSON.stringify({ tool_name: "Bash", tool_input: { command: `git commit -m x -m '${trailer}'` } }) });
+    assert.match(call.stdout, /"deny"/, call.stderr);
+    const modules = join(dir, ".claude", "hooks", "no_ai_attribution");
+    assert.ok(existsSync(join(modules, "shell.py")));
+    for (const name of ["x", ".py", "...py", "../projects.py", join(dir, "abs.py")]) {
+      assert.equal(home(dir, "remove-hook", name).status, 1, name);
+    }
+    assert.ok(existsSync(modules));
+    home(dir, "remove-hook", "no-ai-attribution.py");
+    assert.ok(!existsSync(modules));
+  });
+});
+
 test("only the named hook leaves an entry it shares with other hooks", { skip }, () => {
   withHome((dir) => {
     const mine = { type: "command", command: "my-check" };

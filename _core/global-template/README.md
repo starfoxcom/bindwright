@@ -15,6 +15,7 @@ global-template/
 │   ├── code-research-profiles.json        # Per-tool profiles consumed by the renderer
 │   ├── push-guard.py                      # PreToolUse hook that blocks ordinary force pushes
 │   ├── no-ai-attribution.py               # PreToolUse hook that blocks AI attribution in commits and PRs
+│   ├── no_ai_attribution/                 # Its modules: the shell reader, the file reader, the hook routes
 │   ├── session-title.py                   # SessionStart and UserPromptSubmit hook that names each session
 │   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
 └── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
