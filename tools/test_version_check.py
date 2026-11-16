@@ -405,10 +405,15 @@ class Hook(unittest.TestCase):
         ("an ordinary command", "git log --oneline", 0),
     ]
 
-    # Without the parser, a here-document's lines are read as commands.
-    ROUGH_ROWS = [(name, command, 2 if name.endswith("here-document") else code)
-                  for name, command, code in ROWS] + [
+    ROUGH_ROWS = ROWS + [
         ("an unclosed quote", 'git tag -m "notes v5.2.2', 0),
+        ("a tag whose here-document body holds an apostrophe",
+         "git tag -a v5.2.2 -F - <<'EOF'\nIt's the release\nEOF", 2),
+        ("a release whose here-document body holds an apostrophe",
+         "gh release create v5.2.2 --notes-file - <<EOF\n- the parser doesn't crash\nEOF", 2),
+        ("a tag after a here-document whose body holds an apostrophe",
+         "cat > notes.md <<-EOF\n\tit's done\n\tEOF\ngit tag v5.2.2", 2),
+        ("a here-document word inside a quoted message", 'git commit -m "see <<EOF"\ngit tag v5.2.2', 2),
         ("a quoted message naming a short tag", 'git commit -m "docs: run git tag v1 first"', 0),
         ("a statement starting with an assignment", "A=1 git tag v5.2.2", 2),
         ("a list of tags", "git tag --list", 0),
@@ -431,8 +436,15 @@ class Hook(unittest.TestCase):
     def test_rows(self):
         self.check_rows(self.ROWS, HELPER)
 
-    def test_without_the_parser_the_rows_read_the_same_but_here_documents(self):
+    def test_without_the_parser_the_rows_read_the_same(self):
         self.check_rows(self.ROUGH_ROWS, None)
+
+    def test_without_the_parser_a_powershell_backslash_escapes_nothing(self):
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            command = 'git -C "C:\\my repo\\" tag v5.2.2'
+            code, err = run_hook(repo, command, tool="PowerShell", helper=repo)
+            self.assertEqual(code, 2, err)
 
     def test_a_release_PR_from_the_current_branch(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG, branch="release/v5.2.2") as repo:

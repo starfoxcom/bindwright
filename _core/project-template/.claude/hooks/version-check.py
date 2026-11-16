@@ -22,9 +22,9 @@ read as getopt reads them (`-am <message>`, `--head=<branch>`). `gh release
 create` is measured at the version's tag when it exists, else at `--target`. A
 version, commit or branch built at run time (`git tag $NEXT`) is out of reach. When the parser
 cannot read the command (no helper or Node, a parse error, out of time), Python's `shlex` reads
-it instead: quoted text stays one word, and an operator or `#` inside quotes cuts nothing, but
-a here-document's lines are read as commands, so a body line such as `git tag v2.0.0` is
-checked. The check refusing or failing to run blocks the command with the reason.
+it instead, after taking out each here-document's body: quoted text stays one word, an operator
+or `#` inside quotes cuts nothing, and at a quote that never closes the words before it are
+still checked. The check refusing or failing to run blocks the command with the reason.
 """
 
 import io
@@ -44,10 +44,12 @@ CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 MAY_BE_RELEASE = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
                             re.DOTALL | re.IGNORECASE)
 # The rough cut, for when the shell parser cannot run: characters that end a word outside
-# quotes, a backslash-newline the shell joins, and a `#` inside a word, which is no comment.
+# quotes, each shell's escape character, and a `#` inside a word, which is no comment.
 ROUGH_PUNCTUATION = "();<>|&\n"
-LINE_JOIN = re.compile(r"\\\r?\n")
-MID_WORD_HASH = re.compile(r"(?<=[^\s;&|()<>\\])#")
+ESCAPE = {"bash": "\\", "powershell": "`"}
+MID_WORD_HASH = re.compile(r"(?<=[^\s;&|()<>\\`])#")
+# `<<WORD`, `<<-WORD`, `<<'WORD'`: a here-document, not the `<<<` here-string.
+HERE_DOCUMENT = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 GH_CREATE = ("create", "new")
 RELEASE_BRANCH = re.compile(r"release/(.+)")
@@ -271,25 +273,56 @@ class KeepNewline(io.StringIO):
         return line[:-1]
 
 
-def rough_tokens(command):
-    """The command's words and operators as `shlex` reads them, quotes kept whole and comments
-    dropped; empty when the text cannot be read (an unclosed quote)."""
-    text = MID_WORD_HASH.sub(r"\\#", LINE_JOIN.sub("", command))
+def body_end(lines, start, word, strip_tabs):
+    """The index of the line that closes a here-document whose body starts at `start`, or None
+    when no line does."""
+    for index in range(start, len(lines)):
+        line = lines[index].rstrip("\r")
+        if (line.lstrip("\t") if strip_tabs else line) == word:
+            return index
+    return None
+
+
+def without_here_documents(command):
+    """The command with each here-document's body taken out, as bash reads it. A `<<WORD` with
+    no closing line keeps the lines after it."""
+    lines, kept, index = command.split("\n"), [], 0
+    while index < len(lines):
+        kept.append(lines[index])
+        index += 1
+        for dash, _, word in HERE_DOCUMENT.findall(kept[-1]):
+            end = body_end(lines, index, word, dash == "-")
+            index = index if end is None else end + 1
+    return "\n".join(kept)
+
+
+def rough_tokens(command, shell):
+    """The command's words and operators as `shlex` reads them, quotes kept whole, comments and
+    here-document bodies dropped. At a quote that never closes, the words read before it."""
+    escape = ESCAPE.get(shell, "\\")
+    if shell != "powershell":
+        command = without_here_documents(command)
+    joined = re.sub(re.escape(escape) + r"\r?\n", "", command)
+    text = MID_WORD_HASH.sub(lambda _: escape + "#", joined)
     lexer = shlex.shlex(KeepNewline(text), posix=True, punctuation_chars=ROUGH_PUNCTUATION)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
+    lexer.escape = escape
+    tokens = []
     try:
-        return list(lexer)
+        for token in lexer:
+            tokens.append(token)
     except ValueError:
-        return []
+        pass
+    return tokens
 
 
-def rough_commands(command):
+def rough_commands(command, shell):
     """Each statement's words as a rough cut reads them, for when the shell parser cannot run:
     quoted text is one word, statements end at an operator outside quotes, and redirections
     and leading assignments are dropped. A word built at run time stays as written."""
     commands, words, is_target = [], [], False
-    for token in rough_tokens(command):
+    for token in rough_tokens(command, shell):
         is_operator = bool(token) and all(char in ROUGH_PUNCTUATION for char in token)
         if is_target and not is_operator:
             is_target = False
@@ -310,10 +343,10 @@ def rough_commands(command):
     return commands
 
 
-def may_release(command):
+def may_release(command, shell):
     """Whether a rough reading of the command finds a release: a tag that git would create, or
     a gh release or PR being created."""
-    for run in (run for words in rough_commands(command) for run in runs_in(words)):
+    for run in (run for words in rough_commands(command, shell) for run in runs_in(words)):
         gh = gh_action(run)
         if release_from_git(run) or (gh and gh[0] in ("release", "pr") and gh[1] in GH_CREATE):
             return True
@@ -390,7 +423,7 @@ def refusal(command, shell, project):
     try:
         return read_and_check(command, shell, project)
     except OutOfTime:
-        return f"Blocked: this command may make a release, and {OUT_OF_TIME}" if may_release(command) else None
+        return f"Blocked: this command may make a release, and {OUT_OF_TIME}" if may_release(command, shell) else None
 
 
 def read_and_check(command, shell, project):
@@ -402,7 +435,7 @@ def read_and_check(command, shell, project):
     scheme, fmt = scheme_and_format
     commands = shell_commands(command, shell, project)
     if commands is None:
-        commands = rough_commands(command)
+        commands = rough_commands(command, shell)
     return first_refusal(commands, project, scheme, fmt)
 
 
