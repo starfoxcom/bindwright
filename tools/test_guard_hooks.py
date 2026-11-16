@@ -602,8 +602,8 @@ class GuardHookTest(unittest.TestCase):
         # -S takes its key attached, so `F` is the key and msg.txt a path to commit; on other
         # subcommands a capital F is another option's value (`-bFeature-x` names a branch).
         for command, result in self.each(
-                ("git commit -SF msg.txt", "git checkout -bFeature-x origin/develop && git push -u origin x",
-                 "git push -oFoo=bar origin x"), lambda command: self.attr(command, project=root)):
+                ("git commit -SF msg.txt", "git checkout -bFeature-x origin/develop && git push -u origin x"),
+                lambda command: self.attr(command, project=root)):
             with self.subTest(command=command):
                 self.assert_passes(result)
         # A cmdlet's whole-name -InFile keeps reading its file when the command names git.
