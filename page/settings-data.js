@@ -212,6 +212,16 @@ export const PROJECT = [
     engine: [{ flags: {}, key: "advanced.publicRoadmap", value: null }],
   },
   {
+    id: "version-check",
+    title: "Version check",
+    text: "Before a release is tagged, checks its version against the commits since the last one, "
+      + "as semver, alpha, beta and rc builds included, or calver numbers it. none adds no check.",
+    value: "The repo's own, or one that fits",
+    keys: ["advanced.versioning", "advanced.versionFormat"],
+    options: ["semver", "calver", "none"],
+    engine: [{ flags: {}, key: "advanced.versioning", value: "none" }],
+  },
+  {
     id: "pre-commit",
     title: "Pre-commit hook",
     text: "lefthook runs the lint, the type check and the size check before each commit, "
@@ -223,7 +233,8 @@ export const PROJECT = [
       { flags: {}, key: "advanced.precommit", value: "none" },
       { flags: { team: true }, key: "advanced.precommit", value: "lefthook" },
     ],
-  },];
+  },
+];
 
 export const FIXED = [
   {
