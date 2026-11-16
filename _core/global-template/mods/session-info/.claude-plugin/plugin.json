@@ -16,5 +16,8 @@
       "description": "How many changed files the expanded row lists before it says how many more there are.",
       "default": 8
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }

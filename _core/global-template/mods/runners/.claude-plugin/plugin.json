@@ -10,5 +10,8 @@
       "description": "How often the runners' processes, the queued runs and the schedules are read.",
       "default": 60
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }

@@ -12,6 +12,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
+- **Each mod names the Claude Code versions it runs on.** Every mod's manifest now says it needs Claude Code 2.1.287 or later, so an older Claude Code (2.1.323 and later read this) skips the mod instead of loading one that fails.
 - **The reply style sounds more like a person.** Straight Talk now asks for varied sentences and a colleague's reactions instead of the same report skeleton every reply, and matches the user's register down to swearing: an occasional one where a person would use it, only when the user swears too, never at anyone. It also writes for a reader who loses the thread easily, since that reads well for everyone, and bans bold labels in ordinary explanations. A copy already installed stays as it is, since it may hold your own edits: to take the new text, copy `_core/global-template/output-styles/straight-talk.md` from the Bindwright repository over `~/.claude/output-styles/straight-talk.md`, then start a new session.
 - **The find skill names FindWright's fit.** From FindWright 2.0.0 a project's symbols come only from the rules in `.findwright/config.json`, so `/find` says to run `/findwright:fit` when `coverage` shows files the work searches with no symbol.
 

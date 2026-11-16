@@ -28,5 +28,8 @@
       "description": "Since 2.1.293 the engine no longer compacts a big conversation left idle before its prompt cache goes cold. With this on, the mod does it once per reply, a minute after the engine's own time, unless auto-compact is off (in /config, DISABLE_AUTO_COMPACT or DISABLE_COMPACT).",
       "default": true
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }

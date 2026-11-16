@@ -16,5 +16,8 @@
       "description": "A watch still pending after this long wakes the session with what is stuck.",
       "default": 60
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }

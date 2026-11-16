@@ -8,8 +8,15 @@
       "type": "string",
       "title": "Mode",
       "description": "off: stock compaction. shadow: stock compaction, plus the hand-off written beside it for comparison. on: the hand-off replaces the stock summary.",
-      "options": ["off", "shadow", "on"],
+      "options": [
+        "off",
+        "shadow",
+        "on"
+      ],
       "default": "on"
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }

@@ -28,5 +28,8 @@
       "description": "A session armed to resume that was closed at its wake resumes when it starts again within this many minutes of the wake. Later, it only says what it missed. 0 never catches up.",
       "default": 30
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }

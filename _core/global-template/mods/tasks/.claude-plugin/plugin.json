@@ -16,5 +16,8 @@
       "description": "When a turn ends with a task that is not on hold and nothing pending to wake the session (a CI watch, a plan-limit pause, or a pause whose automatic resume was cancelled, until its reset), the model is prompted to carry on. Stops after two prompts in a row that change nothing on the list, and never after an interrupted turn. With automatic compaction on and the context past 75% of the compaction point, a turn's end gets one such prompt even with no task, to carry on with a step it announced. Near that point, with such a task and nothing to wake the session, the turn's end itself is refused once so the work goes on; turning this off stops that too.",
       "default": true
     }
+  },
+  "engines": {
+    "claude-code": ">=2.1.287"
   }
 }
