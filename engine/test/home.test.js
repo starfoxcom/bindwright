@@ -188,6 +188,29 @@ test("a mod is copied once, listed once, and an installed copy keeps its edits",
   });
 });
 
+test("the tasks mod turns on the task tools it answers and leaves them on; other mods set nothing", { skip }, () => {
+  withHome((dir) => {
+    const add = (name) => {
+      const mod = join(dir, "pack", name);
+      mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
+      writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
+      return home(dir, "add-mod", mod).out;
+    };
+    writeSettings(dir, { env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: "0" } });
+    assert.deepEqual(add("ci-watch").env_set, []);
+    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "0");
+    assert.deepEqual(add("tasks").env_set, ["CLAUDE_CODE_ENABLE_TODO_TOOLS"]);
+    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "1");
+    // Installed again (a later setup or join): the setting holds, nothing to change.
+    const again = add("tasks");
+    assert.equal(again.kept_existing, true);
+    assert.deepEqual(again.env_set, []);
+    // The setting only turns on a CLI feature, so it outlives the mod.
+    home(dir, "remove-mod", "tasks");
+    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "1");
+  });
+});
+
 test("mods are listed in row order whatever order they are added in", { skip }, () => {
   withHome((dir) => {
     const add = (name) => {
@@ -442,11 +465,11 @@ test("a linked mod folder is refused before its entry leaves the folder list", {
 
 test("the last listed mod takes the folder list with it", { skip }, () => {
   withHome((dir) => {
-    const mod = join(dir, "pack", "tasks");
+    const mod = join(dir, "pack", "session-facts");
     mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
     writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
     home(dir, "add-mod", mod);
-    home(dir, "remove-mod", "tasks");
+    home(dir, "remove-mod", "session-facts");
     assert.deepEqual(settings(dir).env, {});
   });
 });

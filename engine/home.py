@@ -348,6 +348,25 @@ def _with_mod(listed, target):
     return listed[:at] + [target] + listed[at:]
 
 
+# Settings a mod cannot work without, turned on with it and left on when it is removed, since
+# each one only turns on a CLI feature that works without the mod. The tasks mod answers the
+# CLI's task tools, which CLI 2.1.233 and later hide on current models unless this is set.
+MOD_ENV = {"tasks": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}
+
+
+def _turn_on_env(env, name):
+    """Sets what MOD_ENV lists for the mod and returns the keys it changed."""
+    needs = MOD_ENV.get(name, {})
+    turned_on = sorted(key for key, value in needs.items() if env.get(key) != value)
+    for key in turned_on:
+        env[key] = needs[key]
+    return turned_on
+
+
+def _listed_mods(env):
+    return [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+
+
 def add_mod(home, folder):
     name = os.path.basename(os.path.normpath(folder))
     if not os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
@@ -359,12 +378,16 @@ def add_mod(home, folder):
     kept = os.path.exists(target)
     if not kept:
         shutil.copytree(folder, target)
-    listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+    changed = False
+    listed = _listed_mods(env)
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
     if not any(same(d) for d in listed):
         env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(_with_mod(listed, target))
+        changed = True
+    turned_on = _turn_on_env(env, name)
+    if changed or turned_on:
         _save(path, data)
-    return {"installed": target, "kept_existing": kept}
+    return {"installed": target, "kept_existing": kept, "env_set": turned_on}
 
 
 def add_agent(home, file):
@@ -442,7 +465,7 @@ def remove_mod(home, name):
         raise HomeError("The mod folder is a link; remove it by hand: " + target)
     path, data = _load(home)
     env = _section(data, "env", dict, path)
-    listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+    listed = _listed_mods(env)
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
     kept = [d for d in listed if not same(d)]
     unlisted = len(kept) != len(listed)

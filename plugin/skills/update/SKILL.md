@@ -68,6 +68,8 @@ For each path in `removed`, say in one line what the file was for and delete it 
 
 Then check that `.claude/settings.local.json`, the personal file that holds the allow list and this person's own switches, stays out of git. Unless `"localOnly"` is true, run `git check-ignore -q --no-index .claude/settings.local.json`; when it fails, add that path to `.gitignore`. When `git ls-files .claude/settings.local.json` prints it, say the file is committed, so everything in it is in the history, and offer `git rm --cached .claude/settings.local.json`, which stops tracking it and keeps the file on disk. Say that every other clone deletes its copy when it pulls or checks out that commit, as git does for a file a commit removes, so each person copies theirs aside first and puts it back after.
 
+Then, when `~/.claude/settings.json` lists the tasks mod in `env.CLAUDE_CODE_PLUGIN_DIRS` and its `env` does not set `CLAUDE_CODE_ENABLE_TODO_TOOLS` to `"1"`, a setup before 5.2.1 installed it: say that the mod answers Claude Code's task tools, which current models hide without that line, so it does nothing until `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` is added to that `env` block, and that it takes effect at the next start of Claude Code. Do not edit the file.
+
 ## 6. Review counts
 
 When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and its batch question when the history check calls for it, and save the answers the same way.
