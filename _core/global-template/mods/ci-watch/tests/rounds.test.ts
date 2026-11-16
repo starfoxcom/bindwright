@@ -61,6 +61,28 @@ test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
 
+// The 10th red round in a row is the hard stop: the wake asks to close the PR and rebuild it.
+test('the wake from the 10th red round on asks to close and rebuild the PR', () => {
+  for (const red of [10, 12]) expect(wakeText(failed('failed'), undefined, red)).toContain('That is the hard stop')
+  expect(wakeText(failed('failed'), undefined, 9)).not.toContain('hard stop')
+  expect(wakeText(failed('failed'), undefined, 9)).toContain('The next step back comes after 1 more')
+})
+
+// At the hard stop commits and pushes wait until the PR is closed; edits do not, and closing it lifts it.
+test('the hard stop holds commits and pushes until the PR is closed', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: ['Edit', 'WebSearch'] }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const bash = (command: string) => $.tool.call({ tool: 'Bash', command } as never)
+  await redRound($, w, 9)
+  for (const query of ['a', 'b', 'c']) await $.tool.call({ tool: 'WebSearch', query } as never)
+  expect(await $.tool.call(editInput as never)).not.toHaveProperty('deny')
+  expect(String(((await bash('git commit -m "fix"')) as { deny?: string }).deny)).toContain('the hard stop')
+  expect(await bash('git push')).toHaveProperty('deny')
+  w.seen.prState = 'CLOSED'
+  expect(await bash('git commit -m "rebuild"')).not.toHaveProperty('deny')
+})
+
 // A latched step back counts distinct topics and ends at the third.
 test('a step back counts each topic once and ends at three', () => {
   expect(withTopic([], ' How Others Solve It ')).toEqual(['how others solve it'])
@@ -195,6 +217,9 @@ test('/ci-watch rounds tells the count and when the next step back is due', asyn
   expect(await ask('rounds')).toBe(
     'o/r#7: 7 fix round(s) in a row without every check green; the next step back is due in 1.',
   )
+  seed(seen, reds(10))
+  expect(await ask('rounds')).toContain('that is the hard stop')
+  seed(seen, reds(7))
   expect(await ask('rounds 7')).toContain('o/r#7: 7 fix round(s) in a row')
   expect(await ask('rounds reset 7')).toContain('/ci-watch rounds')
   expect(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'].rounds).toHaveLength(7)

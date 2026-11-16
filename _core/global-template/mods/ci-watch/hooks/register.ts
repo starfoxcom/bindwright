@@ -4,7 +4,8 @@ import type { Watch } from '../types'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  isResearchDue, lookupTopic, redStreak, researchRefusal, researchText, roundsToResearch, SOURCES_NEEDED, withTopic,
+  hardStopRefusal, isHardStop, isResearchDue, lookupTopic, redStreak, researchRefusal, researchText, roundsToResearch,
+  SOURCES_NEEDED, withTopic,
 } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
@@ -280,6 +281,17 @@ async function owedResearch($: EngineInterface): Promise<string | undefined> {
   return undefined
 }
 
+// The refusal for a commit or push while a PR this session watches is still open at the hard stop, or
+// undefined: the rebuild starts once the PR is closed.
+async function owedRebuild($: EngineInterface): Promise<string | undefined> {
+  for (const w of live.watches) {
+    const red = await redRoundsOf($, w)
+    if (!isHardStop(red) || (await isClosed($, w.repo, w.number))) continue
+    return hardStopRefusal(`${w.repo}#${w.number}`, red)
+  }
+  return undefined
+}
+
 // After a `gh pr merge` (`merged`: its PR number, 0 for the branch's PR, so every finished watch is a
 // candidate). A watch is dropped only once GitHub says its PR is merged or closed: `--auto` only queues the
 // merge, and a refused merge leaves the PR open, and either way the watch still has to wake the session.
@@ -316,9 +328,9 @@ async function roundsCommand($: EngineInterface, args: string): Promise<string> 
   if (!pr && number) return repo ? `No PR ${repo}#${number}.` : `No PR #${number} in this folder's repo.`
   if (!pr) return "This folder's branch has no PR."
   const red = await redRoundsOf($, pr)
-  const next = roundsToResearch(red)
-  const count = `${red} fix round(s) in a row without every check green`
-  return `${pr.repo}#${pr.number}: ${count}; the next step back is due in ${next}.`
+  const count = `${pr.repo}#${pr.number}: ${red} fix round(s) in a row without every check green`
+  if (isHardStop(red)) return `${count}; that is the hard stop: close it and rebuild it in a new PR.`
+  return `${count}; the next step back is due in ${roundsToResearch(red)}.`
 }
 
 // A push that moves no commit (tags, "Everything up-to-date") keeps the watch on that head, settled or
@@ -733,7 +745,7 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
-    const refusal = isHeld ? await owedResearch($) : undefined
+    const refusal = isHeld ? (await owedResearch($)) ?? (await owedRebuild($)) : undefined
     if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.

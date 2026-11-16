@@ -3,7 +3,9 @@
 // research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
 // leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
 // also latches it on the watch: the session's edits, commits and pushes wait until three distinct web
-// lookups ran (`withTopic`), so the fix comes after the research. A round is a watch of
+// lookups ran (`withTopic`), so the fix comes after the research. The 10th red round is the hard stop: the
+// PR is closed without merging and rebuilt from its base branch in a new PR, and the session's commits and
+// pushes wait until it is closed. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
@@ -41,14 +43,32 @@ export const isResearchDue = (red: number) => red === 3 || red >= 5
 /** How many more red rounds until the next research step: to 3, then to 5, then the next one. */
 export const roundsToResearch = (red: number) => (red < 3 ? 3 : red < 5 ? 5 : red + 1) - red
 
+/** The red streak that ends a PR: it is closed without merging and rebuilt in a new PR. */
+export const HARD_STOP = 10
+
+export const isHardStop = (red: number) => red >= HARD_STOP
+
+const REBUILD =
+  'close it without merging (`gh pr close` with a comment that says why), then rebuild the change from its ' +
+  "base branch in a new PR, with this round's findings fixed in the rebuild; the new PR starts its own count."
+
 export function researchText(pr: string, red: number): string {
+  const after = isHardStop(red)
+    ? `That is the hard stop: ${REBUILD} Commits and pushes wait until ${pr} is closed.`
+    : `The next step back comes after ${roundsToResearch(red)} more red round(s).`
   return (
     ` ${pr} has had ${red} fix rounds in a row without every check green, both reviews included. Before ` +
     'the next fix, step back: look up at least three different ways the community solves this problem ' +
     '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
     'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
-    'apply it and keep going. The next step back ' +
-    `comes after ${roundsToResearch(red)} more red round(s).`
+    `apply it and keep going. ${after}`
+  )
+}
+
+export function hardStopRefusal(pr: string, red: number): string {
+  return (
+    `${pr} has had ${red} red rounds in a row, the hard stop, so commits and pushes wait until it is ` +
+    `closed: ${REBUILD}`
   )
 }
 
