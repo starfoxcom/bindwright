@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **Installing the tasks mod turns on the task tools it answers.** Claude Code hides its task tools on current models unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set, and the tasks mod answers those tools, so without the setting it did nothing. Installing the mod now sets it, and the mods question says so first. Where an earlier setup installed the mod, `/bindwright:update` names the line to add. Removing the mod leaves it, since it only turns on Claude Code's own task tools.
+
 ## [v5.2.0] — 2026-11-15
 
 ### Added
