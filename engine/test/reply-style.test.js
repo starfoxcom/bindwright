@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,11 +82,40 @@ test("a prompt in any language and files saved with a BOM still get the style", 
 }));
 
 test("a style is named by its name, and by its file only when it has none", { skip }, () => withLayout((layout) => {
+  const styleFile = join(layout.home, ".claude", "output-styles", "plain.md");
   writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "plain" }));
   assert.equal(run(layout, prompt).context, null);
-  writeFileSync(join(layout.home, ".claude", "output-styles", "plain.md"), "---\nname:\ndescription: d\n---\nBody.\n");
+  writeFileSync(styleFile, "---\nname:\ndescription: d\n---\nBody.\n");
   assert.match(run(layout, prompt).context.additionalContext, /Body\.$/);
+  // An empty header, or one closed at the end of the file, is still a header, never the style.
+  writeFileSync(styleFile, "---\n---\nBody.\n");
+  assert.equal(run(layout, prompt).context.additionalContext.split("\n\n").pop(), "Body.");
+  writeFileSync(styleFile, "---\nname: Plain Speech\ndescription: d\n---");
+  assert.equal(run(layout, prompt).context, null);
 }));
+
+test("parallel tool calls bring the style back exactly once in 25", { skip }, async () => {
+  const base = mkdtempSync(join(tmpdir(), "bw-style-"));
+  const home = join(base, "home");
+  mkdirSync(join(home, ".claude", "output-styles"), { recursive: true });
+  writeFileSync(join(home, ".claude", "output-styles", "plain.md"), STYLE);
+  writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Plain Speech" }));
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: base };
+  delete env.CLAUDE_CONFIG_DIR;
+  const call = () => new Promise((done) => {
+    const child = spawn(python, ["-I", hook], { env });
+    let out = "";
+    child.stdout.on("data", (chunk) => { out += chunk; });
+    child.on("close", () => done(out));
+    child.stdin.end(JSON.stringify(toolCall));
+  });
+  try {
+    const outputs = await Promise.all(Array.from({ length: 50 }, call));
+    assert.equal(outputs.filter(Boolean).length, 2);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
 
 test("a subagent's tool calls are not counted", { skip }, () => withLayout((layout) => {
   const subagent = { ...toolCall, agent_id: "a-1" };

@@ -14,15 +14,18 @@ The count of tool calls per session lives in
 ~/.bindwright/reply-style/, outside any `.claude` folder. Every failure prints nothing and exits 0:
 a reminder never blocks a prompt or a tool call.
 """
+import contextlib
 import json
 import os
 import re
 import sys
+import time
 
 TOOL_CALLS_PER_REMINDER = 25
+# Past this, a call goes uncounted rather than hold up the tool call it follows.
+LOCK_WAIT_SECONDS = 5
 # A file-name stem only, so a session id can never leave the counts folder.
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
-FRONT_MATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 INTRO = ("The reply style in use, {name}, restated here so it is the last thing read before the"
          " reply. Every reply follows it:\n\n")
 
@@ -41,7 +44,10 @@ def config_dir():
 
 
 def active_style(project):
-    """The `outputStyle` setting the CLI would use, or None."""
+    """The `outputStyle` from the first of the three settings files that sets one, or None.
+
+    Managed policy settings and a `--settings` file rank above these and are not read.
+    """
     files = [os.path.join(project, ".claude", "settings.local.json"),
              os.path.join(project, ".claude", "settings.json"),
              os.path.join(config_dir(), "settings.json")]
@@ -66,14 +72,32 @@ def style_text(project, wanted):
                     text = fh.read().replace("\r\n", "\n")
             except (OSError, UnicodeDecodeError):
                 continue
-            head = FRONT_MATTER.match(text)
-            found = re.search(r"^name:[ \t]*(\S.*?)[ \t]*$", head.group(1), re.M) if head else None
+            found, body = front_matter(text)
             # Named by its `name`, and by its file only when it has none, as the CLI names it.
-            name = found.group(1).strip("\"'") if found else file_name[:-3]
+            name = found or file_name[:-3]
             if wanted.lower() == name.lower():
-                body = text[head.end():] if head else text
                 return name, body.strip()
     return None
+
+
+def front_matter(text):
+    """(name, body): the front matter's `name:` (None without one) and the text after it.
+
+    Read line by line as `home.py` reads a style's name, so both find the same style.
+    """
+    lines = text.split("\n")
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if lines[0].strip() != "---" or end is None:
+        return None, text
+    for line in lines[1:end]:
+        key, sep, value = line.partition(":")
+        value = value.strip()
+        # YAML may quote the value: one matching pair of quotes is not part of the name.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1].strip()
+        if sep and key.strip() == "name" and value:
+            return value, "\n".join(lines[end + 1:])
+    return None, "\n".join(lines[end + 1:])
 
 
 def due_after_tool_call(session):
@@ -81,15 +105,46 @@ def due_after_tool_call(session):
     if not SESSION_ID.fullmatch(session or ""):
         return False
     folder = os.path.join(os.path.expanduser("~"), ".bindwright", "reply-style")
-    # One byte appended per call: the file's size is the count, so parallel calls never lose one.
+    # One byte appended per call, under the file's lock: its size is the count, and parallel tool
+    # calls, each its own process, take turns, so none is lost or counted twice.
     try:
         os.makedirs(folder, exist_ok=True)
-        with open(os.path.join(folder, session + ".count"), "ab") as fh:
+        with open(os.path.join(folder, session + ".count"), "ab", buffering=0) as fh, locked(fh):
             fh.write(b".")
-            count = fh.tell()
+            count = os.fstat(fh.fileno()).st_size
     except OSError:
         return False
     return count % TOOL_CALLS_PER_REMINDER == 0
+
+
+@contextlib.contextmanager
+def locked(fh):
+    """Hold an exclusive lock on the open file until the block ends; waits for another holder."""
+    if os.name == "nt":
+        import msvcrt
+        fh.seek(0)  # locks the first byte, which may lie past the end of an empty file
+        # LK_LOCK retries only once a second, ten times, so a burst of calls times out: poll instead.
+        deadline = time.monotonic() + LOCK_WAIT_SECONDS
+        while True:
+            try:
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.005)
+        try:
+            yield
+        finally:
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def reset_count(session):
