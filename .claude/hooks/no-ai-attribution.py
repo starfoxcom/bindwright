@@ -39,12 +39,12 @@ What is scanned, for any git write, gh write or GitHub API call:
     denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. A program built
     at run time has every file flag of its command read. A shell's options
-    are never read: each argument of `bash`, `sh`, `zsh` and the like whose
-    text names a write or a hook change, and PowerShell's arguments joined
-    as `-Command` joins them, is parsed and read like the command, in any
-    folder an argument names, up to three shells deep; one built at run
-    time or nested deeper is denied. A shell named at run time (`$SHELL`)
-    is not read.
+    are never read: each argument of `bash`, `sh`, `pwsh` and the like whose
+    text names a write or a hook change is parsed and read like the command,
+    in any folder an argument names, up to three shells deep; one built at
+    run time, a PowerShell command spread over several words, or one nested
+    deeper is denied. A shell named at run time (`$SHELL`), or a word after
+    a git, gh or text tool (`--label bash`), is not read as a shell.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with this guard. A command this hook reads is
@@ -203,8 +203,9 @@ NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Ru
 OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update to update it."
 UNREAD = ("the guard's parser could not read this command (an array built at run time, PowerShell's"
           " `--%`, or syntax it rejects). Write it as plain commands.")
-NESTED_UNREAD = ("a shell here runs a command string (`bash -c`, `pwsh -Command`) built at run time or"
-                 f" nested more than {MAX_NESTED_SHELLS} deep, which the guard cannot read. Run the command directly.")
+NESTED_UNREAD = ("a shell here runs a command string (`bash -c`, `pwsh -Command`) built at run time, spread"
+                 f" over several words or nested more than {MAX_NESTED_SHELLS} deep, which the guard cannot"
+                 " read. Run the command directly, or quote the string as one word.")
 SLOW = (f"the guard's parser did not answer within {PARSE_SECONDS} s, so the command was not read."
         " Run it again once the computer is less busy.")
 BROKEN = ("the guard's parser failed to run, so the command was not read. Run /bindwright:update to"
@@ -363,10 +364,7 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
     changes move only its own group; (None, None, why) when a string cannot be read."""
     placing = list(around) + list(commands)
     groups, assignments = [(commands, placing, shell)], list(assignments)
-    # A word of a git, gh or text tool command is its data, never a shell it runs.
-    shells = (shell_strings(w[i:]) for w in commands if program(w) not in {"git", "gh"} | TEXT_TOOLS
-              for i in range(len(w)))
-    for inner_shell, strings, args in filter(None, shells):
+    for inner_shell, strings, args in filter(None, (shell_strings(w[i:]) for w in commands for i in shell_places(w))):
         # A shell's options are never read: any argument that names a folder may be where it runs.
         places = folder_places(placing, cwd) or [cwd]
         folders = [["cd", os.path.join(place, w)] for place in places for w in args
@@ -386,18 +384,23 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
 
 def shell_strings(words):
     """(parser shell, the command strings it may run, its arguments) for a shell program: each
-    argument whose text names a route, a dict when built at run time; for PowerShell, one
-    string of its arguments joined, as `-Command` joins them, then each such argument on a line
-    of its own, so a string's first statement keeps its place. None for any other program."""
+    argument whose text names a route, a dict when built at run time. PowerShell joins the
+    words after `-Command` into one string; a route only that join names is a dict too, since
+    the guard does not join them. None for any other program."""
     name, args = program(words), words[1:]
     if name not in POSIX_SHELLS and name not in ("pwsh", "powershell"):
         return None
-    lines = ["shell-arguments " + " ".join(map(text_of, args))] + [
-        w for w in args if isinstance(w, str) and names_route(w)]
-    candidates = args if name in POSIX_SHELLS else [
-        "\n".join(lines) if all(isinstance(w, str) for w in args) else {"dynamic": lines[0]}]
-    return ("bash" if name in POSIX_SHELLS else "powershell",
-            [w for w in candidates if names_route(text_of(w))], args)
+    strings, joined = [w for w in args if names_route(text_of(w))], " ".join(map(text_of, args))
+    if not strings and name not in POSIX_SHELLS and names_route(joined):
+        strings = [{"dynamic": joined}]
+    return ("bash" if name in POSIX_SHELLS else "powershell", strings, args)
+
+
+def shell_places(words):
+    """Where a shell may start in a command: any word before its first git, gh or text tool,
+    whose later words are that program's data (`gh issue create --label bash`)."""
+    data = [i for i in range(len(words)) if program(words[i:]) in {"git", "gh"} | TEXT_TOOLS]
+    return range(data[0] if data else len(words))
 
 
 def names_route(text):
@@ -943,8 +946,9 @@ def main():
         cwd = os.getcwd()
     joined = CONTINUED_LINE.sub(r"\1", cmd)
     # Joining lines can also hide a match, and so can quotes inside a word (`com'mit'`,
-    # `LEFT"HOOK"=0`), so the command is checked as written, joined and without its quotes.
-    texts = (cmd, joined, re.sub(r"[\"'`]", "", joined))
+    # `LEFT"HOOK"=0`) or escapes (`g\it`), so the command is checked as written, joined and
+    # without them.
+    texts = (cmd, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
     named = writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"

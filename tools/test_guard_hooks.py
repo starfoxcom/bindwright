@@ -640,7 +640,8 @@ class GuardHookTest(unittest.TestCase):
                 ("bash --norc -o pipefail -c -- 'git -c core.hooksPath=x commit -m x'", "Bash", "core.hooksPath"),
                 ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
                 ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
-                ("pwsh -NoProfile -Command git commit -C HEAD", "PowerShell", "reusing"),
+                ("pwsh -NoProfile -Command git commit -C HEAD", "PowerShell", "spread over several words"),
+                ('bash -c "g\\it commit --no-verify $FLAGS"', "Bash", "built at run time"),
                 ('powershell "git commit --no-verify -m x"', "PowerShell", "--no-verify"),
                 ("pwsh -c 'git commit -F msg.txt'", "Bash", "found in file"),
                 ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),
@@ -652,6 +653,8 @@ class GuardHookTest(unittest.TestCase):
                 ("bash ./build.sh; git commit -m x", "Bash"), ("pwsh ./x.ps1; git commit -m x", "PowerShell"),
                 ("pwsh ./build.ps1 -c $cfg; git commit -m x", "Bash"),
                 ('gh issue create --label bash --body "git push fails on $BRANCH"', "Bash"),
+                ('sudo gh issue create --label bash --body "use git commit --no-verify to skip"', "Bash"),
+                ("pwsh -c 'Remove-Item tmp -Force; git commit -m x'", "Bash"),
                 # A child shell's `cd` never moves the commands around it.
                 ("sh -c 'cd /no/such/folder && true' && git commit -F clean.txt", "Bash"),
                 ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell")),
