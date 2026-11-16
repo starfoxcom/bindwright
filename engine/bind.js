@@ -88,6 +88,8 @@ function included(path, a, flags) {
     ".claude/hooks/run-hook.sh": flags.guard_hooks_repo,
     ".claude/hooks/push-guard.py": flags.guard_hooks_repo,
     ".claude/hooks/no-ai-attribution.py": flags.guard_hooks_repo && flags.attribution_guard,
+    ".github/scripts/version_check.py": flags.version_check,
+    ".claude/hooks/version-check.py": flags.guard_hooks_repo && flags.version_check,
     ".gitattributes": flags.guard_hooks_repo,
   };
   return path in byFile ? byFile[path] : true;

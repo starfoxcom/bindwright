@@ -157,6 +157,26 @@ For a team project on GitHub, ask one more:
 
 - **Do pull requests need named reviewers?** No (recommended when nothing on GitHub asks for one), or yes: ask for each reviewer's GitHub name, or `<org>/<team>` for a team, up to 10, and save them as `"prReviewers": ["<name>", ...]`. Setup then has each PR request those reviewers and merge only once GitHub reports it approved. No saves `"prReviewers": null`.
 
+### How releases are numbered
+
+First find the numbering the project already uses: its tags (`git tag --list`), a `VERSION` file, and the version its manifest carries (`package.json`, `pyproject.toml`, `Cargo.toml`, `pubspec.yaml`, `*.csproj`, Godot's `project.godot`, Unity's `ProjectSettings/ProjectSettings.asset` `bundleVersion`, and the like). Versions such as `1.4.2`, `v0.3.0` or `1.0.0-beta.2` are semantic versions; ones that start with a year, such as `2026.11.0` or `24.04`, are calendar versions, whose format is the calver.org tokens they fit (`YYYY`, `YY`, `0Y`, `MM`, `0M`, `WW`, `0W`, `DD`, `0D`, `MINOR`, `MICRO`, joined by dots, such as `YYYY.MM.MICRO`).
+
+**When it uses one,** say what was found in one line (such as "tags v0.3.0 to v1.2.0-beta.1: semantic versions"), then ask:
+
+- **Enforce it with the version check?** Yes (recommended): save `"versioning": "semver"`, or `"calver"` with the format as `"versionFormat"`. No: `"versioning": "none"`, and the project keeps numbering by hand.
+
+**When it uses none,** recommend one by what the project is, since some fit a kind of project better than others, and ask:
+
+- **How should this project number its releases?**
+  - Semantic versions, `MAJOR.MINOR.PATCH`: for anything other code builds on (a library, a package, an API, a plugin or a mod), whose version tells users whether an update breaks them. Also for a desktop or mobile app sold in stores.
+  - Semantic versions with pre-release stages: for a game, or any product that goes through testing phases before launch. It counts `0.x` releases during development, with `-alpha.N`, `-beta.N` and `-rc.N` builds toward each version (`1.0.0-alpha.1`, `1.0.0-beta.3`, `1.0.0-rc.1`, then `1.0.0` at launch), then minors for content updates, patches for fixes and a major when old saves or mods stop working. It saves `"semver"` too: the check orders alpha before beta before rc before the release.
+  - Calendar versions, such as `YYYY.MM.MICRO`: for an app, a website or a service shipped on a schedule, where users care when a release came out more than what it breaks. Ask the format, recommending `YYYY.MM.MICRO`.
+  - None: for docs, configuration, personal scripts or anything that is never released.
+
+  Save `"versioning"` as `"semver"`, `"calver"` (with `"versionFormat"`) or `"none"`.
+
+With either numbering, say in one line what it adds: `.github/scripts/version_check.py` and, with the guard hooks in the repo, a hook that runs it before `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch. It blocks a release smaller than its commits need: for semantic versions a `feat` commit needs a minor, a `fix` a patch, and a `!` or a `BREAKING CHANGE:` line a major, read from the commit format `git.md` asks for, measured from the last release without a pre-release tag, and a release's changelog section must match; for calendar versions only the format and that the version comes after the last one. The hook reads commands with the shell parser in Bindwright's helper, so the check needs the helper and Node 18 or later on every computer that commits to the repo: without them, each command that may make a release is blocked with what to install. Say so when asking.
+
 ### Where the work state lives
 
 GitHub works here when the repo's remote is on GitHub and `gh auth status` works. When it does not, say why in one line and use the detailed hand-off file (`"tracker": "file"`). Otherwise ask the question below; with `"githubApps": false`, offer only its "GitHub issues only" and hand-off file choices, and skip the board:
