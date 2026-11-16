@@ -611,6 +611,17 @@ class GuardHookTest(unittest.TestCase):
                                      "-UserAgent git -inFile msg.txt", tool="PowerShell", project=root),
                            f"found in file {path}")
 
+    def test_a_cd_run_again_moves_on_from_its_last_folder(self):
+        # A loop or a function runs a `cd` again from the folder its last run reached.
+        nested = self.project_with({"msg.txt": "x\n", "sub/msg.txt": "x\n", "a/msg.txt": "x\n",
+                                    "sub/sub/msg.txt": f"{GENERATED_LINE}\n", "a/b/msg.txt": f"{GENERATED_LINE}\n"})
+        for (command, folder), result in self.each((
+                ("for i in 1 2; do cd sub; done; git commit -F msg.txt", "sub/sub"),
+                ("f() { cd b; }; cd a; f; git commit -F msg.txt", "a/b")),
+                        lambda command, folder: self.attr(command, project=nested)):
+            with self.subTest(command=command):
+                self.assert_denied(result, f"found in file {os.path.realpath(os.path.join(nested, folder, 'msg.txt'))}")
+
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
         # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy. A `cd` in a
         # child shell, or one that fails, leaves git in the first folder, so it is read there too.
