@@ -6,9 +6,24 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v5.2.0] — 2026-11-15
+
+### Added
+
+- **`/bindwright:update` offers to move an old hand-off file into issues.** In a project whose work state lives in GitHub issues, an update that finds an old `*-CONTEXT_*.md` hand-off file at the repo root says `/start-session` no longer reads it, offers to turn its open items (and any in a `ROADMAP.md`) into issues one at a time, as setup does, then offers to delete the hand-off file. Until now only running setup again offered this.
+
+### Changed
+
+- **The reply style sounds more like a person.** Straight Talk now asks for varied sentences and a colleague's reactions instead of the same report skeleton every reply, and matches the user's register down to swearing: an occasional one where a person would use it, only when the user swears too, never at anyone. It also writes for a reader who loses the thread easily, since that reads well for everyone, and bans bold labels in ordinary explanations. A copy already installed stays as it is, since it may hold your own edits: to take the new text, copy `_core/global-template/output-styles/straight-talk.md` from the Bindwright repository over `~/.claude/output-styles/straight-talk.md`, then start a new session.
+- **The find skill names FindWright's fit.** From FindWright 2.0.0 a project's symbols come only from the rules in `.findwright/config.json`, so `/find` says to run `/findwright:fit` when `coverage` shows files the work searches with no symbol.
+- **Mod rows stack in one fixed order.** Setup lists the mods in the order their rows should stack above the prompt, whatever order they are picked in: the PC queue on top, then runners, the usage pause, CI, tasks, the session row, and the budgets row last, right above the prompt, since it is read most. A mod of your own keeps its place. An existing list is not reordered: to get the order, list the folders in `env.CLAUDE_CODE_PLUGIN_DIRS` of `~/.claude/settings.json` as `shared-pc`, `runners`, `usage-guard`, `ci-watch`, `tasks`, `session-info`, `session-facts`, `compact-handoff`, `skill-check`, `mods`, then restart Claude Code.
+
 ### Fixed
 
-- **CI reviews can run plain git reads again.** The review jobs load the project's hooks, and since v5.0.0 the attribution guard refuses every command its text names when it has no parser, so reviewers lost reads such as `git log --grep=merge` and `git tag`. Both review workflows now install the helper release pinned in `.bindwright/helper.json` on the PR's base, checked against its SHA-256, so the guard reads commands there as it does on your computer. Without a pin on the base, the reviews run as before.
+- **Near the compaction, a session with nothing on its task list lists its next steps instead of stopping.** The tasks mod refuses a turn's end near the compaction only while a task on the list needs no one; with an empty list it sends one prompt to carry on, and a turn that ended again after it sat idle. That prompt now asks the session to put each step it announced on the task list and start the first, so the refusal and the keep-going prompts hold the turn open until they are done.
+- **A review gate waiting for a deep review says how to restart one.** Since v5.1.0 the `Review gate` check stays in progress while the deep review a blocked routine review asked for runs. When that deep run never starts or dies before writing its verdict (its access check fails, its runner is lost), nothing settles the check. Each waiting state's summary now ends with the way out: if no deep run is alive, ask again with a comment starting with `@claude review this PR`.
+- **The attribution guard refuses a malformed parser reply instead of crashing.** A reply whose run-time words lacked the field saying whether they can expand to nothing, whose commands were not lists, or whose words were neither text nor a run-time word made the guard fail on the git call it read, and a crashed hook lets the call through. Such a reply now refuses the call: as a helper older than the guard when a run-time word lacks a field, as a broken helper otherwise.
+- **CI reviews can run plain git reads again.** The review jobs load the project's hooks, and since v5.0.0 the attribution guard refuses every command its text names when it has no parser, so reviewers lost reads such as `git log --grep=merge` and `git tag`. Both review workflows now install the helper release pinned in `.bindwright/helper.json` on the PR's base, checked against its SHA-256, so the guard reads commands there as it does on your computer. Setup and `/bindwright:update` write that pin; without one on the base, the reviews run as before.
 
 ## [v5.1.0] — 2026-11-14
 

@@ -195,6 +195,7 @@ test('near the compaction a turn end with no workable task gets one prompt to ca
   await turnEnds($, clock)
   expect(seen.prompts).toHaveLength(1)
   expect(seen.prompts[0]).toContain('ended near the compaction')
+  expect(seen.prompts[0]).toContain('put each such step on the task list')
 })
 
 // Near the compaction, with a task that needs no one, the turn's end itself is refused once; far from it,

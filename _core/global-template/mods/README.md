@@ -75,12 +75,14 @@ Options are `userConfig` fields in each mod's `.claude-plugin/plugin.json`: thos
    ```json
    {
      "env": {
-       "CLAUDE_CODE_PLUGIN_DIRS": "C:/Users/<you>/.claude/mods/session-facts;C:/Users/<you>/.claude/mods/ci-watch"
+       "CLAUDE_CODE_PLUGIN_DIRS": "C:/Users/<you>/.claude/mods/ci-watch;C:/Users/<you>/.claude/mods/session-facts"
      }
    }
    ```
 
-   On Windows the separator is `;` (verified). On macOS and Linux it is `:` (`~/.claude/mods/session-facts:~/.claude/mods/ci-watch`), per the CLI's plugin reference; not yet verified on those systems.
+   On Windows the separator is `;` (verified). On macOS and Linux it is `:` (`~/.claude/mods/ci-watch:~/.claude/mods/session-facts`), per the CLI's plugin reference; not yet verified on those systems.
+
+   The CLI draws the rows above the prompt top-down in this list's order, so list the most-read rows last, nearest the prompt: `shared-pc`, `runners`, `usage-guard`, `ci-watch`, `tasks`, `session-info`, `session-facts`, then the mods with no row (`compact-handoff`, `skill-check`, `mods`). `/bindwright:setup` lists them in this order whatever order you pick them in.
 3. **Fully restart** Claude Code. The variable is read at start, so a new entry needs a restart. Editing a mod that is already loaded reloads it in running terminal sessions when one of its files is saved.
 4. **Desktop app:** it reads the same `~/.claude/settings.json` and its `env` block, so steps 1 to 3 cover it. Keep the variables in that file: on Windows the app also inherits user and system environment variables but never reads a PowerShell profile. The mods run only in **local** Desktop sessions; plugins are not loaded in WSL or cloud sessions. Desktop sessions are not interactive terminal sessions, and the CLI watches mod folders by default only in those, so in Desktop an edited mod loads at the next session start. To reload on save there too, add `"CLAUDE_CODE_PLUGIN_DIR_WATCH": "1"` to the same `env` block; it is optional and only matters while you edit mods. An older Desktop build that places no panes leaves the `tasks` list pane unopened; its band still draws.
 5. Optional: copy `skill-check/skill-contracts.example.json` to `~/.claude/skill-contracts.json`.

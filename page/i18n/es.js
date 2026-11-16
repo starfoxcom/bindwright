@@ -70,18 +70,18 @@ export default {
   "view.terminal": "Terminal",
   "install.plugin.title": "En tu computadora, una vez",
   "install.plugin.text": "Agrega los comandos /bindwright a todos tus proyectos, listos en esta "
-    + "sesión. No necesita Git.",
+    + "sesión.",
   "install.setup.title": "En cada proyecto",
   "install.setup.text": "Abre Claude Code en la carpeta del proyecto y ejecuta la configuración. "
     + "Hace unas preguntas y no cambia nada sin tu sí.",
   "install.desktop.open.title": "Abre tu proyecto",
   "install.desktop.open.text": "En la pestaña Code, inicia una sesión nueva en la carpeta de tu proyecto.",
   "install.desktop.install.title": "Instala Bindwright",
-  "install.desktop.install.text": "Pega esto y envíalo, y espera a que Claude diga que terminó. No necesita Git.",
+  "install.desktop.install.text": "Pega esto y envíalo, y espera a que Claude diga que terminó.",
   "install.desktop.prompt": "Instálame el plugin Bindwright: ejecuta claude plugin install bindwright --marketplace "
-    + "https://starfoxcom.github.io/bindwright/.claude-plugin/marketplace.json en la terminal. Si no "
-    + "encuentra claude, agrega ese marketplace (llamado bindwright, con origen url) en "
-    + "extraKnownMarketplaces y \"bindwright@bindwright\": true en enabledPlugins de "
+    + "starfoxcom/wrights en la terminal. Si no "
+    + "encuentra claude, agrega el marketplace llamado wrights (con origen github, repo starfoxcom/wrights) en "
+    + "extraKnownMarketplaces y \"bindwright@wrights\": true en enabledPlugins de "
     + "~/.claude/settings.json, sin tocar lo demás.",
   "install.desktop.setup.title": "Ejecuta la configuración",
   "install.desktop.setup.text": "Inicia otra sesión nueva en la misma carpeta, para que cargue el "

@@ -326,9 +326,13 @@ def parse(cmd, shell, cwd):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
         return None, None, NO_NODE if node_too_old(node) else BROKEN
+    if not all(isinstance(command, list) for command in data["commands"]):
+        return None, None, BROKEN
     words = [word for command in data["commands"] for word in command]
+    if not all(isinstance(word, (str, dict)) for word in words):
+        return None, None, BROKEN
     if not isinstance(data.get("assignments"), list) or any(
-            isinstance(word, dict) and "shape" not in word for word in words):
+            isinstance(word, dict) and not {"shape", "canBeEmpty"} <= word.keys() for word in words):
         return None, None, OLD_HELPER
     if data.get("error"):
         return None, None, UNREAD
