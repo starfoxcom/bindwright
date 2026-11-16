@@ -14,8 +14,9 @@ semver reads the commits as Conventional Commits: a `<type>!:` header or a
 `BREAKING CHANGE:` body line needs a major, `feat` a minor, `fix` and `perf` a
 patch. Before 1.0.0 a major counts as a minor and a minor as a patch. The
 release's section in the changelog (Keep a Changelog, `## [vNEW]` or `## [NEW]`)
-must hold the headings its size needs. The changelog is CHANGELOG.md when that
-file exists, and is not checked when it does not.
+must hold the headings its size needs. The changelog is CHANGELOG.md in the repo's
+top folder when that file exists, and is not checked when it does not. The check runs
+from the top folder, so it works from any folder inside the repo.
 
 semver orders versions as SemVer 2.0.0 does: a pre-release (`1.3.0-beta.1`) sorts after the
 release before it and before its own release, and build metadata (`+build.5`) is ignored.
@@ -105,14 +106,25 @@ def git(*args):
     return done.stdout
 
 
+def move_to_root(args):
+    """Runs the check from the repo's top folder, so its files (the saved answers, the
+    changelog) are found from any folder inside it. A given --changelog keeps meaning the
+    file it names. A bare repo has no top folder and no such files, so it stays put."""
+    if args.changelog is not None:
+        args.changelog = os.path.abspath(args.changelog)
+    done = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", check=False)
+    if done.returncode == 0 and done.stdout.strip():
+        os.chdir(done.stdout.strip())
+
+
 def use_saved_answers(args):
     """Fills --scheme, and --format for calver, from the project's saved answers."""
     if args.scheme is not None:
         return
     args.scheme = "semver"
-    root = git("rev-parse", "--show-toplevel").strip()
     try:
-        with open(os.path.join(root, ".bindwright", "project.json"), encoding="utf-8") as fh:
+        with open(os.path.join(".bindwright", "project.json"), encoding="utf-8") as fh:
             advanced = json.load(fh).get("advanced")
     except (OSError, ValueError, AttributeError):
         return
@@ -315,6 +327,7 @@ def report(reasons):
 
 
 def check(args):
+    move_to_root(args)
     use_saved_answers(args)
     tokens = calver_tokens(args)
     new = parse(strip_v(args.version), args.scheme, tokens)

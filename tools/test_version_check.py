@@ -198,6 +198,23 @@ class SemverRules(unittest.TestCase):
             self.assertEqual(code, 2, out)
             self.assertIn("feat: caf\ufffd", out)
 
+    def test_a_subfolder_reads_the_root_changelog(self):
+        with make_repo("v5.2.1", ["fix: keep the queue"], "## [v5.2.1]\n") as repo:
+            subfolder = os.path.join(repo, "src")
+            os.makedirs(subfolder)
+            code, out = check(subfolder, "v5.2.2")
+            self.assertEqual(code, 2, out)
+            self.assertIn("no section for 5.2.2", out)
+
+    def test_a_bare_repo_is_checked_as_semver(self):
+        with make_repo("v5.2.1", ["feat: add a flag"]) as repo, \
+                tempfile.TemporaryDirectory() as bare:
+            subprocess.run(QUIET_GIT + ["clone", "-q", "--bare", repo, bare],
+                           check=True, capture_output=True)
+            code, out = check(bare, "v5.2.2", "--ref", "main")
+            self.assertEqual(code, 2, out)
+            self.assertIn("need a minor", out)
+
     def test_a_shallow_clone_is_exit_1(self):
         with make_repo("v5.2.1", ["feat: add a flag"]) as repo,                 tempfile.TemporaryDirectory() as clone:
             subprocess.run(QUIET_GIT + ["clone", "-q", "--depth", "1", pathlib.Path(repo).as_uri(), clone],
