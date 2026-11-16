@@ -22,10 +22,12 @@ import {
   setProject,
   setShare,
   statusOf,
+  DROP_LABELS,
 } from "../../helper/hooks/counts.mjs";
 import {
   KINDS as COUNTER_KINDS,
   MAX_ROUNDS_PER_SEND,
+  checkSend,
   STALL_ROUNDS as COUNTER_STALL_ROUNDS,
 } from "../../counter/src/rules.js";
 
@@ -55,17 +57,31 @@ const ghTime = (date) => date.toISOString().replace(".000Z", "Z");
 const after = (date, milliseconds) => new Date(date.getTime() + milliseconds).toISOString();
 
 // A merged PR of the author as gh lists it, created and merged at noon of day 2 unless told.
-const pr = (comments = [], labels = [], { number = 1, mergedAt = noon(2) } = {}) => ({
+const pr = (comments = [], labels = [], { number = 1, mergedAt = noon(2), body = "" } = {}) => ({
   number,
   createdAt: ghTime(mergedAt),
   mergedAt: ghTime(mergedAt),
   labels: labels.map((name) => ({ name })),
   comments,
+  body,
 });
+// A PR of the author closed unmerged at noon of day 2 unless told, with the given labels.
+const closedPr = (labels, { number = 90, closedAt = noon(2) } = {}) => ({
+  number,
+  createdAt: ghTime(closedAt),
+  closedAt: ghTime(closedAt),
+  mergedAt: null,
+  labels: labels.map((name) => ({ name })),
+  comments: [],
+});
+const REBUILD = { body: "Resolves #12\nRebuilds #931\n\n## What" };
 const GREEN_PR = pr([green]);
 
 // The counts of one PR set: merged is 1 and every other count 0 unless told otherwise.
-const counted = (fields) => ({ checked: 0, caught: 0, deep: 0, merged: 1, stalled: 0, rounds: 0, ...fields });
+const counted = (fields) => ({
+  checked: 0, caught: 0, deep: 0, merged: 1, stalled: 0, rounds: 0,
+  rebuilt: 0, rebuiltCaught: 0, rebuiltStalled: 0, ...fields,
+});
 const reds = (count) => Array.from({ length: count }, () => red);
 // The deep tier's job summary opens with its own heading, then its verdict line.
 const deepSummary = (verdictLine) => comment(`**Claude finished the deep review**\n\n${verdictLine}`);
@@ -127,6 +143,15 @@ const countRows = [
   ["red rounds add up across PRs",
     [pr([red, green], [], { number: 1 }), pr([...reds(2), green], [], { number: 2 })],
     counted({ checked: 2, caught: 2, merged: 2, rounds: 3 })],
+  ["a rebuild merged first try is rebuilt only", [pr([green], [], REBUILD)],
+    counted({ checked: 1, rebuilt: 1 })],
+  ["a rebuild held back once is rebuilt and rebuiltCaught", [pr([red, green], [], REBUILD)],
+    counted({ checked: 1, caught: 1, rounds: 1, rebuilt: 1, rebuiltCaught: 1 })],
+  ["a rebuild that stalled again counts in all three", [pr([...reds(3), green], [], REBUILD)],
+    counted({ checked: 1, caught: 1, stalled: 1, rounds: 3, rebuilt: 1, rebuiltCaught: 1, rebuiltStalled: 1 })],
+  ["a rebuild with no review is no rebuild", [pr([], [], REBUILD)], counted({})],
+  ["a rebuild named mid-sentence is no rebuild", [pr([green], [], { body: "This rebuilds #931" })],
+    counted({ checked: 1 })],
   ["each count caps at the batch size of 500", Array.from({ length: 501 }, () => pr([green], [DEEP])),
     counted({ checked: 500, deep: 500, merged: 500 })],
   ["rounds cap at 25000, the most one send carries",
@@ -212,19 +237,24 @@ function answerGh(prs, args) {
   const search = args[args.indexOf("--search") + 1];
   const fields = args[args.indexOf("--json") + 1].split(",");
   const direction = search.includes("sort:created-asc") ? 1 : -1;
+  const isClosedList = args.includes("closed");
+  const label = /label:"([^"]+)"/.exec(search)?.[1];
+  const matches = (item) => (isClosedList
+    ? !item.mergedAt && item.labels.some((l) => l.name === label) && inQualifier(item.closedAt, search, "closed")
+    : Boolean(item.mergedAt) && inQualifier(item.mergedAt, search, "merged"));
   return prs
-    .filter((item) => inMergedQualifier(item.mergedAt, search))
+    .filter(matches)
     .sort((a, b) => direction * (Date.parse(a.createdAt) - Date.parse(b.createdAt)))
     .slice(0, GH_LIMIT)
     .map((item) => Object.fromEntries(fields.map((field) => [field, item[field]])));
 }
 
-// Whether a merge time matches the `merged:` qualifier: `>=X`, or the inclusive range `A..B`.
-function inMergedQualifier(mergedAt, search) {
-  const at = Date.parse(mergedAt);
-  const from = /merged:>=(\S+)/.exec(search);
+// Whether a time matches the `merged:` or `closed:` qualifier: `>=X`, or the inclusive range `A..B`.
+function inQualifier(time, search, name) {
+  const at = Date.parse(time);
+  const from = new RegExp(`${name}:>=(\\S+)`).exec(search);
   if (from) return at >= Date.parse(from[1]);
-  const [, start, end] = /merged:(\S+?)\.\.(\S+)/.exec(search);
+  const [, start, end] = new RegExp(`${name}:(\\S+?)\\.\\.(\\S+)`).exec(search);
   return at >= Date.parse(start) && at <= Date.parse(end);
 }
 
@@ -317,13 +347,32 @@ test("an accepted send moves since forward and waits 24 hours", () => inScene(as
   assert.deepEqual(counter.posts, [{
     url: SEND_URL,
     body: {
-      project: ID, kind: "game", checked: 1, caught: 0, deep: 0, merged: 1,
-      stalled: 0, rounds: 0, from: noon(1).getTime(), to: when.getTime(),
+      project: ID, kind: "game", ...counted({ checked: 1 }), dropped: 0, retired: 0,
+      from: noon(1).getTime(), to: when.getTime(),
     },
   }]);
   assert.deepEqual(projectOf(s), projectEntry({
     since: when.toISOString(), nextSendAt: after(when, DAY), lastSendDay: null,
   }));
+}));
+
+// Only PRs closed unmerged inside the send's window count, each by the label that says why.
+test("a send carries the PRs dropped in its window, by their label", () => inScene(async (s) => {
+  seedState(s);
+  const gh = fakeGh([
+    GREEN_PR,
+    closedPr([DROP_LABELS.dropped]),
+    closedPr([DROP_LABELS.retired], { number: 91 }),
+    closedPr([DROP_LABELS.retired], { number: 92 }),
+    closedPr([], { number: 93 }),
+    closedPr([DROP_LABELS.dropped], { number: 94, closedAt: new Date(noon(1).getTime() - DAY) }),
+  ]);
+  const counter = fakeCounter(OK);
+  await sendAt(s, noon(3), gh, counter);
+  const { dropped, retired } = counter.posts[0].body;
+  assert.deepEqual({ dropped, retired }, { dropped: 1, retired: 2 });
+  // The counter in this repo takes what the helper sends, key for key.
+  assert.deepEqual(checkSend(counter.posts[0].body).ok, true, checkSend(counter.posts[0].body).reason);
 }));
 
 test("a send the counter already counted keeps since and waits 24 hours", () => inScene(async (s) => {
@@ -515,8 +564,8 @@ test("a history of one batch goes out in one send, from GitHub's first day to no
   assert.deepEqual(counter.posts, [{
     url: SEND_URL,
     body: {
-      project: projectOf(s).id, kind: "game", checked: CAP, caught: 0, deep: 0, merged: CAP,
-      stalled: 0, rounds: 0, from: Date.parse(HISTORY_START), to: noon(3).getTime(),
+      project: projectOf(s).id, kind: "game", ...counted({ checked: CAP, merged: CAP }), dropped: 0,
+      retired: 0, from: Date.parse(HISTORY_START), to: noon(3).getTime(),
     },
   }]);
 }));
