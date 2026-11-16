@@ -1,8 +1,7 @@
 // The evidence section's project bars: one row per project, its bar as wide as its
 // merged and dropped pull requests against the largest, split into the ones that skipped
 // the review, how many review rounds the rest took, the rebuilds of PRs closed at the hard
-// stop, and the PRs dropped with no fix or no reason left to exist. The white outline is
-// the merged total.
+// stop, and the PRs dropped with no fix or no reason left to exist.
 // The share that passed first try is rounded, so it can read 100% with a stalled one left.
 import { t } from "./i18n/index.js";
 

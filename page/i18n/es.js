@@ -210,6 +210,10 @@ export default {
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
   "evidence.fixed.label": "se detuvieron 1 o 2 rondas hasta corregir el problema",
   "evidence.stalled.label": "tomaron 3 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
+  "evidence.rebuilt.label": "se reconstruyeron desde cero tras 10 rondas en rojo y pasaron sin otra investigación",
+  "evidence.rebuiltStalled.label": "se reconstruyeron, necesitaron investigar de nuevo y aun así se integraron",
+  "evidence.dropped.label": "se descartaron porque no se encontró arreglo",
+  "evidence.retired.label": "se descartaron porque ya no hacían falta",
   "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión "
     + "y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",

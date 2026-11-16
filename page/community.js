@@ -59,12 +59,18 @@ async function load() {
   const total = validated(await response.json());
   if (!total || total.projects === 0 || total.top.length === 0) return null;
   const { projects, checked, caught, deep, merged, stalled, rounds } = total;
-  return { projects, checked, caught, deep, merged, stalled, rounds, rows: labelled(total.top) };
+  const outcomes = withOutcomes(total);
+  if (!isConsistent(outcomes)) return null;
+  const { rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired } = outcomes;
+  return {
+    projects, checked, caught, deep, merged, stalled, rounds, rebuilt, rebuiltCaught, rebuiltStalled,
+    dropped, retired, rows: labelled(total.top),
+  };
 }
 
 /**
- * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled,
- * rounds, rows }`, or null. Each row is `{ label, merged, checked, caught, stalled, rebuilt,
+ * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled, rounds,
+ * rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired, rows }`, or null. Each row is `{ label, merged, checked, caught, stalled, rebuilt,
  * rebuiltCaught, rebuiltStalled, dropped, retired }`, for bars.js.
  */
 export const shared = load().catch(() => null);

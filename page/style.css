@@ -162,7 +162,6 @@ h1 {
 /* Each row starts 80 ms after the one above it (--row is its index) and takes 900 ms. */
 .project-bar {
   display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--key);
-  box-shadow: 0 0 0 1px var(--text);
   transform: scaleX(0); transform-origin: left;
   transition: transform 900ms ease-out calc(var(--row) * 80ms);
 }

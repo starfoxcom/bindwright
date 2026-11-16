@@ -212,6 +212,22 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <span class="stat-num stat-orange" data-total="stalled" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.stalled.label">took 3 rounds or more, where the session stops to research a simpler fix</p>
       </div>
+      <div class="stat">
+        <span class="stat-num stat-purple" data-total="rebuilt" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.rebuilt.label">were rebuilt from scratch after 10 red rounds, then passed without another research step</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-indigo" data-total="rebuiltStalled" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.rebuiltStalled.label">were rebuilt, needed research again, and still merged</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="dropped" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.dropped.label">were dropped because no fix was found</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-gray" data-total="retired" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.retired.label">were dropped because they were no longer needed</p>
+      </div>
     </div>
     <p class="evidence-detail" id="evidence-detail"></p>
     <p class="chart-title" data-t="evidence.chart">Each project: pull requests merged, the ones that skipped the review, and how many rounds each took to pass</p>

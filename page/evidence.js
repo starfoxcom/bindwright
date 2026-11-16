@@ -51,16 +51,11 @@ export function onEnter(node, start) {
   observer.observe(node);
 }
 
-// The five big numbers: merged, then the parts that add up to it: skipped the review,
-// passed first try, fixed in a few rounds and stalled.
+// The big numbers: merged, then each part of the bars, counted the same way (bars.js).
+const TOTAL_NAMES = ["skipped", "firstTry", "fixed", "stalled", "rebuilt", "rebuiltStalled", "dropped", "retired"];
 function totalsOf(total) {
-  return {
-    merged: total.merged,
-    skipped: total.merged - total.checked,
-    firstTry: total.checked - total.caught,
-    fixed: total.caught - total.stalled,
-    stalled: total.stalled,
-  };
+  const parts = PARTS.map((part, index) => [TOTAL_NAMES[index], part.count(total)]);
+  return { merged: total.merged, ...Object.fromEntries(parts) };
 }
 
 function show(total) {
