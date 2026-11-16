@@ -31,6 +31,15 @@ AI_TRAILER = "Co-" + "Authored-By: Cla" + "ude <noreply@anthro" + "pic.com>"
 HUMAN_TRAILER = "Co-" + "Authored-By: Jane Doe <12345+jane@users.noreply.github.com>"
 GENERATED_LINE = "Gener" + "ated with [Cla" + "ude Code](https://cla" + "ude.com/claude-code)"
 SESSION_LINK = "https://cla" + "ude.ai/code/session_" + "01V8SAUxUZBbVPekZUHDL9FZ"
+# Brace forms checked against real bash: lists, ranges, steps, padding, escapes, quotes, nesting,
+# empties, dots in a list, and the forms that must get no reading (a `$`, a range across cases).
+BRACE_ROWS = (
+    "{{a,b}", "{a,b}}", r"\{a,b}", r"{a\,b}", '{a","b}', '{a,b"}"}', "{a..3}", "{1..10..0}", "{01..03}",
+    "{a..e..2}", "{1..5..-2}", "{5..1}", "{a,{b,c}d}", "{,}", "{a,}{b,}", "-{F,}m.txt", "{-03..2}",
+    r"{a,b\}}", '{"a,b"}', "{a..c}{1..2}", 'a{b,c}"d"', "{1..3..2}", "{z..x}", "{A..c}", "'{a,b}'",
+    r"{a,b}\ ", "{,a}", "{}", "{a}", "{1..}", "{a,b}{}", "{$,x}HOME", r"{\$,x}H", "{O..a..12}-]n",
+    "-{V..a..6}-x", "{a..c}{X..Z}", "{1..a}", "{-1..1}", "{-F,../msg.txt}", "{1..2,3}", "{-n,-m..}",
+    '{a,""}', "''{,}", "x{,}")
 # The deep-review trigger, split so a review that quotes this file cannot
 # carry the whole phrase into a PR comment and start a deep review.
 DEEP_TRIGGER = "@cla" + "ude rev" + "iew this PR"
@@ -1110,6 +1119,29 @@ class GuardHookTest(unittest.TestCase):
         unread = b"echo {$,x}HOME {A..c} {O..a..12}-]n -{V..a..6}-x {1..a} {1..999999999}"
         out = subprocess.run(["node", script, "bash"], input=unread, capture_output=True, timeout=60)
         self.assertFalse([w for w in json.loads(out.stdout)["commands"][0][1:] if "braces" in w], out.stderr)
+
+    def test_brace_readings_match_real_bash(self):
+        # Bash is the oracle: every brace reading the shipped parser gives is the words bash makes.
+        found = (r"C:\Program Files\Git\bin\bash.exe", shutil.which("bash"))
+        bash = next((path for path in found if path and os.path.isfile(path)), None)
+        if not bash:
+            self.skipTest("no bash on this computer")
+        script = os.path.join(HELPER, "hooks", "shell-words.mjs")
+        source = "\n".join(f"x {row}" for row in BRACE_ROWS).encode("utf-8")
+        parsed = json.loads(subprocess.run(["node", script, "bash"], input=source, capture_output=True,
+                                           timeout=60).stdout)["commands"]
+        program = "\n".join(f"printf '%s\\0' x {row}; printf '\\1'" for row in BRACE_ROWS)
+        real = subprocess.run([bash, "--norc", "--noprofile", "-c", program], capture_output=True, timeout=60).stdout
+        made = [chunk.decode("utf-8").split("\0")[:-1] for chunk in real.split(b"\1")[:-1]]
+        self.assertEqual((len(parsed), len(made)), (len(BRACE_ROWS), len(BRACE_ROWS)))
+        read = 0
+        for row, words, bash_words in zip(BRACE_ROWS, parsed, made):
+            if any(isinstance(word, dict) and "braces" in word for word in words):
+                read += 1
+                with self.subTest(row=row):
+                    self.assertEqual([each for word in words for each in (
+                        word.get("braces", [word]) if isinstance(word, dict) else [word])], bash_words)
+        self.assertGreaterEqual(read, 25)
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
