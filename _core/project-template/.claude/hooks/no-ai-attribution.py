@@ -190,7 +190,8 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
 HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
 CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
 MAX_PLACES = 64  # folders one command may run in before the guard stops placing them
-PARSE_SECONDS = 6  # all of one command's parses; the hook itself is stopped at 10 s
+PARSE_SECONDS = 6  # one parse
+ALL_PARSES_SECONDS = 9  # every parse of one command, nested strings included: the hook is stopped at 10 s
 MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
 POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
 BASH_VALUE_OPTIONS = {"--rcfile", "--init-file"}  # and a short cluster that ends in o or O
@@ -337,7 +338,7 @@ def parse(cmd, shell, cwd, deadline):
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
-                             capture_output=True, timeout=deadline - time.monotonic())
+                             capture_output=True, timeout=min(PARSE_SECONDS, deadline - time.monotonic()))
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except subprocess.TimeoutExpired:
         return None, None, SLOW
@@ -973,7 +974,7 @@ def main():
 
     if writes:
         scan_text(cmd, "the command text")
-    deadline = time.monotonic() + PARSE_SECONDS
+    deadline = time.monotonic() + ALL_PARSES_SECONDS
     parsed, assignments, problem = parse(cmd, shell, cwd, deadline)
     if not problem:
         groups, assignments, problem = with_nested(parsed, assignments, shell, cwd, deadline)
