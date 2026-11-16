@@ -501,6 +501,29 @@ class Hook(unittest.TestCase):
             as_project(repo, "none")
             self.assertEqual(run_hook(repo, "git tag v5.2.2"), (0, ""))
 
+    def test_without_the_check_script_nothing_is_checked_or_needed(self):
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            os.remove(os.path.join(repo, ".github", "scripts", "version_check.py"))
+            self.assertEqual(run_hook(repo, "git tag v5.2.2", helper=repo), (0, ""))
+
+    def test_a_parser_reply_of_another_shape_is_unread(self):
+        replies = {"an entry that is not a list": '{"commands": [null]}',
+                   "a word that is a number": '{"commands": [["git", "tag", 5]]}',
+                   "a word that is an object without its run-time text":
+                       '{"commands": [["git", "tag", {"prefix": ""}]]}'}
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            for name, reply in replies.items():
+                stub = os.path.join(repo, "stub", name.replace(" ", "-"))
+                os.makedirs(os.path.join(stub, "hooks"))
+                with open(os.path.join(stub, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as fh:
+                    fh.write(f"process.stdout.write({json.dumps(reply)});\n")
+                with self.subTest(name):
+                    code, err = run_hook(repo, "git tag v5.2.2", helper=stub)
+                    self.assertEqual(code, 2, err)
+                    self.assertIn("/bindwright:setup", err)
+
     def test_calver_reads_its_format(self):
         with make_repo("2026.10.3", []) as repo:
             as_project(repo, "calver", "YYYY.MM.MICRO")

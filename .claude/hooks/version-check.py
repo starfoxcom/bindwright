@@ -119,8 +119,16 @@ def shell_commands(command, shell, project):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list) or data.get("error"):
         return None
-    return [[word if isinstance(word, str) else None for word in words]
-            for words in data["commands"] if isinstance(words, list)]
+    commands = data["commands"]
+    # One entry of another shape makes the whole reply unread, never a command skipped.
+    if not all(isinstance(words, list) and all(map(is_word, words)) for words in commands):
+        return None
+    return [[word if isinstance(word, str) else None for word in words] for words in commands]
+
+
+def is_word(word):
+    """Whether the parser's word is text, or its marker for a word built at run time."""
+    return isinstance(word, str) or isinstance(word, dict) and isinstance(word.get("dynamic"), str)
 
 
 def long_name(name, names):
@@ -300,12 +308,14 @@ def load_scheme(project):
     return advanced["versioning"], fmt
 
 
+def check_script(project):
+    """The repo's version check script, which setup writes beside this hook."""
+    return os.path.join(project, ".github", "scripts", "version_check.py")
+
+
 def check_release(project, scheme, fmt, version, ref):
     """The reasons the release is refused, or None when it may go ahead."""
-    script = os.path.join(project, ".github", "scripts", "version_check.py")
-    if not os.path.isfile(script):
-        return None
-    argv = [sys.executable, "-I", script, version, "--scheme", scheme, "--ref", ref]
+    argv = [sys.executable, "-I", check_script(project), version, "--scheme", scheme, "--ref", ref]
     if scheme == "calver" and fmt:
         argv += ["--format", fmt]
     try:
@@ -337,7 +347,7 @@ def read_and_check(command, shell, project):
     """The block message for a command that may make a release, or None; raises OutOfTime."""
     project = git_output(project, "rev-parse", "--show-toplevel") or project
     scheme_and_format = load_scheme(project)
-    if not scheme_and_format:
+    if not scheme_and_format or not os.path.isfile(check_script(project)):
         return None
     scheme, fmt = scheme_and_format
     commands = shell_commands(command, shell, project)
