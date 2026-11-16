@@ -302,6 +302,9 @@ class CalverRules(unittest.TestCase):
             with self.subTest(fmt), make_repo(tag, ["feat!: drop the flag"]) as repo:
                 as_project(repo, "calver", fmt)
                 self.assertEqual(check(repo, new), (0, ""))
+                subfolder = os.path.join(repo, "src")
+                os.makedirs(subfolder)
+                self.assertEqual(check(subfolder, new), (0, ""), "run from a subfolder")
 
     def test_a_bad_format_is_exit_1(self):
         with make_repo("2026.10.3", []) as repo:
@@ -421,6 +424,19 @@ class Hook(unittest.TestCase):
             done = subprocess.run([sys.executable, "-I", HOOK], input=event, capture_output=True,
                                   text=True, encoding="utf-8")
             self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_cwd_that_is_not_text_falls_back_to_the_working_folder(self):
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+            env["BINDWRIGHT_HELPER"] = HELPER
+            for command, code in (("git log --oneline", 0), ("git tag v5.2.2", 2)):
+                event = json.dumps({"tool_name": "Bash", "tool_input": {"command": command},
+                                    "cwd": 5})
+                done = subprocess.run([sys.executable, "-I", HOOK], input=event, cwd=repo, env=env,
+                                      capture_output=True, text=True, encoding="utf-8")
+                with self.subTest(command):
+                    self.assertEqual(done.returncode, code, done.stderr)
 
     def test_a_project_without_versioning_checks_nothing(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:

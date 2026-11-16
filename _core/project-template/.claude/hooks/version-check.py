@@ -186,11 +186,17 @@ def release_from_git(words):
     return found[0], (found[1] if len(found) > 1 else "HEAD")
 
 
+class OutOfTime(Exception):
+    """The hook's time budget ran out before the release could be checked."""
+
+
 def git_output(project, *args):
-    """What git prints, or "" when it fails."""
+    """What git prints, or "" when it fails. Running out of time is not an answer: it raises."""
     try:
         out = subprocess.run(["git", *args], cwd=project, capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=seconds_left())
+    except subprocess.TimeoutExpired:
+        raise OutOfTime() from None
     except (OSError, subprocess.SubprocessError):
         return ""
     return out.stdout.strip() if out.returncode == 0 else ""
@@ -278,14 +284,25 @@ def check_release(project, scheme, fmt, version, ref):
 
 
 def refusal(command, shell, project):
-    """Why the command's release is blocked, or None."""
+    """Why the command's release is blocked, or None. A command that cannot make a release
+    returns before anything that can fail; past that, a failure blocks with its reason."""
+    if not RELEASE_TEXT.search(command):
+        return None
     scheme_and_format = load_scheme(project)
-    if not scheme_and_format or not RELEASE_TEXT.search(command):
+    if not scheme_and_format:
         return None
     scheme, fmt = scheme_and_format
     commands, problem = shell_commands(command, shell, project)
     if problem:
         return f"Blocked: this command may make a release, and {problem}"
+    try:
+        return first_refusal(commands, project, scheme, fmt)
+    except OutOfTime:
+        return f"Blocked: this command may make a release, and {OUT_OF_TIME}"
+
+
+def first_refusal(commands, project, scheme, fmt):
+    """The block message for the first release in the commands the check refuses, or None."""
     shape = SEMVER_TAG if scheme == "semver" else CALVER_TAG
     for words in (run for words in commands for run in runs_in(words)):
         release = release_from_git(words) or release_from_gh(words, project)
@@ -310,7 +327,8 @@ def main():
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str):
         return 0
-    project = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd()
+    places = (os.environ.get("CLAUDE_PROJECT_DIR"), data.get("cwd"))
+    project = next((place for place in places if isinstance(place, str) and place), os.getcwd())
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     reason = refusal(command, shell, project)
     if not reason:

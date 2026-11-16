@@ -110,8 +110,9 @@ def use_saved_answers(args):
     if args.scheme is not None:
         return
     args.scheme = "semver"
+    root = git("rev-parse", "--show-toplevel").strip()
     try:
-        with open(os.path.join(".bindwright", "project.json"), encoding="utf-8") as fh:
+        with open(os.path.join(root, ".bindwright", "project.json"), encoding="utf-8") as fh:
             advanced = json.load(fh).get("advanced")
     except (OSError, ValueError, AttributeError):
         return
