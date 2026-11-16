@@ -48,7 +48,8 @@ function labelled(top) {
     seen[project.kind] = (seen[project.kind] ?? 0) + 1;
     const name = t(`evidence.kind.${project.kind}`);
     const label = totals[project.kind] > 1 ? `${name} ${seen[project.kind]}` : name;
-    const { merged, checked, caught, stalled, rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired } = project;
+    const { merged, checked, caught, stalled } = project;
+    const { rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired } = project;
     return { label, merged, checked, caught, stalled, rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired };
   });
 }
@@ -70,7 +71,8 @@ async function load() {
 
 /**
  * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled, rounds,
- * rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired, rows }`, or null. Each row is `{ label, merged, checked, caught, stalled, rebuilt,
- * rebuiltCaught, rebuiltStalled, dropped, retired }`, for bars.js.
+ * rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired, rows }`, or null. Each row is
+ * `{ label, merged, checked, caught, stalled, rebuilt, rebuiltCaught, rebuiltStalled, dropped,
+ * retired }`, for bars.js.
  */
 export const shared = load().catch(() => null);
