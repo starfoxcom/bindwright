@@ -613,14 +613,17 @@ class GuardHookTest(unittest.TestCase):
 
     def test_a_cd_run_again_moves_on_from_its_last_folder(self):
         # A loop or a function runs a `cd` again from the folder its last run reached.
-        nested = self.project_with({"msg.txt": "x\n", "sub/msg.txt": "x\n", "a/msg.txt": "x\n",
-                                    "sub/sub/msg.txt": f"{GENERATED_LINE}\n", "a/b/msg.txt": f"{GENERATED_LINE}\n"})
-        for (command, folder), result in self.each((
-                ("for i in 1 2; do cd sub; done; git commit -F msg.txt", "sub/sub"),
-                ("f() { cd b; }; cd a; f; git commit -F msg.txt", "a/b")),
-                        lambda command, folder: self.attr(command, project=nested)):
+        nested = self.project_with({"msg.txt": "x\n", "sub/msg.txt": "x\n", "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
+        moved = os.path.join(nested, "sub", "sub", "msg.txt")
+        for command, result in self.each(("for i in 1 2; do cd sub; done; git commit -F msg.txt",
+                                          "f() { cd sub; }; f; f; git commit -F msg.txt"),
+                                         lambda command: self.attr(command, project=nested)):
             with self.subTest(command=command):
-                self.assert_denied(result, f"found in file {os.path.realpath(os.path.join(nested, folder, 'msg.txt'))}")
+                self.assert_denied(result, f"found in file {moved}")
+        # The first run still needs its folder to exist then: a later `cd` cannot place a folder made first.
+        made = self.project_with({"msg.txt": "x\n", "other/x/msg.txt": "x\n"})
+        self.assert_denied(self.attr('mkdir x; cd x; git commit -F msg.txt; cd other', project=made),
+                           "the command text cannot tell")
 
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
         # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy. A `cd` in a

@@ -590,26 +590,32 @@ def is_run_time_git(word):
 
 def folder_places(commands, cwd):
     """Every folder a command may run in: the start folder, and each folder a folder change
-    in the command names, reached from any folder found so far, since a `cd` may run in a child
-    shell, fail, or run again in a loop or a function, so the shell may be in any of them. The
-    changes are applied until no folder is added. None when a target cannot be placed: one
-    built at run time, or one this computer cannot find, such as a saved folder (`cd -`, `~-`),
-    a Git Bash path (`/c/...`) or a folder made later, or when the folders pass MAX_PLACES."""
+    in the command names, reached from any folder found before it in the text, since a `cd`
+    may run in a child shell or fail, so the shell may be in any of them. The changes are then
+    applied again until no folder is added, since a loop or a function may run a `cd` again.
+    None when a target cannot be placed: one built at run time, or one this computer cannot
+    find, such as a saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made
+    later, or when the folders pass MAX_PLACES."""
     targets = [target for words in commands for target in folder_targets(words)]
     if not all(isinstance(target, str) for target in targets):
         return None
-    places, placed, added = [os.path.realpath(cwd)], set(), True
-    while added:
-        added = False
-        for index, target in enumerate(map(os.path.expanduser, targets)):
+    places, seen, first = [cwd], {os.path.realpath(cwd)}, True
+    while True:
+        count = len(places)
+        for target in map(os.path.expanduser, targets):
             reached = [target] if os.path.isabs(target) else [os.path.join(place, target) for place in places]
-            found = [os.path.realpath(place) for place in reached if os.path.isdir(place)]
-            placed.update([index] if found else [])
-            new = [place for place in dict.fromkeys(found) if place not in places]
-            places, added = places + new, added or bool(new)
+            found = [place for place in reached if os.path.isdir(place)]
+            if first and not found:
+                return None
+            for place in found:
+                if os.path.realpath(place) not in seen:
+                    seen.add(os.path.realpath(place))
+                    places.append(place)
+        if len(places) == count:
+            return places
         if len(places) > MAX_PLACES:
             return None
-    return places if len(placed) == len(targets) else None
+        first = False
 
 
 def parsed_files(commands, cwd, shell="bash"):
