@@ -16,6 +16,7 @@ global-template/
 │   ├── push-guard.py                      # PreToolUse hook that blocks ordinary force pushes
 │   ├── no-ai-attribution.py               # PreToolUse hook that blocks AI attribution in commits and PRs
 │   ├── no_ai_attribution/                 # Its modules: the shell reader, the file reader, the hook routes
+│   ├── reply-style.py                     # UserPromptSubmit and PostToolUse hook that restates the reply style
 │   ├── session-title.py                   # SessionStart and UserPromptSubmit hook that names each session
 │   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
 └── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
@@ -168,6 +169,8 @@ The project's deny rules match command text, so a force push written as a bundle
 `hooks/session-title.py` names every session on the computer after its project, then `<Project> - <purpose>` once the session's focus is clear, so several open sessions, the phone and the desktop app's session lists tell projects and tasks apart. The project name is the one setup saved in `.bindwright/project.json`, else the name of the repo's folder, else the session's folder, so it works in every project, set up or not. At the start of each session it names the purpose file, `~/.bindwright/session-titles/<session id>.purpose`, and asks the assistant to write the session's focus there in 10 words or fewer; `/start-session` writes it once the plan is approved. Its files live in that folder only, never in a project. The folder sits outside `~/.claude` because the CLI asks before every write inside a `.claude` folder, whatever the allow rules say; setup adds the rule `Edit(~/.bindwright/session-titles/**)` so the purpose is written without a prompt. A title is set once per change, so a name picked with `/rename` stays until the purpose changes.
 
 `/bindwright:setup` installs it to `~/.claude/hooks/session-title.py` and registers it for `SessionStart` and `UserPromptSubmit` (`engine/home.py install-hook --events`).
+
+`hooks/reply-style.py` restates the active output style's text where the model reads last: with every prompt, and after every 25 tool calls since the last prompt, since the CLI puts the style at the top of a session, where a long session buries it. It reads `outputStyle` from the project's `.claude/settings.local.json`, then `.claude/settings.json`, then `~/.claude/settings.json` (a style set by managed policy settings or a `--settings` file is not seen), and the style file named that way in the project's or `~/.claude`'s `output-styles/`; a built-in style has no file, so it adds nothing, and a subagent's tool calls are not counted. The count lives in `~/.bindwright/reply-style/`. `/bindwright:setup` installs it with the reply style and registers it for `UserPromptSubmit` and `PostToolUse`.
 
 ## 4c. Install the attribution guard (hook location "home")
 

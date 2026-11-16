@@ -308,6 +308,7 @@ test("a kept output style's name is read as YAML writes it", { skip }, () => {
     ["single quotes", "---\nname: 'My Style'\n---\nmine\n", "My Style"],
     ["a quote inside the name", "---\nname: Alex's style\n---\nmine\n", "Alex's style"],
     ["a byte-order mark", "﻿---\nname: Mine\n---\nmine\n", "Mine"],
+    ["a header never closed, which is no header", "---\nname: Mine\nmine\n", "straight-talk"],
   ];
   for (const [label, body, want] of cases) {
     withHome((dir) => {
