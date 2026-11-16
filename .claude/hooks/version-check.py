@@ -48,7 +48,7 @@ RELEASE_BRANCH = re.compile(r"release/(.+)")
 GIT_GLOBAL_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path",
                     "--config-env", "--attr-source", "--super-prefix"}
 GH_GROUP_VALUE = {"-R", "--repo"}
-TAG_VALUE = {"-m", "--message", "-F", "--file", "-u", "--local-user", "--cleanup", "--color",
+TAG_VALUE = {"-m", "--message", "-F", "--file", "-u", "--local-user", "--cleanup",
              "--sort", "--format", "--contains", "--no-contains", "--merged", "--no-merged",
              "--points-at", "--trailer"}
 TAG_NOT_CREATING = {"-d", "--delete", "-l", "--list", "-v", "--verify", "-n"}
@@ -329,6 +329,14 @@ def refusal(command, shell, project):
     returns before anything that can fail; past that, a failure blocks with its reason."""
     if not MAY_BE_RELEASE.search(command):
         return None
+    try:
+        return read_and_check(command, shell, project)
+    except OutOfTime:
+        return f"Blocked: this command may make a release, and {OUT_OF_TIME}"
+
+
+def read_and_check(command, shell, project):
+    """The block message for a command that may make a release, or None; raises OutOfTime."""
     project = git_output(project, "rev-parse", "--show-toplevel") or project
     scheme_and_format = load_scheme(project)
     if not scheme_and_format:
@@ -338,10 +346,7 @@ def refusal(command, shell, project):
     if problem:
         # Without the parser only a command the rough reading finds a release in is blocked.
         return f"Blocked: this command may make a release, and {problem}" if may_release(command) else None
-    try:
-        return first_refusal(commands, project, scheme, fmt)
-    except OutOfTime:
-        return f"Blocked: this command may make a release, and {OUT_OF_TIME}"
+    return first_refusal(commands, project, scheme, fmt)
 
 
 def first_refusal(commands, project, scheme, fmt):

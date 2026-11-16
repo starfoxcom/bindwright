@@ -374,6 +374,7 @@ class Hook(unittest.TestCase):
         ("a release with the repo option before its action", "gh release -R o/r create v5.2.2", 2),
         ("git spelled in capitals", "GIT tag v5.2.2", 2),
         ("git quoted", '"git" tag v5.2.2', 2),
+        ("an option whose value is optional, before the version", "git tag --color v5.2.2", 2),
         ("a quoted global option value with a space", 'git -c user.name="A B" tag v5.2.2', 2),
         ("a line continuation before tag", "git \\\n  tag v5.2.2", 2),
         ("a long option given by a unique prefix", "git tag --mes 'Release' v5.2.2", 2),
