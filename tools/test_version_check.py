@@ -390,7 +390,11 @@ class Hook(unittest.TestCase):
             code, err = run_hook(repo, "git tag v5.3.0", helper=repo)
             self.assertEqual(code, 2)
             self.assertIn("/bindwright:update", err)
-            self.assertEqual(run_hook(repo, "git log --oneline", helper=repo), (0, ""))
+            for command in ("git log --oneline", "gh pr checks 12 --json name,bucket",
+                            "gh release list", "npm run release", "cat pr.md",
+                            "git fetch origin release/1.2.0"):
+                with self.subTest(command):
+                    self.assertEqual(run_hook(repo, command, helper=repo), (0, ""))
 
     def test_a_project_without_versioning_checks_nothing(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:

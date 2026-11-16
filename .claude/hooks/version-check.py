@@ -33,7 +33,9 @@ import sys
 
 SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
-RELEASE_TEXT = re.compile(r"\b(?:tag|release|pr)\b")
+# The text of a command that may create a tag, a release or a release PR; only such a command
+# is read, and blocked when it cannot be.
+RELEASE_TEXT = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\bcreate\b", re.DOTALL)
 RELEASE_BRANCH = re.compile(r"release/(.+)")
 
 # Options that take a value, so it is never the version.
@@ -55,6 +57,8 @@ PARSE_SECONDS = 6
 NO_PARSER = ("the shell parser in Bindwright's helper could not run, so the command was not read. "
              "Run /bindwright:update to install the helper; it needs Node 18 or later.")
 UNREAD = "the shell parser could not read this command. Write the release command plainly."
+SLOW = (f"the shell parser did not answer within {PARSE_SECONDS} s, so the command was not read. "
+        "Run it again once the computer is less busy.")
 
 
 def parser_script():
@@ -89,6 +93,8 @@ def shell_commands(command, shell, project):
         out = subprocess.run([node, script, shell], input=command.encode("utf-8"),
                              capture_output=True, timeout=PARSE_SECONDS)
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
+    except subprocess.TimeoutExpired:
+        return None, SLOW
     except (OSError, subprocess.SubprocessError, ValueError):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
