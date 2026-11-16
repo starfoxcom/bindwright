@@ -596,6 +596,8 @@ test('the own list tools stand in only where the built-in task tools are missing
     registered.push(e.name)
     return { value: { tool: `mcp__tasks__${e.name}` } }
   })
+  // A user's own MCP server named `tasks`, which the mod must leave alone when it registered nothing.
+  on('tool.call', { tool: 'mcp__tasks__create' }, () => ({ result: 'from the server' }) as never)
   await $.session.start({ cwd: 'C:/Repos/x' } as never)
   expect(registered).toEqual(['create', 'update', 'list', 'get'])
   await turn($)
@@ -617,4 +619,11 @@ test('the own list tools stand in only where the built-in task tools are missing
   offered = ['Read', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']
   await $.session.start({ cwd: 'C:/Repos/x' } as never)
   expect(registered).toEqual([])
+  // With no stand-ins registered, a user's own `tasks` MCP server answers its tools, for subagents too.
+  for (const agentId of [undefined, 'a1']) {
+    const passed = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'y', description: 'y',
+      agentId } as never)) as never as { result?: unknown; deny?: string }
+    expect(passed).toEqual({ result: 'from the server' })
+  }
+  expect(mirror(seen).tasks).toHaveLength(1)
 })
