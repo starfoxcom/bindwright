@@ -20,18 +20,16 @@ so quoted text and here-documents are never taken for commands, and a git or gh
 command behind a wrapper (`env`, `sudo`, `xargs`) is checked too. Options are
 read as getopt reads them (`-am <message>`, `--head=<branch>`). `gh release
 create` is measured at the version's tag when it exists, else at `--target`. A
-version, commit or branch built at run time (`git tag $NEXT`) is out of reach. When the parser
-cannot read the command (no helper or Node, a parse error, out of time), Python's `shlex` reads
-it instead, after taking out each here-document's body: quoted text stays one word, an operator
-or `#` inside quotes cuts nothing, and at a quote that never closes the words before it are
-still checked. The check refusing or failing to run blocks the command with the reason.
+version, commit or branch built at run time (`git tag $NEXT`, `--target=$BRANCH`) is out of
+reach, so that release is not checked. The parser is a requirement, not an option: when it
+cannot read the command (no helper or Node, a command it cannot parse, out of time), a command
+that may make a release is blocked with what to install. The check refusing or failing to run
+blocks the command with the reason.
 """
 
-import io
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -43,14 +41,6 @@ CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 # miss one that does; only a match is read by the shell parser.
 MAY_BE_RELEASE = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
                             re.DOTALL | re.IGNORECASE)
-# The rough cut, for when the shell parser cannot run: characters that end a word outside
-# quotes, each shell's escape character, and a `#` inside a word, which is no comment.
-ROUGH_PUNCTUATION = "();<>|&\n"
-ESCAPE = {"bash": "\\", "powershell": "`"}
-MID_WORD_HASH = re.compile(r"(?<=[^\s;&|()<>\\`])#")
-# `<<WORD`, `<<-WORD`, `<<'WORD'`: a here-document, not the `<<<` here-string.
-HERE_DOCUMENT = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
-ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 GH_CREATE = ("create", "new")
 RELEASE_BRANCH = re.compile(r"release/(.+)")
 
@@ -79,6 +69,12 @@ STARTED = time.monotonic()
 PARSE_SECONDS = 6
 OUT_OF_TIME = (f"the version check did not finish within {HOOK_SECONDS} s. Run the command again "
                "once the computer is less busy.")
+UNREAD = ("Blocked: this command may make a release, and the version check could not read it. "
+          "The check reads commands with the shell parser in Bindwright's helper, which needs "
+          "Node 18 or later: install both with `/bindwright:setup`, or turn the check off with "
+          "\"versioning\": \"none\" in .bindwright/project.json. With both installed, the parser "
+          "could not read this command: run the release as a plain git tag, gh release create "
+          "or gh pr create command of its own.")
 
 
 def seconds_left():
@@ -261,148 +257,6 @@ def gh_action(words):
     return words[group], words[action], words[action + 1:]
 
 
-class KeepNewline(io.StringIO):
-    """A stream whose `readline` leaves the newline unread, so the newline that ends a comment
-    still ends its statement for `shlex`."""
-
-    def readline(self, size=-1):
-        line = super().readline(size)
-        if not line.endswith("\n"):
-            return line
-        self.seek(self.tell() - 1)
-        return line[:-1]
-
-
-def body_end(lines, start, word, strip_tabs):
-    """The index of the line that closes a here-document whose body starts at `start`, or None
-    when no line does."""
-    for index in range(start, len(lines)):
-        line = lines[index].rstrip("\r")
-        if (line.lstrip("\t") if strip_tabs else line) == word:
-            return index
-    return None
-
-
-def without_here_documents(command):
-    """The command with each here-document's body taken out, as bash reads it. A `<<WORD` with
-    no closing line keeps the lines after it."""
-    lines, kept, index = command.split("\n"), [], 0
-    while index < len(lines):
-        kept.append(lines[index])
-        index += 1
-        for dash, _, word in HERE_DOCUMENT.findall(kept[-1]):
-            end = body_end(lines, index, word, dash == "-")
-            index = index if end is None else end + 1
-    return "\n".join(kept)
-
-
-def substitution_end(command, index):
-    """The index just past the `)` that closes a `$(` whose text starts at `index`; quotes
-    inside a substitution are its own."""
-    depth, quote = 1, None
-    while index < len(command) and depth:
-        char = command[index]
-        if quote and char == quote:
-            quote = None
-        elif not quote and char in "'\"":
-            quote = char
-        elif quote != "'" and command.startswith("$(", index):
-            index = substitution_end(command, index + 2) - 1
-        elif not quote:
-            depth += {"(": 1, ")": -1}.get(char, 0)
-        index += 1
-    return index
-
-
-def without_substitutions(command, shell):
-    """The command with each `$(...)`, and in bash each backtick span, as `$_`, so the word
-    that holds one reads as built at run time. Single-quoted text is left alone."""
-    escape, kept, index, quote = ESCAPE.get(shell, "\\"), [], 0, None
-    while index < len(command):
-        char = command[index]
-        if quote == "'":
-            quote = None if char == "'" else quote
-        elif char == escape:
-            kept.append(command[index:index + 2])
-            index += 2
-            continue
-        elif char == '"':
-            quote = None if quote == '"' else '"'
-        elif char == "'" and not quote:
-            quote = "'"
-        elif command.startswith("$(", index) or (char == "`" and shell != "powershell"):
-            kept.append("$_")
-            index = backtick_end(command, index) if char == "`" else substitution_end(command, index + 2)
-            continue
-        kept.append(char)
-        index += 1
-    return "".join(kept)
-
-
-def backtick_end(command, index):
-    """The index just past the backtick that closes the one at `index`, or the command's end."""
-    close = command.find("`", index + 1)
-    return len(command) if close < 0 else close + 1
-
-
-def rough_tokens(command, shell):
-    """The command's words and operators as `shlex` reads them, quotes kept whole, comments and
-    here-document bodies dropped. At a quote that never closes, the words read before it."""
-    escape = ESCAPE.get(shell, "\\")
-    if shell != "powershell":
-        command = without_here_documents(command)
-    joined = re.sub(re.escape(escape) + r"\r?\n", "", without_substitutions(command, shell))
-    text = MID_WORD_HASH.sub(lambda _: escape + "#", joined)
-    lexer = shlex.shlex(KeepNewline(text), posix=True, punctuation_chars=ROUGH_PUNCTUATION)
-    lexer.whitespace = " \t\r"
-    lexer.whitespace_split = True
-    lexer.escape = escape
-    tokens = []
-    try:
-        for token in lexer:
-            tokens.append(token)
-    except ValueError:
-        pass
-    return tokens
-
-
-def rough_commands(command, shell):
-    """Each statement's words as a rough cut reads them, for when the shell parser cannot run:
-    quoted text is one word, statements end at an operator outside quotes, and redirections
-    and leading assignments are dropped. A word holding `$` or a substitution is built at run
-    time, so it is None, as the parser reads it."""
-    commands, words, is_target = [], [], False
-    for token in rough_tokens(command, shell):
-        is_operator = bool(token) and all(char in ROUGH_PUNCTUATION for char in token)
-        if is_target and not is_operator:
-            is_target = False
-        elif is_operator and ("<" in token or ">" in token):
-            if words and words[-1].isdigit():
-                words.pop()
-            is_target = True
-        elif is_operator:
-            commands.append(words)
-            words, is_target = [], False
-        else:
-            words.append(token)
-    commands.append(words)
-    for index, words in enumerate(commands):
-        while words and ASSIGNMENT.match(words[0]):
-            words = words[1:]
-        commands[index] = [None if "$" in word else word for word in words]
-    return commands
-
-
-def may_release(command, shell):
-    """Whether a rough reading of the command finds a release: a tag that git would create, or
-    a gh release or PR being created."""
-    for run in (run for words in rough_commands(command, shell) for run in runs_in(words)):
-        gh = gh_action(run)
-        if release_from_git(run) or (gh and gh[0] in ("release", "pr") and gh[1] in GH_CREATE):
-            return True
-    return False
-
-
 def release_from_gh(words, project):
     """(version, ref) when the words create a release or a release branch's PR, else None."""
     parts = gh_action(words)
@@ -410,12 +264,15 @@ def release_from_gh(words, project):
         return None
     group, action, args = parts
     if group == "release" and action in GH_CREATE:
+        # A word built at run time may be `--target=<branch>`, so the release's commit is unknown.
         found, options = read_options(args, RELEASE_VALUE)
-        if not found or found[0] is None:
+        if not found or None in found:
             return None
         return found[0], release_ref(project, found[0], options)
     if group == "pr" and action in GH_CREATE:
-        _, options = read_options(args, PR_VALUE)
+        found, options = read_options(args, PR_VALUE)
+        if None in found:
+            return None
         named = "--head" if "--head" in options else "-H"
         head = options.get(named)
         if named in options and head is None:
@@ -473,7 +330,7 @@ def refusal(command, shell, project):
     try:
         return read_and_check(command, shell, project)
     except OutOfTime:
-        return f"Blocked: this command may make a release, and {OUT_OF_TIME}" if may_release(command, shell) else None
+        return f"Blocked: this command may make a release, and {OUT_OF_TIME}"
 
 
 def read_and_check(command, shell, project):
@@ -485,7 +342,7 @@ def read_and_check(command, shell, project):
     scheme, fmt = scheme_and_format
     commands = shell_commands(command, shell, project)
     if commands is None:
-        commands = rough_commands(command, shell)
+        return UNREAD
     return first_refusal(commands, project, scheme, fmt)
 
 

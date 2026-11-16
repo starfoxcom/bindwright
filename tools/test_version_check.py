@@ -393,6 +393,14 @@ class Hook(unittest.TestCase):
          'git tag -a v5.2.2 -m "notes: $(git log -1 --format="%s %b")"', 2),
         ("a target held in a variable", "gh release create v5.2.2 --target $BRANCH", 0),
         ("a release PR head held in a variable", "gh pr create --base main --head $BRANCH", 0),
+        ("a target attached with = and held in a variable",
+         "gh release create v5.2.2 --target=$BRANCH", 0),
+        ("a release PR head attached with = and held in a variable", "gh pr create --head=$BRANCH", 0),
+        ("a tag whose here-document body holds an apostrophe",
+         "git tag -a v5.2.2 -F - <<'EOF'\nIt's the release\nEOF", 2),
+        ("a tag after a here-document whose body holds an apostrophe",
+         "cat > notes.md <<-EOF\n\tit's done\n\tEOF\ngit tag v5.2.2", 2),
+        ("a statement starting with an assignment", "A=1 git tag v5.2.2", 2),
         ("a release made with gh's new alias", "gh release new v5.2.2", 2),
         ("a release PR made with gh's new alias", "gh pr new --head release/v5.2.2", 2),
         ("a release with the repo option before its action", "gh release -R o/r create v5.2.2", 2),
@@ -413,46 +421,29 @@ class Hook(unittest.TestCase):
         ("an ordinary command", "git log --oneline", 0),
     ]
 
-    ROUGH_ROWS = ROWS + [
-        ("an unclosed quote", 'git tag -m "notes v5.2.2', 0),
-        ("a tag whose here-document body holds an apostrophe",
-         "git tag -a v5.2.2 -F - <<'EOF'\nIt's the release\nEOF", 2),
-        ("a release whose here-document body holds an apostrophe",
-         "gh release create v5.2.2 --notes-file - <<EOF\n- the parser doesn't crash\nEOF", 2),
-        ("a tag after a here-document whose body holds an apostrophe",
-         "cat > notes.md <<-EOF\n\tit's done\n\tEOF\ngit tag v5.2.2", 2),
-        ("a here-document word inside a quoted message", 'git commit -m "see <<EOF"\ngit tag v5.2.2', 2),
-        ("a quoted message naming a short tag", 'git commit -m "docs: run git tag v1 first"', 0),
-        ("a statement starting with an assignment", "A=1 git tag v5.2.2", 2),
-        ("a list of tags", "git tag --list", 0),
-        ("a release listing", "gh release list", 0),
-        ("a fetch of a release branch", "git fetch origin release/1.2.0", 0),
-        ("two gh commands", "gh pr view 5 && gh issue create --title x", 0),
-    ]
-
-    def check_rows(self, rows, helper):
+    def test_rows(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
             as_project(repo, "semver")
-            results = in_parallel(lambda row: run_hook(repo, row[1], helper=helper or repo), rows)
-            for (name, _, code), (got_code, err) in zip(rows, results):
+            results = in_parallel(lambda row: run_hook(repo, row[1]), self.ROWS)
+            for (name, _, code), (got_code, err) in zip(self.ROWS, results):
                 with self.subTest(name):
                     self.assertEqual(got_code, code, err)
                     if code == 2:
                         self.assertIn("Blocked release v5.2.2", err)
                         self.assertIn("feat(mods): add the task panel", err)
 
-    def test_rows(self):
-        self.check_rows(self.ROWS, HELPER)
-
-    def test_without_the_parser_the_rows_read_the_same(self):
-        self.check_rows(self.ROUGH_ROWS, None)
-
-    def test_without_the_parser_a_powershell_backslash_escapes_nothing(self):
+    def test_without_the_parser_a_command_that_may_release_is_blocked(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
             as_project(repo, "semver")
-            command = 'git -C "C:\\my repo\\" tag v5.2.2'
-            code, err = run_hook(repo, command, tool="PowerShell", helper=repo)
-            self.assertEqual(code, 2, err)
+            rows = [("a tag of the right size", "git tag v5.3.0", 2),
+                    ("a message that names a tag", 'git commit -m "fix: tag sorting"', 2),
+                    ("an ordinary command", "git log --oneline", 0)]
+            for (name, command, code), (got, err) in zip(
+                    rows, in_parallel(lambda row: run_hook(repo, row[1], helper=repo), rows)):
+                with self.subTest(name):
+                    self.assertEqual(got, code, err)
+                    if code == 2:
+                        self.assertIn("/bindwright:setup", err)
 
     def test_a_release_PR_from_the_current_branch(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG, branch="release/v5.2.2") as repo:
