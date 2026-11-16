@@ -44,8 +44,8 @@ What is scanned, for any git write, gh write or GitHub API call:
     up to three shells deep; one built at run time or nested deeper is
     denied, as is a nested `pwsh` or `powershell` whose text arguments name
     one, since PowerShell joins them into a script (but a script block
-    passed last is read with the command, and words after a `.ps1` file
-    are its parameters). A shell named at run time (`$SHELL`), or a word
+    after options alone is read with the command, and words after a `.ps1`
+    file are its parameters). A shell named at run time (`$SHELL`), or a word
     after a git, gh or text program (`--label bash`), is not read as one.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
@@ -389,7 +389,8 @@ def shell_strings(words, caller):
         return None
     args = args[:script_file_at(name, args)]
     last = args[-1] if args and caller == "powershell" and not isinstance(args[-1], str) else ""
-    if text_of(last).lstrip().startswith("{") and all(str(w).startswith("-") for w in args[:-1]):
+    options = all(re.fullmatch(r"-[A-Za-z]+", text_of(w)) for w in args[:-1])
+    if options and text_of(last).lstrip().startswith("{"):
         args = args[:-1]
     joined = " ".join(text_of(w) for w in args)
     return "powershell", [{"dynamic": joined}] if names_route(joined) else []

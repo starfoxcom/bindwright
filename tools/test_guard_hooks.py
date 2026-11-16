@@ -632,6 +632,7 @@ class GuardHookTest(unittest.TestCase):
                 # A block followed by text words is part of the joined script.
                 ("sudo pwsh -c {git commit} --no-verify -m x", "PowerShell", "nested PowerShell"),
                 ("sudo pwsh -c git { commit --no-verify -m x }", "PowerShell", "nested PowerShell"),
+                ("sudo pwsh -c '-not $x; git' { commit --no-verify -m x }", "PowerShell", "nested PowerShell"),
                 # An assignment or an option value named like git is not the program.
                 ("env HOME=/home/git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("sudo -u git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
