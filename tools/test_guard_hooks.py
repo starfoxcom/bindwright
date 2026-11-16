@@ -614,21 +614,20 @@ class GuardHookTest(unittest.TestCase):
 
     def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
         root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n", "inner.txt": "x\n",
-                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n", "deep.txt": "x\n",
-                                  "sub/deep.txt": "x\n", "sub/deeper/deep.txt": f"{GENERATED_LINE}\n"})
+                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n"})
         deep = "git commit -m x"
         for _ in range(4):
             deep = f"bash -c {shlex.quote(deep)}"
         for (command, tool, reason), result in self.each((
-                ("pwsh -co 'git commit --no-verify -m x'", "Bash", "--no-verify"),
-                ("pwsh -wi Hidden -in -cwa 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("pwsh -co 'git commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                ("pwsh -c 'git' 'commit --no-verify -m \"see git push\"'", "Bash", "nested PowerShell"),
+                ('powershell "git commit --no-verify -m x"', "PowerShell", "nested PowerShell"),
+                ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell", "nested PowerShell"),
+                ("pwsh -Command { git commit --no-verify -m x }", "PowerShell", "--no-verify"),
                 ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
-                ("pwsh -wd sub -c 'git commit -F inner.txt'", "Bash", "found in file"),
-                ("pwsh -c 'cd sub; git commit -F inner.txt'", "Bash", "found in file"),
                 ("bash -c 'git commit -F inner.txt'; bash -c 'cd sub; bash -c \"git commit -F inner.txt\"'",
                  "Bash", "found in file"),
-                ("cd sub && pwsh -wd deeper -c 'git commit -F deep.txt'", "Bash", "found in file"),
                 ("bash -c 'g\"i\"t commit --no-verify -m x'", "Bash", "--no-verify"),
                 (deep, "Bash", "nested more than"),
                 ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
@@ -636,15 +635,10 @@ class GuardHookTest(unittest.TestCase):
                 ("bash -euo pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash -ceo pipefail 'git commit -n -m x'", "Bash", "--no-verify"),
                 ("bash -c 'cd sub && git commit -F inner.txt'", "Bash", "found in file"),
-                ("pwsh -ExecutionPolicy Bypass -Command 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash --norc -o pipefail -c -- 'git -c core.hooksPath=x commit -m x'", "Bash", "core.hooksPath"),
                 ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
                 ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
-                ("pwsh -NoProfile -Command git commit -C HEAD", "PowerShell", "spread over several words"),
                 ('bash -c "g\\it commit --no-verify $FLAGS"', "Bash", "built at run time"),
-                ('pwsh -c "git commit" --no-verify -m x', "Bash", "spread over several words"),
-                ('powershell "git commit --no-verify -m x"', "PowerShell", "--no-verify"),
-                ("pwsh -c 'git commit -F msg.txt'", "Bash", "found in file"),
                 ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),
                 lambda command, tool, reason: self.attr(command, tool=tool, project=root)):
             with self.subTest(command=command):
@@ -655,10 +649,9 @@ class GuardHookTest(unittest.TestCase):
                 ("pwsh ./build.ps1 -c $cfg; git commit -m x", "Bash"),
                 ('gh issue create --label bash --body "git push fails on $BRANCH"', "Bash"),
                 ('sudo gh issue create --label bash --body "use git commit --no-verify to skip"', "Bash"),
-                ("pwsh -c 'Remove-Item tmp -Force; git commit -m x'", "Bash"),
+                ("pwsh -NoProfile -Command { git commit -m 'fix: y' }", "PowerShell"),
                 # A child shell's `cd` never moves the commands around it.
-                ("sh -c 'cd /no/such/folder && true' && git commit -F clean.txt", "Bash"),
-                ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell")),
+                ("sh -c 'cd /no/such/folder && true' && git commit -F clean.txt", "Bash")),
                 lambda command, tool: self.attr(command, tool=tool, project=root)):
             with self.subTest(command=command):
                 self.assert_passes(result)

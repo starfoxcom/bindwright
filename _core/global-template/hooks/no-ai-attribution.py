@@ -39,12 +39,14 @@ What is scanned, for any git write, gh write or GitHub API call:
     denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. A program built
     at run time has every file flag of its command read. A shell's options
-    are never read: each argument of `bash`, `sh`, `pwsh` and the like whose
+    are never read: each argument of `bash`, `sh`, `zsh` and the like whose
     text names a write or a hook change is parsed and read like the command,
-    in any folder an argument names, up to three shells deep; one built at
-    run time, a PowerShell command spread over several words, or one nested
-    deeper is denied. A shell named at run time (`$SHELL`), or a word after
-    a git, gh or text tool (`--label bash`), is not read as a shell.
+    up to three shells deep; one built at run time or nested deeper is
+    denied, as is a nested `pwsh` or `powershell` whose text arguments name
+    one, since PowerShell joins them into a script (a script block passed
+    to it is read with the command). A shell named at run time (`$SHELL`),
+    or a word after a git, gh or text tool (`--label bash`), is not read as
+    a shell.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with this guard. A command this hook reads is
@@ -203,9 +205,9 @@ NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Ru
 OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update to update it."
 UNREAD = ("the guard's parser could not read this command (an array built at run time, PowerShell's"
           " `--%`, or syntax it rejects). Write it as plain commands.")
-NESTED_UNREAD = ("a shell here runs a command string (`bash -c`, `pwsh -Command`) built at run time, spread"
-                 f" over several words or nested more than {MAX_NESTED_SHELLS} deep, which the guard cannot"
-                 " read. Run the command directly, or quote the string as one word.")
+NESTED_UNREAD = ("a shell here runs a command string built at run time (`bash -c \"$CMD\"`), one nested more"
+                 f" than {MAX_NESTED_SHELLS} deep, or one given to a nested PowerShell (`pwsh -Command`), which"
+                 " the guard cannot read. Run the command directly.")
 SLOW = (f"the guard's parser did not answer within {PARSE_SECONDS} s, so the command was not read."
         " Run it again once the computer is less busy.")
 BROKEN = ("the guard's parser failed to run, so the command was not read. Run /bindwright:update to"
@@ -364,18 +366,14 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
     changes move only its own group; (None, None, why) when a string cannot be read."""
     placing = list(around) + list(commands)
     groups, assignments = [(commands, placing, shell)], list(assignments)
-    for inner_shell, strings, args in filter(None, (shell_strings(w[i:]) for w in commands for i in shell_places(w))):
-        # A shell's options are never read: any argument that names a folder may be where it runs.
-        places = folder_places(placing, cwd) or [cwd]
-        folders = [["cd", os.path.join(place, w)] for place in places for w in args
-                   if isinstance(w, str) and os.path.isdir(os.path.join(place, w))]
+    for inner_shell, strings in filter(None, (shell_strings(w[i:]) for w in commands for i in shell_places(w))):
         for text in strings:
             if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
                 return None, None, NESTED_UNREAD
             inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
             if not problem:
                 inner_groups, inner_assignments, problem = with_nested(
-                    inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing + folders)
+                    inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing)
             if problem:
                 return None, None, problem
             groups, assignments = groups + inner_groups, assignments + inner_assignments
@@ -383,17 +381,18 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
 
 
 def shell_strings(words):
-    """(parser shell, the command strings it may run, its arguments) for a shell program: each
-    argument whose text names a route, a dict when built at run time. PowerShell joins every
-    word after `-Command` into one string, so a route is read only in its last argument; one
-    anywhere else is a dict too, since the guard does not join them. None for any other program."""
+    """(parser shell, the command strings it may run) for a shell program: each argument of a
+    POSIX shell whose text names a route, a dict when built at run time. PowerShell joins its
+    arguments into a script the guard does not rebuild, so a route its text arguments name is a
+    dict; a script block (`pwsh -Command { ... }`) is read by the outer parse. None for any
+    other program."""
     name, args = program(words), words[1:]
-    if name not in POSIX_SHELLS and name not in ("pwsh", "powershell"):
+    if name in POSIX_SHELLS:
+        return "bash", [w for w in args if names_route(text_of(w))]
+    if name not in ("pwsh", "powershell"):
         return None
-    strings, joined = [w for w in args if names_route(text_of(w))], " ".join(map(text_of, args))
-    if name not in POSIX_SHELLS and names_route(joined) and strings != args[-1:]:
-        strings = [{"dynamic": joined}]
-    return ("bash" if name in POSIX_SHELLS else "powershell", strings, args)
+    joined = " ".join(text_of(w) for w in args if isinstance(w, str) or not text_of(w).lstrip().startswith("{"))
+    return "powershell", [{"dynamic": joined}] if names_route(joined) else []
 
 
 def shell_places(words):
