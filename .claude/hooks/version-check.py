@@ -34,7 +34,11 @@ import time
 
 SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
-# A rough cut of a command into statements, for the check that runs before the shell parser.
+# The first pass over a command's text: it may match commands that make no release, never
+# miss one that does; only a match is read by the shell parser.
+MAY_BE_RELEASE = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
+                            re.DOTALL | re.IGNORECASE)
+# A rough cut of a command into statements, for when the shell parser cannot run.
 ROUGH_STATEMENT = re.compile(r"[;&|\n()]+")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 GH_CREATE = ("create", "new")
@@ -323,15 +327,17 @@ def check_release(project, scheme, fmt, version, ref):
 def refusal(command, shell, project):
     """Why the command's release is blocked, or None. A command that cannot make a release
     returns before anything that can fail; past that, a failure blocks with its reason."""
-    if not may_release(command):
+    if not MAY_BE_RELEASE.search(command):
         return None
+    project = git_output(project, "rev-parse", "--show-toplevel") or project
     scheme_and_format = load_scheme(project)
     if not scheme_and_format:
         return None
     scheme, fmt = scheme_and_format
     commands, problem = shell_commands(command, shell, project)
     if problem:
-        return f"Blocked: this command may make a release, and {problem}"
+        # Without the parser only a command the rough reading finds a release in is blocked.
+        return f"Blocked: this command may make a release, and {problem}" if may_release(command) else None
     try:
         return first_refusal(commands, project, scheme, fmt)
     except OutOfTime:
@@ -364,7 +370,8 @@ def main():
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str):
         return 0
-    places = (os.environ.get("CLAUDE_PROJECT_DIR"), data.get("cwd"))
+    # The folder the command runs in; refusal reads the repo it belongs to.
+    places = (data.get("cwd"), os.environ.get("CLAUDE_PROJECT_DIR"))
     project = next((place for place in places if isinstance(place, str) and place), os.getcwd())
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     reason = refusal(command, shell, project)

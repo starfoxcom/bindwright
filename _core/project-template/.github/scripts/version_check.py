@@ -266,11 +266,11 @@ def find_section(text, bare):
     return text[m.end():m.end() + nxt.start()] if nxt else text[m.end():]
 
 
-def changelog_reasons(path, bare, size, commits, pre_1):
+def changelog_reasons(source, bare, size, commits, pre_1):
     """What the version's changelog section lacks or must not hold. Before 1.0.0 each size
     carries one step more: a minor may break, and a patch may add."""
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        section = find_section(fh.read(), bare)
+    path, text = source
+    section = find_section(text, bare)
     if section is None:
         return ["%s: no section for %s" % (path, bare)]
     headings = set(re.findall(r"^### ([^\n]+?)[ \t]*$", section, re.MULTILINE))
@@ -308,16 +308,31 @@ def semver_reasons(args, new, stable):
         needing = [c for c, level in zip(commits, levels) if level == required]
         reasons.append("%s is a %s, but its commits need a %s: %s"
                        % (args.version, size, required, listing(needing)))
-    path = changelog_path(args)
-    if path is not None and is_stable(new):
-        reasons += changelog_reasons(path, bare_version(args.version), size, commits, pre_1)
+    source = changelog_source(args)
+    if source is not None and is_stable(new):
+        reasons += changelog_reasons(source, bare_version(args.version), size, commits, pre_1)
     return reasons
 
 
-def changelog_path(args):
-    if args.changelog is not None:
-        return args.changelog
-    return "CHANGELOG.md" if os.path.exists("CHANGELOG.md") else None
+def commit_of(ref):
+    return git("rev-parse", "--verify", "--quiet", ref + "^{commit}").strip()
+
+
+def changelog_source(args):
+    """(name, text) of the changelog: a given --changelog file; CHANGELOG.md in the working tree
+    when --ref is the commit checked out; else CHANGELOG.md as it is at --ref, the commit being
+    released. None when there is none."""
+    path = args.changelog
+    if path is None and commit_of(args.ref) == commit_of("HEAD"):
+        path = "CHANGELOG.md" if os.path.exists("CHANGELOG.md") else None
+        if path is None:
+            return None
+    if path is not None:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return path, fh.read()
+    blob = "%s:CHANGELOG.md" % args.ref
+    exists = subprocess.run(["git", "cat-file", "-e", blob], capture_output=True, check=False)
+    return ("CHANGELOG.md", git("show", blob)) if exists.returncode == 0 else None
 
 
 def report(reasons):
