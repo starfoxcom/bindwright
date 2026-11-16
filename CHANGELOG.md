@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v5.2.2] — 2026-11-15
+
 ### Fixed
 
 - **The tasks mod works where Claude Code offers no task tools.** Some builds and models hide `TaskCreate` and the other task tools even with `CLAUDE_CODE_ENABLE_TODO_TOOLS` set, and the tasks mod answers those tools, so it did nothing there. When a session has no `TaskCreate`, the mod now registers its own `mcp__tasks__create`, `mcp__tasks__update`, `mcp__tasks__list` and `mcp__tasks__get`, answered from the same list, and its prompts and the task-tracking rule name them; where the built-in tools are there it adds none.
