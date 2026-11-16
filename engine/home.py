@@ -12,7 +12,6 @@ Standard library, Python 3.8+.
     python engine/home.py allow RULE          /  disallow RULE
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
-    python engine/home.py mod-env             (turns on what the listed mods need to work)
     python engine/home.py add-agent FILE
     python engine/home.py add-style FILE      (copies the output style, turns it on)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
@@ -368,25 +367,6 @@ def _listed_mods(env):
     return [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
 
 
-def mod_env(home):
-    """Turns on what each listed, installed mod needs; never lists or unlists a mod."""
-    path, data = _load(home)
-    env = _section(data, "env", dict, path)
-    mods_dir = os.path.normcase(os.path.normpath(os.path.join(_claude(home), "mods")))
-    turned_on = {}
-    for listed in _listed_mods(env):
-        folder = os.path.normpath(os.path.expanduser(listed))
-        name = os.path.basename(folder)
-        is_ours = os.path.normcase(os.path.dirname(folder)) == mods_dir
-        if name in MOD_ENV and is_ours and os.path.isdir(folder):
-            keys = _turn_on_env(env, name)
-            if keys:
-                turned_on[name] = keys
-    if turned_on:
-        _save(path, data)
-    return {"env_set": turned_on}
-
-
 def add_mod(home, folder):
     name = os.path.basename(os.path.normpath(folder))
     if not os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
@@ -485,7 +465,7 @@ def remove_mod(home, name):
         raise HomeError("The mod folder is a link; remove it by hand: " + target)
     path, data = _load(home)
     env = _section(data, "env", dict, path)
-    listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+    listed = _listed_mods(env)
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
     kept = [d for d in listed if not same(d)]
     unlisted = len(kept) != len(listed)
@@ -652,8 +632,6 @@ def run(argv):
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
-    if cmd == "mod-env" and not args:
-        return mod_env(home)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
     if cmd == "project-mods" and one:

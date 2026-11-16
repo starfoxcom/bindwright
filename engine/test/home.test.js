@@ -211,24 +211,6 @@ test("the tasks mod turns on the task tools it answers and leaves them on; other
   });
 });
 
-test("mod-env turns on what a listed mod needs and never lists an unlisted one", { skip }, () => {
-  withHome((dir) => {
-    const mod = join(dir, "pack", "tasks");
-    mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
-    writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
-    const target = home(dir, "add-mod", mod).out.installed;
-    // An install from before the setting existed: listed, but without it.
-    writeSettings(dir, { env: { CLAUDE_CODE_PLUGIN_DIRS: target } });
-    assert.deepEqual(home(dir, "mod-env").out.env_set, { tasks: ["CLAUDE_CODE_ENABLE_TODO_TOOLS"] });
-    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "1");
-    assert.deepEqual(home(dir, "mod-env").out.env_set, {});
-    // Turned off by hand: the folder stays, the list does not name it, and nothing changes.
-    writeSettings(dir, { env: { CLAUDE_CODE_PLUGIN_DIRS: "/other/mod" } });
-    assert.deepEqual(home(dir, "mod-env").out.env_set, {});
-    assert.deepEqual(settings(dir).env, { CLAUDE_CODE_PLUGIN_DIRS: "/other/mod" });
-  });
-});
-
 test("mods are listed in row order whatever order they are added in", { skip }, () => {
   withHome((dir) => {
     const add = (name) => {
