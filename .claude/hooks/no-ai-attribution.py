@@ -607,8 +607,10 @@ def folder_places(commands, cwd):
             found = [place for place in reached if os.path.isdir(place)]
             if first and not found:
                 return None
+            # A link keeps its own name in the first pass, since Windows reads `link\..` by name;
+            # the repeated passes compare real paths, so a link back to a parent cannot keep adding.
             for place in found:
-                if os.path.realpath(place) not in seen:
+                if place not in places if first else os.path.realpath(place) not in seen:
                     seen.add(os.path.realpath(place))
                     places.append(place)
         if len(places) == count:

@@ -620,6 +620,13 @@ class GuardHookTest(unittest.TestCase):
                                          lambda command: self.attr(command, project=nested)):
             with self.subTest(command=command):
                 self.assert_denied(result, f"found in file {moved}")
+        # Windows reads `link\..` by name, so a link to a folder already placed keeps its own parent.
+        if os.name == "nt":
+            import _winapi
+            linked = self.project_with({"msg.txt": "x\n", "real/msg.txt": "x\n", "w/msg.txt": f"{GENERATED_LINE}\n"})
+            _winapi.CreateJunction(os.path.join(linked, "real"), os.path.join(linked, "w", "link"))
+            self.assert_denied(self.attr("cd real; cd w/link; cd ..; git commit -F msg.txt", project=linked),
+                               "found in file")
         # The first run still needs its folder to exist then: a later `cd` cannot place a folder made first.
         made = self.project_with({"msg.txt": "x\n", "other/x/msg.txt": "x\n"})
         self.assert_denied(self.attr('mkdir x; cd x; git commit -F msg.txt; cd other', project=made),
