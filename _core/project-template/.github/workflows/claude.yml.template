@@ -828,7 +828,7 @@ jobs:
         timeout-minutes: 30
         if: steps.pr-checkout.outcome == 'success'
         continue-on-error: true
-        # Pinned to the v1.0.271 release commit. The bare `@v1` floats.
+        # Pinned to the v1.0.277 release commit. The bare `@v1` floats.
         # Update via
         #   gh api repos/anthropics/claude-code-action/git/ref/tags/v1 --jq '.object.type + " " + .object.sha'
         # and, when the type is `tag` (an annotated tag), peel it to its commit:
