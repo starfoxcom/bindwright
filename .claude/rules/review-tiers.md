@@ -46,6 +46,7 @@ A finding belongs to the PR when the PR causes it: a regression from the base br
 - Write this bar into every reviewer prompt from the first round, local or CI, before any finding arrives.
 - When a review reports, sort each finding against the bar before touching code. Fix only what passes it, plus the other copies of that same mistake (§ After a 🔴), with the smallest change, and add no features while fixing.
 - After 3 red rounds in a row, stop patching: look up at least three ways others solved the same problem, compare them against each other, take the simplest one that removes the whole class, then continue. One search is a guess. Each step back that leaves the PR red leaves one round fewer before the next: research again after 2 more red rounds, then after every red round from the 6th on.
+- The 10th red round in a row is the hard stop: close the PR without merging, then rebuild the change from its base branch in a new PR, with that round's findings fixed in the rebuild. The new PR starts its own count.
 
 Without the bar, each fix adds surface for the next round to find, and the rounds never converge.
 
