@@ -40,11 +40,17 @@ failed write never leaves half a settings file.
 import json
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
 
 from apply import _is_link
+
+# Its front-matter reader names an output style here too, so both find the same style.
+_REPLY_STYLE_HOOK = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir, "_core", "global-template", "hooks", "reply-style.py"
+)
 
 # Runs the hook file by path, and exits 0 when the file is gone, so a
 # registration whose file was removed lets calls through. A hook that fails
@@ -421,21 +427,12 @@ def add_agent(home, file):
 
 
 def _style_name(text):
-    """The `name:` of an output style's front matter, or None without one."""
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None
-    for line in lines[1:]:
-        if line.strip() == "---":
-            return None
-        key, sep, value = line.partition(":")
-        value = value.strip()
-        # YAML may quote the value: one matching pair of quotes is not part of the name.
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1].strip()
-        if sep and key.strip() == "name" and value:
-            return value
-    return None
+    """The `name:` of an output style's front matter, or None without one.
+
+    Read with the reply-style hook's own reader, so the style turned on here is the one it restates.
+    """
+    front_matter = runpy.run_path(_REPLY_STYLE_HOOK)["front_matter"]
+    return front_matter(text.lstrip("﻿").replace("\r\n", "\n"))[0]
 
 
 def add_style(home, file):

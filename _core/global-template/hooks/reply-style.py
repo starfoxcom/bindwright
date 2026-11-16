@@ -83,7 +83,9 @@ def style_text(project, wanted):
 def front_matter(text):
     """(name, body): the front matter's `name:` (None without one) and the text after it.
 
-    Read line by line as `home.py` reads a style's name, so both find the same style.
+    A header with no closing `---` is no header, as most front-matter readers take it, so the whole
+    file is the body. `engine/home.py` names a style with this same function, so both find the same
+    style.
     """
     lines = text.split("\n")
     end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)

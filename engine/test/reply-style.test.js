@@ -92,6 +92,9 @@ test("a style is named by its name, and by its file only when it has none", { sk
   assert.equal(run(layout, prompt).context.additionalContext.split("\n\n").pop(), "Body.");
   writeFileSync(styleFile, "---\nname: Plain Speech\ndescription: d\n---");
   assert.equal(run(layout, prompt).context, null);
+  // A header never closed is no header, so the file is named by its file name.
+  writeFileSync(styleFile, "---\nname: Plain Speech\nBody.\n");
+  assert.match(run(layout, prompt).context.additionalContext, /name: Plain Speech\nBody\.$/);
 }));
 
 test("parallel tool calls bring the style back exactly once in 25", { skip }, async () => {
