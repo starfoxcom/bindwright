@@ -7,7 +7,7 @@
 import { t } from "./i18n/index.js";
 import { shared } from "./community.js";
 import { ENTER_MARGIN } from "./reveal.js";
-import { PARTS, el, projectRow } from "./bars.js";
+import { PARTS, el, projectRow, sizeOf } from "./bars.js";
 
 const counts = document.getElementById("evidence-counts");
 const note = document.getElementById("evidence-note");
@@ -76,7 +76,7 @@ function show(total) {
     rounds: total.caught > 0 ? (total.rounds / total.caught).toFixed(1) : "0",
     deep: total.deep,
   });
-  const largest = Math.max(...total.rows.map((row) => row.merged));
+  const largest = Math.max(...total.rows.map(sizeOf));
   chart.replaceChildren(...total.rows.map((row, index) => projectRow(row, index, largest)));
   legend.replaceChildren(...PARTS.map(legendItem));
   counts.hidden = false;

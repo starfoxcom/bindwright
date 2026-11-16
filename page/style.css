@@ -14,6 +14,10 @@
   --del: oklch(0.72 0.15 25);
   --warn: oklch(0.85 0.14 85);
   --info: oklch(0.74 0.13 245);
+  --orange: oklch(0.78 0.15 55);
+  --purple: oklch(0.74 0.14 310);
+  --indigo: oklch(0.62 0.16 280);
+  --gray: oklch(0.64 0.01 240);
   color-scheme: dark;
   scroll-padding: 96px 0;
 }
@@ -141,6 +145,10 @@ h1 {
 .stat-warn { color: var(--warn); }
 .stat-accent { color: var(--accent); }
 .stat-info { color: var(--info); }
+.stat-orange { color: var(--orange); }
+.stat-purple { color: var(--purple); }
+.stat-indigo { color: var(--indigo); }
+.stat-gray { color: var(--gray); }
 .stat-label { margin-top: 12px; font-size: 17px; color: var(--text-2); }
 .evidence-detail { margin-top: 28px; max-width: 72ch; font-size: 15px; color: var(--text-2); }
 .chart-title { margin-top: 48px; font-size: 15px; color: var(--text-2); }
@@ -154,6 +162,7 @@ h1 {
 /* Each row starts 80 ms after the one above it (--row is its index) and takes 900 ms. */
 .project-bar {
   display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--key);
+  box-shadow: 0 0 0 1px var(--text);
   transform: scaleX(0); transform-origin: left;
   transition: transform 900ms ease-out calc(var(--row) * 80ms);
 }
@@ -162,7 +171,11 @@ h1 {
 .seg-skipped { background: var(--info); }
 .seg-ok { background: var(--accent); }
 .seg-fixed { background: var(--warn); }
-.seg-stalled { background: var(--del); }
+.seg-stalled { background: var(--orange); }
+.seg-rebuilt { background: var(--purple); }
+.seg-rebuilt-stalled { background: var(--indigo); }
+.seg-dropped { background: var(--del); }
+.seg-retired { background: var(--gray); }
 .project-count {
   font-size: 14px; color: var(--text-2);
   font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap;

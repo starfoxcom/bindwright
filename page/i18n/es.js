@@ -221,11 +221,19 @@ export default {
   "evidence.part.passed": "a la primera",
   "evidence.part.fixed": "corregidos en 1 o 2 rondas",
   "evidence.part.stalled": "corregidos tras investigar más a fondo",
+  "evidence.part.rebuilt": "reconstruidos",
+  "evidence.part.rebuiltStalled": "reconstruidos, otra investigación",
+  "evidence.part.dropped": "descartados",
+  "evidence.part.retired": "ya no hacían falta",
   "evidence.legend.skipped": "no necesitaron revisión",
   "evidence.legend.passed": "pasaron la primera revisión",
   "evidence.legend.fixed": "corregidos en 1 o 2 rondas",
   "evidence.legend.stalled": "tomaron 3 rondas o más",
-  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y rojo, tomaron "
+  "evidence.legend.rebuilt": "reconstruidos tras 10 rondas en rojo",
+  "evidence.legend.rebuiltStalled": "reconstruidos, con otra investigación",
+  "evidence.legend.dropped": "descartados, sin arreglo",
+  "evidence.legend.retired": "descartados, ya no hacían falta",
+  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y naranja, tomaron "
     + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {
