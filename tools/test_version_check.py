@@ -341,6 +341,9 @@ class Hook(unittest.TestCase):
          'git commit -m "docs: release steps\ngit tag v5.2.2\nthen push"', 0),
         ("a release command inside a here-document", "cat > notes.md <<EOF\ngit tag v5.2.2\nEOF", 0),
         ("a version built at run time", "git tag $NEXT", 0),
+        ("a tag behind env", "env A=1 git tag v5.2.2", 2),
+        ("a release behind sudo", "sudo gh release create v5.2.2", 2),
+        ("a release command only printed", "echo git tag v5.2.2", 0),
         ("a pre-release tag too small for its commits", "git tag v5.2.2-beta.1", 2),
         ("a tag that is not a version", "git tag backup", 0),
         ("a tag being deleted", "git tag -d v5.2.2", 0),
@@ -363,6 +366,23 @@ class Hook(unittest.TestCase):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG, branch="release/v5.2.2") as repo:
             as_project(repo, "semver")
             self.assertEqual(run_hook(repo, "gh pr create --base main", "PowerShell")[0], 2)
+
+    def test_a_release_is_measured_at_its_tag_or_target(self):
+        # v5.2.2 tags a fix; main has a feat after it, and side holds only the fix.
+        stream = (commit_block(1, "chore: start", "main") + tag_block("v5.2.1", 1)
+                  + commit_block(2, "fix: keep the queue", "main", parents=(1,))
+                  + tag_block("v5.2.2", 2)
+                  + commit_block(3, "feat: add a flag", "main", parents=(2,))
+                  + commit_block(4, "fix: close a hole", "side", parents=(1,)))
+        with import_repo(stream) as repo:
+            as_project(repo, "semver")
+            rows = [("the existing tag, with HEAD past it", "gh release create v5.2.2", 0),
+                    ("a target branch without the feat", "gh release create v5.2.3 --target side", 0),
+                    ("no tag and no target: HEAD", "gh release create v5.2.3", 2)]
+            for (name, command, code), (got, err) in zip(
+                    rows, in_parallel(lambda row: run_hook(repo, row[1]), rows)):
+                with self.subTest(name):
+                    self.assertEqual(got, code, err)
 
     def test_without_the_parser_only_a_possible_release_is_blocked(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:

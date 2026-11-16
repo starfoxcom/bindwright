@@ -16,9 +16,11 @@ of the scheme (`git tag backup`) is not a release, so it runs too.
 
 A command whose text names a tag, a release or a PR is read the way the shell
 reads it, by the shell parser in Bindwright's helper (`hooks/shell-words.mjs`),
-so quoted text and here-documents are never taken for commands. Options are
-read as getopt reads them (`-am <message>`, `--head=<branch>`). A version built
-at run time (`git tag $NEXT`) is out of reach. The check refusing, failing to
+so quoted text and here-documents are never taken for commands, and a git or gh
+command behind a wrapper (`env`, `sudo`, `xargs`) is checked too. Options are
+read as getopt reads them (`-am <message>`, `--head=<branch>`). `gh release
+create` is measured at the version's tag when it exists, else at `--target`. A
+version, commit or branch built at run time (`git tag $NEXT`) is out of reach. The check refusing, failing to
 run, or the parser missing blocks such a command with the reason.
 """
 
@@ -45,6 +47,9 @@ RELEASE_VALUE = {"-t", "--title", "-n", "--notes", "-F", "--notes-file", "--targ
 PR_VALUE = {"-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-R",
             "--repo", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p",
             "--project", "-r", "--reviewer", "-T", "--template", "--recover", "-H", "--head"}
+TEXT_TOOLS = {"echo", "printf", "write-output", "write-host", "awk", "gawk", "mawk", "grep", "egrep",
+              "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq", "head", "tail", "wc", "jq", "column",
+              "paste", "join", "select-string", "sls", "findstr"}
 TIMEOUT_SECONDS = 25
 PARSE_SECONDS = 6
 NO_PARSER = ("the shell parser in Bindwright's helper could not run, so the command was not read. "
@@ -133,6 +138,14 @@ def program(words):
     return re.sub(r"\.(exe|cmd|bat|com)$", "", name)
 
 
+def runs_in(words):
+    """The command, and each git or gh command a wrapper in it may run (`env A=1 git tag`,
+    `sudo gh release create`); a tool that only reads or prints text runs none."""
+    if program(words) in TEXT_TOOLS:
+        return [words]
+    return [words] + [words[i:] for i in range(1, len(words)) if program(words[i:]) in ("git", "gh")]
+
+
 def git_subcommand(words):
     """The words after `git` and its global options, or None when this is not git."""
     if program(words) != "git":
@@ -172,14 +185,28 @@ def branch_ref(project, branch):
     return "HEAD"
 
 
+def release_ref(project, version, options):
+    """The commit `gh release create` releases: the version's tag when it exists, else the
+    `--target` branch or commit, else the current one; None when the target is built at run time."""
+    tag = "refs/tags/" + version
+    if git_output(project, "rev-parse", "--verify", "--quiet", tag + "^{commit}"):
+        return tag
+    if "--target" not in options:
+        return "HEAD"
+    target = options["--target"]
+    return branch_ref(project, target) if target else None
+
+
 def release_from_gh(words, project):
     """(version, ref) when the words create a release or a release branch's PR, else None."""
     if program(words) != "gh" or len(words) < 3:
         return None
     group, action, args = words[1], words[2], words[3:]
     if (group, action) == ("release", "create"):
-        found, _ = read_options(args, RELEASE_VALUE)
-        return (found[0], "HEAD") if found else None
+        found, options = read_options(args, RELEASE_VALUE)
+        if not found or found[0] is None:
+            return None
+        return found[0], release_ref(project, found[0], options)
     if (group, action) == ("pr", "create"):
         _, options = read_options(args, PR_VALUE)
         named = "--head" if "--head" in options else "-H"
@@ -237,7 +264,7 @@ def refusal(command, shell, project):
     if problem:
         return f"Blocked: this command may make a release, and {problem}"
     shape = SEMVER_TAG if scheme == "semver" else CALVER_TAG
-    for words in commands:
+    for words in (run for words in commands for run in runs_in(words)):
         release = release_from_git(words) or release_from_gh(words, project)
         if not release or None in release or not shape.fullmatch(release[0]):
             continue
