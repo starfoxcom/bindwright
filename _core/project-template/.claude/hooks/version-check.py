@@ -34,15 +34,16 @@ import time
 
 SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
-# The text of a command that may create a tag, a release or a release PR; only such a command
-# is read, and blocked when it cannot be.
-RELEASE_TEXT = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
-                          re.DOTALL)
+# A rough cut of a command into statements, for the check that runs before the shell parser.
+ROUGH_STATEMENT = re.compile(r"[;&|\n()]+")
+ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 GH_CREATE = ("create", "new")
 RELEASE_BRANCH = re.compile(r"release/(.+)")
 
 # Options that take a value, so it is never the version.
-GIT_GLOBAL_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+GIT_GLOBAL_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path",
+                    "--config-env", "--attr-source", "--super-prefix"}
+GH_GROUP_VALUE = {"-R", "--repo"}
 TAG_VALUE = {"-m", "--message", "-F", "--file", "-u", "--local-user", "--cleanup", "--color",
              "--sort", "--format", "--contains", "--no-contains", "--merged", "--no-merged",
              "--points-at", "--trailer"}
@@ -118,6 +119,12 @@ def shell_commands(command, shell, project):
             for words in data["commands"] if isinstance(words, list)], ""
 
 
+def long_name(name, names):
+    """The long option a unique prefix stands for (`--mes` for `--message`), else the name."""
+    matches = [option for option in names if option.startswith("--") and option.startswith(name)]
+    return matches[0] if len(name) > 2 and name not in names and len(matches) == 1 else name
+
+
 def read_options(args, takes_value):
     """(positionals, {option: value}) as getopt reads them: `-abc` is three options, a short
     option that takes a value takes the rest of its word or the next one, `--name=value`
@@ -132,6 +139,7 @@ def read_options(args, takes_value):
             found.append(word)
         elif word.startswith("--"):
             name, has_value, value = word.partition("=")
+            name = long_name(name, takes_value)
             if not has_value and name in takes_value and index < len(args):
                 value, index = args[index], index + 1
             options[name] = value
@@ -181,7 +189,8 @@ def release_from_git(words):
     if not rest or rest[0] != "tag":
         return None
     found, options = read_options(rest[1:], TAG_VALUE)
-    if not found or TAG_NOT_CREATING & options.keys():
+    named = {long_name(option, TAG_NOT_CREATING) for option in options}
+    if not found or TAG_NOT_CREATING & named:
         return None
     return found[0], (found[1] if len(found) > 1 else "HEAD")
 
@@ -222,11 +231,39 @@ def release_ref(project, version, options):
     return branch_ref(project, target) if target else None
 
 
-def release_from_gh(words, project):
-    """(version, ref) when the words create a release or a release branch's PR, else None."""
+def gh_action(words):
+    """(group, action, the action's arguments) of a gh command, skipping the group's options
+    before the action (`gh release -R owner/repo create`); None when this is not gh."""
     if program(words) != "gh" or len(words) < 3:
         return None
-    group, action, args = words[1], words[2], words[3:]
+    index = 2
+    while index < len(words) and isinstance(words[index], str) and words[index].startswith("-"):
+        index += 2 if words[index] in GH_GROUP_VALUE else 1
+    if index >= len(words):
+        return None
+    return words[1], words[index], words[index + 1:]
+
+
+def may_release(command):
+    """Whether a rough reading of the command finds a release: a tag that git would create, or
+    a gh release or PR being created. It decides only whether the command is read in full."""
+    for statement in ROUGH_STATEMENT.split(command):
+        words = statement.split()
+        while words and ASSIGNMENT.match(words[0]):
+            words = words[1:]
+        for run in runs_in(words):
+            gh = gh_action(run)
+            if release_from_git(run) or (gh and gh[0] in ("release", "pr") and gh[1] in GH_CREATE):
+                return True
+    return False
+
+
+def release_from_gh(words, project):
+    """(version, ref) when the words create a release or a release branch's PR, else None."""
+    parts = gh_action(words)
+    if not parts:
+        return None
+    group, action, args = parts
     if group == "release" and action in GH_CREATE:
         found, options = read_options(args, RELEASE_VALUE)
         if not found or found[0] is None:
@@ -278,7 +315,7 @@ def check_release(project, scheme, fmt, version, ref):
         return f"the version check could not run: {error}"
     if out.returncode == 0:
         return None
-    if out.returncode == 2:
+    if out.returncode == 2 and out.stdout.strip():
         return out.stdout.strip()
     return f"the version check could not run: {(out.stderr or out.stdout).strip()}"
 
@@ -286,7 +323,7 @@ def check_release(project, scheme, fmt, version, ref):
 def refusal(command, shell, project):
     """Why the command's release is blocked, or None. A command that cannot make a release
     returns before anything that can fail; past that, a failure blocks with its reason."""
-    if not RELEASE_TEXT.search(command):
+    if not may_release(command):
         return None
     scheme_and_format = load_scheme(project)
     if not scheme_and_format:

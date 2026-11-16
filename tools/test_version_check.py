@@ -371,6 +371,10 @@ class Hook(unittest.TestCase):
         ("a version built at run time", "git tag $NEXT", 0),
         ("a release made with gh's new alias", "gh release new v5.2.2", 2),
         ("a release PR made with gh's new alias", "gh pr new --head release/v5.2.2", 2),
+        ("a release with the repo option before its action", "gh release -R o/r create v5.2.2", 2),
+        ("git spelled in capitals", "GIT tag v5.2.2", 2),
+        ("a long option given by a unique prefix", "git tag --mes 'Release' v5.2.2", 2),
+        ("a global option that takes a value", "git --attr-source HEAD tag v5.2.2", 2),
         ("a tag behind env", "env A=1 git tag v5.2.2", 2),
         ("a release behind sudo", "sudo gh release create v5.2.2", 2),
         ("a release command only printed", "echo git tag v5.2.2", 0),
@@ -422,7 +426,9 @@ class Hook(unittest.TestCase):
             self.assertIn("/bindwright:update", err)
             for command in ("git log --oneline", "gh pr checks 12 --json name,bucket",
                             "gh release list", "npm run release", "cat pr.md",
-                            "git fetch origin release/1.2.0"):
+                            "git fetch origin release/1.2.0", "git tag --list", "git tag -l",
+                            'git commit -m "fix: tag sorting"', "git add src/tag.py",
+                            "gh pr view 5 && gh issue create --title x"):
                 with self.subTest(command):
                     self.assertEqual(run_hook(repo, command, helper=repo), (0, ""))
 
