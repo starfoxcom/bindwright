@@ -6,6 +6,14 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Every project is offered the commit checks, not only a team's.** Setup now asks each project, solo ones included, whether to check each change on the computer before it is committed, and recommends it: lefthook (or the hook manager the repo already uses) runs the lint, the type check and, with the size check on, the size check before each commit, and the tests before each push, so commits stay fast. Where no CI runs, setup says it is the only automatic check the project gets. A yes installs lefthook when it is missing; a no, or a declined install, leaves the checks off. With the checks on, the project's deny list also refuses `git commit --no-verify`, `git push --no-verify` and `LEFTHOOK=0`, the usual ways around them, even where the attribution guard is off. A project keeps the answer it has until setup runs again.
+
+### Fixed
+
+- **The commit-message check accepts a breaking change.** Every hook manager's commit-message check refused `feat!: ...` and `fix(scope)!: ...`, the marker Conventional Commits uses for a breaking change, so a project with the checks on could not mark one. It now takes the `!` after the type or scope.
+
 ## [v5.3.1] — 2026-11-15
 
 ### Fixed
