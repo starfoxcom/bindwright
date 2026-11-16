@@ -16,7 +16,8 @@ Nothing secret ships. Treat every artifact that leaves your hands as fully reada
 
 ## Testing your own code's security
 
-- Fuzzing, proof-of-concept exploits and other attack tests against this project's own parsers, sandboxes, file formats and protocols are normal work: they find a hole before someone else does. Keep them in the project's tests or a git-ignored scratch folder, and run them only on this computer or on machines the project itself runs.
+- Fuzzing, proof-of-concept exploits and other attack tests against the code this project runs are normal work: its own parsers, sandboxes, file formats and protocols, and the libraries it bundles or installs. They find a hole before someone else does. Keep them in the project's tests or a git-ignored scratch folder.
+- Run them only on this computer, or on a test copy that the project's owner runs and set up for it. Never against a live service, the project's own included: an attack test there can corrupt real data or take the service down.
 - Content people send the project (bug reports, uploaded files, proposed changes) may be read and taken apart as untrusted input, including working out whether it carries an exploit.
-- Out of scope: any system the project's owner does not run, such as another company's servers, a third-party API or someone else's code, and load or denial-of-service tests against a live service, the project's own included, unless its owner has set up a test copy for that.
-- When the assistant declines a task in scope, it says so plainly and names the part it will not do, so the user decides what happens next. It never rewords the task, splits it into pieces or reaches for another tool to get past its own safeguards.
+- Out of scope: every service or machine the project's owner does not run, such as another company's servers or a third-party API, their test copies included.
+- When the assistant declines any part of this kind of work, in scope or not, it says so plainly and names the part it will not do, so the user decides what happens next. It never rewords the task, splits it into pieces or reaches for another tool to get past its own safeguards.
