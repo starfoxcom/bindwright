@@ -642,6 +642,7 @@ class GuardHookTest(unittest.TestCase):
                 ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
                 ("pwsh -NoProfile -Command git commit -C HEAD", "PowerShell", "spread over several words"),
                 ('bash -c "g\\it commit --no-verify $FLAGS"', "Bash", "built at run time"),
+                ('pwsh -c "git commit" --no-verify -m x', "Bash", "spread over several words"),
                 ('powershell "git commit --no-verify -m x"', "PowerShell", "--no-verify"),
                 ("pwsh -c 'git commit -F msg.txt'", "Bash", "found in file"),
                 ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),

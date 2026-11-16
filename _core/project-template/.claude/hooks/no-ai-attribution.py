@@ -384,14 +384,14 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
 
 def shell_strings(words):
     """(parser shell, the command strings it may run, its arguments) for a shell program: each
-    argument whose text names a route, a dict when built at run time. PowerShell joins the
-    words after `-Command` into one string; a route only that join names is a dict too, since
-    the guard does not join them. None for any other program."""
+    argument whose text names a route, a dict when built at run time. PowerShell joins every
+    word after `-Command` into one string, so a route is read only in its last argument; one
+    anywhere else is a dict too, since the guard does not join them. None for any other program."""
     name, args = program(words), words[1:]
     if name not in POSIX_SHELLS and name not in ("pwsh", "powershell"):
         return None
     strings, joined = [w for w in args if names_route(text_of(w))], " ".join(map(text_of, args))
-    if not strings and name not in POSIX_SHELLS and names_route(joined):
+    if name not in POSIX_SHELLS and names_route(joined) and strings != args[-1:]:
         strings = [{"dynamic": joined}]
     return ("bash" if name in POSIX_SHELLS else "powershell", strings, args)
 
