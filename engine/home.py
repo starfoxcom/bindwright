@@ -12,6 +12,7 @@ Standard library, Python 3.8+.
     python engine/home.py allow RULE          /  disallow RULE
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
+    python engine/home.py mod-env             (turns on what the listed mods need to work)
     python engine/home.py add-agent FILE
     python engine/home.py add-style FILE      (copies the output style, turns it on)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
@@ -351,6 +352,53 @@ def _with_mod(listed, target):
 # Settings a mod cannot work without, turned on with it. The tasks mod answers the task
 # tools, which the CLI hides on current models unless this is set.
 MOD_ENV = {"tasks": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}
+# Inside the installed mod's folder: the MOD_ENV keys this engine changed, so removing the
+# mod turns off only those and never a value the user had set themselves.
+ENV_RECORD = ".bindwright-env.json"
+
+
+def _recorded_env(target):
+    try:
+        with open(os.path.join(target, ENV_RECORD), encoding="utf-8") as fh:
+            keys = json.load(fh)
+    except (OSError, ValueError):
+        return []
+    return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+
+def _turn_on_env(env, name, target):
+    """Sets what MOD_ENV lists for the mod, records the keys it changed, and returns them."""
+    needs = MOD_ENV.get(name, {})
+    turned_on = sorted(key for key, value in needs.items() if env.get(key) != value)
+    for key in turned_on:
+        env[key] = needs[key]
+    if turned_on:
+        recorded = sorted(set(_recorded_env(target)) | set(turned_on))
+        _atomic_write(os.path.join(target, ENV_RECORD), json.dumps(recorded) + "\n")
+    return turned_on
+
+
+def _listed_mods(env):
+    return [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+
+
+def mod_env(home):
+    """Turns on what each listed, installed mod needs; never lists or unlists a mod."""
+    path, data = _load(home)
+    env = _section(data, "env", dict, path)
+    mods_dir = os.path.normcase(os.path.normpath(os.path.join(_claude(home), "mods")))
+    turned_on = {}
+    for listed in _listed_mods(env):
+        folder = os.path.normpath(os.path.expanduser(listed))
+        name = os.path.basename(folder)
+        is_ours = os.path.normcase(os.path.dirname(folder)) == mods_dir
+        if name in MOD_ENV and is_ours and os.path.isdir(folder):
+            keys = _turn_on_env(env, name, folder)
+            if keys:
+                turned_on[name] = keys
+    if turned_on:
+        _save(path, data)
+    return {"env_set": turned_on}
 
 
 def add_mod(home, folder):
@@ -365,15 +413,12 @@ def add_mod(home, folder):
     if not kept:
         shutil.copytree(folder, target)
     changed = False
-    listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+    listed = _listed_mods(env)
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
     if not any(same(d) for d in listed):
         env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(_with_mod(listed, target))
         changed = True
-    needs = MOD_ENV.get(name, {})
-    turned_on = sorted(key for key, value in needs.items() if env.get(key) != value)
-    for key in turned_on:
-        env[key] = needs[key]
+    turned_on = _turn_on_env(env, name, target)
     if changed or turned_on:
         _save(path, data)
     return {"installed": target, "kept_existing": kept, "env_set": turned_on}
@@ -464,7 +509,7 @@ def remove_mod(home, name):
         else:
             del env["CLAUDE_CODE_PLUGIN_DIRS"]
     needs = MOD_ENV.get(name, {})
-    turned_off = sorted(key for key, value in needs.items() if env.get(key) == value)
+    turned_off = sorted(k for k in _recorded_env(target) if k in needs and env.get(k) == needs[k])
     for key in turned_off:
         del env[key]
     if unlisted or turned_off:
@@ -626,6 +671,8 @@ def run(argv):
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
+    if cmd == "mod-env" and not args:
+        return mod_env(home)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
     if cmd == "project-mods" and one:
