@@ -603,7 +603,8 @@ class GuardHookTest(unittest.TestCase):
         # The file such a word names is never read as a literal, quotes inside it included
         # (`ms["g"]` is the pattern `ms[g]`), nor a brace holding a part built at run time.
         for command, result in self.each(('git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]",
-                                          "git commit -F {a,$B}", "git commit -F msg{1..3}*.txt"),
+                                          "git commit -F {a,$B}", "git commit -F msg{1..3}*.txt",
+                                          "git commit -F {A..c}"),
                                          lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_denied(result, "text the shell builds at run time")
@@ -619,6 +620,21 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 if flags:
                     self.assert_denied(result, "attribution marker")
+                else:
+                    self.assert_passes(result)
+
+    def test_braces_stay_run_time_where_the_shell_may_not_expand_them(self):
+        # dash and `set +B` keep `{,}` as a word, so git gets `-m '{,}' -n` and skips its hooks;
+        # bash drops it, and the same command is a commit with the message `-n`.
+        for (command, refused), result in self.each((
+                ("sh -c 'git commit -m {,} -n'", True), ("bash +B -c 'git commit -m {,} -n'", True),
+                ("set +B; git commit -m {,} -n", True), ("set $OPTS; git commit -m {,} -n", True),
+                ("bash -c 'git commit -m {,} -n'", False),
+                ("git commit -m x " + "{,}" * 30, False)),
+                lambda command, refused: self.attr(command)):
+            with self.subTest(command=command):
+                if refused:
+                    self.assert_denied(result, "git hook bypass")
                 else:
                     self.assert_passes(result)
 
@@ -1073,7 +1089,9 @@ class GuardHookTest(unittest.TestCase):
                 ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"]),
                 ("git commit {-F,/m.txt} -{n,q}", ["git", "commit", "-F", "/m.txt", "-n", "-q"]),
                 ('echo {a,} {a,""} x{1..2} stash@{0} "{c,d}"',
-                 ["echo", "a", "a", "", "x1", "x2", "stash@{0}", "{c,d}"])),
+                 ["echo", "a", "a", "", "x1", "x2", "stash@{0}", "{c,d}"]),
+                ("echo {01..03} {1..5..-2} {a\\,b,c} {a..e..2}",
+                 ["echo", "01", "02", "03", "1", "3", "5", "a,b", "c", "a", "c", "e"])),
                 lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
                                                       capture_output=True, timeout=60)):
             with self.subTest(command=command):

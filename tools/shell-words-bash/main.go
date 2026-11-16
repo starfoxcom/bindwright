@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
@@ -63,6 +64,36 @@ func unescape(escape *regexp.Regexp, text string) string {
 // reader turns words into their literal values, keeping the source to quote dynamic ones.
 type reader struct {
 	source string
+	// expandsBraces is whether braces are read as the words bash makes; off when the command may
+	// turn brace expansion off, so they stay words built at run time.
+	expandsBraces bool
+}
+
+// bracesOff matches a `set` option word that turns brace expansion off (`+B`, `+eB`) or names it
+// (`+o braceexpand`).
+var bracesOff = regexp.MustCompile(`^\+[A-Za-z]*B|^braceexpand$`)
+
+// turnsBracesOff reports whether any `set` in the command may turn brace expansion off: one with
+// an option that does, or with a word built at run time, which could be one.
+func turnsBracesOff(file *syntax.File) bool {
+	off := false
+	syntax.Walk(file, func(node syntax.Node) bool {
+		call, ok := node.(*syntax.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return !off
+		}
+		args := call.Args
+		if name := args[0].Lit(); (name == "builtin" || name == "command") && len(args) > 1 {
+			args = args[1:]
+		}
+		if args[0].Lit() == "set" {
+			off = off || slices.ContainsFunc(args[1:], func(arg *syntax.Word) bool {
+				return arg.Lit() == "" || bracesOff.MatchString(arg.Lit())
+			})
+		}
+		return !off
+	})
+	return off
 }
 
 func (r reader) text(node syntax.Node) string {
@@ -213,13 +244,15 @@ func (r reader) word(word *syntax.Word) any {
 // unquoted ones as bash does; any other argument is the one word `word` reads.
 func (r reader) words(arg *syntax.Word) []any {
 	split := splitBraces(arg)
-	if !hasBraceExp(split) {
+	if !r.expandsBraces || !hasBraceExp(split) || rangesOverBackslash(split) {
 		return []any{r.word(arg)}
 	}
 	values := []any{}
+	made := 0
 	for word, err := range expand.BracesSeq(nil, split) {
+		made++
 		value, literal := r.literalValue(word)
-		if err != nil || !literal || len(values) == maxBraceWords {
+		if err != nil || !literal || made > maxBraceWords {
 			return []any{r.dynamicWord(arg)}
 		}
 		if value != "" || hasQuotes(word) {
@@ -243,6 +276,26 @@ func hasBraceExp(word *syntax.Word) bool {
 	return slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
 		_, expands := part.(*syntax.BraceExp)
 		return expands
+	})
+}
+
+// rangesOverBackslash reports whether a letter range in the word, nested ones included, passes the
+// backslash (`{A..c}`): bash then takes that backslash for an escape and gives an empty word.
+func rangesOverBackslash(word *syntax.Word) bool {
+	return slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		brace, ok := part.(*syntax.BraceExp)
+		if !ok {
+			return false
+		}
+		if brace.Sequence {
+			from, to := brace.Elems[0].Lit(), brace.Elems[1].Lit()
+			if _, err := strconv.Atoi(from); err != nil && from != "" && to != "" {
+				low, high := min(from[0], to[0]), max(from[0], to[0])
+				return low <= '\\' && '\\' <= high
+			}
+			return false
+		}
+		return slices.ContainsFunc(brace.Elems, rangesOverBackslash)
 	})
 }
 
@@ -336,7 +389,7 @@ func shellWords(source string) result {
 		out.Error = true
 		return out
 	}
-	r := reader{source: source}
+	r := reader{source: source, expandsBraces: !turnsBracesOff(file)}
 	addAssigns := func(assigns []*syntax.Assign) {
 		for _, assign := range assigns {
 			if assign.Array != nil {
