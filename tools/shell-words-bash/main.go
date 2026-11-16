@@ -5,17 +5,24 @@
 // `shellWordsInput` to the command, runs the module, and reads the global `shellWordsOutput`, a
 // JSON object {"error": bool, "commands": [[word, ...], ...], "assignments": [{"name", "value"}]}.
 // A word is a string, or {"dynamic": <source text>, "prefix": <literal start>, "shape": <literal
-// text, NUL for each run-time part>, "canBeEmpty": bool} when the shell builds it at run time.
+// text, NUL for each run-time part>, "canBeEmpty": bool} when the shell builds it at run time;
+// a command word whose braces hold only plain text also has "braces": [string, ...], bash's words.
 package main
 
 import (
 	"encoding/json"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 )
+
+// maxBraceWords is the most words a brace's bash reading may hold; a larger one gets none, so a
+// long range cannot swell the reply.
+const maxBraceWords = 256
 
 type assignment struct {
 	Name  string `json:"name"`
@@ -37,6 +44,10 @@ type dynamic struct {
 	Shape string `json:"shape"`
 	// CanBeEmpty is whether the word can expand to no word at all.
 	CanBeEmpty bool `json:"canBeEmpty"`
+	// Braces, for a command word whose braces hold only plain text, is the words bash's brace
+	// expansion makes of it (`{-F,msg.txt}` is "-F", "msg.txt"). The word stays built at run time,
+	// since a shell that does not expand braces (dash, `set +B`) gives it as written.
+	Braces *[]string `json:"braces,omitempty"`
 }
 
 var (
@@ -216,6 +227,91 @@ func (r reader) word(word *syntax.Word) any {
 	return value.String()
 }
 
+// braceWords is the words bash's brace expansion makes of a word whose braces hold only plain
+// text, dropping the empty unquoted ones as bash does, so `{,}` makes an empty list; nil for any
+// other word, or one past maxBraceWords. A word made with `$` or a backtick (`{$,x}HOME` makes
+// `$HOME`) has none, since bash expands it again.
+func (r reader) braceWords(word *syntax.Word) *[]string {
+	split := &syntax.Word{Parts: slices.Clone(word.Parts)}
+	syntax.SplitBraces(split)
+	if !slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
+		_, expands := part.(*syntax.BraceExp)
+		return expands
+	}) || isGlob(word) || !rangesMakeOnlyAlphanumerics(split) {
+		return nil
+	}
+	values, made := []string{}, 0
+	for expanded, err := range expand.BracesSeq(nil, split) {
+		made++
+		value, ok := r.literalValue(expanded)
+		if err != nil || !ok || made > maxBraceWords || strings.ContainsAny(unquotedText(expanded), "$`") {
+			return nil
+		}
+		if value != "" || !onlyPlainText(expanded) {
+			values = append(values, value)
+		}
+	}
+	return &values
+}
+
+// rangesMakeOnlyAlphanumerics reports whether every range in the word, nested ones included, makes
+// only numbers or letters of one case. A range is the one part of a brace that makes characters the
+// command does not hold, and a letter range across the cases makes `[`, `\` and the backtick, which
+// bash then reads as a pattern, an escape or a substitution.
+func rangesMakeOnlyAlphanumerics(word *syntax.Word) bool {
+	return !slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		brace, ok := part.(*syntax.BraceExp)
+		if !ok {
+			return false
+		}
+		if !brace.Sequence {
+			return slices.ContainsFunc(brace.Elems, func(elem *syntax.Word) bool { return !rangesMakeOnlyAlphanumerics(elem) })
+		}
+		from, to := brace.Elems[0].Lit(), brace.Elems[1].Lit()
+		_, fromErr := strconv.Atoi(from)
+		_, toErr := strconv.Atoi(to)
+		return (fromErr != nil || toErr != nil) && !sameCaseLetters(from, to)
+	})
+}
+
+func sameCaseLetters(from, to string) bool {
+	lower := func(s string) bool { return len(s) == 1 && 'a' <= s[0] && s[0] <= 'z' }
+	upper := func(s string) bool { return len(s) == 1 && 'A' <= s[0] && s[0] <= 'Z' }
+	return lower(from) && lower(to) || upper(from) && upper(to)
+}
+
+// literalValue is the word's value when every part is literal text.
+func (r reader) literalValue(word *syntax.Word) (string, bool) {
+	var value strings.Builder
+	for _, part := range word.Parts {
+		literal, ok := r.literalPart(part)
+		if !ok {
+			return "", false
+		}
+		value.WriteString(literal)
+	}
+	return value.String(), true
+}
+
+// unquotedText is the word's plain text outside quotes, escapes kept.
+func unquotedText(word *syntax.Word) string {
+	var text strings.Builder
+	for _, part := range word.Parts {
+		if lit, ok := part.(*syntax.Lit); ok {
+			text.WriteString(lit.Value)
+		}
+	}
+	return text.String()
+}
+
+// onlyPlainText reports whether every part of the word is unquoted text, so an empty one is dropped.
+func onlyPlainText(word *syntax.Word) bool {
+	return !slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		_, plain := part.(*syntax.Lit)
+		return !plain
+	})
+}
+
 func (r reader) literalPart(part syntax.WordPart) (string, bool) {
 	switch part := part.(type) {
 	case *syntax.Lit:
@@ -316,6 +412,10 @@ func shellWords(source string) result {
 				words := make([]any, len(node.Args))
 				for i, arg := range node.Args {
 					words[i] = r.word(arg)
+					if word, built := words[i].(dynamic); built {
+						word.Braces = r.braceWords(arg)
+						words[i] = word
+					}
 				}
 				out.Commands = append(out.Commands, words)
 			}

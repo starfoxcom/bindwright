@@ -24,7 +24,9 @@ What is scanned, for any git write, gh write or GitHub API call:
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
     (`hooks/shell-words.mjs`), so each flag belongs to one
-    command. Every command's flags are read, a wrapper's (`env`, `sudo`,
+    command. A brace of plain text is read both as text built at run time
+    and as the words bash makes of it (`{-F,msg.txt}` as `-F msg.txt`),
+    since a shell may or may not expand it. Every command's flags are read, a wrapper's (`env`, `sudo`,
     `xargs`) included, except a text tool's (`awk -F,`, `grep -F word`),
     git's in a read (`git log -F`), and gh's `--template`. A flag inside
     quoted text, a here-doc, a here-string or the value of -m / --body /
@@ -74,7 +76,9 @@ backticks, eval), a body file the command itself writes, a body piped in
 on stdin, a git alias or a git program built at run time whose text does
 not name git (their options are not read as git's), an option, setting or
 `git config` name whose text the shell builds at run time (`${X:+-n}`,
-`$(echo --no-verify)`, `"$KEY"`, `core.ho$'o'ksPath`), and text a program
+`$(echo --no-verify)`, `"$KEY"`, `core.ho$'o'ksPath`), a body-file flag
+the shell builds at run time from a word that does not start with `-` as
+written (`$F` holding `-F msg.txt`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
 by hand.

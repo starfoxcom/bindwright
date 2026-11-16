@@ -9,7 +9,8 @@
 // {"dynamic": <source text>, "prefix": <literal text before its first expansion>, "shape": <its
 // text with a NUL for each expansion>,
 // "canBeEmpty": <it can leave no word>} when the shell builds it at run time (a variable, a
-// substitution, a glob), so its value cannot be known before it runs.
+// substitution, a glob), so its value cannot be known before it runs. A bash command word whose
+// braces hold only plain text also carries "braces": [<each word bash's brace expansion makes>].
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";

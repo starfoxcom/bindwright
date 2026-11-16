@@ -95,9 +95,29 @@ def parse(cmd, shell, cwd, deadline):
     if not isinstance(data.get("assignments"), list) or any(
             isinstance(word, dict) and not {"shape", "canBeEmpty"} <= word.keys() for word in words):
         return None, None, OLD_HELPER
+    if any(isinstance(word, dict) and not is_word_list(word.get("braces", [])) for word in words):
+        return None, None, BROKEN
     if data.get("error"):
         return None, None, UNREAD
-    return data["commands"], data["assignments"], ""
+    return with_brace_readings(data["commands"]), data["assignments"], ""
+
+
+def is_word_list(value):
+    """Whether a reply's word list is a JSON list of strings, the one shape the guard reads."""
+    return isinstance(value, list) and all(isinstance(each, str) for each in value)
+
+
+def with_brace_readings(commands):
+    """Each command, then, when a word of it is a brace of plain text, the same command with that
+    word as bash expands it (`{-F,msg.txt}` is `-F msg.txt`). Both are checked, since a shell that
+    does not expand braces (dash, `set +B`) runs the first and bash runs the second."""
+    read = []
+    for words in commands:
+        read.append(words)
+        if any(isinstance(word, dict) and "braces" in word for word in words):
+            read.append([each for word in words for each in (
+                word["braces"] if isinstance(word, dict) and "braces" in word else [word])])
+    return read
 
 
 def with_nested(commands, assignments, shell, cwd, deadline, found, depth=1, around=()):

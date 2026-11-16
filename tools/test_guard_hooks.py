@@ -31,6 +31,15 @@ AI_TRAILER = "Co-" + "Authored-By: Cla" + "ude <noreply@anthro" + "pic.com>"
 HUMAN_TRAILER = "Co-" + "Authored-By: Jane Doe <12345+jane@users.noreply.github.com>"
 GENERATED_LINE = "Gener" + "ated with [Cla" + "ude Code](https://cla" + "ude.com/claude-code)"
 SESSION_LINK = "https://cla" + "ude.ai/code/session_" + "01V8SAUxUZBbVPekZUHDL9FZ"
+# Brace forms checked against real bash: lists, ranges, steps, padding, escapes, quotes, nesting,
+# empties, dots in a list, and the forms that must get no reading (a `$`, a range across cases).
+BRACE_ROWS = (
+    "{{a,b}", "{a,b}}", r"\{a,b}", r"{a\,b}", '{a","b}', '{a,b"}"}', "{a..3}", "{1..10..0}", "{01..03}",
+    "{a..e..2}", "{1..5..-2}", "{5..1}", "{a,{b,c}d}", "{,}", "{a,}{b,}", "-{F,}m.txt", "{-03..2}",
+    r"{a,b\}}", '{"a,b"}', "{a..c}{1..2}", 'a{b,c}"d"', "{1..3..2}", "{z..x}", "{A..c}", "'{a,b}'",
+    r"{a,b}\ ", "{,a}", "{}", "{a}", "{1..}", "{a,b}{}", "{$,x}HOME", r"{\$,x}H", "{O..a..12}-]n",
+    "-{V..a..6}-x", "{a..c}{X..Z}", "{1..a}", "{-1..1}", "{-F,../msg.txt}", "{1..2,3}", "{-n,-m..}",
+    '{a,""}', "''{,}", "x{,}")
 # The deep-review trigger, split so a review that quotes this file cannot
 # carry the whole phrase into a PR comment and start a deep review.
 DEEP_TRIGGER = "@cla" + "ude rev" + "iew this PR"
@@ -599,14 +608,46 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "Write it as plain commands")
 
-    def test_brace_and_pattern_words_are_read_as_built_at_run_time(self):
+    def test_pattern_and_mixed_brace_words_are_read_as_built_at_run_time(self):
         # The file such a word names is never read as a literal, quotes inside it included
-        # (`ms["g"]` is the pattern `ms[g]`).
-        for command, result in self.each(("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
-                                          'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"),
+        # (`ms["g"]` is the pattern `ms[g]`), nor a brace holding a part built at run time.
+        for command, result in self.each(('git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]",
+                                          "git commit -F {a,$B}", "git commit -F msg{1..3}*.txt",
+                                          "git commit -F {A..c}"),
                                          lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_denied(result, "text the shell builds at run time")
+
+    def test_plain_text_braces_are_read_as_the_words_bash_makes(self):
+        # Bash expands `{-F,msg.txt}` to `-F msg.txt` before it runs git, so the file is read.
+        flagged = self.body_file(f"{GENERATED_LINE}\n").replace("\\", "/")
+        clean = self.body_file("Plain body.\n").replace("\\", "/")
+        for (command, flags), result in self.each((
+                (f"git commit {{-F,{flagged}}}", True), (f"gh pr create --title t {{--body-file,{flagged}}}", True),
+                (f"gh pr create --title {{,}} --title --body-file {flagged}", True),
+                (f"git commit {{-F,{clean}}}", False)),
+                lambda command, flags: self.attr(command)):
+            with self.subTest(command=command):
+                if flags:
+                    self.assert_denied(result, "attribution marker")
+                else:
+                    self.assert_passes(result)
+
+    def test_a_brace_is_read_both_as_written_and_as_bash_expands_it(self):
+        # A shell that does not expand braces (dash, `set +B`) gives git `-m '{,}' -n`, which skips
+        # the hooks; bash gives `{-n,-m} x` as `-n -m x`. Either reading is refused.
+        for (command, refused), result in self.each((
+                ("git commit -m {,} -n", True), ("sh -c 'git commit -m {,} -n'", True),
+                ("shopt -u -o braceexpand; git commit -m {,} -n", True), ("git commit {-n,-m} x", True),
+                ("bash -c 'git commit {-n,-m} x'", True), ("git commit -m {,} -m -n", True),
+                ("git commit -m x " + "{,}" * 30, False),
+                ("git commit -m {a,b}", False)),
+                lambda command, refused: self.attr(command)):
+            with self.subTest(command=command):
+                if refused:
+                    self.assert_denied(result, "git hook bypass")
+                else:
+                    self.assert_passes(result)
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""
@@ -851,9 +892,13 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(broken, "hooks"))
         with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write("process.exit(1);\n")
-        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object.
+        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object,
+        # a brace reading that is not a list of strings.
+        built = '[["git", "commit", {dynamic: "{a,b}", shape: "{a,b}", canBeEmpty: false, braces: %s}]]'
         malformed = []
-        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]')):
+        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]'),
+                               ("null-braces", built % "null"), ("number-braces", built % "5"),
+                               ("text-braces", built % '"ab"')):
             folder = os.path.join(self.home, name + "-helper")
             os.makedirs(os.path.join(folder, "hooks"))
             with open(os.path.join(folder, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
@@ -1050,17 +1095,53 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "git hook bypass")
 
-    def test_shipped_bash_parser_reads_escapes_as_bash_does(self):
+    def test_shipped_bash_parser_reads_words_as_bash_does(self):
         # Runs helper/parsers/shell-words-bash.wasm itself, so the rows prove the shipped bytes.
         script = os.path.join(HELPER, "hooks", "shell-words.mjs")
         for (command, words), result in self.each((
                 ('git commit -m "a\\\\\nb"', ["git", "commit", "-m", "a\\\nb"]),
                 ('git commit -m "a\\\nb"', ["git", "commit", "-m", "ab"]),
-                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"])),
+                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"]),
+                ("git commit {-F,/m.txt} -{n,q}", ["git", "commit", "-F", "/m.txt", "-n", "-q"]),
+                ('echo {a,} {a,""} x{1..2} stash@{0} "{c,d}"',
+                 ["echo", "a", "a", "", "x1", "x2", "stash@{0}", "{c,d}"]),
+                ("echo {01..03} {1..5..-2} {a\\,b,c} {a..e..2} {X..Z} {-1..1}",
+                 ["echo", "01", "02", "03", "1", "3", "5", "a,b", "c", "a", "c", "e", "X", "Y", "Z", "-1", "0", "1"])),
                 lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
                                                       capture_output=True, timeout=60)):
             with self.subTest(command=command):
-                self.assertEqual(json.loads(result.stdout)["commands"], [words], result.stderr)
+                # A brace keeps its run-time word and carries bash's reading in `braces`.
+                read = [each for word in json.loads(result.stdout)["commands"][0]
+                        for each in (word.get("braces", [word]) if isinstance(word, dict) else [word])]
+                self.assertEqual(read, words, result.stderr)
+        # Bash expands `$HOME` again after `{$,x}HOME`, and a letter range across the cases makes `[`,
+        # `\` or the backtick, which bash reads again: no reading.
+        unread = b"echo {$,x}HOME {A..c} {O..a..12}-]n -{V..a..6}-x {1..a} {1..999999999}"
+        out = subprocess.run(["node", script, "bash"], input=unread, capture_output=True, timeout=60)
+        self.assertFalse([w for w in json.loads(out.stdout)["commands"][0][1:] if "braces" in w], out.stderr)
+
+    def test_brace_readings_match_real_bash(self):
+        # Bash is the oracle: every brace reading the shipped parser gives is the words bash makes.
+        found = (r"C:\Program Files\Git\bin\bash.exe", shutil.which("bash"))
+        bash = next((path for path in found if path and os.path.isfile(path)), None)
+        if not bash:
+            self.skipTest("no bash on this computer")
+        script = os.path.join(HELPER, "hooks", "shell-words.mjs")
+        source = "\n".join(f"x {row}" for row in BRACE_ROWS).encode("utf-8")
+        parsed = json.loads(subprocess.run(["node", script, "bash"], input=source, capture_output=True,
+                                           timeout=60).stdout)["commands"]
+        program = "\n".join(f"printf '%s\\0' x {row}; printf '\\1'" for row in BRACE_ROWS)
+        real = subprocess.run([bash, "--norc", "--noprofile", "-c", program], capture_output=True, timeout=60).stdout
+        made = [chunk.decode("utf-8").split("\0")[:-1] for chunk in real.split(b"\1")[:-1]]
+        self.assertEqual((len(parsed), len(made)), (len(BRACE_ROWS), len(BRACE_ROWS)))
+        read = 0
+        for row, words, bash_words in zip(BRACE_ROWS, parsed, made):
+            if any(isinstance(word, dict) and "braces" in word for word in words):
+                read += 1
+                with self.subTest(row=row):
+                    self.assertEqual([each for word in words for each in (
+                        word.get("braces", [word]) if isinstance(word, dict) else [word])], bash_words)
+        self.assertGreaterEqual(read, 25)
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
