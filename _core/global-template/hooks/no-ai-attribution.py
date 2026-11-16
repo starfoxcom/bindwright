@@ -89,6 +89,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 # Obfuscation-tolerant: optional zero-width / separator chars between letters.
 _Z = r"[​‌‍⁠﻿\s\-_.*]*"
@@ -189,11 +190,15 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
 HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
 CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
 MAX_PLACES = 64  # folders one command may run in before the guard stops placing them
-PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
+PARSE_SECONDS = 6  # all of one command's parses; the hook itself is stopped at 10 s
 MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
 POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
-BASH_VALUE_OPTIONS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
+BASH_VALUE_OPTIONS = {"--rcfile", "--init-file"}  # and a short cluster that ends in o or O
 PWSH_COMMAND = {"c", "com", "comm", "comma", "comman", "command"}  # -Command and its prefixes
+PWSH_VALUE_PARAMETERS = ("executionpolicy", "workingdirectory", "configurationname", "configurationfile",
+                         "custompipename", "settingsfile", "outputformat", "inputformat", "windowstyle",
+                         "version", "encodedcommand", "encodedarguments", "psconsolefile")
+PWSH_VALUE_ALIASES = {"ep", "ex", "wd", "config", "of", "o", "if", "in", "w", "v", "e", "ec"}
 NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
            " command. Install Node, then run /bindwright:update.")
 NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Run /bindwright:update to install it."
@@ -318,19 +323,21 @@ def node_too_old(node):
     return version is not None and int(version.group(1)) < 18
 
 
-def parse(cmd, shell, cwd):
+def parse(cmd, shell, cwd, deadline):
     """(each simple command's words, the variables the command sets, "") as the shell reads
     them (helper/hooks/shell-words.mjs); (None, None, why) when the parser is missing, older
-    than this guard, fails or cannot read the command."""
+    than this guard, fails, cannot read the command or has not answered by `deadline`."""
     node, script = node_program(cwd), parser_script()
     if not node:
         return None, None, NO_NODE
     if not script:
         return None, None, NO_HELPER
+    if deadline <= time.monotonic():
+        return None, None, SLOW
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=cmd.encode("utf-8"),
-                             capture_output=True, timeout=PARSE_SECONDS)
+                             capture_output=True, timeout=deadline - time.monotonic())
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except subprocess.TimeoutExpired:
         return None, None, SLOW
@@ -351,29 +358,29 @@ def parse(cmd, shell, cwd):
     return data["commands"], data["assignments"], ""
 
 
-def with_nested(commands, assignments, shell, cwd, depth=1):
-    """(commands, the shell that reads each, assignments, ""): the parsed commands plus those of
-    every command string a shell in them runs (`bash -c '...'`, `pwsh -Command ...`), parsed
-    the same way; (None, None, None, why) when one cannot be read."""
-    shells, commands, assignments = [shell] * len(commands), list(commands), list(assignments)
-    for words in list(commands):
-        for script in filter(None, (shell_script(words[i:]) for i in range(len(words)))):
-            inner_shell, text = script
-            if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
-                return None, None, None, NESTED_UNREAD
-            inner, inner_assignments, problem = parse(text, inner_shell, cwd)
-            if not problem:
-                inner, inner_shells, inner_assignments, problem = with_nested(
-                    inner, inner_assignments, inner_shell, cwd, depth + 1)
-            if problem:
-                return None, None, None, problem
-            commands, shells, assignments = commands + inner, shells + inner_shells, assignments + inner_assignments
-    return commands, shells, assignments, ""
+def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=()):
+    """(groups, assignments, ""): a group (commands, the commands that place their folders, shell)
+    for the parsed commands, then one per command string a shell in them runs, whose folder
+    changes move only its own group; (None, None, why) when a string cannot be read."""
+    placing = list(around) + list(commands)
+    groups, assignments = [(commands, placing, shell)], list(assignments)
+    # The first shell in a command holds any later one inside its own string.
+    scripts = (next(filter(None, (shell_script(w[i:]) for i in range(len(w)))), None) for w in commands)
+    for inner_shell, text in filter(None, scripts):
+        if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
+            return None, None, NESTED_UNREAD
+        inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
+        if not problem:
+            inner_groups, inner_assignments, problem = with_nested(
+                inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing)
+        if problem:
+            return None, None, problem
+        groups, assignments = groups + inner_groups, assignments + inner_assignments
+    return groups, assignments, ""
 
 
 def shell_script(words):
-    """(parser shell, command string) for a shell run on one, the string a dict when any part of
-    it is built at run time; None for anything else."""
+    """(parser shell, command string, a dict when built at run time) for a shell run on one."""
     name, args = program(words), words[1:]
     if name in POSIX_SHELLS:
         return posix_script(args)
@@ -384,10 +391,12 @@ def posix_script(args):
     """A POSIX shell's command string: its first plain word once a `-c` (`-lc`, `-ec`) is set."""
     has_c, i = False, 0
     while i < len(args) and isinstance(args[i], str) and args[i] != "--":
-        if args[i] in BASH_VALUE_OPTIONS:
-            i += 2
-        elif args[i].startswith("--") or re.fullmatch(r"[-+][A-Za-z]+", args[i]):
-            has_c, i = has_c or args[i][0] == "-" and "c" in args[i] and args[i][1] != "-", i + 1
+        word = args[i]
+        if word.startswith("--"):
+            i += 2 if word in BASH_VALUE_OPTIONS else 1
+        elif re.fullmatch(r"[-+][A-Za-z]+", word):
+            has_c = has_c or word[0] == "-" and "c" in word
+            i += 2 if word[-1] in "oO" else 1  # `-o pipefail`, `-euo pipefail`
         else:
             break
     i += i < len(args) and args[i] == "--"
@@ -396,11 +405,21 @@ def posix_script(args):
 
 def powershell_script(name, args):
     """PowerShell's command string: the words after `-Command` (`-c`, `/c`), joined as it joins them."""
-    # Windows PowerShell runs its first plain word as a command; pwsh runs it as a script file.
-    starts = [i + 1 for i, w in enumerate(args) if isinstance(w, str) and w[:1] in "-/"
-              and w.lstrip("-/").lower() in PWSH_COMMAND]
-    plain = [i for i, w in enumerate(args) if not (isinstance(w, str) and w[:1] in "-/")]
-    start = starts[0] if starts else plain[0] if name == "powershell" and plain else None
+    start, i = None, 0
+    while start is None and i < len(args):
+        parameter = re.fullmatch(r"(?:--?|/)([A-Za-z]+)", args[i]) if isinstance(args[i], str) else None
+        name_read = parameter.group(1).lower() if parameter else None
+        if name_read is None:
+            # Windows PowerShell runs its first plain word as a command; pwsh runs it as a script file.
+            start = i if name == "powershell" else len(args)
+        elif name_read in PWSH_COMMAND:
+            start = i + 1
+        elif "file".startswith(name_read):
+            start = len(args)
+        else:
+            takes_value = name_read in PWSH_VALUE_ALIASES or len(name_read) > 2 and any(
+                p.startswith(name_read) for p in PWSH_VALUE_PARAMETERS)
+            i += 2 if takes_value else 1
     if start is None or start >= len(args):
         return None
     built = [w for w in args[start:] if not isinstance(w, str)]
@@ -685,14 +704,15 @@ def folder_places(commands, cwd):
         first = False
 
 
-def parsed_files(commands, cwd, shells):
-    """(path, error) for every body file the parsed commands name, in order, each command read
-    as the shell beside it reads it, a relative file in every folder the command may run in."""
-    places = folder_places(commands, cwd)
-    for words, shell in zip(commands, shells):
-        for value in command_files(words, shell):
-            if value != "-":
-                yield from resolve(value, places)
+def parsed_files(groups, cwd):
+    """(path, error) for every body file the parsed commands name, in order, each group of
+    `with_nested` read as its shell reads it, a relative file in every folder it may run in."""
+    for commands, placing, shell in groups:
+        places = folder_places(placing, cwd)
+        for words in commands:
+            for value in command_files(words, shell):
+                if value != "-":
+                    yield from resolve(value, places)
 
 
 def abbreviates(word, option, shortest):
@@ -905,10 +925,11 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-def hook_route(commands, assignments):
-    """The kind of route past git's hooks the parsed command takes, or None. A git run through
-    a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run time that names
-    git (`$GIT`)."""
+def hook_route(groups, assignments):
+    """The kind of route past git's hooks the commands of `with_nested`'s groups take, or None.
+    A git run through a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run
+    time that names git (`$GIT`)."""
+    commands = [words for group, _, _ in groups for words in group]
     if turns_lefthook_off(commands, assignments):
         return "lefthook"
     for words in commands:
@@ -952,15 +973,16 @@ def main():
 
     if writes:
         scan_text(cmd, "the command text")
-    parsed, assignments, problem = parse(cmd, shell, cwd)
+    deadline = time.monotonic() + PARSE_SECONDS
+    parsed, assignments, problem = parse(cmd, shell, cwd, deadline)
     if not problem:
-        parsed, shells, assignments, problem = with_nested(parsed, assignments, shell, cwd)
+        groups, assignments, problem = with_nested(parsed, assignments, shell, cwd, deadline)
     if problem:
         if named:
             deny(problem)
         sys.exit(0)
     # A command that writes nothing is checked only for the routes past the hooks.
-    for path, error in (parsed_files(parsed, cwd, shells) if writes else ()):
+    for path, error in (parsed_files(groups, cwd) if writes else ()):
         if error:
             deny(f"could not tell which file holds {error}. Use a literal absolute path.")
         try:
@@ -968,7 +990,7 @@ def main():
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
         scan_text(text, f"file {path}")
-    route = hook_route(parsed, assignments)
+    route = hook_route(groups, assignments)
     if route:
         deny(BYPASS_REASONS[route])
     sys.exit(0)

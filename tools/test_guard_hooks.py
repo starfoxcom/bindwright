@@ -612,10 +612,15 @@ class GuardHookTest(unittest.TestCase):
                            f"found in file {path}")
 
     def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
-        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n"})
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n",
+                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n"})
         for (command, tool, reason), result in self.each((
                 ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("sh -ec 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -euo pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -ceo pipefail 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -c 'cd sub && git commit -F inner.txt'", "Bash", "found in file"),
+                ("pwsh -ExecutionPolicy Bypass -Command 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash --norc -o pipefail -c -- 'git -c core.hooksPath=x commit -m x'", "Bash", "core.hooksPath"),
                 ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
                 ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
@@ -630,6 +635,9 @@ class GuardHookTest(unittest.TestCase):
         for (command, tool), result in self.each((
                 ("bash -c 'git commit -F clean.txt'", "Bash"), ("bash -c 'git status --no-verify'", "Bash"),
                 ("bash ./build.sh; git commit -m x", "Bash"), ("pwsh ./x.ps1; git commit -m x", "PowerShell"),
+                ("pwsh ./build.ps1 -c $cfg; git commit -m x", "Bash"),
+                # A child shell's `cd` never moves the commands around it.
+                ("sh -c 'cd /no/such/folder && true' && git commit -F clean.txt", "Bash"),
                 ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell")),
                 lambda command, tool: self.attr(command, tool=tool, project=root)):
             with self.subTest(command=command):
