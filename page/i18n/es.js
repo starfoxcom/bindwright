@@ -392,8 +392,9 @@ export default {
   "settings.blocked-commands.value": "Estándar",
   "settings.version-check.title": "Revisión de versión",
   "settings.version-check.text": "Antes de etiquetar una versión, compara su número con los commits "
-    + "desde la anterior, como lo numera semver o calver. none no agrega la revisión.",
-  "settings.version-check.value": "semver cuando el repo tiene etiquetas de versión",
+    + "desde la anterior, como lo numera semver, con builds alpha, beta y rc, o calver. "
+    + "none no agrega la revisión.",
+  "settings.version-check.value": "La numeración que ya usa el repo, o una que le quede al proyecto",
   "settings.architecture.title": "Regla de arquitectura",
   "settings.architecture.text": "Una estructura de carpetas a seguir: clean, ddd, ecs, feature-based, "
     + "hexagonal, layered o mvc.",

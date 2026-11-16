@@ -153,14 +153,23 @@ For a team project on GitHub, ask one more:
 
 ### How releases are numbered
 
-Read what the repo shows first: its tags (`git tag --list`) and any `VERSION` file. Then ask:
+First find the numbering the project already uses: its tags (`git tag --list`), a `VERSION` file, and the version its manifest carries (`package.json`, `pyproject.toml`, `Cargo.toml`, `pubspec.yaml`, `*.csproj`, Godot's `project.godot`, Unity's `ProjectSettings/ProjectSettings.asset` `bundleVersion`, and the like). Versions such as `1.4.2`, `v0.3.0` or `1.0.0-beta.2` are semantic versions; ones that start with a year, such as `2026.11.0` or `24.04`, are calendar versions, whose format is the calver.org tokens they fit (`YYYY`, `YY`, `0Y`, `MM`, `0M`, `WW`, `0W`, `DD`, `0D`, `MINOR`, `MICRO`, joined by dots, such as `YYYY.MM.MICRO`).
 
-- **How are this project's releases numbered?**
-  - Semantic versions, such as `v1.4.2`: `"versioning": "semver"`, `"versionFormat": null`. Recommend it when the tags or the `VERSION` file hold versions of that shape.
-  - Calendar versions, such as `2026.11.0`: ask the format in calver.org's tokens joined by dots (`YYYY`, `YY`, `0Y`, `MM`, `0M`, `WW`, `0W`, `DD`, `0D`, `MINOR`, `MICRO`), recommending the one the existing tags fit, such as `YYYY.MM.MICRO`, and save `"versioning": "calver"` with it as `"versionFormat"`.
-  - It does not number its releases: `"versioning": "none"`, `"versionFormat": null`. Recommend it when there are no version tags and no `VERSION` file.
+**When it uses one,** say what was found in one line (such as "tags v0.3.0 to v1.2.0-beta.1: semantic versions"), then ask:
 
-With either numbering, say in one line what it adds: `.github/scripts/version_check.py` and, with the guard hooks in the repo, a hook that runs it before `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch. It blocks a release smaller than its commits need: for semantic versions a `feat` commit needs a minor, a `fix` a patch, and a `!` or a `BREAKING CHANGE:` line a major, read from the commit format `git.md` asks for, and the changelog section must match; for calendar versions only the format and that the version comes after the last one.
+- **Enforce it with the version check?** Yes (recommended): save `"versioning": "semver"`, or `"calver"` with the format as `"versionFormat"`. No: `"versioning": "none"`, and the project keeps numbering by hand.
+
+**When it uses none,** recommend one by what the project is, since some fit a kind of project better than others, and ask:
+
+- **How should this project number its releases?**
+  - Semantic versions, `MAJOR.MINOR.PATCH`: for anything other code builds on (a library, a package, an API, a plugin or a mod), whose version tells users whether an update breaks them. Also for a desktop or mobile app sold in stores.
+  - Semantic versions with pre-release stages: for a game, or any product that goes through testing phases before launch. It counts `0.x` releases during development, with `-alpha.N`, `-beta.N` and `-rc.N` builds toward each version (`1.0.0-alpha.1`, `1.0.0-beta.3`, `1.0.0-rc.1`, then `1.0.0` at launch), then minors for content updates, patches for fixes and a major when old saves or mods stop working. It saves `"semver"` too: the check orders alpha before beta before rc before the release.
+  - Calendar versions, such as `YYYY.MM.MICRO`: for an app, a website or a service shipped on a schedule, where users care when a release came out more than what it breaks. Ask the format, recommending `YYYY.MM.MICRO`.
+  - None: for docs, configuration, personal scripts or anything that is never released.
+
+  Save `"versioning"` as `"semver"`, `"calver"` (with `"versionFormat"`) or `"none"`.
+
+With either numbering, say in one line what it adds: `.github/scripts/version_check.py` and, with the guard hooks in the repo, a hook that runs it before `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch. It blocks a release smaller than its commits need: for semantic versions a `feat` commit needs a minor, a `fix` a patch, and a `!` or a `BREAKING CHANGE:` line a major, read from the commit format `git.md` asks for, measured from the last release without a pre-release tag, and a release's changelog section must match; for calendar versions only the format and that the version comes after the last one.
 
 ### Where the work state lives
 

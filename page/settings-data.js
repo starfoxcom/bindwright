@@ -215,8 +215,8 @@ export const PROJECT = [
     id: "version-check",
     title: "Version check",
     text: "Before a release is tagged, checks its version against the commits since the last one, "
-      + "as semver or calver numbers it. none adds no check.",
-    value: "semver when the repo has version tags",
+      + "as semver, alpha, beta and rc builds included, or calver numbers it. none adds no check.",
+    value: "The numbering the repo uses, or one that fits the project",
     keys: ["advanced.versioning", "advanced.versionFormat"],
     options: ["semver", "calver", "none"],
     engine: [{ flags: {}, key: "advanced.versioning", value: "none" }],
