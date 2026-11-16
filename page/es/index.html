@@ -209,8 +209,24 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <p class="stat-label" data-t="evidence.fixed.label">se detuvieron 1 o 2 rondas hasta corregir el problema</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="stalled" data-count="0">0</span>
+        <span class="stat-num stat-orange" data-total="stalled" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.stalled.label">tomaron 3 rondas o más, donde la sesión se detiene a buscar una corrección más simple</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-purple" data-total="rebuilt" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.rebuilt.label">se reconstruyeron desde cero tras 10 rondas en rojo y pasaron sin otra investigación</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-indigo" data-total="rebuiltStalled" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.rebuiltStalled.label">se reconstruyeron, necesitaron investigar de nuevo y aun así se integraron</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="dropped" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.dropped.label">se descartaron porque no se encontró arreglo</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-gray" data-total="retired" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.retired.label">se descartaron porque ya no hacían falta</p>
       </div>
     </div>
     <p class="evidence-detail" id="evidence-detail"></p>

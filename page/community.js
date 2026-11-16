@@ -18,6 +18,16 @@ function counterUrl() {
 }
 
 const isCount = (value) => Number.isInteger(value) && value >= 0;
+// The counts an older counter does not send yet: read as 0 when missing.
+const OUTCOMES = ["rebuilt", "rebuiltCaught", "rebuiltStalled", "dropped", "retired"];
+const withOutcomes = (p) => ({
+  ...p, ...Object.fromEntries(OUTCOMES.map((key) => [key, p[key] === undefined ? 0 : p[key]])),
+});
+// The rebuilds sit inside the checked PRs, each in the round bracket it took.
+const isConsistent = (p) => OUTCOMES.every((key) => isCount(p[key]))
+  && p.rebuiltStalled <= p.rebuiltCaught && p.rebuiltCaught <= p.rebuilt
+  && p.rebuilt - p.rebuiltCaught <= p.checked - p.caught
+  && p.rebuiltCaught - p.rebuiltStalled <= p.caught - p.stalled && p.rebuiltStalled <= p.stalled;
 
 // The counter's answer, or null when it is not the shape the chart draws.
 function validated(total) {
@@ -25,7 +35,7 @@ function validated(total) {
   if (!total || !fields.every((field) => isCount(total[field])) || !Array.isArray(total.top)) return null;
   const top = total.top.filter((p) => KINDS.includes(p?.kind) && isCount(p.checked) && p.checked > 0
     && isCount(p.merged) && p.merged >= p.checked && isCount(p.caught) && p.caught <= p.checked
-    && isCount(p.stalled) && p.stalled <= p.caught);
+    && isCount(p.stalled) && p.stalled <= p.caught).map(withOutcomes).filter(isConsistent);
   return { ...total, top };
 }
 
@@ -39,7 +49,8 @@ function labelled(top) {
     const name = t(`evidence.kind.${project.kind}`);
     const label = totals[project.kind] > 1 ? `${name} ${seen[project.kind]}` : name;
     const { merged, checked, caught, stalled } = project;
-    return { label, merged, checked, caught, stalled };
+    const { rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired } = project;
+    return { label, merged, checked, caught, stalled, rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired };
   });
 }
 
@@ -49,11 +60,19 @@ async function load() {
   const total = validated(await response.json());
   if (!total || total.projects === 0 || total.top.length === 0) return null;
   const { projects, checked, caught, deep, merged, stalled, rounds } = total;
-  return { projects, checked, caught, deep, merged, stalled, rounds, rows: labelled(total.top) };
+  const outcomes = withOutcomes(total);
+  if (!isConsistent(outcomes)) return null;
+  const { rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired } = outcomes;
+  return {
+    projects, checked, caught, deep, merged, stalled, rounds, rebuilt, rebuiltCaught, rebuiltStalled,
+    dropped, retired, rows: labelled(total.top),
+  };
 }
 
 /**
- * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled,
- * rounds, rows }`, or null. Each row is `{ label, merged, checked, caught, stalled }`, for bars.js.
+ * The shared totals and top rows, `{ projects, checked, caught, deep, merged, stalled, rounds,
+ * rebuilt, rebuiltCaught, rebuiltStalled, dropped, retired, rows }`, or null. Each row is
+ * `{ label, merged, checked, caught, stalled, rebuilt, rebuiltCaught, rebuiltStalled, dropped,
+ * retired }`, for bars.js.
  */
 export const shared = load().catch(() => null);
