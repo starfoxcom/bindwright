@@ -3,6 +3,12 @@
 
 import { FIELDS, dayOf } from "./rules.js";
 
+const NAMES = [...FIELDS, "rounds"];
+/** Each count's column: its name in a send, camelCase, written in snake_case. */
+const COLUMNS = NAMES.map((name) => name.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`));
+const SUMS = COLUMNS.map((column, i) => `COALESCE(SUM(${column}), 0) AS ${NAMES[i]}`);
+const AS_SENT = COLUMNS.map((column, i) => `${column} AS ${NAMES[i]}`);
+
 /**
  * Wraps a D1 database binding with the two calls the handler needs. The
  * handler takes any object with the same methods, so tests pass an
@@ -25,7 +31,11 @@ export class D1Store {
    */
   async addSend({ send, country, timeInMilliseconds, gapInMilliseconds, maxNewPerDay }) {
     const day = dayOf(timeInMilliseconds);
-    const counts = [...FIELDS, "rounds"].map((field) => send[field]);
+    const counts = NAMES.map((name) => send[name]);
+    // ?1 id, ?2 kind, ?3 country, then one per count; the rest follow the counts.
+    const at = (offset) => `?${3 + counts.length + offset}`;
+    const values = counts.map((_, i) => `?${4 + i}`).join(", ");
+    const added = COLUMNS.map((column) => `${column} = ${column} + excluded.${column}`).join(",\n             ");
     const [, , upsert] = await this._database.batch([
       this._database.prepare("DELETE FROM new_projects WHERE day < ?1").bind(day),
       this._database
@@ -38,23 +48,17 @@ export class D1Store {
         .bind(day, send.project, maxNewPerDay),
       this._database
         .prepare(
-          `INSERT INTO projects (id, kind, country, checked, caught, deep, merged, stalled, rounds,
-                                 last_send, covered_to)
-           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?14
+          `INSERT INTO projects (id, kind, country, ${COLUMNS.join(", ")}, last_send, covered_to)
+           SELECT ?1, ?2, ?3, ${values}, ${at(1)}, ${at(5)}
            WHERE EXISTS (SELECT 1 FROM projects WHERE id = ?1)
-              OR EXISTS (SELECT 1 FROM new_projects WHERE day = ?11 AND id = ?1)
+              OR EXISTS (SELECT 1 FROM new_projects WHERE day = ${at(2)} AND id = ?1)
            ON CONFLICT (id) DO UPDATE SET
              kind = excluded.kind,
              country = excluded.country,
-             checked = checked + excluded.checked,
-             caught = caught + excluded.caught,
-             deep = deep + excluded.deep,
-             merged = merged + excluded.merged,
-             stalled = stalled + excluded.stalled,
-             rounds = rounds + excluded.rounds,
+             ${added},
              last_send = excluded.last_send,
              covered_to = excluded.covered_to
-           WHERE projects.last_send <= excluded.last_send - ?12 AND projects.covered_to <= ?13`,
+           WHERE projects.last_send <= excluded.last_send - ${at(3)} AND projects.covered_to <= ${at(4)}`,
         )
         .bind(send.project, send.kind, country, ...counts, timeInMilliseconds, day, gapInMilliseconds,
           send.from, send.to),
@@ -94,18 +98,14 @@ export class D1Store {
   async _computeTotals(topProjects) {
     const [sums, countries, top] = await this._database.batch([
       this._database.prepare(
-        `SELECT COUNT(*) AS projects, COALESCE(SUM(checked), 0) AS checked,
-                COALESCE(SUM(caught), 0) AS caught, COALESCE(SUM(deep), 0) AS deep,
-                COALESCE(SUM(merged), 0) AS merged, COALESCE(SUM(stalled), 0) AS stalled,
-                COALESCE(SUM(rounds), 0) AS rounds
-         FROM projects`,
+        `SELECT COUNT(*) AS projects, ${SUMS.join(", ")} FROM projects`,
       ),
       this._database.prepare(
         "SELECT country, COUNT(*) AS projects FROM projects GROUP BY country ORDER BY projects DESC",
       ),
       this._database
         .prepare(
-          `SELECT kind, checked, caught, deep, merged, stalled, rounds FROM projects
+          `SELECT kind, ${AS_SENT.join(", ")} FROM projects
            ORDER BY checked DESC, merged DESC LIMIT ?1`,
         )
         .bind(topProjects),

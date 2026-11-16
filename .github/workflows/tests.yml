@@ -96,6 +96,15 @@ jobs:
           if grep -q "skipped=" python-tests.txt; then echo "::error::Python tests were skipped"; exit 1; fi
           grep -qE "^Ran [1-9][0-9]* tests? in" python-tests.txt || { echo "::error::No Python tests ran"; exit 1; }
 
+      # The release version check: its script and the hook that runs it. The step runs once
+      # the check is on the branch.
+      - name: Version check tests
+        if: hashFiles('tools/test_version_check.py') != ''
+        run: |
+          python3 -m unittest -v tools/test_version_check.py 2>&1 | tee version-tests.txt
+          grep -qE "^OK" version-tests.txt || { echo "::error::Version check tests failed"; exit 1; }
+          grep -qE "^Ran [1-9][0-9]* tests? in" version-tests.txt || { echo "::error::No version check tests ran"; exit 1; }
+
       # The helper's bash parser ships built from Go source. Rebuilding it with
       # the one Go release that gives the same bytes proves the shipped file is
       # that source. Go comes from go.dev, checked against its SHA-256; the
@@ -166,6 +175,15 @@ jobs:
           python -m unittest -v tools/test_guard_hooks.py 2>&1 | tee guard-tests.txt
           grep -qE "^OK" guard-tests.txt || { echo "::error::Guard hook tests failed"; exit 1; }
           grep -qE "^Ran [1-9][0-9]* tests? in" guard-tests.txt || { echo "::error::No guard hook tests ran"; exit 1; }
+
+      # The version check again on Windows, where a bare program name is looked up in the
+      # current folder first and the hook must refuse a repo's own git or node.
+      - name: Version check tests
+        if: hashFiles('tools/test_version_check.py') != ''
+        run: |
+          python -m unittest -v tools/test_version_check.py 2>&1 | tee version-tests.txt
+          grep -qE "^OK" version-tests.txt || { echo "::error::Version check tests failed"; exit 1; }
+          grep -qE "^Ran [1-9][0-9]* tests? in" version-tests.txt || { echo "::error::No version check tests ran"; exit 1; }
 
   # The required check: it passes only when both jobs above pass. A job that
   # needs a failed one would be skipped, and a skipped check counts as passed.

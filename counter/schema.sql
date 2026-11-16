@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS projects (
   merged    INTEGER NOT NULL DEFAULT 0,
   stalled   INTEGER NOT NULL DEFAULT 0,  -- PRs with STALL_ROUNDS or more red review rounds (rules.js)
   rounds    INTEGER NOT NULL DEFAULT 0,  -- red review rounds, summed over the checked PRs
+  rebuilt         INTEGER NOT NULL DEFAULT 0,  -- the outcome counts of rules.js OUTCOME_COUNTS
+  rebuilt_caught  INTEGER NOT NULL DEFAULT 0,
+  rebuilt_stalled INTEGER NOT NULL DEFAULT 0,
+  dropped         INTEGER NOT NULL DEFAULT 0,
+  retired         INTEGER NOT NULL DEFAULT 0,
   last_send INTEGER NOT NULL,  -- milliseconds since the epoch
   covered_to INTEGER NOT NULL  -- end of the newest counted window, milliseconds since the epoch
 );
@@ -36,4 +41,5 @@ CREATE TABLE IF NOT EXISTS totals_copy (
 );
 
 INSERT OR IGNORE INTO totals_copy (id, refreshed_at, body) VALUES (1, 0,
-  '{"projects":0,"checked":0,"caught":0,"deep":0,"merged":0,"stalled":0,"rounds":0,"countries":[],"top":[]}');
+  '{"projects":0,"checked":0,"caught":0,"deep":0,"merged":0,"stalled":0,"rebuilt":0,"rebuiltCaught":0,'
+  || '"rebuiltStalled":0,"dropped":0,"retired":0,"rounds":0,"countries":[],"top":[]}');
