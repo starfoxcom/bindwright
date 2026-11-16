@@ -268,6 +268,12 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
     target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
     with open(file, encoding="utf-8") as fh:
         _atomic_write(target, fh.read())
+    package = os.path.join(os.path.dirname(os.path.abspath(file)), _package_name(name))
+    if os.path.isdir(package):
+        for module in sorted(os.listdir(package)):
+            if module.endswith(".py"):
+                with open(os.path.join(package, module), encoding="utf-8") as fh:
+                    _atomic_write(os.path.join(os.path.dirname(target), _package_name(name), module), fh.read())
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
@@ -286,7 +292,15 @@ def remove_hook(home, name):
     deleted = os.path.isfile(target)
     if deleted:
         os.remove(target)
+    package = os.path.join(_claude(home), "hooks", _package_name(name))
+    if os.path.isdir(package) and not _is_link(os.lstat(package)):
+        shutil.rmtree(package)
     return {"removed_hooks": removed, "deleted_file": deleted}
+
+
+def _package_name(hook):
+    """The folder of modules a hook file loads beside it: `no-ai-attribution.py` → `no_ai_attribution`."""
+    return hook[:-3].replace("-", "_")
 
 
 def _hook_files(hook):

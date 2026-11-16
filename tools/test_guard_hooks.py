@@ -108,6 +108,11 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(root, ".claude", "hooks"))
         for name in files:
             shutil.copy(os.path.join(REPO, ".claude", "hooks", name), os.path.join(root, ".claude", "hooks"))
+            package = name[:-3].replace("-", "_")  # a hook's package, as an install copies it
+            if name.endswith(".py") and os.path.isdir(os.path.join(REPO, ".claude", "hooks", package)):
+                shutil.copytree(os.path.join(REPO, ".claude", "hooks", package),
+                                os.path.join(root, ".claude", "hooks", package),
+                                ignore=shutil.ignore_patterns("__pycache__"))
         return root
 
     def home_settings(self, text, hook_files=()):
@@ -326,6 +331,14 @@ class GuardHookTest(unittest.TestCase):
                                 text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
+
+    def test_a_guard_without_its_package_refuses_only_what_may_write(self):
+        # A copy of the hook file alone cannot read a command, so a git or gh call gets the fix.
+        root = self.temp_project(("run-hook.sh",))
+        hooks = os.path.join(root, ".claude", "hooks")
+        shutil.copy(os.path.join(REPO, ".claude", "hooks", "no-ai-attribution.py"), hooks)
+        self.assert_denied(self.attr("git commit -m x", project=root), "/bindwright:update")
+        self.assert_passes(self.attr("ls -la", project=root))
 
     def test_attribution_next_to_repo_name_is_denied(self):
         self.assert_denied(self.attr(
@@ -1059,8 +1072,9 @@ class HookSourceTest(unittest.TestCase):
     escape (a DeprecationWarning before 3.12, a SyntaxWarning from 3.12)
     reaches stderr on every tool call."""
 
-    DIRS = (".claude/hooks", "_core/global-template/hooks",
-            "_core/project-template/.claude/hooks", "_core/project-template/.claude/scripts")
+    DIRS = (".claude/hooks", "_core/global-template/hooks", "_core/project-template/.claude/hooks",
+            "_core/project-template/.claude/scripts", ".claude/hooks/no_ai_attribution",
+            "_core/global-template/hooks/no_ai_attribution", "_core/project-template/.claude/hooks/no_ai_attribution")
 
     def test_compiles_without_warnings(self):
         files = [os.path.join(d, name) for d in self.DIRS
