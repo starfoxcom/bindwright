@@ -1,5 +1,5 @@
-"""The attribution guard's shell reading: the parser in Bindwright's helper, the
-command strings a nested shell runs, and which text names a git or GitHub write."""
+"""The attribution guard's shell reading: the parser in Bindwright's helper and the
+command strings a nested shell runs."""
 import json
 import os
 import re

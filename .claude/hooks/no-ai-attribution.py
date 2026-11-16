@@ -218,9 +218,12 @@ def readers(named):
         from no_ai_attribution.shell import parse, with_nested
     except ImportError:
         if named:
+            here = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
             deny("the folder no_ai_attribution/ beside this guard, which reads the command, is missing."
-                 " Restore it: `git checkout -- .claude/hooks/no_ai_attribution` where the repo commits"
-                 " it, otherwise /bindwright:setup.")
+                 " Copy it back from Bindwright's helper: `cp -r ~/.bindwright/helper/node_modules/bindwright"
+                 f"/_core/global-template/hooks/no_ai_attribution \"{here}/\"` (`helper/python/bindwright`"
+                 " after a pip install), or `git checkout -- .claude/hooks/no_ai_attribution` where the"
+                 " repo commits it.")
         sys.exit(0)
     return parse, with_nested, parsed_files, hook_route
 

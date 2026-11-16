@@ -339,11 +339,15 @@ class GuardHookTest(unittest.TestCase):
         shutil.copy(os.path.join(REPO, ".claude", "hooks", "no-ai-attribution.py"), hooks)
         for command in ("git commit -m x", "g\\it commit -m x", "git config core.hooksPath x"):
             with self.subTest(command=command):
-                self.assert_denied(self.attr(command, project=root), "git checkout -- .claude/hooks/no_ai_attribution")
-        for command in ("ls -la", "git status --porcelain", "git checkout -- .claude/hooks/no_ai_attribution",
-                        "node ~/.bindwright/helper/engine/cli.js --update ."):
+                self.assert_denied(self.attr(command, project=root), "global-template/hooks/no_ai_attribution")
+        # The two restores the refusal names pass, and so does a read.
+        restore = f"cp -r {os.path.join(REPO, '_core', 'global-template', 'hooks', 'no_ai_attribution')} {hooks}"
+        for command in ("git status --porcelain", "git checkout -- .claude/hooks/no_ai_attribution", restore):
             with self.subTest(command=command):
                 self.assert_passes(self.attr(command, project=root))
+        shutil.copytree(os.path.join(REPO, "_core", "global-template", "hooks", "no_ai_attribution"),
+                        os.path.join(hooks, "no_ai_attribution"))  # what the cp line does
+        self.assert_denied(self.attr("git commit --no-verify -m x", project=root), "--no-verify")
 
     def test_attribution_next_to_repo_name_is_denied(self):
         self.assert_denied(self.attr(
