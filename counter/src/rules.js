@@ -85,7 +85,8 @@ export function checkSend(body) {
 
   const counts = {};
   for (const field of COUNT_FIELDS) {
-    const value = body[field] ?? (OUTCOME_COUNTS.includes(field) ? 0 : undefined);
+    const isLeftOut = !(field in body) && OUTCOME_COUNTS.includes(field);
+    const value = isLeftOut ? 0 : body[field];
     const limit = field === "rounds" ? MAX_ROUNDS_PER_SEND : MAX_PER_SEND;
     if (!Number.isInteger(value) || value < 0 || value > limit) {
       return refuse(`${field} must be a whole number from 0 to ${limit}`);

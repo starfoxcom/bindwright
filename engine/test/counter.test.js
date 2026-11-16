@@ -126,6 +126,7 @@ test("checkSend accepts a valid send and refuses each bad field", () => {
     ["rounds above their cap", send({ rounds: MAX_ROUNDS_PER_SEND + 1 })],
     ["rounds with caught at 0", send({ caught: 0, deep: 0, rounds: 1 })],
     ["an outcome count as text", send({ dropped: "1" })],
+    ["an outcome count as null", send({ dropped: null })],
     ["rebuiltCaught above rebuilt", send({ rebuilt: 1, rebuiltCaught: 2 })],
     ["rebuiltStalled above rebuiltCaught", send({ caught: 2, stalled: 1, rounds: 4, rebuilt: 1,
       rebuiltCaught: 0, rebuiltStalled: 1 })],
