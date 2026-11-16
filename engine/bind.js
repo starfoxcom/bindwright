@@ -151,6 +151,7 @@ async function globalFiles(a, ctx, readFile) {
     ["memory/MEMORY.md", await render("memory-template/MEMORY.md")],
     ["hooks/push-guard.py", await verbatim("hooks/push-guard.py")],
     ["hooks/session-title.py", await verbatim("hooks/session-title.py")],
+    ["hooks/reply-style.py", await verbatim("hooks/reply-style.py")],
     ["agents/builder.md", await verbatim("agents/builder.md")],
     ["output-styles/straight-talk.md", await verbatim("output-styles/straight-talk.md")],
   ];

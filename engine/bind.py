@@ -205,6 +205,7 @@ def _global_files(a, ctx, read_file):
         ["memory/MEMORY.md", render("memory-template/MEMORY.md")],
         ["hooks/push-guard.py", verbatim("hooks/push-guard.py")],
         ["hooks/session-title.py", verbatim("hooks/session-title.py")],
+        ["hooks/reply-style.py", verbatim("hooks/reply-style.py")],
         ["agents/builder.md", verbatim("agents/builder.md")],
         ["output-styles/straight-talk.md", verbatim("output-styles/straight-talk.md")],
     ]
