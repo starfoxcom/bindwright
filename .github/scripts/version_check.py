@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Refuses a release whose version is smaller than its commits require.
 
-Reads the commits since the newest release tag reachable from --ref, other than
+Reads the commits since the newest stable release tag reachable from --ref, other than
 a tag of NEW_VERSION itself, and checks NEW_VERSION against them:
 
     version_check.py NEW_VERSION [--scheme semver|calver] [--format YYYY.MM.MICRO]
@@ -13,6 +13,12 @@ patch. Before 1.0.0 a major counts as a minor and a minor as a patch. The
 release's section in the changelog (Keep a Changelog, `## [vNEW]` or `## [NEW]`)
 must hold the headings its size needs. The changelog is CHANGELOG.md when that
 file exists, and is not checked when it does not.
+
+semver orders versions as SemVer 2.0.0 does: a pre-release (`1.3.0-beta.1`) sorts after the
+release before it and before its own release, and build metadata (`+build.5`) is ignored.
+NEW must sort after the newest tag of any kind, pre-releases included. A pre-release's size
+is measured against the newest stable tag, and its changelog section is not checked: that
+waits for the release. With no stable tag, only the sort check runs.
 
 calver checks that NEW fits --format (calver.org tokens joined by dots) and
 sorts after the last tag, and nothing else.
@@ -35,7 +41,15 @@ TYPE_LEVEL = {"feat": "minor", "fix": "patch", "perf": "patch"}
 DEMOTED = {"major": "minor", "minor": "patch"}
 HEADER = re.compile(r"^(?P<type>[a-z]+)(?:\([^()]*\))?(?P<bang>!)?: \S")
 BREAKING = re.compile(r"^BREAKING[ -]CHANGE:", re.MULTILINE)
-SEMVER = re.compile(r"(\d+)\.(\d+)\.(\d+)", re.ASCII)
+# SemVer 2.0.0 section 9 and 10: no leading zero in a numeric pre-release identifier.
+SEMVER_IDENTIFIER = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+SEMVER = re.compile(
+    r"(\d+)\.(\d+)\.(\d+)(?:-(%s(?:\.%s)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    % (SEMVER_IDENTIFIER, SEMVER_IDENTIFIER),
+    re.ASCII,
+)
+# The pre-release key of a release: it sorts above every pre-release of its version.
+RELEASE = (1,)
 PATCH_HEADINGS = {"Fixed", "Security"}
 MAX_LISTED = 5
 # calver.org tokens: the regex each one matches, and its range when it is a date part.
@@ -106,11 +120,23 @@ def calver_tokens(args):
     return tokens
 
 
-def parse(text, scheme, tokens):
-    """The version's numbers as a tuple, or None when it does not fit the scheme."""
-    if scheme == "semver":
-        m = SEMVER.fullmatch(text)
-        return tuple(int(n) for n in m.groups()) if m else None
+def pre_key(pre):
+    """Sorts a pre-release: numbers before words, numbers by value, a longer list last."""
+    if pre is None:
+        return RELEASE
+    parts = pre.split(".")
+    return (0,) + tuple((0, int(part)) if part.isdigit() else (1, part) for part in parts)
+
+
+def parse_semver(text):
+    m = SEMVER.fullmatch(text)
+    if m is None:
+        return None
+    return tuple(int(n) for n in m.group(1, 2, 3)), pre_key(m.group(4))
+
+
+def parse_calver(text, tokens):
+    """The version's numbers as a tuple, or None when it does not fit the format."""
     pattern = r"\.".join("(%s)" % CALVER_TOKENS[t][0] for t in tokens)
     m = re.fullmatch(pattern, text, re.ASCII)
     if not m:
@@ -123,8 +149,23 @@ def parse(text, scheme, tokens):
     return numbers
 
 
-def last_release(ref, scheme, tokens, new):
-    """(tag, version) of the newest release tag reachable from ref, or None.
+def parse(text, scheme, tokens):
+    """The version as a sortable key (numbers, pre-release key), or None when it does not fit.
+
+    Build metadata is dropped, so it never changes an order or an equality.
+    """
+    if scheme == "semver":
+        return parse_semver(text)
+    numbers = parse_calver(text, tokens)
+    return None if numbers is None else (numbers, RELEASE)
+
+
+def is_stable(version):
+    return version[1] == RELEASE
+
+
+def release_tags(ref, scheme, tokens, new):
+    """(version, tag) of each release tag reachable from ref.
 
     A tag of the new version itself is skipped, so a release made from a tag that
     already exists is checked against the release before it.
@@ -134,8 +175,11 @@ def last_release(ref, scheme, tokens, new):
         version = parse(strip_v(tag), scheme, tokens)
         if version is not None and version != new:
             releases.append((version, tag))
-    if not releases:
-        return None
+    return releases
+
+
+def newest(releases):
+    """(tag, version) of the newest of the (version, tag) pairs."""
     version, tag = max(releases)
     return tag, version
 
@@ -208,11 +252,16 @@ def changelog_reasons(path, bare, size, commits):
     return ["%s: %s" % (path, reason) for reason in reasons]
 
 
-def semver_reasons(args, new, last):
-    last_tag, last_version = last
-    size = size_of(new, last_version)
-    pre_1 = last_version[0] == 0
-    commits = read_commits(last_tag, args.ref)
+def bare_version(text):
+    """The version without its v prefix or build metadata: the name of its changelog heading."""
+    return strip_v(text).split("+", 1)[0]
+
+
+def semver_reasons(args, new, stable):
+    stable_tag, stable_version = stable
+    size = size_of(new[0], stable_version[0])
+    pre_1 = stable_version[0][0] == 0
+    commits = read_commits(stable_tag, args.ref)
     levels = [commit_level(c.subject, c.body, pre_1) for c in commits]
     required = max(levels, key=RANK.get, default="none")
     reasons = []
@@ -221,8 +270,8 @@ def semver_reasons(args, new, last):
         reasons.append("%s is a %s, but its commits need a %s: %s"
                        % (args.version, size, required, listing(needing)))
     path = changelog_path(args)
-    if path is not None:
-        reasons += changelog_reasons(path, strip_v(args.version), size, commits)
+    if path is not None and is_stable(new):
+        reasons += changelog_reasons(path, bare_version(args.version), size, commits)
     return reasons
 
 
@@ -242,18 +291,21 @@ def check(args):
     tokens = calver_tokens(args)
     new = parse(strip_v(args.version), args.scheme, tokens)
     if new is None:
-        expected = args.format or "X.Y.Z"
+        expected = args.format or "X.Y.Z[-pre][+build]"
         return report(["%s does not fit %s %s" % (args.version, args.scheme, expected)])
-    last = last_release(args.ref, args.scheme, tokens, new)
-    if last is None:
+    releases = release_tags(args.ref, args.scheme, tokens, new)
+    if not releases:
         print("first release: no earlier tag to compare %s with" % args.version)
         return 0
-    last_tag, last_version = last
+    last_tag, last_version = newest(releases)
     if new <= last_version:
         return report(["%s is not after %s" % (args.version, last_tag)])
     if args.scheme == "calver":
         return 0
-    return report(semver_reasons(args, new, last))
+    stable = [release for release in releases if is_stable(release[0])]
+    if not stable:
+        return 0
+    return report(semver_reasons(args, new, newest(stable)))
 
 
 def main(argv):

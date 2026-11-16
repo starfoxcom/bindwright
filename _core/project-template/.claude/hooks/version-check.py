@@ -27,7 +27,7 @@ import shlex
 import subprocess
 import sys
 
-SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+")
+SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 STATEMENT_END = re.compile(r"\r?\n|&&|\|\||[;&|]")
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")

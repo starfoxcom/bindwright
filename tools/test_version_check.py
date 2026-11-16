@@ -179,8 +179,65 @@ class SemverRules(unittest.TestCase):
             self.assertEqual(check(repo)[0], 1)
 
 
+class PreReleaseRules(unittest.TestCase):
+    # name, tag, commits after it, tags on the last commit, NEW version, changelog or None,
+    # exit code, texts in the output
+    ROWS = [
+        ("a beta after a stable release and a feat needs only a minor",
+         "v1.2.0", ["feat: add a flag"], [], "v1.3.0-beta.1", None, 0, []),
+        ("a pre-release of a patch is refused when its commits need a minor",
+         "v1.2.0", ["feat: add a flag"], [], "v1.2.1-beta.1", None, 2, ["need a minor"]),
+        ("a pre-release of a released version is not after it",
+         "v1.2.0", [], [], "v1.2.0-rc.1", None, 2, ["v1.2.0-rc.1 is not after v1.2.0"]),
+        ("a pre-release sorts after the earlier pre-releases of its version",
+         "v1.2.0", ["feat: add a flag"], ["v1.3.0-alpha.2"], "v1.3.0-beta.1", None, 0, []),
+        ("an earlier pre-release is not after the newest one",
+         "v1.2.0", ["feat: add a flag"], ["v1.3.0-alpha.2"], "v1.3.0-alpha.1", None, 2,
+         ["v1.3.0-alpha.1 is not after v1.3.0-alpha.2"]),
+        ("numeric pre-release identifiers compare as numbers",
+         "v1.2.0", ["feat: add a flag"], ["v1.3.0-beta.2"], "v1.3.0-beta.11", None, 0, []),
+        ("beta.11 sorts before rc.1: the first identifiers differ by name",
+         "v1.2.0", ["feat: add a flag"], ["v1.3.0-beta.11"], "v1.3.0-rc.1", None, 0, []),
+        ("the release sorts after its rc and takes an Added heading",
+         "v1.2.0", ["feat: add a flag"], ["v1.3.0-rc.1"], "v1.3.0", section("v1.3.0", "Added"),
+         0, []),
+        ("the release is checked for its Added or Changed heading",
+         "v1.2.0", ["feat: add a flag"], ["v1.3.0-rc.1"], "v1.3.0", section("v1.3.0", "Fixed"),
+         2, ["### Added or ### Changed"]),
+        ("a pre-release needs no changelog section",
+         "v1.2.0", ["feat: add a flag"], [], "v1.3.0-beta.1", "## [v1.2.0]\n", 0, []),
+        ("a build suffix is ignored, and the changelog heading has no suffix",
+         "v1.2.0", ["feat: add a flag"], [], "v1.3.0+build.5", section("v1.3.0", "Added"), 0, []),
+        ("a leading zero in a numeric pre-release identifier does not fit",
+         "v1.2.0", [], [], "v1.3.0-01", None, 2, ["does not fit semver X.Y.Z[-pre][+build]"]),
+        ("an empty pre-release does not fit",
+         "v1.2.0", [], [], "v1.3.0-", None, 2, ["does not fit semver X.Y.Z[-pre][+build]"]),
+        ("with no stable tag, a pre-release that sorts after the tag passes silently",
+         "v0.1.0-alpha.1", ["fix: keep the queue"], [], "v0.1.0-alpha.2", None, 0, []),
+        ("with no stable tag, a pre-release is still checked for its order",
+         "v0.1.0-alpha.2", [], [], "v0.1.0-alpha.1", None, 2,
+         ["v0.1.0-alpha.1 is not after v0.1.0-alpha.2"]),
+    ]
+
+    @staticmethod
+    def run_row(row):
+        _, tag, commits, end_tags, new, changelog, _, _ = row
+        with make_repo(tag, commits, changelog, end_tags) as repo:
+            return check(repo, new)
+
+    def test_rows(self):
+        results = in_parallel(self.run_row, self.ROWS)
+        for (name, _, _, _, _, _, code, texts), (got_code, out) in zip(self.ROWS, results):
+            with self.subTest(name):
+                self.assertEqual(got_code, code, out)
+                for text in texts:
+                    self.assertIn(text, out)
+                if code == 0:
+                    self.assertEqual(out, "", "an allowed version prints nothing")
+
+
 class CalverRules(unittest.TestCase):
-    FORMAT = ["--scheme", "calver", "--format", "YYYY.MM.MICRO"]
+    FORMAT =["--scheme", "calver", "--format", "YYYY.MM.MICRO"]
     # name, tag, NEW version, exit code, text in the output
     ROWS = [
         ("a later month is allowed", "2026.10.3", "2026.11.0", 0, ""),
@@ -243,6 +300,7 @@ class Hook(unittest.TestCase):
          "gh pr create --base main --head release/v5.2.2 --title x", 2),
         ("a refused tag after another statement", "git push -q && git tag v5.2.2", 2),
         ("a tag after git's own options", "git -C . tag v5.2.2", 2),
+        ("a pre-release tag too small for its commits", "git tag v5.2.2-beta.1", 2),
         ("a tag that is not a version", "git tag backup", 0),
         ("a tag being deleted", "git tag -d v5.2.2", 0),
         ("a PR from a work branch", "gh pr create --base develop --head feature/x", 0),
