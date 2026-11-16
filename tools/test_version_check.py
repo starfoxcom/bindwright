@@ -8,6 +8,7 @@ script or the hook on it the way a session does.
 
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, ".github", "scripts", "version_check.py")
 HOOK = os.path.join(ROOT, "_core", "project-template", ".claude", "hooks", "version-check.py")
+HELPER = os.path.join(ROOT, "helper")
 QUIET_GIT = ["git", "-c", "core.hooksPath="]
 
 
@@ -100,6 +102,9 @@ class SemverRules(unittest.TestCase):
          "v6.0.0", section("v6.0.0", "Breaking"), 0, []),
         ("a major without a Breaking heading is refused",
          "v5.2.1", ["fix!: drop the old flag"], "v6.0.0", section("v6.0.0", "Fixed"), 2,
+         ["a breaking change needs ### Breaking"]),
+        ("a major needs Breaking even with no breaking commit",
+         "v5.2.1", ["feat: add a flag"], "v6.0.0", section("v6.0.0", "Added"), 2,
          ["a major needs ### Breaking"]),
         ("a minor may not hold Breaking",
          "v5.2.1", ["feat: add a flag"], "v5.3.0", section("v5.3.0", "Added", "Breaking"), 2,
@@ -113,6 +118,19 @@ class SemverRules(unittest.TestCase):
          "v0.4.0", ["feat!: replace the parser"], "v0.5.0", None, 0, []),
         ("before 1.0.0 a feat needs only a patch",
          "v0.4.0", ["feat: add a flag"], "v0.4.1", None, 0, []),
+        ("before 1.0.0 a patch that adds takes Added",
+         "v0.4.0", ["feat: add a flag"], "v0.4.1", section("v0.4.1", "Added"), 0, []),
+        ("before 1.0.0 a minor that breaks takes Breaking",
+         "v0.4.0", ["feat!: replace the parser"], "v0.5.0", section("v0.5.0", "Added", "Breaking"),
+         0, []),
+        ("before 1.0.0 a breaking change still needs Breaking",
+         "v0.4.0", ["feat!: replace the parser"], "v0.5.0", section("v0.5.0", "Added"), 2,
+         ["a breaking change needs ### Breaking"]),
+        ("before 1.0.0 a patch may not hold Breaking",
+         "v0.4.0", ["fix: keep the queue"], "v0.4.1", section("v0.4.1", "Fixed", "Breaking"), 2,
+         ["a patch must not have ### Breaking"]),
+        ("1.0.0 needs no Breaking when nothing breaks",
+         "v0.9.0", ["feat: add a flag"], "v1.0.0", section("v1.0.0", "Added"), 0, []),
         ("a changelog section is required when the file exists",
          "v5.2.1", ["fix: keep the queue"], "v5.2.2", "## [v5.2.1]\n", 2, ["no section for 5.2.2"]),
         ("the section may be named without v",
@@ -171,6 +189,20 @@ class SemverRules(unittest.TestCase):
             code, out = check(repo, "v5.2.2")
             self.assertEqual(code, 2)
             self.assertIn("and 2 more", out)
+
+    def test_a_commit_message_that_is_not_utf8_is_read(self):
+        stream = (commit_block(1, "chore: start", "main") + tag_block("v5.2.1", 1)
+                  + commit_block(2, "feat: cafe", "main", parents=(1,)).replace(b"cafe", b"caf\xe9"))
+        with import_repo(stream) as repo:
+            code, out = check(repo, "v5.2.2")
+            self.assertEqual(code, 2, out)
+            self.assertIn("feat: caf\ufffd", out)
+
+    def test_a_shallow_clone_is_exit_1(self):
+        with make_repo("v5.2.1", ["feat: add a flag"]) as repo,                 tempfile.TemporaryDirectory() as clone:
+            subprocess.run(QUIET_GIT + ["clone", "-q", "--depth", "1", pathlib.Path(repo).as_uri(), clone],
+                           check=True, capture_output=True)
+            self.assertEqual(check(clone, "v5.2.2"), (1, ""))
 
     def test_a_bad_argument_or_a_missing_changelog_is_exit_1(self):
         with make_repo("v5.2.1", []) as repo:
@@ -279,9 +311,10 @@ def as_project(repo, versioning, fmt=None):
     shutil.copy(SCRIPT, os.path.join(repo, ".github", "scripts"))
 
 
-def run_hook(repo, command, tool="Bash"):
+def run_hook(repo, command, tool="Bash", helper=HELPER):
     event = json.dumps({"tool_name": tool, "tool_input": {"command": command}, "cwd": repo})
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=repo)
+    # The hook reads commands with the helper's shell parser; here, the repo's own copy.
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=repo, BINDWRIGHT_HELPER=helper)
     done = subprocess.run([sys.executable, "-I", HOOK], input=event, capture_output=True,
                           text=True, encoding="utf-8", env=env)
     return done.returncode, done.stderr
@@ -300,6 +333,14 @@ class Hook(unittest.TestCase):
          "gh pr create --base main --head release/v5.2.2 --title x", 2),
         ("a refused tag after another statement", "git push -q && git tag v5.2.2", 2),
         ("a tag after git's own options", "git -C . tag v5.2.2", 2),
+        ("a tag whose options are clustered, message first", 'git tag -am "v5.2.2" v5.2.2', 2),
+        ("a release PR whose head is attached with =", "gh pr create --head=release/v5.2.2", 2),
+        ("a clustered list of tags", "git tag -ln v5.2.2", 0),
+        ("a list with an attached line count", "git tag -n9 v5.2.2", 0),
+        ("a release command inside a quoted message",
+         'git commit -m "docs: release steps\ngit tag v5.2.2\nthen push"', 0),
+        ("a release command inside a here-document", "cat > notes.md <<EOF\ngit tag v5.2.2\nEOF", 0),
+        ("a version built at run time", "git tag $NEXT", 0),
         ("a pre-release tag too small for its commits", "git tag v5.2.2-beta.1", 2),
         ("a tag that is not a version", "git tag backup", 0),
         ("a tag being deleted", "git tag -d v5.2.2", 0),
@@ -322,6 +363,14 @@ class Hook(unittest.TestCase):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG, branch="release/v5.2.2") as repo:
             as_project(repo, "semver")
             self.assertEqual(run_hook(repo, "gh pr create --base main", "PowerShell")[0], 2)
+
+    def test_without_the_parser_only_a_possible_release_is_blocked(self):
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            code, err = run_hook(repo, "git tag v5.3.0", helper=repo)
+            self.assertEqual(code, 2)
+            self.assertIn("/bindwright:update", err)
+            self.assertEqual(run_hook(repo, "git log --oneline", helper=repo), (0, ""))
 
     def test_a_project_without_versioning_checks_nothing(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:

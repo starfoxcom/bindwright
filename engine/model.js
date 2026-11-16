@@ -329,7 +329,6 @@ export function mapRemovedTool(advanced) {
   return { ...advanced, codeResearch: "custom", codeResearchCustom: { ...old } };
 }
 
-// Every toggle name the templates use must resolve here to true or false.
 // A calver format is tokens joined by dots, which the check script parses again.
 const CALVER_FORMAT = /^(YYYY|YY|0Y|MM|0M|WW|0W|DD|0D|MINOR|MICRO)(\.(YYYY|YY|0Y|MM|0M|WW|0W|DD|0D|MINOR|MICRO))*$/;
 
@@ -343,6 +342,7 @@ function checkVersioning(adv) {
   }
 }
 
+// Every toggle name the templates use must resolve here to true or false.
 export function flagsFor(a) {
   const adv = a.advanced;
   const soloOwn = !a.team && !a.client;

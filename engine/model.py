@@ -420,7 +420,6 @@ def map_removed_tool(advanced):
                 codeResearchCustom=dict(REMOVED_CODE_RESEARCH_TOOLS[code_research]))
 
 
-# Every toggle name the templates use must resolve here to True or False.
 # A calver format is tokens joined by dots, which the check script parses again.
 _CALVER_TOKEN = r"(YYYY|YY|0Y|MM|0M|WW|0W|DD|0D|MINOR|MICRO)"
 _CALVER_FORMAT = re.compile(r"%s(\.%s)*" % (_CALVER_TOKEN, _CALVER_TOKEN))
@@ -438,6 +437,7 @@ def _check_versioning(adv):
         _check(fmt is None, "versionFormat is only for calver: it must be null")
 
 
+# Every toggle name the templates use must resolve here to True or False.
 def flags_for(a):
     adv = a["advanced"]
     solo_own = not a["team"] and not a["client"]

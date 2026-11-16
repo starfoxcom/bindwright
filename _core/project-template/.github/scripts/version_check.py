@@ -95,7 +95,7 @@ def parse_args(argv):
 
 def git(*args):
     done = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8",
-                          check=False)
+                          errors="replace", check=False)
     if done.returncode != 0:
         raise CheckError(done.stderr.strip() or "git %s failed" % args[0])
     return done.stdout
@@ -232,18 +232,23 @@ def find_section(text, bare):
     return text[m.end():m.end() + nxt.start()] if nxt else text[m.end():]
 
 
-def changelog_reasons(path, bare, size, commits):
-    with open(path, encoding="utf-8") as fh:
+def changelog_reasons(path, bare, size, commits, pre_1):
+    """What the version's changelog section lacks or must not hold. Before 1.0.0 each size
+    carries one step more: a minor may break, and a patch may add."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
         section = find_section(fh.read(), bare)
     if section is None:
         return ["%s: no section for %s" % (path, bare)]
     headings = set(re.findall(r"^### ([^\n]+?)[ \t]*$", section, re.MULTILINE))
+    breaks = any(commit_level(c.subject, c.body, False) == "major" for c in commits)
+    may_break = size == "major" or (pre_1 and size == "minor")
     reasons = []
-    if size == "major" and "Breaking" not in headings:
-        reasons.append("a major needs ### Breaking")
-    if size == "minor" and "Breaking" in headings:
-        reasons.append("a minor must not have ### Breaking")
-    if size == "patch" and headings - PATCH_HEADINGS:
+    if (breaks or (size == "major" and not pre_1)) and "Breaking" not in headings:
+        reasons.append("a breaking change needs ### Breaking" if breaks
+                       else "a major needs ### Breaking")
+    if not may_break and "Breaking" in headings:
+        reasons.append("a %s must not have ### Breaking" % size)
+    if size == "patch" and not pre_1 and headings - PATCH_HEADINGS:
         extra = ", ".join("### " + h for h in sorted(headings - PATCH_HEADINGS))
         reasons.append("a patch may hold only ### Fixed and ### Security, not %s" % extra)
     has_feat = any(commit_type(c.subject) == "feat" for c in commits)
@@ -271,7 +276,7 @@ def semver_reasons(args, new, stable):
                        % (args.version, size, required, listing(needing)))
     path = changelog_path(args)
     if path is not None and is_stable(new):
-        reasons += changelog_reasons(path, bare_version(args.version), size, commits)
+        reasons += changelog_reasons(path, bare_version(args.version), size, commits, pre_1)
     return reasons
 
 
@@ -293,6 +298,9 @@ def check(args):
     if new is None:
         expected = args.format or "X.Y.Z[-pre][+build]"
         return report(["%s does not fit %s %s" % (args.version, args.scheme, expected)])
+    if git("rev-parse", "--is-shallow-repository").strip() == "true":
+        raise CheckError("this clone is shallow, so earlier release tags may be missing; "
+                         "run git fetch --unshallow --tags, then check again")
     releases = release_tags(args.ref, args.scheme, tokens, new)
     if not releases:
         print("first release: no earlier tag to compare %s with" % args.version)
@@ -309,6 +317,9 @@ def check(args):
 
 
 def main(argv):
+    # Commit subjects can hold any character, and a console's own code page may not.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", errors="replace")
     try:
         return check(parse_args(argv))
     except (CheckError, OSError) as e:

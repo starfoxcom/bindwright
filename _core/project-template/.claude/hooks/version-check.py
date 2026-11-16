@@ -14,26 +14,27 @@ The numbering comes from `advanced.versioning` in `.bindwright/project.json`:
 or no check script, every command runs. A tag that is not shaped like a version
 of the scheme (`git tag backup`) is not a release, so it runs too.
 
-The command is cut into statements at newlines, `;`, `&` and `|`, and each one
-is split into words the way the shell would. It reads the commands a release
-is made with; a version built at run time (`git tag $NEXT`) is out of reach.
-The check refusing, or failing to run, blocks the command with its reasons.
+A command whose text names a tag, a release or a PR is read the way the shell
+reads it, by the shell parser in Bindwright's helper (`hooks/shell-words.mjs`),
+so quoted text and here-documents are never taken for commands. Options are
+read as getopt reads them (`-am <message>`, `--head=<branch>`). A version built
+at run time (`git tag $NEXT`) is out of reach. The check refusing, failing to
+run, or the parser missing blocks such a command with the reason.
 """
 
 import json
 import os
 import re
-import shlex
+import shutil
 import subprocess
 import sys
 
 SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
-STATEMENT_END = re.compile(r"\r?\n|&&|\|\||[;&|]")
-ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+RELEASE_TEXT = re.compile(r"\b(?:tag|release|pr)\b")
 RELEASE_BRANCH = re.compile(r"release/(.+)")
 
-# Options that take the next word as their value, so it is never the version.
+# Options that take a value, so it is never the version.
 GIT_GLOBAL_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 TAG_VALUE = {"-m", "--message", "-F", "--file", "-u", "--local-user", "--cleanup", "--color",
              "--sort", "--format", "--contains", "--no-contains", "--merged", "--no-merged",
@@ -43,50 +44,101 @@ RELEASE_VALUE = {"-t", "--title", "-n", "--notes", "-F", "--notes-file", "--targ
                  "--repo", "--discussion-category", "--notes-start-tag"}
 PR_VALUE = {"-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-R",
             "--repo", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p",
-            "--project", "-r", "--reviewer", "-T", "--template", "--recover"}
+            "--project", "-r", "--reviewer", "-T", "--template", "--recover", "-H", "--head"}
 TIMEOUT_SECONDS = 25
+PARSE_SECONDS = 6
+NO_PARSER = ("the shell parser in Bindwright's helper could not run, so the command was not read. "
+             "Run /bindwright:update to install the helper; it needs Node 18 or later.")
+UNREAD = "the shell parser could not read this command. Write the release command plainly."
 
 
-def words_of(statement):
-    """The statement's words as the shell splits them, or plain words when it cannot."""
+def parser_script():
+    """The helper's shell parser, or None when no copy is installed."""
+    helper = os.path.join(os.path.expanduser("~"), ".bindwright", "helper")
+    folders = [os.environ["BINDWRIGHT_HELPER"]] if os.environ.get("BINDWRIGHT_HELPER") else [
+        os.path.join(helper, "node_modules", "bindwright"), os.path.join(helper, "python", "bindwright")]
+    scripts = [os.path.join(folder, "hooks", "shell-words.mjs") for folder in folders]
+    return next((script for script in scripts if os.path.isfile(script)), None)
+
+
+def node_program(project):
+    """The `node` on PATH, or None when the only one is the project's own. Windows looks a bare
+    name up in the current folder first, so a repo could ship its own `node.exe`: that search
+    is switched off, and a relative match or one inside the project is refused."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    found = shutil.which("node")
+    if not found or not os.path.isabs(found):
+        return None
+    here = {os.path.normcase(os.path.realpath(folder)) for folder in (project, os.getcwd())}
+    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
+
+
+def shell_commands(command, shell, project):
+    """(each simple command's words, "") as the shell reads them, or (None, why) when the
+    parser cannot run or read the command. A word built at run time is None."""
+    node, script = node_program(project), parser_script()
+    if not node or not script:
+        return None, NO_PARSER
     try:
-        return shlex.split(statement, posix=True)
-    except ValueError:
-        return statement.split()
+        # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
+        out = subprocess.run([node, script, shell], input=command.encode("utf-8"),
+                             capture_output=True, timeout=PARSE_SECONDS)
+        data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        data = None
+    if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
+        return None, NO_PARSER
+    if data.get("error"):
+        return None, UNREAD
+    return [[word if isinstance(word, str) else None for word in words]
+            for words in data["commands"] if isinstance(words, list)], ""
 
 
-def positionals(args, value_options):
-    """The arguments that are neither options nor an option's value."""
-    found, skip = [], False
-    for word in args:
-        if skip:
-            skip = False
-        elif word == "--":
-            continue
-        elif word.startswith("-"):
-            skip = word in value_options
-        else:
+def read_options(args, takes_value):
+    """(positionals, {option: value}) as getopt reads them: `-abc` is three options, a short
+    option that takes a value takes the rest of its word or the next one, `--name=value`
+    or `--name value` for a long one, and `--` ends the options."""
+    found, options, index = [], {}, 0
+    while index < len(args):
+        word, index = args[index], index + 1
+        if word == "--":
+            found += args[index:]
+            break
+        if word is None or not word.startswith("-") or word == "-":
             found.append(word)
-    return found
+        elif word.startswith("--"):
+            name, has_value, value = word.partition("=")
+            if not has_value and name in takes_value and index < len(args):
+                value, index = args[index], index + 1
+            options[name] = value
+        else:
+            for at in range(1, len(word)):
+                name = "-" + word[at]
+                if name not in takes_value:
+                    options[name] = ""
+                    continue
+                value = word[at + 1:]
+                if not value and index < len(args):
+                    value, index = args[index], index + 1
+                options[name] = value
+                break
+    return found, options
 
 
-def option_value(args, names):
-    """The value given to any of `names`, as `--name value` or `--name=value`."""
-    for index, word in enumerate(args):
-        if word in names and index + 1 < len(args):
-            return args[index + 1]
-        for name in names:
-            if name.startswith("--") and word.startswith(name + "="):
-                return word[len(name) + 1:]
-    return None
+def program(words):
+    """The command's program name, without a Windows extension, or "" when unknown."""
+    if not words or not isinstance(words[0], str):
+        return ""
+    name = os.path.basename(words[0].replace("\\", "/")).lower()
+    return re.sub(r"\.(exe|cmd|bat|com)$", "", name)
 
 
 def git_subcommand(words):
     """The words after `git` and its global options, or None when this is not git."""
-    if not words or os.path.basename(words[0]).lower() not in ("git", "git.exe"):
+    if program(words) != "git":
         return None
     rest = words[1:]
-    while rest and rest[0].startswith("-"):
+    while rest and isinstance(rest[0], str) and rest[0].startswith("-"):
         rest = rest[2:] if rest[0] in GIT_GLOBAL_VALUE else rest[1:]
     return rest
 
@@ -96,11 +148,8 @@ def release_from_git(words):
     rest = git_subcommand(words)
     if not rest or rest[0] != "tag":
         return None
-    args = rest[1:]
-    if any(word in TAG_NOT_CREATING for word in args):
-        return None
-    found = positionals(args, TAG_VALUE)
-    if not found:
+    found, options = read_options(rest[1:], TAG_VALUE)
+    if not found or TAG_NOT_CREATING & options.keys():
         return None
     return found[0], (found[1] if len(found) > 1 else "HEAD")
 
@@ -109,7 +158,7 @@ def git_output(project, *args):
     """What git prints, or "" when it fails."""
     try:
         out = subprocess.run(["git", *args], cwd=project, capture_output=True, text=True,
-                             timeout=TIMEOUT_SECONDS)
+                             encoding="utf-8", errors="replace", timeout=TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError):
         return ""
     return out.stdout.strip() if out.returncode == 0 else ""
@@ -125,33 +174,24 @@ def branch_ref(project, branch):
 
 def release_from_gh(words, project):
     """(version, ref) when the words create a release or a release branch's PR, else None."""
-    if len(words) < 3 or os.path.basename(words[0]).lower() not in ("gh", "gh.exe"):
+    if program(words) != "gh" or len(words) < 3:
         return None
     group, action, args = words[1], words[2], words[3:]
     if (group, action) == ("release", "create"):
-        found = positionals(args, RELEASE_VALUE)
+        found, _ = read_options(args, RELEASE_VALUE)
         return (found[0], "HEAD") if found else None
     if (group, action) == ("pr", "create"):
-        head = option_value(args, ("-H", "--head"))
+        _, options = read_options(args, PR_VALUE)
+        named = "--head" if "--head" in options else "-H"
+        head = options.get(named)
+        if named in options and head is None:
+            return None
         branch = head.split(":")[-1] if head else git_output(project, "branch", "--show-current")
         match = RELEASE_BRANCH.fullmatch(branch)
         if not match:
             return None
         return match.group(1), (branch_ref(project, branch) if head else "HEAD")
     return None
-
-
-def releases_in(command, project):
-    """Every (version, ref) the command would tag or propose."""
-    found = []
-    for statement in STATEMENT_END.split(command):
-        words = words_of(statement)
-        while words and ASSIGNMENT.match(words[0]):
-            words = words[1:]
-        release = release_from_git(words) or release_from_gh(words, project)
-        if release:
-            found.append(release)
-    return found
 
 
 def load_scheme(project):
@@ -176,8 +216,8 @@ def check_release(project, scheme, fmt, version, ref):
     if scheme == "calver" and fmt:
         argv += ["--format", fmt]
     try:
-        out = subprocess.run(argv, cwd=project, capture_output=True, text=True,
-                             timeout=TIMEOUT_SECONDS)
+        out = subprocess.run(argv, cwd=project, capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", timeout=TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError) as error:
         return f"the version check could not run: {error}"
     if out.returncode == 0:
@@ -187,19 +227,25 @@ def check_release(project, scheme, fmt, version, ref):
     return f"the version check could not run: {(out.stderr or out.stdout).strip()}"
 
 
-def refusal(command, project):
-    """Why the command's release is refused, or None."""
+def refusal(command, shell, project):
+    """Why the command's release is blocked, or None."""
     scheme_and_format = load_scheme(project)
-    if not scheme_and_format:
+    if not scheme_and_format or not RELEASE_TEXT.search(command):
         return None
     scheme, fmt = scheme_and_format
+    commands, problem = shell_commands(command, shell, project)
+    if problem:
+        return f"Blocked: this command may make a release, and {problem}"
     shape = SEMVER_TAG if scheme == "semver" else CALVER_TAG
-    for version, ref in releases_in(command, project):
-        if not shape.fullmatch(version):
+    for words in commands:
+        release = release_from_git(words) or release_from_gh(words, project)
+        if not release or None in release or not shape.fullmatch(release[0]):
             continue
-        reasons = check_release(project, scheme, fmt, version, ref)
+        reasons = check_release(project, scheme, fmt, *release)
         if reasons:
-            return version, reasons
+            return (f"Blocked release {release[0]}: its version does not fit the commits since "
+                    f"the last release.\n{reasons}\nPick the version the commits need, or fix "
+                    "the changelog, then run the command again.")
     return None
 
 
@@ -212,13 +258,11 @@ def main():
         return 0
     command = (data.get("tool_input") or {}).get("command") or ""
     project = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd()
-    found = refusal(command, project)
-    if not found:
+    shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
+    reason = refusal(command, shell, project)
+    if not reason:
         return 0
-    version, reasons = found
-    print(f"Blocked release {version}: its version does not fit the commits since the last "
-          f"release.\n{reasons}\nPick the version the commits need, or fix the changelog, "
-          "then run the command again.", file=sys.stderr)
+    print(reason, file=sys.stderr)
     return 2
 
 
