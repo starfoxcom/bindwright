@@ -1,6 +1,7 @@
 // The opt-in review counter behind the Bindwright page.
 //
-//   POST /increment  {project, kind, checked, caught, deep, merged, stalled, rounds, from, to}
+//   POST /increment  {project, kind, checked, caught, deep, merged, stalled, rounds, from, to},
+//                    plus the outcome counts of rules.js OUTCOME_COUNTS, each 0 when left out
 //                    adds one send
 //   GET  /total      the sums, projects per country and the top projects
 //

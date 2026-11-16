@@ -20,6 +20,9 @@ import {
 } from "../../counter/src/rules.js";
 
 const SCHEMA = readFileSync(new URL("../../counter/schema.sql", import.meta.url), "utf8");
+const MIGRATION = readFileSync(
+  new URL("../../counter/migrations/0001_outcome_counts.sql", import.meta.url), "utf8");
+const NO_OUTCOMES = { rebuilt: 0, rebuiltCaught: 0, rebuiltStalled: 0, dropped: 0, retired: 0 };
 const PROJECT = "0123456789abcdef0123456789abcdef";
 const OTHER = "fedcba9876543210fedcba9876543210";
 const NOON = Date.UTC(2026, 10, 4, 12);
@@ -33,9 +36,9 @@ const isRead = (sql) => /^\s*(SELECT|WITH)\b/i.test(sql);
  * transaction, as D1 does, and reports `meta.changes` per statement.
  */
 class SqliteD1 {
-  constructor() {
+  constructor(schema = SCHEMA) {
     this.sqlite = new DatabaseSync(":memory:");
-    this.sqlite.exec(SCHEMA);
+    this.sqlite.exec(schema);
   }
 
   prepare(sql) {
@@ -68,8 +71,8 @@ class SqliteD1 {
   }
 }
 
-function newStore() {
-  const database = new SqliteD1();
+function newStore(schema) {
+  const database = new SqliteD1(schema);
   return { store: new D1Store(database), database };
 }
 
@@ -98,6 +101,10 @@ async function run(request, { store, rateLimiter, time = NOON }) {
 test("checkSend accepts a valid send and refuses each bad field", () => {
   assert.equal(checkSend(send()).ok, true);
   assert.equal(checkSend(send({ caught: 2, stalled: 1, rounds: 3 })).ok, true, "a stalled PR");
+  const outcomes = send({ caught: 2, stalled: 1, rounds: 4, rebuilt: 3, rebuiltCaught: 2, rebuiltStalled: 1 });
+  assert.equal(checkSend(outcomes).ok, true, "rebuilds, one in each round bracket");
+  const onlyDrops = send({ checked: 0, caught: 0, deep: 0, merged: 0, rounds: 0, dropped: 1, retired: 2 });
+  assert.equal(checkSend(onlyDrops).ok, true, "a window with only dropped PRs");
   const refused = [
     ["not an object", []],
     ["unknown field", send({ repo: "secret" })],
@@ -118,6 +125,14 @@ test("checkSend accepts a valid send and refuses each bad field", () => {
     ["rounds fewer than three per stalled PR", send({ caught: 2, stalled: 2, rounds: 5 })],
     ["rounds above their cap", send({ rounds: MAX_ROUNDS_PER_SEND + 1 })],
     ["rounds with caught at 0", send({ caught: 0, deep: 0, rounds: 1 })],
+    ["an outcome count as text", send({ dropped: "1" })],
+    ["an outcome count as null", send({ dropped: null })],
+    ["rebuiltCaught above rebuilt", send({ rebuilt: 1, rebuiltCaught: 2 })],
+    ["rebuiltStalled above rebuiltCaught", send({ caught: 2, stalled: 1, rounds: 4, rebuilt: 1,
+      rebuiltCaught: 0, rebuiltStalled: 1 })],
+    ["more clean rebuilds than clean checked PRs", send({ rebuilt: 4 })],
+    ["more held-back rebuilds than held-back PRs", send({ rebuilt: 2, rebuiltCaught: 2 })],
+    ["a stalled rebuild with no stalled PR", send({ rebuilt: 1, rebuiltCaught: 1, rebuiltStalled: 1 })],
   ];
   for (const [name, body] of refused) assert.equal(checkSend(body).ok, false, name);
   const atCap = send({
@@ -143,7 +158,7 @@ test("a send adds to the totals, and /total reports kinds and counts only", asyn
   assert.equal(total.body.stalled, 1);
   assert.equal(total.body.rounds, 10);
   assert.deepEqual(total.body.top[0], {
-    kind: "website", checked: 9, caught: 2, deep: 1, merged: 3, stalled: 1, rounds: 8,
+    kind: "website", checked: 9, caught: 2, deep: 1, merged: 3, stalled: 1, ...NO_OUTCOMES, rounds: 8,
   });
   assert.equal(JSON.stringify(total.body).includes(PROJECT), false, "project ids stay private");
 });
@@ -225,4 +240,23 @@ test("other routes and methods answer 404", async () => {
   const { store } = newStore();
   assert.equal((await run(new Request("https://counter.test/increment"), { store })).status, 404);
   assert.equal((await run(new Request("https://counter.test/"), { store })).status, 404);
+});
+
+// A database made before the outcome counts gains them from the migration, and its rows keep counting.
+test("the migration adds the outcome counts to an older database, which then adds them up", async () => {
+  const older = SCHEMA.replace(/^[ \t]+(rebuilt\w*|dropped|retired)[ \t]+INTEGER[^\n]*\n/gm, "");
+  const names = (db) => db.sqlite.prepare("SELECT name FROM pragma_table_info('projects')").all()
+    .map((row) => row.name).sort();
+  const { store, database } = newStore(older);
+  assert.equal(names(database).includes("rebuilt"), false, "the older table has no outcome columns");
+  database.sqlite.prepare(
+    `INSERT INTO projects (id, kind, country, checked, caught, deep, merged, stalled, rounds, last_send,
+                           covered_to) VALUES (?, 'game', 'XX', 4, 1, 1, 3, 0, 2, ?, ?)`,
+  ).run(PROJECT, NOON, NOON);
+  database.sqlite.exec(MIGRATION);
+  assert.deepEqual(names(database), names(new SqliteD1()));
+  const next = send({ from: NOON, to: LATER, dropped: 2, rebuilt: 1 });
+  assert.equal((await run(post(next), { store, time: LATER })).status, 200);
+  const row = rowOf(database, PROJECT);
+  assert.deepEqual([row.checked, row.dropped, row.rebuilt, row.retired], [8, 2, 1, 0]);
 });
