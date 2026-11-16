@@ -27,6 +27,7 @@ import {
 import {
   KINDS as COUNTER_KINDS,
   MAX_ROUNDS_PER_SEND,
+  checkSend,
   STALL_ROUNDS as COUNTER_STALL_ROUNDS,
 } from "../../counter/src/rules.js";
 
@@ -370,6 +371,8 @@ test("a send carries the PRs dropped in its window, by their label", () => inSce
   await sendAt(s, noon(3), gh, counter);
   const { dropped, retired } = counter.posts[0].body;
   assert.deepEqual({ dropped, retired }, { dropped: 1, retired: 2 });
+  // The counter in this repo takes what the helper sends, key for key.
+  assert.deepEqual(checkSend(counter.posts[0].body).ok, true, checkSend(counter.posts[0].body).reason);
 }));
 
 test("a send the counter already counted keeps since and waits 24 hours", () => inScene(async (s) => {

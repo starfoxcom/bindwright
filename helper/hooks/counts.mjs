@@ -58,7 +58,7 @@ const GH_TIMEOUT_IN_MILLISECONDS = 10 * 60 * 1000;
 const GH_OUTPUT_LIMIT_IN_BYTES = 256 * 1024 * 1024;
 const POST_TIMEOUT_IN_MILLISECONDS = 2000;
 const DEEP_LABEL = "needs-deep-review";
-// The line a PR's body opens with when it rebuilds one closed at the review rules' hard stop.
+// A line anywhere in a PR's body that says it rebuilds one closed at the review rules' hard stop.
 const REBUILDS = /^Rebuilds #\d+\b/im;
 // The label a PR closed unmerged carries to say why, by the count it adds to: no fix was found,
 // or it had no reason left to exist.
