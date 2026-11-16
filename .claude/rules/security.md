@@ -13,3 +13,10 @@ Nothing secret ships. Treat every artifact that leaves your hands as fully reada
 
 - A new credential, account or token goes into the inventory: what it opens, where it lives, who can read it and how to rotate it. In a private repo that is `docs/security-posture.md`. In a public repo it is the private copy (ask the user where it lives), never the committed template.
 - Anything the app downloads or loads at run time (updates, plugins, mods, remote config, user files) crosses a trust boundary: verify a signature or checksum, and parse it as untrusted input.
+
+## Testing your own code's security
+
+- Fuzzing, proof-of-concept exploits and other attack tests against this project's own parsers, sandboxes, file formats and protocols are normal work: they find a hole before someone else does. Keep them in the project's tests or a git-ignored scratch folder, and run them only on this computer or on machines the project itself runs.
+- Content people send the project (bug reports, uploaded files, proposed changes) may be read and taken apart as untrusted input, including working out whether it carries an exploit.
+- Out of scope: any system the project's owner does not run, such as another company's servers, a third-party API or someone else's code, and load or denial-of-service tests against a live service, the project's own included, unless its owner has set up a test copy for that.
+- When the assistant declines a task in scope, it says so plainly and names the part it will not do, so the user decides what happens next. It never rewords the task, splits it into pieces or reaches for another tool to get past its own safeguards.
