@@ -349,32 +349,18 @@ def _with_mod(listed, target):
     return listed[:at] + [target] + listed[at:]
 
 
-# Settings a mod cannot work without, turned on with it. The tasks mod answers the task
-# tools, which the CLI hides on current models unless this is set.
+# Settings a mod cannot work without, turned on with it and left on when it is removed, since
+# each one only turns on a CLI feature that works without the mod. The tasks mod answers the
+# CLI's task tools, which CLI 2.1.233 and later hide on current models unless this is set.
 MOD_ENV = {"tasks": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}
-# Inside the installed mod's folder: the MOD_ENV keys this engine changed, so removing the
-# mod turns off only those and never a value the user had set themselves.
-ENV_RECORD = ".bindwright-env.json"
 
 
-def _recorded_env(target):
-    try:
-        with open(os.path.join(target, ENV_RECORD), encoding="utf-8") as fh:
-            keys = json.load(fh)
-    except (OSError, ValueError):
-        return []
-    return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
-
-
-def _turn_on_env(env, name, target):
-    """Sets what MOD_ENV lists for the mod, records the keys it changed, and returns them."""
+def _turn_on_env(env, name):
+    """Sets what MOD_ENV lists for the mod and returns the keys it changed."""
     needs = MOD_ENV.get(name, {})
     turned_on = sorted(key for key, value in needs.items() if env.get(key) != value)
     for key in turned_on:
         env[key] = needs[key]
-    if turned_on:
-        recorded = sorted(set(_recorded_env(target)) | set(turned_on))
-        _atomic_write(os.path.join(target, ENV_RECORD), json.dumps(recorded) + "\n")
     return turned_on
 
 
@@ -393,7 +379,7 @@ def mod_env(home):
         name = os.path.basename(folder)
         is_ours = os.path.normcase(os.path.dirname(folder)) == mods_dir
         if name in MOD_ENV and is_ours and os.path.isdir(folder):
-            keys = _turn_on_env(env, name, folder)
+            keys = _turn_on_env(env, name)
             if keys:
                 turned_on[name] = keys
     if turned_on:
@@ -418,7 +404,7 @@ def add_mod(home, folder):
     if not any(same(d) for d in listed):
         env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(_with_mod(listed, target))
         changed = True
-    turned_on = _turn_on_env(env, name, target)
+    turned_on = _turn_on_env(env, name)
     if changed or turned_on:
         _save(path, data)
     return {"installed": target, "kept_existing": kept, "env_set": turned_on}
@@ -508,16 +494,11 @@ def remove_mod(home, name):
             env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(kept)
         else:
             del env["CLAUDE_CODE_PLUGIN_DIRS"]
-    needs = MOD_ENV.get(name, {})
-    turned_off = sorted(k for k in _recorded_env(target) if k in needs and env.get(k) == needs[k])
-    for key in turned_off:
-        del env[key]
-    if unlisted or turned_off:
         _save(path, data)
     deleted = os.path.isdir(target)
     if deleted:
         shutil.rmtree(target)
-    return {"removed": target, "unlisted": unlisted, "deleted_folder": deleted, "env_unset": turned_off}
+    return {"removed": target, "unlisted": unlisted, "deleted_folder": deleted}
 
 
 def remove_agent(home, name):

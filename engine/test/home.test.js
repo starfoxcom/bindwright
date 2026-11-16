@@ -188,7 +188,7 @@ test("a mod is copied once, listed once, and an installed copy keeps its edits",
   });
 });
 
-test("the tasks mod turns on the task tools it answers; other mods set nothing", { skip }, () => {
+test("the tasks mod turns on the task tools it answers and leaves them on; other mods set nothing", { skip }, () => {
   withHome((dir) => {
     const add = (name) => {
       const mod = join(dir, "pack", name);
@@ -205,12 +205,8 @@ test("the tasks mod turns on the task tools it answers; other mods set nothing",
     const again = add("tasks");
     assert.equal(again.kept_existing, true);
     assert.deepEqual(again.env_set, []);
-    assert.deepEqual(home(dir, "remove-mod", "tasks").out.env_unset, ["CLAUDE_CODE_ENABLE_TODO_TOOLS"]);
-    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, undefined);
-    // A value the user set before the install is theirs: removing the mod leaves it.
-    writeSettings(dir, { env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" } });
-    assert.deepEqual(add("tasks").env_set, []);
-    assert.deepEqual(home(dir, "remove-mod", "tasks").out.env_unset, []);
+    // The setting only turns on a CLI feature, so it outlives the mod.
+    home(dir, "remove-mod", "tasks");
     assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "1");
   });
 });
@@ -460,11 +456,11 @@ test("a removed mod leaves the folder list, keeps the user's other entries, and 
     const target = home(dir, "add-mod", mod).out.installed;
     const removed = home(dir, "remove-mod", "session-facts");
     assert.equal(removed.status, 0, removed.stderr);
-    assert.deepEqual(removed.out, { removed: target, unlisted: true, deleted_folder: true, env_unset: [] });
+    assert.deepEqual(removed.out, { removed: target, unlisted: true, deleted_folder: true });
     assert.deepEqual(settings(dir).env, { CLAUDE_CODE_PLUGIN_DIRS: "/other/mod", KEEP: "1" });
     assert.ok(!existsSync(target));
     assert.deepEqual(home(dir, "remove-mod", "session-facts").out,
-      { removed: target, unlisted: false, deleted_folder: false, env_unset: [] });
+      { removed: target, unlisted: false, deleted_folder: false });
   });
 });
 
@@ -487,11 +483,11 @@ test("a linked mod folder is refused before its entry leaves the folder list", {
 
 test("the last listed mod takes the folder list with it", { skip }, () => {
   withHome((dir) => {
-    const mod = join(dir, "pack", "tasks");
+    const mod = join(dir, "pack", "session-facts");
     mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
     writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
     home(dir, "add-mod", mod);
-    home(dir, "remove-mod", "tasks");
+    home(dir, "remove-mod", "session-facts");
     assert.deepEqual(settings(dir).env, {});
   });
 });
