@@ -71,7 +71,7 @@ const OLDER = [
 const OLDEST = ["o1", "o2", "o3"].map((id) => use(id, "Edit", { file_path: id }));
 const AGENT = ["w2", "w3", "w4"].map((id) => use(id, "Write", { file_path: id }));
 
-function scene({ rules = RULES, logs = true, answers = { codeResearch: "findwright" } } = {}) {
+function scene({ rules = RULES, logs = true, answers = { codeResearch: "findwright" }, oldest = OLDEST } = {}) {
   const root = mkdtempSync(join(tmpdir(), "bw-audit-"));
   const repo = join(root, "repo");
   for (const rule of rules) {
@@ -86,7 +86,7 @@ function scene({ rules = RULES, logs = true, answers = { codeResearch: "findwrig
     writeFileSync(join(folder, "newer.jsonl"), jsonl(NEWER));
     writeFileSync(join(folder, "older.jsonl"), jsonl(OLDER));
     writeFileSync(join(folder, "older", "subagents", "agent-1.jsonl"), jsonl(AGENT));
-    writeFileSync(join(folder, "oldest.jsonl"), jsonl(OLDEST));
+    writeFileSync(join(folder, "oldest.jsonl"), jsonl(oldest));
     utimesSync(join(folder, "oldest.jsonl"), new Date("2026-10-27"), new Date("2026-10-27"));
     utimesSync(join(folder, "older.jsonl"), new Date("2026-10-28"), new Date("2026-10-28"));
     utimesSync(join(folder, "newer.jsonl"), new Date("2026-10-30"), new Date("2026-10-30"));
@@ -133,6 +133,11 @@ test("each check counts where its rule applied and where it broke", needsPython,
   assert.equal(c["task-tracking"].examples[0].session, "oldest");
   assert.deepEqual(c["commit-format"].examples[0], { session: "newer", when: "2026-10-30 09:15", text: "Added stuff" });
   assert.deepEqual(out.skipped, []);
+});
+
+test("the tasks mod's stand-in create tool counts as a task list", needsPython, () => {
+  const out = audit({ oldest: [...OLDEST, use("m1", "mcp__tasks__taskmod_create", { subject: "z" })] });
+  assert.deepEqual(counts(byId(out)["task-tracking"]), [3, 0, []]);
 });
 
 test("a check whose rule the repo lacks is skipped, and no logs count nothing", needsPython, () => {

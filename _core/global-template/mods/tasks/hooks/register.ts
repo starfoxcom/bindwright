@@ -4,6 +4,7 @@ import {
   hasEngineWake, hasPendingWake, isNearCompaction, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS,
   nearCompactionText, workable,
 } from './keepgoing'
+import { builtInName, registerOwnTools } from './owntools'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { PANE, phoneText } from './view'
 import type { EngineTask, Mirror, TaskArgs } from './mirror'
@@ -24,7 +25,9 @@ import {
 // TaskList and TaskGet itself from `mods-data/tasks/<session>.json`, so the
 // engine's own store (deleted once every task is completed) and its panel under
 // the spinner (forced open on every task change) never come into play; the
-// mod's band is the one list on screen. Subagents keep the engine's tools. It
+// mod's band is the one list on screen. Where the session offers no TaskCreate,
+// it registers its own four list tools in their place (`owntools.ts`), answered
+// the same way. Subagents keep the engine's tools. It
 // also allows one task in progress at a time, names stale tasks instead of the
 // engine's generic reminder, and asks for a list when a turn grows without one.
 
@@ -376,6 +379,7 @@ function registerLifecycle(on: On): void {
     await clearEngineStore($).catch(() => undefined)
     await carryOverOnce($)
     await startAlive($)
+    await registerOwnTools($, HOLD_HELP).catch(() => false)
     return result
   })
 
@@ -462,28 +466,37 @@ function registerPrompts(on: On): void {
   })
 }
 
+// Answers a main-session task call (`tool` is the built-in name it stands for) from the mirror. A built-in
+// name's record goes through that tool's own mapper; a stand-in has none, so it sends the record as text.
+async function answerTaskCall($: EngineInterface, tool: string, args: TaskArgs, isStandIn: boolean) {
+  live.sawTaskTool = true
+  const mirror = await mirrorOf($)
+  const now = await $.clock.now()
+  const before = JSON.stringify(mirror)
+  const output = answerTool(mirror, tool, args, live.turn, now)
+  if (tool === 'TaskUpdate' && args.status === 'in_progress' && (output as { success: boolean }).success) {
+    live.checkOverlap = true
+  }
+  if (JSON.stringify(mirror) !== before) {
+    mirror.changedAt = now
+    await saveMirror($, mirror)
+  }
+  return { result: isStandIn ? JSON.stringify(output) : output }
+}
+
 // Registers the task tools' answers, the tool-call checks and the hold description.
 function registerTools(on: On): void {
   on('tool.call', async ($, e, next) => {
-    if (TASK_TOOLS.has(e.tool) && !e.agentId) {
-      live.sawTaskTool = true
-      const mirror = await mirrorOf($)
-      const now = await $.clock.now()
-      const args = e as unknown as TaskArgs
-      const before = JSON.stringify(mirror)
-      const output = answerTool(mirror, e.tool, args, live.turn, now)
-      if (e.tool === 'TaskUpdate' && args.status === 'in_progress' && (output as { success: boolean }).success) {
-        live.checkOverlap = true
-      }
-      if (JSON.stringify(mirror) !== before) {
-        mirror.changedAt = now
-        await saveMirror($, mirror)
-      }
-      return { result: output } as never
+    // The stand-ins' `taskmod_` names are this mod's alone; any other tool passes through as it is.
+    const tool = builtInName(e.tool)
+    // The own tools serve the main session's list only; a subagent keeps the engine's tools, if any.
+    if (tool !== e.tool && e.agentId) return { deny: 'This task list belongs to the main session.' } as never
+    if (TASK_TOOLS.has(tool) && !e.agentId) {
+      return (await answerTaskCall($, tool, e as unknown as TaskArgs, tool !== e.tool)) as never
     }
     const result = await next(e)
     if (e.agentId) return result
-    if (!TASK_TOOLS.has(e.tool)) {
+    if (!TASK_TOOLS.has(tool)) {
       if (UNCOUNTED_TOOLS.has(e.tool)) return result
       if (live.checkOverlap) {
         live.checkOverlap = false

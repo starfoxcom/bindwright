@@ -17,7 +17,7 @@ export const SESSIONS = 50; // the newest main transcripts read
 const EXAMPLES = 3;
 const CUT = 100; // code points of an example's text
 const EDIT_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
-const TASK_TOOLS = ["TaskCreate", "TodoWrite"];
+const TASK_TOOLS = ["TaskCreate", "TodoWrite", "mcp__tasks__taskmod_create"];
 const EDITS_FOR_TASKS = 3;
 
 // Patterns spell out ASCII classes, so both engines match the same text. A
