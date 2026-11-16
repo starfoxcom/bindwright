@@ -34,7 +34,8 @@ function run({ home, root }, event) {
   const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: root };
   delete env.CLAUDE_CONFIG_DIR;
   const input = typeof event === "string" ? event : JSON.stringify(event);
-  const out = spawnSync(python, [hook], { input, env, encoding: "utf8" });
+  // -I, as the installed entry starts it: no PYTHONUTF8 or PYTHONIOENCODING can fix the encoding.
+  const out = spawnSync(python, ["-I", hook], { input: Buffer.from(input, "utf8"), env, encoding: "utf8" });
   return { status: out.status, context: out.stdout ? JSON.parse(out.stdout).hookSpecificOutput : null };
 }
 
@@ -70,6 +71,27 @@ test("every 25th tool call since the last prompt brings the style back", { skip 
   calls(10);
   run(layout, prompt);
   assert.ok(calls(24).every((context) => context === null));
+  assert.notEqual(run(layout, toolCall).context, null);
+}));
+
+test("a prompt in any language and files saved with a BOM still get the style", { skip }, () => withLayout((layout) => {
+  writeFileSync(join(layout.home, ".claude", "settings.json"), "﻿" + JSON.stringify({ outputStyle: "Plain Speech" }));
+  writeFileSync(join(layout.home, ".claude", "output-styles", "plain.md"), "﻿" + STYLE);
+  const { context } = run(layout, { ...prompt, prompt: "¿Qué pasó? ÁÍÏÝ ” 日本語 🎉" });
+  assert.match(context.additionalContext, /Answer first, in plain words\.$/);
+}));
+
+test("a style is named by its name, and by its file only when it has none", { skip }, () => withLayout((layout) => {
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "plain" }));
+  assert.equal(run(layout, prompt).context, null);
+  writeFileSync(join(layout.home, ".claude", "output-styles", "plain.md"), "---\nname:\ndescription: d\n---\nBody.\n");
+  assert.match(run(layout, prompt).context.additionalContext, /Body\.$/);
+}));
+
+test("a subagent's tool calls are not counted", { skip }, () => withLayout((layout) => {
+  const subagent = { ...toolCall, agent_id: "a-1" };
+  assert.ok(Array.from({ length: 25 }, () => run(layout, subagent).context).every((context) => context === null));
+  assert.ok(Array.from({ length: 24 }, () => run(layout, toolCall).context).every((context) => context === null));
   assert.notEqual(run(layout, toolCall).context, null);
 }));
 

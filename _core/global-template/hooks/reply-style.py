@@ -9,7 +9,8 @@ The active style is `outputStyle` from the project's `.claude/settings.local.jso
 `.claude/settings.json`, then `settings.json` in the user's config folder (CLAUDE_CONFIG_DIR, else
 ~/.claude). It is the file in the project's `.claude/output-styles/` or the config folder's
 `output-styles/` whose front matter `name` (or file name) matches it, case aside; the built-in
-styles have no file, so they get nothing. The count of tool calls per session lives in
+styles have no file, so they get nothing. A subagent's tool calls are not counted.
+The count of tool calls per session lives in
 ~/.bindwright/reply-style/, outside any `.claude` folder. Every failure prints nothing and exits 0:
 a reminder never blocks a prompt or a tool call.
 """
@@ -28,7 +29,7 @@ INTRO = ("The reply style in use, {name}, restated here so it is the last thing 
 
 def read_json(path):
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8-sig") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -61,14 +62,15 @@ def style_text(project, wanted):
             continue
         for file_name in names:
             try:
-                with open(os.path.join(folder, file_name), encoding="utf-8") as fh:
+                with open(os.path.join(folder, file_name), encoding="utf-8-sig") as fh:
                     text = fh.read().replace("\r\n", "\n")
             except (OSError, UnicodeDecodeError):
                 continue
             head = FRONT_MATTER.match(text)
-            found = re.search(r"^name:\s*(.+?)\s*$", head.group(1), re.M) if head else None
+            found = re.search(r"^name:[ \t]*(\S.*?)[ \t]*$", head.group(1), re.M) if head else None
+            # Named by its `name`, and by its file only when it has none, as the CLI names it.
             name = found.group(1).strip("\"'") if found else file_name[:-3]
-            if wanted.lower() in (name.lower(), file_name[:-3].lower()):
+            if wanted.lower() == name.lower():
                 body = text[head.end():] if head else text
                 return name, body.strip()
     return None
@@ -79,16 +81,12 @@ def due_after_tool_call(session):
     if not SESSION_ID.fullmatch(session or ""):
         return False
     folder = os.path.join(os.path.expanduser("~"), ".bindwright", "reply-style")
-    path = os.path.join(folder, session + ".count")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            count = int(fh.read().strip() or 0) + 1
-    except (OSError, ValueError):
-        count = 1
+    # One byte appended per call: the file's size is the count, so parallel calls never lose one.
     try:
         os.makedirs(folder, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(str(count))
+        with open(os.path.join(folder, session + ".count"), "ab") as fh:
+            fh.write(b".")
+            count = fh.tell()
     except OSError:
         return False
     return count % TOOL_CALLS_PER_REMINDER == 0
@@ -104,9 +102,11 @@ def reset_count(session):
 
 def main():
     try:
-        event = json.load(sys.stdin)
+        event = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
     except ValueError:
         return
+    if not isinstance(event, dict) or event.get("agent_id"):
+        return  # a subagent's call: its replies do not follow the user's style
     kind, session = event.get("hook_event_name"), event.get("session_id")
     if kind == "UserPromptSubmit":
         reset_count(session)
