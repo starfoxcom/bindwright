@@ -49,6 +49,8 @@ ARCHITECTURES = ["none", "clean", "ddd", "ecs", "feature-based", "hexagonal", "l
 # Where the guard hooks live: shipped in the repo (teammates and cloud
 # sessions get them), or only in each person's ~/.claude (global-template).
 HOOK_LOCATIONS = ["repo", "home"]
+# How releases are numbered, which the version check enforces: "none" installs no check.
+VERSIONINGS = ["none", "semver", "calver"]
 # How much the committed deny list blocks. "standard" stops force pushes,
 # direct pushes to the protected branches, interactive rebase and admin
 # merges; "strict" also stops local history wipes and destructive gh calls.
@@ -160,6 +162,10 @@ def defaults(team=False, client=False, private=None):
             "hookLocation": "repo",
             "attributionGuard": True,
             "denyProfile": "standard",
+            # The release numbering the version check holds each release to, and the
+            # calver format (such as "YYYY.MM.MICRO"); None outside calver.
+            "versioning": "none",
+            "versionFormat": None,
             # Files the writing rule checks. None keeps the rule's own list.
             "shippedTextPaths": None,
             # Add-on: a CI check that fails on any new code-size breach.
@@ -270,6 +276,7 @@ def validate(saved):
     _check(_is_bool(get(adv, "attributionGuard")), "attributionGuard must be true or false")
     _check(isinstance(get(adv, "denyProfile"), str) and adv["denyProfile"] in DENY_PROFILES,
            'unknown deny profile %s' % quoted(get(adv, "denyProfile")))
+    _check_versioning(adv)
     # Each glob lands in a double-quoted YAML string, so quotes, backslashes
     # and control characters are refused rather than escaped.
     paths = get(adv, "shippedTextPaths")
@@ -413,6 +420,23 @@ def map_removed_tool(advanced):
                 codeResearchCustom=dict(REMOVED_CODE_RESEARCH_TOOLS[code_research]))
 
 
+# A calver format is tokens joined by dots, which the check script parses again.
+_CALVER_TOKEN = r"(YYYY|YY|0Y|MM|0M|WW|0W|DD|0D|MINOR|MICRO)"
+_CALVER_FORMAT = re.compile(r"%s(\.%s)*" % (_CALVER_TOKEN, _CALVER_TOKEN))
+
+
+def _check_versioning(adv):
+    versioning = adv.get("versioning", UNDEFINED)
+    _check(isinstance(versioning, str) and versioning in VERSIONINGS,
+           'unknown versioning %s' % quoted(versioning))
+    fmt = adv.get("versionFormat", UNDEFINED)
+    if versioning == "calver":
+        _check(isinstance(fmt, str) and _CALVER_FORMAT.fullmatch(fmt) is not None,
+               "versionFormat must be a calver format such as YYYY.MM.MICRO")
+    else:
+        _check(fmt is None, "versionFormat is only for calver: it must be null")
+
+
 # Every toggle name the templates use must resolve here to True or False.
 def flags_for(a):
     adv = a["advanced"]
@@ -437,6 +461,7 @@ def flags_for(a):
         "guard_hooks_repo": adv["hookLocation"] == "repo",
         "attribution_guard": adv["attributionGuard"],
         "deny_list_strict": adv["denyProfile"] == "strict",
+        "version_check": adv["versioning"] != "none",
         "code_size_check": adv["codeSizeCheck"],
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],

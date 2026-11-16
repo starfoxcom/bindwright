@@ -45,6 +45,8 @@ export const ARCHITECTURES = ["none", "clean", "ddd", "ecs", "feature-based", "h
 // Where the guard hooks live: shipped in the repo (teammates and cloud
 // sessions get them), or only in each person's ~/.claude (global-template).
 export const HOOK_LOCATIONS = ["repo", "home"];
+// How releases are numbered, which the version check enforces: "none" installs no check.
+export const VERSIONINGS = ["none", "semver", "calver"];
 // How much the committed deny list blocks. "standard" stops force pushes,
 // direct pushes to the protected branches, interactive rebase and admin
 // merges; "strict" also stops local history wipes and destructive gh calls.
@@ -104,6 +106,10 @@ export function defaults({ team = false, client = false, isPrivate = client } = 
       hookLocation: "repo",
       attributionGuard: true,
       denyProfile: "standard",
+      // The release numbering the version check holds each release to, and the
+      // calver format (such as "YYYY.MM.MICRO"); null outside calver.
+      versioning: "none",
+      versionFormat: null,
       // Files the writing rule checks. null keeps the rule's own list.
       shippedTextPaths: null,
       // Add-on: a CI check that fails on any new code-size breach.
@@ -251,6 +257,7 @@ export function validate(saved) {
   check(HOOK_LOCATIONS.includes(adv.hookLocation), `unknown hook location ${quoted(adv.hookLocation)}`);
   check(typeof adv.attributionGuard === "boolean", "attributionGuard must be true or false");
   check(DENY_PROFILES.includes(adv.denyProfile), `unknown deny profile ${quoted(adv.denyProfile)}`);
+  checkVersioning(adv);
   // Each glob lands in a double-quoted YAML string, so quotes, backslashes
   // and control characters are refused rather than escaped.
   check(adv.shippedTextPaths === null || (Array.isArray(adv.shippedTextPaths) && adv.shippedTextPaths.length > 0 &&
@@ -322,6 +329,19 @@ export function mapRemovedTool(advanced) {
   return { ...advanced, codeResearch: "custom", codeResearchCustom: { ...old } };
 }
 
+// A calver format is tokens joined by dots, which the check script parses again.
+const CALVER_FORMAT = /^(YYYY|YY|0Y|MM|0M|WW|0W|DD|0D|MINOR|MICRO)(\.(YYYY|YY|0Y|MM|0M|WW|0W|DD|0D|MINOR|MICRO))*$/;
+
+function checkVersioning(adv) {
+  check(VERSIONINGS.includes(adv.versioning), `unknown versioning ${quoted(adv.versioning)}`);
+  if (adv.versioning === "calver") {
+    check(typeof adv.versionFormat === "string" && CALVER_FORMAT.test(adv.versionFormat),
+      "versionFormat must be a calver format such as YYYY.MM.MICRO");
+  } else {
+    check(adv.versionFormat === null, "versionFormat is only for calver: it must be null");
+  }
+}
+
 // Every toggle name the templates use must resolve here to true or false.
 export function flagsFor(a) {
   const adv = a.advanced;
@@ -346,6 +366,7 @@ export function flagsFor(a) {
     guard_hooks_repo: adv.hookLocation === "repo",
     attribution_guard: adv.attributionGuard,
     deny_list_strict: adv.denyProfile === "strict",
+    version_check: adv.versioning !== "none",
     code_size_check: adv.codeSizeCheck,
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
