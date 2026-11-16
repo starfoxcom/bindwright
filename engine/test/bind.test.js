@@ -99,6 +99,32 @@ test("every pre-commit manager lands its config file", async () => {
   }
 });
 
+// The commit-message rule each manager's config carries, unescaped from its JSON or YAML string.
+function commitMessageRule(config) {
+  const start = config.indexOf("^(feat|");
+  const end = config.indexOf(".{1,72}$", start) + ".{1,72}$".length;
+  return new RegExp(config.slice(start, end).replace(/\\\\/g, "\\"));
+}
+
+test("every manager's commit check takes the breaking marker, and runs the size check with it on", async () => {
+  const profiles = JSON.parse(await readFile("_core/project-template/precommit/precommit-profiles.json"));
+  for (const pc of PRECOMMIT_MANAGERS) {
+    for (const codeSizeCheck of [true, false]) {
+      const a = defaults({ team: true });
+      Object.assign(a.advanced, { precommit: pc, codeSizeCheck });
+      const config = (await run(a)).get(profiles[pc].config_filename);
+      const rule = commitMessageRule(config);
+      for (const message of ["feat!: drop the flag", "fix(api)!: rename it", "fix: keep the queue"]) {
+        assert.ok(rule.test(message), `${pc}: ${message} refused`);
+      }
+      for (const message of ["wip: stuff", "feat!!: x", "feat(api): "]) {
+        assert.ok(!rule.test(message), `${pc}: ${message} accepted`);
+      }
+      assert.equal(config.includes(".github/scripts/size_check.py"), codeSizeCheck, `${pc}: size check`);
+    }
+  }
+});
+
 test("architecture choice ships exactly one rule file", async () => {
   for (const arch of ARCHITECTURES.filter((x) => x !== "none")) {
     const a = defaults();

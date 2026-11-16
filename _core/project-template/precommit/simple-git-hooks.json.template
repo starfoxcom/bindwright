@@ -1,5 +1,10 @@
 {
+<!-- TOGGLE:code_size_check START -->
+  "pre-commit": "{{LINT_COMMAND}} && {{TYPECHECK_COMMAND}} && python .github/scripts/size_check.py",
+<!-- TOGGLE:code_size_check END -->
+<!-- TOGGLE:code_size_check:off START -->
   "pre-commit": "{{LINT_COMMAND}} && {{TYPECHECK_COMMAND}}",
-  "commit-msg": "grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\\([a-z0-9_-]+\\))?: .{1,72}$' \"$1\" || { echo 'Commit message must follow: <type>(<scope>): <imperative description> - see .claude/rules/git.md'; exit 1; }",
+<!-- TOGGLE:code_size_check:off END -->
+  "commit-msg": "grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\\([a-z0-9_-]+\\))?!?: .{1,72}$' \"$1\" || { echo 'Commit message must follow: <type>(<scope>): <imperative description> - see .claude/rules/git.md'; exit 1; }",
   "pre-push": "{{TEST_COMMAND}}"
 }

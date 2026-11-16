@@ -27,10 +27,19 @@ repos:
         pass_filenames: false
         # Examples (entry): npx tsc --noEmit | mypy . | cargo check --all-targets
 
+<!-- TOGGLE:code_size_check START -->
+      - id: size-check
+        name: code size (.claude/rules/code-size.md)
+        entry: "python .github/scripts/size_check.py"
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+
+<!-- TOGGLE:code_size_check END -->
       - id: conventional-commit
         name: conventional commit message
         # $1 is the commit-message file pre-commit passes on the commit-msg stage.
-        entry: "bash -c 'grep -qE \"^(feat|fix|refactor|perf|test|docs|chore|style|data)(\\([a-z0-9_-]+\\))?: .{1,72}$\" \"$1\" || { echo \"Commit message must follow: <type>(<scope>): <imperative description> — see .claude/rules/git.md\"; exit 1; }' --"
+        entry: "bash -c 'grep -qE \"^(feat|fix|refactor|perf|test|docs|chore|style|data)(\\([a-z0-9_-]+\\))?!?: .{1,72}$\" \"$1\" || { echo \"Commit message must follow: <type>(<scope>): <imperative description> — see .claude/rules/git.md\"; exit 1; }' --"
         language: system
         stages: [commit-msg]
 

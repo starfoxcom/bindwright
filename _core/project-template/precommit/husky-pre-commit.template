@@ -24,6 +24,11 @@ fi
 
 # Project-wide type check.
 {{TYPECHECK_COMMAND}}
+<!-- TOGGLE:code_size_check START -->
+
+# The code-size limits in .claude/rules/code-size.md, on the staged files too.
+python .github/scripts/size_check.py
+<!-- TOGGLE:code_size_check END -->
 #   Examples ({{TYPECHECK_COMMAND}}):
 #     ts:        npx tsc --noEmit
 #     python:    mypy .
@@ -35,7 +40,7 @@ fi
 #
 #   .husky/commit-msg
 #   -----------------
-#   grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\([a-z0-9_-]+\))?: .{1,72}$' "$1" || {
+#   grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\([a-z0-9_-]+\))?!?: .{1,72}$' "$1" || {
 #     echo "❌ Commit message must follow: <type>(<scope>): <imperative description>"
 #     echo "   Types: feat, fix, refactor, perf, test, docs, chore, style, data"
 #     echo "   See .claude/rules/git.md for details."
