@@ -466,6 +466,24 @@ function registerPrompts(on: On): void {
   })
 }
 
+// Answers a main-session task call (`tool` is the built-in name it stands for) from the mirror. A built-in
+// name's record goes through that tool's own mapper; a stand-in has none, so it sends the record as text.
+async function answerTaskCall($: EngineInterface, tool: string, args: TaskArgs, isStandIn: boolean) {
+  live.sawTaskTool = true
+  const mirror = await mirrorOf($)
+  const now = await $.clock.now()
+  const before = JSON.stringify(mirror)
+  const output = answerTool(mirror, tool, args, live.turn, now)
+  if (tool === 'TaskUpdate' && args.status === 'in_progress' && (output as { success: boolean }).success) {
+    live.checkOverlap = true
+  }
+  if (JSON.stringify(mirror) !== before) {
+    mirror.changedAt = now
+    await saveMirror($, mirror)
+  }
+  return { result: isStandIn ? JSON.stringify(output) : output }
+}
+
 // Registers the task tools' answers, the tool-call checks and the hold description.
 function registerTools(on: On): void {
   on('tool.call', async ($, e, next) => {
@@ -474,21 +492,7 @@ function registerTools(on: On): void {
     // The own tools serve the main session's list only; a subagent keeps the engine's tools, if any.
     if (tool !== e.tool && e.agentId) return { deny: 'This task list belongs to the main session.' } as never
     if (TASK_TOOLS.has(tool) && !e.agentId) {
-      live.sawTaskTool = true
-      const mirror = await mirrorOf($)
-      const now = await $.clock.now()
-      const args = e as unknown as TaskArgs
-      const before = JSON.stringify(mirror)
-      const output = answerTool(mirror, tool, args, live.turn, now)
-      if (tool === 'TaskUpdate' && args.status === 'in_progress' && (output as { success: boolean }).success) {
-        live.checkOverlap = true
-      }
-      if (JSON.stringify(mirror) !== before) {
-        mirror.changedAt = now
-        await saveMirror($, mirror)
-      }
-      // A built-in name's record goes through that tool's own mapper; a stand-in has none, so it sends text.
-      return { result: tool === e.tool ? output : JSON.stringify(output) } as never
+      return (await answerTaskCall($, tool, e as unknown as TaskArgs, tool !== e.tool)) as never
     }
     const result = await next(e)
     if (e.agentId) return result
