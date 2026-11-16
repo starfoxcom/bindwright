@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **CI reviews can run plain git reads again.** The review jobs load the project's hooks, and since v5.0.0 the attribution guard refuses every command its text names when it has no parser, so reviewers lost reads such as `git log --grep=merge` and `git tag`. Both review workflows now install the helper release pinned in `.bindwright/helper.json` on the PR's base, checked against its SHA-256, so the guard reads commands there as it does on your computer. Setup and `/bindwright:update` write that pin.
+- **CI reviews can run plain git reads again.** The review jobs load the project's hooks, and since v5.0.0 the attribution guard refuses every command its text names when it has no parser, so reviewers lost reads such as `git log --grep=merge` and `git tag`. Both review workflows now install the helper release pinned in `.bindwright/helper.json` on the PR's base, checked against its SHA-256, so the guard reads commands there as it does on your computer. Without a pin on the base, the reviews run as before.
 
 ## [v5.1.0] — 2026-11-14
 
