@@ -14,8 +14,13 @@ import (
 	"slices"
 	"strings"
 
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 )
+
+// maxBraceWords is the most words one brace expansion is read as; a larger one stays a word
+// built at run time, so a long range cannot swell the reply.
+const maxBraceWords = 256
 
 type assignment struct {
 	Name  string `json:"name"`
@@ -194,26 +199,78 @@ func isList(part syntax.WordPart) bool {
 // expanded at run time: a parameter, a substitution, a glob, a brace expansion, or an ANSI-C or
 // locale string.
 func (r reader) word(word *syntax.Word) any {
-	// Bash's own rule: only a brace holding a comma or a range expands (`{a,b}`, `{1..3}`), never
-	// `{}` or `stash@{0}`. The parser splits a copy, since it rewrites the parts it is given, and
-	// turns a brace that does not expand back into plain text.
+	if hasBraceExp(splitBraces(word)) {
+		return r.dynamicWord(word)
+	}
+	if value, ok := r.literalValue(word); ok {
+		return value
+	}
+	return r.dynamicWord(word)
+}
+
+// words is what bash makes of one argument before it expands anything else. A brace whose words
+// are all plain text gives each of them (`{-F,msg.txt}` is `-F msg.txt`), dropping the empty
+// unquoted ones as bash does; any other argument is the one word `word` reads.
+func (r reader) words(arg *syntax.Word) []any {
+	split := splitBraces(arg)
+	if !hasBraceExp(split) {
+		return []any{r.word(arg)}
+	}
+	values := []any{}
+	for word, err := range expand.BracesSeq(nil, split) {
+		value, literal := r.literalValue(word)
+		if err != nil || !literal || len(values) == maxBraceWords {
+			return []any{r.dynamicWord(arg)}
+		}
+		if value != "" || hasQuotes(word) {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+// splitBraces is a copy of the word with its expanding braces as brace parts. Bash's own rule:
+// only a brace holding a comma or a range expands (`{a,b}`, `{1..3}`), never `{}` or `stash@{0}`.
+// It works on a copy, since the parser rewrites the parts it is given, and turns a brace that
+// does not expand back into plain text.
+func splitBraces(word *syntax.Word) *syntax.Word {
 	split := &syntax.Word{Parts: slices.Clone(word.Parts)}
 	syntax.SplitBraces(split)
-	if slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
+	return split
+}
+
+func hasBraceExp(word *syntax.Word) bool {
+	return slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
 		_, expands := part.(*syntax.BraceExp)
 		return expands
-	}) || isGlob(word) {
-		return r.dynamicWord(word)
+	})
+}
+
+func hasQuotes(word *syntax.Word) bool {
+	return slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		switch part.(type) {
+		case *syntax.SglQuoted, *syntax.DblQuoted:
+			return true
+		}
+		return false
+	})
+}
+
+// literalValue is the word's value when bash gives it as written: no file pattern and no part
+// built at run time.
+func (r reader) literalValue(word *syntax.Word) (string, bool) {
+	if isGlob(word) {
+		return "", false
 	}
 	var value strings.Builder
 	for _, part := range word.Parts {
 		literal, ok := r.literalPart(part)
 		if !ok {
-			return r.dynamicWord(word)
+			return "", false
 		}
 		value.WriteString(literal)
 	}
-	return value.String()
+	return value.String(), true
 }
 
 func (r reader) literalPart(part syntax.WordPart) (string, bool) {
@@ -313,11 +370,13 @@ func shellWords(source string) result {
 		case *syntax.CallExpr:
 			addAssigns(node.Assigns)
 			if len(node.Args) > 0 {
-				words := make([]any, len(node.Args))
-				for i, arg := range node.Args {
-					words[i] = r.word(arg)
+				words := []any{}
+				for _, arg := range node.Args {
+					words = append(words, r.words(arg)...)
 				}
-				out.Commands = append(out.Commands, words)
+				if len(words) > 0 {
+					out.Commands = append(out.Commands, words)
+				}
 			}
 		case *syntax.DeclClause:
 			addAssigns(node.Args)

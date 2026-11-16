@@ -599,14 +599,28 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "Write it as plain commands")
 
-    def test_brace_and_pattern_words_are_read_as_built_at_run_time(self):
+    def test_pattern_and_mixed_brace_words_are_read_as_built_at_run_time(self):
         # The file such a word names is never read as a literal, quotes inside it included
-        # (`ms["g"]` is the pattern `ms[g]`).
-        for command, result in self.each(("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
-                                          'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"),
+        # (`ms["g"]` is the pattern `ms[g]`), nor a brace holding a part built at run time.
+        for command, result in self.each(('git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]",
+                                          "git commit -F {a,$B}", "git commit -F msg{1..3}*.txt"),
                                          lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_denied(result, "text the shell builds at run time")
+
+    def test_plain_text_braces_are_read_as_the_words_bash_makes(self):
+        # Bash expands `{-F,msg.txt}` to `-F msg.txt` before it runs git, so the file is read.
+        flagged = self.body_file(f"{GENERATED_LINE}\n").replace("\\", "/")
+        clean = self.body_file("Plain body.\n").replace("\\", "/")
+        for (command, flags), result in self.each((
+                (f"git commit {{-F,{flagged}}}", True), (f"gh pr create --title t {{--body-file,{flagged}}}", True),
+                (f"git commit {{-F,{clean}}}", False)),
+                lambda command, flags: self.attr(command)):
+            with self.subTest(command=command):
+                if flags:
+                    self.assert_denied(result, "attribution marker")
+                else:
+                    self.assert_passes(result)
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""
@@ -1050,13 +1064,16 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "git hook bypass")
 
-    def test_shipped_bash_parser_reads_escapes_as_bash_does(self):
+    def test_shipped_bash_parser_reads_words_as_bash_does(self):
         # Runs helper/parsers/shell-words-bash.wasm itself, so the rows prove the shipped bytes.
         script = os.path.join(HELPER, "hooks", "shell-words.mjs")
         for (command, words), result in self.each((
                 ('git commit -m "a\\\\\nb"', ["git", "commit", "-m", "a\\\nb"]),
                 ('git commit -m "a\\\nb"', ["git", "commit", "-m", "ab"]),
-                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"])),
+                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"]),
+                ("git commit {-F,/m.txt} -{n,q}", ["git", "commit", "-F", "/m.txt", "-n", "-q"]),
+                ('echo {a,} {a,""} x{1..2} stash@{0} "{c,d}"',
+                 ["echo", "a", "a", "", "x1", "x2", "stash@{0}", "{c,d}"])),
                 lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
                                                       capture_output=True, timeout=60)):
             with self.subTest(command=command):
