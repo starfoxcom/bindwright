@@ -366,7 +366,7 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
     changes move only its own group; (None, None, why) when a string cannot be read."""
     placing = list(around) + list(commands)
     groups, assignments = [(commands, placing, shell)], list(assignments)
-    for inner_shell, strings in filter(None, (shell_strings(w[i:]) for w in commands for i in shell_places(w))):
+    for inner_shell, strings in filter(None, (shell_strings(w[i:], shell) for w in commands for i in shell_places(w))):
         for text in strings:
             if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
                 return None, None, NESTED_UNREAD
@@ -380,18 +380,19 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
     return groups, assignments, ""
 
 
-def shell_strings(words):
+def shell_strings(words, caller):
     """(parser shell, the command strings it may run) for a shell program: each argument of a
     POSIX shell whose text names a route, a dict when built at run time. PowerShell joins its
     arguments into a script the guard does not rebuild, so a route its text arguments name is a
-    dict; a script block (`pwsh -Command { ... }`) is read by the outer parse. None for any
-    other program."""
+    dict; a script block (`pwsh -Command { ... }`), which only a PowerShell `caller` can pass,
+    is read by the outer parse. None for any other program."""
     name, args = program(words), words[1:]
     if name in POSIX_SHELLS:
         return "bash", [w for w in args if names_route(text_of(w))]
     if name not in ("pwsh", "powershell"):
         return None
-    joined = " ".join(text_of(w) for w in args if isinstance(w, str) or not text_of(w).lstrip().startswith("{"))
+    joined = " ".join(text_of(w) for w in args if isinstance(w, str) or caller != "powershell"
+                      or not text_of(w).lstrip().startswith("{"))
     return "powershell", [{"dynamic": joined}] if names_route(joined) else []
 
 

@@ -624,6 +624,8 @@ class GuardHookTest(unittest.TestCase):
                 ('powershell "git commit --no-verify -m x"', "PowerShell", "nested PowerShell"),
                 ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell", "nested PowerShell"),
                 ("pwsh -Command { git commit --no-verify -m x }", "PowerShell", "--no-verify"),
+                # From bash a word starting with `{` is text or a brace expansion, never a script block.
+                ("pwsh -c {git,true}' commit --no-verify -m x'", "Bash", "nested PowerShell"),
                 ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash -c 'git commit -F inner.txt'; bash -c 'cd sub; bash -c \"git commit -F inner.txt\"'",
