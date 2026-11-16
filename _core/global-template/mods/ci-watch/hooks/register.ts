@@ -2,22 +2,23 @@ import { atom, update, type EngineInterface, type Hook, type Register } from 'cl
 
 import type { Watch } from '../types'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
-import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
+import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  hardStopRefusal, isHardStop, isResearchDue, lookupTopic, redStreak, researchRefusal, researchText, roundsToResearch,
-  SOURCES_NEEDED, withTopic,
+  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsToResearch, SOURCES_NEEDED, withTopic,
 } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
   dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
 } from './store'
-import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
+import { isSameRun, PENDING, reconcile, settle } from './settle'
+import { wakeText } from './wake'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
 import { HELP, HINT } from './help'
 export { HELP } from './help'
 export { MKDIR_SCRIPT } from './store'
+export { wakeText } from './wake'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -47,47 +48,6 @@ const live = {
   generation: 0,
   /** Saved with the watches: a reload mid-turn loads it, since that turn started in the old module. */
   isTurnRunning: false,
-}
-
-// How long ago the checks finished, so a late wake shows its delay.
-function finishedAgo(watch: Watch, now?: number): string {
-  if (now === undefined || watch.settledAt === undefined) return ''
-  const minutes = Math.max(0, Math.round((now - watch.settledAt) / 60_000))
-  return minutes === 0 ? ' Checks finished just now.' : ` Checks finished ${minutes} min ago.`
-}
-
-export function wakeText(watch: Watch, now?: number, red = 0): string {
-  const pr = `${watch.repo}#${watch.number}`
-  const research = watch.outcome === 'failed' && isResearchDue(red) ? researchText(pr, red) : ''
-  return `${outcomeText(watch, now)}${research}${finishedAgo(watch, now)}`
-}
-
-function outcomeText(watch: Watch, now?: number): string {
-  const entries = Object.entries(watch.checks)
-  const pr = `PR ${watch.repo}#${watch.number}`
-  // Not settled: the wake names GitHub's incident while the checks wait.
-  if (!watch.outcome && watch.incident) {
-    const minutes = Math.round(((now ?? watch.startedAt) - watch.startedAt) / 60_000)
-    return incidentText(pr, minutes, watch.incident)
-  }
-  const failed = entries.filter(([, bucket]) => FAILED.has(bucket)).map(([name]) => name)
-  if (watch.outcome === 'failed') {
-    return (
-      `[ci-watch] ${pr}: all checks settled; failed: ${failed.join(', ')}. Fetch the failing logs (gh run ` +
-      `view --log-failed) or the review comment, fix and push; the watch restarts on the new commit.`
-    )
-  }
-  if (watch.outcome === 'timeout') {
-    const pending = entries.filter(([, bucket]) => PENDING.has(bucket)).map(([name]) => name)
-    return (
-      `[ci-watch] ${pr}: still pending after the time limit: ${pending.join(', ') || 'no checks reported'}. ` +
-      `Look at why before waiting longer.`
-    )
-  }
-  return (
-    `[ci-watch] ${pr}: all ${entries.length} checks settled with no failure. Verify it is mergeable and ` +
-    `finish it per the project rules.`
-  )
 }
 
 // Every session leaves a state file and an owner file behind. Once per load, those of other sessions
