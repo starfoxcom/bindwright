@@ -25,6 +25,23 @@ Every mod is optional and independent, with one exception noted in the table (sh
 
 "Recommended on" means we suggest installing it with every setup; "opt-in" means install it only when you want what it does. Installing is manual for now (see Install below).
 
+### What each one gains and costs
+
+Setup shows these three columns for every mod it asks about, so turning one on or leaving it off is a choice made knowing both sides.
+
+| Mod | On, you get | On, it costs | Off, you give up |
+|---|---|---|---|
+| `session-facts` | The exact time, context fill and plan usage in every reply, the budgets row, and idle compaction that still runs where the CLI skips it. | One short line, for the model only, on every prompt, and a row above the prompt. | The assistant guesses the time and how full its context is, and no row shows the plan's limits coming. |
+| `compact-handoff` | Your messages kept word for word across compactions, a structured hand-off, and a tool that searches the full transcript. | A few thousand tokens more after each compaction in a long session. | The stock summary, which keeps the gist of older messages and loses their wording. |
+| `ci-watch` | Each pushed PR's checks watched at no plan usage, one wake when they finish, and a step back to research after repeated red rounds. | After a PR's 3rd, 5th and every red round from the 6th, file edits, commits and pushes wait until three web lookups have run. Needs `gh`. | The session waits on checks itself, spending plan usage, or you tell it when they finish; nothing makes it research before patching again. |
+| `shared-pc` | Builds, test suites and local CI from several sessions take turns, so the PC is not starved and timings are not skewed. | A heavy command waits in line while another session holds the seat, and a band shows the line. | Sessions run heavy work at the same time. Worth it only when several sessions work at once. |
+| `skill-check` | A skipped step of a session skill is caught and named. | Now and then one follow-up turn, which uses plan time. | A skipped step goes unnoticed until it matters. |
+| `tasks` | An honest task list that survives compaction, and unattended work that carries on instead of stopping with tasks left. | A nudge or a prompt to carry on now and then, which uses a turn; installing it sets `CLAUDE_CODE_ENABLE_TODO_TOOLS`. | The built-in list, which can go stale, and turns that end with work left until you come back. |
+| `usage-guard` | Work saved before a plan limit and resumed by itself after the reset, and wake-ups you can set. | At the wrap-up level (95% by default) every session stops and waits, and each project's background work is stopped by your stop commands. | A session can hit the limit mid-task, and nothing resumes it after the reset. |
+| `session-info` | Model, effort, project, branch and changes at a glance. | A row above the prompt and a git read every 30 seconds. | Only the glance: the same facts are a command away. |
+| `runners` | Your local CI runners' state, queue and schedule, with Start and Stop. | A `gh` read every minute while a runner is listed. | Nothing, unless you run local CI runners. |
+| `mods` | A pane listing every mod, what it does and its commands. | Nothing while the pane is closed. | The list in one place. |
+
 ### Per project or the whole computer
 
 Every installed mod loads in every project, but three can be turned off for one project while every other project keeps them: `ci-watch` (a project with no CI checks has nothing to watch), `tasks` and `skill-check`. `/bindwright:setup project` asks which of them run in a project and writes the answer to that project's personal `.claude/settings.local.json`, which git leaves out:
