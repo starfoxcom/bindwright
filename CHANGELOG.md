@@ -20,7 +20,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **The attribution guard follows more folder changes.** A `cd` behind `builtin` or `command` (`command -p` too, but not `command -v`, which only prints) and `env -C <dir>` or `--chdir` now move where a relative body file is read, so `env -C sub git commit -F msg.txt` reads `sub/msg.txt`. `git commit -t <file>`, the short form of `--template`, is read as a body file too; on `checkout`, `branch` and `switch`, where `-t` means track, it is not.
+- **The attribution guard follows more folder changes.** A `cd` behind `builtin` or `command` (`command -p` too, but not `command -v`, which only prints) and `env -C <dir>` or `--chdir` now move where a relative body file is read, so `env -C sub git commit -F msg.txt` reads `sub/msg.txt`. `git commit -t <file>`, the short form of `--template`, is read as a body file too; on `checkout`, `branch` and `switch`, where `-t` means track, it is not. So is a file after `-F` at the end of a short cluster (`git commit -aF msg.txt`, `-aFmsg.txt`).
 - **The commit-message check accepts a breaking change.** The commit-message check of lefthook, pre-commit and simple-git-hooks, and the example in husky's hook, refused `feat!: ...` and `fix(scope)!: ...`, the marker Conventional Commits uses for a breaking change, so a project with the checks on could not mark one. It now takes the `!` after the type or scope.
 
 ## [v5.3.1] — 2026-11-15

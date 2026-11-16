@@ -19,7 +19,8 @@ What is scanned, for any git write, gh write or GitHub API call:
   * The full command text: inline -m / --body / --title / --notes values,
     here-docs, here-strings and PowerShell -Body all live there.
   * Every file a command names with a body flag (-F / --file / --template
-    for a git write, and -t for git commit; --body-file / --notes-file / --input / -F and
+    for a git write, -F at the end of a cluster (-aF), and -t for git
+    commit; --body-file / --notes-file / --input / -F and
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
     (`hooks/shell-words.mjs`), so each flag belongs to one
@@ -368,6 +369,8 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None
     earlier letters take no value. With `attached_only`, a short flag's attached value is read
     only from a word that pattern matches."""
     cluster = re.compile(r"-(?:(?![m%s])[a-z])*m" % value_letters) if value_letters is not None else None
+    # A git cluster ending in -F reads its file like -F alone: `-aF msg.txt`, `-aFmsg.txt`.
+    file_cluster = None if value_letters is None else re.compile(r"-(?:(?![m%s])[a-z])+F(.*)" % value_letters)
     message = False
     for i, word in enumerate(words):
         text = text_of(word)
@@ -377,7 +380,13 @@ def flag_values(words, short=(), message_flags=MESSAGE_FLAGS, value_letters=None
         built = isinstance(word, dict)
         message = (text in message_flags or text.lower() == "-body"  # PowerShell names are any case
                    or (cluster is not None and cluster.fullmatch(text) is not None))
-        if text.startswith("--") and "=" in text:
+        clustered = file_cluster.fullmatch(text) if file_cluster is not None else None
+        if clustered and not clustered.group(1):
+            yield "-F", words[i + 1] if i + 1 < len(words) else None
+            continue
+        if clustered:
+            flag, value = "-F", clustered.group(1)
+        elif text.startswith("--") and "=" in text:
             flag, value = text.split("=", 1)
         elif text[:2] in short and len(text) > 2 and (attached_only is None or attached_only.match(text)):
             flag, value = text[:2], text[2:]
