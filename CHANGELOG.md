@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v5.3.1] — 2026-11-15
+
+### Fixed
+
+- **The layout check no longer counts toward locking your Windows account.** On Windows, Chrome and Edge started with a new profile check whether the account's password is blank by signing in with an empty one, and Windows logs that as a failed sign-in. The layout check starts the browser with a new profile on every run, so each run cost one failed sign-in, and ten in ten minutes lock the account under Windows' default policy. Each new profile now carries the answer the browser caches, so it skips the check: a run makes no failed sign-in.
+
 ## [v5.3.0] — 2026-11-15
 
 ### Added
