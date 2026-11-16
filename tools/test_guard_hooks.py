@@ -617,15 +617,23 @@ class GuardHookTest(unittest.TestCase):
                 ("builtin cd sub && git commit -F msg.txt", "command cd sub; git commit -F msg.txt",
                  "command -p cd sub; git commit -F msg.txt", "env -C sub git commit -F msg.txt",
                  "env -Csub git commit -F msg.txt", "env --chdir=sub git commit -F msg.txt",
-                 "env --ch sub git commit -F msg.txt", "env -i -C sub git commit -F msg.txt"),
+                 "env --ch sub git commit -F msg.txt", "env -i -C sub git commit -F msg.txt",
+                 "env -iC sub git commit -F msg.txt"),
                 lambda command: self.attr(command, project=inner)):
             with self.subTest(command=command):
                 self.assert_denied(result, f"found in file {moved}")
         self.assert_denied(self.attr("git commit -t sub/msg.txt", project=inner),
                            f"found in file {os.path.join(inner, 'sub/msg.txt')}")
+        # A folder built at run time cannot be placed, however env's option is spelled.
+        for command, result in self.each(
+                ('env --chdir="$ROOT" git commit -F msg.txt', "env -C$ROOT git commit -F msg.txt",
+                 "env $OPTS -C sub git commit -F msg.txt"), lambda command: self.attr(command, project=inner)):
+            with self.subTest(command=command):
+                self.assert_denied(result)
         for command, result in self.each(
                 ("command -v cd sub; git commit -F msg.txt", "env -u sub git commit -F msg.txt",
-                 "git checkout -t sub/msg.txt"),
+                 "env -uC sub git commit -F msg.txt", "env A=$B git commit -F msg.txt",
+                 "rg TODO env -C 3; git commit -F msg.txt", "git checkout -t sub/msg.txt"),
                 lambda command: self.attr(command, project=inner)):
             with self.subTest(command=command):
                 self.assert_passes(result)

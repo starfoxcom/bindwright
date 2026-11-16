@@ -19,7 +19,7 @@ What is scanned, for any git write, gh write or GitHub API call:
   * The full command text: inline -m / --body / --title / --notes values,
     here-docs, here-strings and PowerShell -Body all live there.
   * Every file a command names with a body flag (-F / --file / --template
-    for a git write; --body-file / --notes-file / --input / -F and
+    for a git write, and -t for git commit; --body-file / --notes-file / --input / -F and
     --field key=@file; -d @file and -F key=@file; -InFile; Get-Content's
     path). Bindwright's helper parses the command the way the shell does
     (`hooks/shell-words.mjs`), so each flag belongs to one
@@ -28,8 +28,9 @@ What is scanned, for any git write, gh write or GitHub API call:
     git's in a read (`git log -F`), and gh's `--template`. A flag inside
     quoted text, a here-doc, a here-string or the value of -m / --body /
     --title is text, not a body file. A relative path is read in the start
-    folder and in every folder a `cd`, `pushd`, `Set-Location` or `git -C`
-    in the command names, each reached from the folders named before it in
+    folder and in every folder a `cd` (`builtin cd` and `command cd` too),
+    `pushd`, `Set-Location`, `git -C` or `env -C` / `--chdir` in the
+    command names, each reached from the folders named before it in
     the text, since one may run in a child shell or fail. A `cd` a loop or
     a function runs again, or before one written earlier, is not followed
     further. One after a folder change it cannot place (`cd -`, a
@@ -515,14 +516,15 @@ def command_files(words, shell="bash"):
 
 def folder_targets(words):
     """The folders one command names to move to: a `cd`-style command's targets (home for a
-    bare `cd`, none for `popd` or a bare `pushd`), or the `-C` folders of a git it runs."""
+    bare `cd`, none for `popd` or a bare `pushd`), or the `-C` folders of an env or a git it runs."""
     words = past_cd_wrapper(words)
     name = program(words)
     if name in CD_COMMANDS:
         targets = [w for w in words[1:] if text_of(w) == "-" or not text_of(w).startswith("-")]
         return targets or (["~"] if name in HOME_COMMANDS else [])
-    envs = [folder for i in range(len(words)) if program(words[i:]) == "env"
-            for folder in env_folders(words[i + 1:])]
+    # A text tool's `env` is a word it reads (`rg TODO env -C 3`), not a program it runs.
+    envs = [] if name in TEXT_TOOLS else [folder for i in range(len(words)) if program(words[i:]) == "env"
+                                          for folder in env_folders(words[i + 1:])]
     return envs + [folder for i in range(len(words)) if program(words[i:]) == "git" or is_run_time_git(words[i])
                    for folder in git_subcommand(words[i:])[1]]
 
@@ -541,10 +543,16 @@ def past_cd_wrapper(words):
 
 
 def env_folders(args):
-    """The folders `env -C <dir>` or `--chdir` moves its program to, read before that program."""
+    """The folders `env -C <dir>` or `--chdir` moves its program to, read before that program. A
+    word built at run time there that is not an assignment (`--chdir="$D"`, `$OPTS`) may name a
+    folder, so it comes back as one, which `folder_places` cannot place."""
     folders, i = [], 0
-    while i < len(args) and isinstance(args[i], str) and args[i] != "--":
+    while i < len(args) and args[i] != "--":
         word, i = args[i], i + 1
+        if not isinstance(word, str):
+            if not re.match(r"\w+=", shape_of(word)):
+                return folders + [word]
+            continue
         if word.startswith("--"):
             name, has_value, value = word.partition("=")
             if abbreviates(name, "--chdir", ENV_VALUE_OPTIONS["--chdir"]):
