@@ -271,8 +271,7 @@ CONFIG_WRITES = {"set", "unset", "remove-section", "rename-section"}
 def deny(reason):
     sys.stdout.write(json.dumps({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
+            "hookEventName": "PreToolUse", "permissionDecision": "deny",
             "permissionDecisionReason": "BLOCKED (no AI attribution): " + reason
                 + " Commits, PRs, issues, comments and releases belong to the maintainer; no AI "
                   "Co-Authored-By, no generated-with line, no session link, no robot emoji.",
@@ -381,17 +380,18 @@ def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=())
 def shell_strings(words, caller):
     """(parser shell, the command strings it may run) for a shell program: each argument of a
     POSIX shell whose text names a route, a dict when built at run time. PowerShell joins its
-    arguments into a script the guard does not rebuild, so a route its text arguments name is a
-    dict; a script block passed last (`pwsh -c { ... }`), which only a PowerShell `caller` can
-    pass, is read by the outer parse. None for any other program."""
+    arguments into a script the guard does not rebuild, so a route they name is a dict; a script
+    block after options alone (`pwsh -c { ... }`) is read by the outer parse; None otherwise."""
     name, args = program(words), words[1:]
     if name in POSIX_SHELLS:
         return "bash", [w for w in args if names_route(text_of(w))]
     if name not in ("pwsh", "powershell"):
         return None
     args = args[:script_file_at(name, args)]
-    joined = " ".join(text_of(w) for w in args if isinstance(w, str) or w is not args[-1]
-                      or caller != "powershell" or not text_of(w).lstrip().startswith("{"))
+    last = args[-1] if args and caller == "powershell" and not isinstance(args[-1], str) else ""
+    if text_of(last).lstrip().startswith("{") and all(str(w).startswith("-") for w in args[:-1]):
+        args = args[:-1]
+    joined = " ".join(text_of(w) for w in args)
     return "powershell", [{"dynamic": joined}] if names_route(joined) else []
 
 
