@@ -43,10 +43,10 @@ What is scanned, for any git write, gh write or GitHub API call:
     text names a write or a hook change is parsed and read like the command,
     up to three shells deep; one built at run time or nested deeper is
     denied, as is a nested `pwsh` or `powershell` whose text arguments name
-    one, since PowerShell joins them into a script (a script block passed
-    to it is read with the command). A shell named at run time (`$SHELL`),
-    or a word after a git, gh or text tool (`--label bash`), is not read as
-    a shell.
+    one, since PowerShell joins them into a script (but a script block
+    is read with the command, and words after a `.ps1` file are its
+    parameters). A shell named at run time (`$SHELL`), or a word after
+    a git, gh or text tool (`--label bash`), is not read as a shell.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with this guard. A command this hook reads is
@@ -391,9 +391,23 @@ def shell_strings(words, caller):
         return "bash", [w for w in args if names_route(text_of(w))]
     if name not in ("pwsh", "powershell"):
         return None
+    args = args[:script_file_at(name, args)]
     joined = " ".join(text_of(w) for w in args if isinstance(w, str) or caller != "powershell"
                       or not text_of(w).lstrip().startswith("{"))
     return "powershell", [{"dynamic": joined}] if names_route(joined) else []
+
+
+def script_file_at(name, args):
+    """Index of the .ps1 file a nested PowerShell runs past no-value switches, whose later words
+    are its parameters; `powershell` reads a first plain word as a command, so it needs `-File`."""
+    named = name == "pwsh"
+    for i, w in enumerate(args):
+        option = w.lstrip("-").lower() if isinstance(w, str) and w.startswith("-") else None
+        if option not in ("noprofile", "nop", "nologo", "noninteractive", "noni", "file", "f"):
+            is_script = isinstance(w, str) and w.lower().endswith(".ps1") and not names_route(w)
+            return i if named and is_script else len(args)
+        named = named or option in ("file", "f")
+    return len(args)
 
 
 def shell_places(words):

@@ -624,6 +624,9 @@ class GuardHookTest(unittest.TestCase):
                 ('powershell "git commit --no-verify -m x"', "PowerShell", "nested PowerShell"),
                 ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell", "nested PowerShell"),
                 ("pwsh -Command { git commit --no-verify -m x }", "PowerShell", "--no-verify"),
+                # A script file counts only first, and `powershell` reads a first plain word as a command.
+                ('pwsh -Command "git commit --no-verify -m x; ./x.ps1"', "Bash", "nested PowerShell"),
+                ("powershell ./x.ps1 ';' 'git commit --no-verify -m x'", "Bash", "nested PowerShell"),
                 # From bash a word starting with `{` is text or a brace expansion, never a script block.
                 ("pwsh -c {git,true}' commit --no-verify -m x'", "Bash", "nested PowerShell"),
                 ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
@@ -653,7 +656,9 @@ class GuardHookTest(unittest.TestCase):
                 ('sudo gh issue create --label bash --body "use git commit --no-verify to skip"', "Bash"),
                 ("pwsh -NoProfile -Command { git commit -m 'fix: y' }", "PowerShell"),
                 # A child shell's `cd` never moves the commands around it.
-                ("sh -c 'cd /no/such/folder && true' && git commit -F clean.txt", "Bash")),
+                ("sh -c 'cd /no/such/folder && git commit -m x' && git commit -F clean.txt", "Bash"),
+                ('pwsh ./build.ps1 -Message "git push done"', "Bash"),
+                ('pwsh -NoProfile ./build.ps1 -Message "git push done"', "PowerShell")),
                 lambda command, tool: self.attr(command, tool=tool, project=root)):
             with self.subTest(command=command):
                 self.assert_passes(result)
