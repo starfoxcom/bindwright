@@ -348,6 +348,11 @@ def _with_mod(listed, target):
     return listed[:at] + [target] + listed[at:]
 
 
+# Settings a mod cannot work without, turned on with it. The tasks mod answers the task
+# tools, which the CLI hides on current models unless this is set.
+MOD_ENV = {"tasks": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}
+
+
 def add_mod(home, folder):
     name = os.path.basename(os.path.normpath(folder))
     if not os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
@@ -359,12 +364,19 @@ def add_mod(home, folder):
     kept = os.path.exists(target)
     if not kept:
         shutil.copytree(folder, target)
+    changed = False
     listed = [d for d in str(env.get("CLAUDE_CODE_PLUGIN_DIRS") or "").split(os.pathsep) if d]
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
     if not any(same(d) for d in listed):
         env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(_with_mod(listed, target))
+        changed = True
+    needs = MOD_ENV.get(name, {})
+    turned_on = sorted(key for key, value in needs.items() if env.get(key) != value)
+    for key in turned_on:
+        env[key] = needs[key]
+    if changed or turned_on:
         _save(path, data)
-    return {"installed": target, "kept_existing": kept}
+    return {"installed": target, "kept_existing": kept, "env_set": turned_on}
 
 
 def add_agent(home, file):
@@ -451,11 +463,16 @@ def remove_mod(home, name):
             env["CLAUDE_CODE_PLUGIN_DIRS"] = os.pathsep.join(kept)
         else:
             del env["CLAUDE_CODE_PLUGIN_DIRS"]
+    needs = MOD_ENV.get(name, {})
+    turned_off = sorted(key for key, value in needs.items() if env.get(key) == value)
+    for key in turned_off:
+        del env[key]
+    if unlisted or turned_off:
         _save(path, data)
     deleted = os.path.isdir(target)
     if deleted:
         shutil.rmtree(target)
-    return {"removed": target, "unlisted": unlisted, "deleted_folder": deleted}
+    return {"removed": target, "unlisted": unlisted, "deleted_folder": deleted, "env_unset": turned_off}
 
 
 def remove_agent(home, name):

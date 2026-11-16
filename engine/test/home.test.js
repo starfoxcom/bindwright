@@ -188,6 +188,28 @@ test("a mod is copied once, listed once, and an installed copy keeps its edits",
   });
 });
 
+test("the tasks mod turns on the task tools it answers; other mods set nothing", { skip }, () => {
+  withHome((dir) => {
+    const add = (name) => {
+      const mod = join(dir, "pack", name);
+      mkdirSync(join(mod, ".claude-plugin"), { recursive: true });
+      writeFileSync(join(mod, ".claude-plugin", "plugin.json"), "{}");
+      return home(dir, "add-mod", mod).out;
+    };
+    writeSettings(dir, { env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: "0" } });
+    assert.deepEqual(add("ci-watch").env_set, []);
+    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "0");
+    assert.deepEqual(add("tasks").env_set, ["CLAUDE_CODE_ENABLE_TODO_TOOLS"]);
+    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, "1");
+    // Run again on an installed copy (as an update does): the setting holds, nothing to change.
+    const again = add("tasks");
+    assert.equal(again.kept_existing, true);
+    assert.deepEqual(again.env_set, []);
+    assert.deepEqual(home(dir, "remove-mod", "tasks").out.env_unset, ["CLAUDE_CODE_ENABLE_TODO_TOOLS"]);
+    assert.equal(settings(dir).env.CLAUDE_CODE_ENABLE_TODO_TOOLS, undefined);
+  });
+});
+
 test("mods are listed in row order whatever order they are added in", { skip }, () => {
   withHome((dir) => {
     const add = (name) => {
@@ -415,11 +437,11 @@ test("a removed mod leaves the folder list, keeps the user's other entries, and 
     const target = home(dir, "add-mod", mod).out.installed;
     const removed = home(dir, "remove-mod", "session-facts");
     assert.equal(removed.status, 0, removed.stderr);
-    assert.deepEqual(removed.out, { removed: target, unlisted: true, deleted_folder: true });
+    assert.deepEqual(removed.out, { removed: target, unlisted: true, deleted_folder: true, env_unset: [] });
     assert.deepEqual(settings(dir).env, { CLAUDE_CODE_PLUGIN_DIRS: "/other/mod", KEEP: "1" });
     assert.ok(!existsSync(target));
     assert.deepEqual(home(dir, "remove-mod", "session-facts").out,
-      { removed: target, unlisted: false, deleted_folder: false });
+      { removed: target, unlisted: false, deleted_folder: false, env_unset: [] });
   });
 });
 
