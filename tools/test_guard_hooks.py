@@ -611,6 +611,30 @@ class GuardHookTest(unittest.TestCase):
                                      "-UserAgent git -inFile msg.txt", tool="PowerShell", project=root),
                            f"found in file {path}")
 
+    def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n"})
+        for (command, tool, reason), result in self.each((
+                ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("sh -ec 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash --norc -o pipefail -c -- 'git -c core.hooksPath=x commit -m x'", "Bash", "core.hooksPath"),
+                ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
+                ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
+                ("pwsh -NoProfile -Command git commit -C HEAD", "PowerShell", "reusing"),
+                ('powershell "git commit --no-verify -m x"', "PowerShell", "--no-verify"),
+                ("pwsh -c 'git commit -F msg.txt'", "Bash", "found in file"),
+                ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time"),
+                ("bash -c \"bash -c \\\"bash -c 'bash -c true'\\\"\"; git commit -m x", "Bash", "nested more than")),
+                lambda command, tool, reason: self.attr(command, tool=tool, project=root)):
+            with self.subTest(command=command):
+                self.assert_denied(result, reason)
+        for (command, tool), result in self.each((
+                ("bash -c 'git commit -F clean.txt'", "Bash"), ("bash -c 'git status --no-verify'", "Bash"),
+                ("bash ./build.sh; git commit -m x", "Bash"), ("pwsh ./x.ps1; git commit -m x", "PowerShell"),
+                ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell")),
+                lambda command, tool: self.attr(command, tool=tool, project=root)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+
     def test_a_cd_run_again_moves_on_from_its_last_folder(self):
         # A loop or a function runs a `cd` again from the folder its last run reached.
         nested = self.project_with({"msg.txt": "x\n", "sub/msg.txt": "x\n", "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
