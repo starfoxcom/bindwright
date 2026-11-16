@@ -1151,7 +1151,8 @@ jobs:
       # action's review falls back to the CLI it bundles. The backup runs on
       # the stable release (see below). npm installs it into a folder of the
       # job's own, so two runners under one account never share it mid-install.
-      # npm runs on the Node the step above brought, or else on the runner's
+      # npm runs on the Node "Bring a Linux Node for the CLI install" brought, or
+      # else on the runner's
       # own. With no usable Node and npm there is no job copy: the review
       # runs on the action's own CLI, with no credits run and no backup review. npm starts in the job's
       # temp folder, never the PR's checkout, keeps its cache there, and runs
