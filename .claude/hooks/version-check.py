@@ -30,12 +30,15 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 # The text of a command that may create a tag, a release or a release PR; only such a command
 # is read, and blocked when it cannot be.
-RELEASE_TEXT = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\bcreate\b", re.DOTALL)
+RELEASE_TEXT = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
+                          re.DOTALL)
+GH_CREATE = ("create", "new")
 RELEASE_BRANCH = re.compile(r"release/(.+)")
 
 # Options that take a value, so it is never the version.
@@ -52,13 +55,23 @@ PR_VALUE = {"-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base"
 TEXT_TOOLS = {"echo", "printf", "write-output", "write-host", "awk", "gawk", "mawk", "grep", "egrep",
               "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq", "head", "tail", "wc", "jq", "column",
               "paste", "join", "select-string", "sls", "findstr"}
-TIMEOUT_SECONDS = 25
+# The hook's entry in .claude/settings.json stops it at 30 s; every step shares what is left of
+# this budget, so the hook gives its own reason before that.
+HOOK_SECONDS = 27
+STARTED = time.monotonic()
 PARSE_SECONDS = 6
 NO_PARSER = ("the shell parser in Bindwright's helper could not run, so the command was not read. "
              "Run /bindwright:update to install the helper; it needs Node 18 or later.")
 UNREAD = "the shell parser could not read this command. Write the release command plainly."
 SLOW = (f"the shell parser did not answer within {PARSE_SECONDS} s, so the command was not read. "
         "Run it again once the computer is less busy.")
+OUT_OF_TIME = (f"the version check did not finish within {HOOK_SECONDS} s. Run the command again "
+               "once the computer is less busy.")
+
+
+def seconds_left():
+    """What is left of the hook's time budget."""
+    return max(0.0, STARTED + HOOK_SECONDS - time.monotonic())
 
 
 def parser_script():
@@ -91,7 +104,7 @@ def shell_commands(command, shell, project):
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=command.encode("utf-8"),
-                             capture_output=True, timeout=PARSE_SECONDS)
+                             capture_output=True, timeout=min(PARSE_SECONDS, seconds_left()))
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
     except subprocess.TimeoutExpired:
         return None, SLOW
@@ -177,7 +190,7 @@ def git_output(project, *args):
     """What git prints, or "" when it fails."""
     try:
         out = subprocess.run(["git", *args], cwd=project, capture_output=True, text=True,
-                             encoding="utf-8", errors="replace", timeout=TIMEOUT_SECONDS)
+                             encoding="utf-8", errors="replace", timeout=seconds_left())
     except (OSError, subprocess.SubprocessError):
         return ""
     return out.stdout.strip() if out.returncode == 0 else ""
@@ -208,12 +221,12 @@ def release_from_gh(words, project):
     if program(words) != "gh" or len(words) < 3:
         return None
     group, action, args = words[1], words[2], words[3:]
-    if (group, action) == ("release", "create"):
+    if group == "release" and action in GH_CREATE:
         found, options = read_options(args, RELEASE_VALUE)
         if not found or found[0] is None:
             return None
         return found[0], release_ref(project, found[0], options)
-    if (group, action) == ("pr", "create"):
+    if group == "pr" and action in GH_CREATE:
         _, options = read_options(args, PR_VALUE)
         named = "--head" if "--head" in options else "-H"
         head = options.get(named)
@@ -231,13 +244,15 @@ def load_scheme(project):
     """(scheme, format) from the saved answers, or None when nothing is checked."""
     try:
         with open(os.path.join(project, ".bindwright", "project.json"), encoding="utf-8") as handle:
-            advanced = json.load(handle).get("advanced") or {}
+            advanced = json.load(handle).get("advanced")
     except (OSError, ValueError, AttributeError):
         return None
-    scheme = advanced.get("versioning")
-    if scheme not in ("semver", "calver"):
+    if not isinstance(advanced, dict) or advanced.get("versioning") not in ("semver", "calver"):
         return None
-    return scheme, advanced.get("versionFormat")
+    fmt = advanced.get("versionFormat")
+    if advanced["versioning"] == "calver" and not isinstance(fmt, str):
+        return None
+    return advanced["versioning"], fmt
 
 
 def check_release(project, scheme, fmt, version, ref):
@@ -250,7 +265,9 @@ def check_release(project, scheme, fmt, version, ref):
         argv += ["--format", fmt]
     try:
         out = subprocess.run(argv, cwd=project, capture_output=True, text=True, encoding="utf-8",
-                             errors="replace", timeout=TIMEOUT_SECONDS)
+                             errors="replace", timeout=seconds_left())
+    except subprocess.TimeoutExpired:
+        return OUT_OF_TIME
     except (OSError, subprocess.SubprocessError) as error:
         return f"the version check could not run: {error}"
     if out.returncode == 0:
@@ -289,7 +306,10 @@ def main():
         return 0
     if not isinstance(data, dict) or data.get("tool_name") not in ("Bash", "PowerShell"):
         return 0
-    command = (data.get("tool_input") or {}).get("command") or ""
+    tool_input = data.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(command, str):
+        return 0
     project = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd()
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     reason = refusal(command, shell, project)

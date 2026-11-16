@@ -7,6 +7,9 @@ a tag of NEW_VERSION itself, and checks NEW_VERSION against them:
     version_check.py NEW_VERSION [--scheme semver|calver] [--format YYYY.MM.MICRO]
                      [--changelog CHANGELOG.md] [--ref HEAD]
 
+Without --scheme, the scheme and the calver format come from `advanced.versioning`
+and `advanced.versionFormat` in .bindwright/project.json, and semver without it.
+
 semver reads the commits as Conventional Commits: a `<type>!:` header or a
 `BREAKING CHANGE:` body line needs a major, `feat` a minor, `fix` and `perf` a
 patch. Before 1.0.0 a major counts as a minor and a minor as a patch. The
@@ -29,6 +32,7 @@ error, with the message on stderr. With no earlier tag it says so and exits 0.
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -86,7 +90,7 @@ class Parser(argparse.ArgumentParser):
 def parse_args(argv):
     parser = Parser()
     parser.add_argument("version", metavar="NEW_VERSION")
-    parser.add_argument("--scheme", choices=("semver", "calver"), default="semver")
+    parser.add_argument("--scheme", choices=("semver", "calver"))
     parser.add_argument("--format", help="calver format, such as YYYY.MM.MICRO")
     parser.add_argument("--changelog", help="default CHANGELOG.md when that file exists")
     parser.add_argument("--ref", default="HEAD")
@@ -99,6 +103,23 @@ def git(*args):
     if done.returncode != 0:
         raise CheckError(done.stderr.strip() or "git %s failed" % args[0])
     return done.stdout
+
+
+def use_saved_answers(args):
+    """Fills --scheme, and --format for calver, from the project's saved answers."""
+    if args.scheme is not None:
+        return
+    args.scheme = "semver"
+    try:
+        with open(os.path.join(".bindwright", "project.json"), encoding="utf-8") as fh:
+            advanced = json.load(fh).get("advanced")
+    except (OSError, ValueError, AttributeError):
+        return
+    if not isinstance(advanced, dict) or advanced.get("versioning") != "calver":
+        return
+    args.scheme = "calver"
+    if args.format is None and isinstance(advanced.get("versionFormat"), str):
+        args.format = advanced["versionFormat"]
 
 
 def strip_v(text):
@@ -293,6 +314,7 @@ def report(reasons):
 
 
 def check(args):
+    use_saved_answers(args)
     tokens = calver_tokens(args)
     new = parse(strip_v(args.version), args.scheme, tokens)
     if new is None:

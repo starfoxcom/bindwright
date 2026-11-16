@@ -295,6 +295,14 @@ class CalverRules(unittest.TestCase):
                 else:
                     self.assertEqual(out, "")
 
+    def test_without_a_scheme_the_saved_answers_pick_it(self):
+        # A feat! would need a major under semver; calver only checks the format and the order.
+        rows = [("YYYY.MM.MICRO", "2026.10.3", "2026.11.0"), ("YYYY.MM", "2026.10", "2026.11")]
+        for fmt, tag, new in rows:
+            with self.subTest(fmt), make_repo(tag, ["feat!: drop the flag"]) as repo:
+                as_project(repo, "calver", fmt)
+                self.assertEqual(check(repo, new), (0, ""))
+
     def test_a_bad_format_is_exit_1(self):
         with make_repo("2026.10.3", []) as repo:
             bad_format = ["--scheme", "calver", "--format", "YYYY.XX"]
@@ -341,6 +349,8 @@ class Hook(unittest.TestCase):
          'git commit -m "docs: release steps\ngit tag v5.2.2\nthen push"', 0),
         ("a release command inside a here-document", "cat > notes.md <<EOF\ngit tag v5.2.2\nEOF", 0),
         ("a version built at run time", "git tag $NEXT", 0),
+        ("a release made with gh's new alias", "gh release new v5.2.2", 2),
+        ("a release PR made with gh's new alias", "gh pr new --head release/v5.2.2", 2),
         ("a tag behind env", "env A=1 git tag v5.2.2", 2),
         ("a release behind sudo", "sudo gh release create v5.2.2", 2),
         ("a release command only printed", "echo git tag v5.2.2", 0),
@@ -395,6 +405,22 @@ class Hook(unittest.TestCase):
                             "git fetch origin release/1.2.0"):
                 with self.subTest(command):
                     self.assertEqual(run_hook(repo, command, helper=repo), (0, ""))
+
+    def test_malformed_answers_or_input_let_every_command_run(self):
+        answers = [{"advanced": "x"}, {"advanced": [1]},
+                   {"advanced": {"versioning": "calver", "versionFormat": 5}}]
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            for saved in answers:
+                with open(os.path.join(repo, ".bindwright", "project.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump(saved, fh)
+                with self.subTest(saved=saved):
+                    self.assertEqual(run_hook(repo, "git tag v5.2.2"), (0, ""))
+            event = json.dumps({"tool_name": "Bash", "tool_input": ["git tag v5.2.2"], "cwd": repo})
+            done = subprocess.run([sys.executable, "-I", HOOK], input=event, capture_output=True,
+                                  text=True, encoding="utf-8")
+            self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_a_project_without_versioning_checks_nothing(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
