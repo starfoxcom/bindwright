@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -614,7 +615,16 @@ class GuardHookTest(unittest.TestCase):
     def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
         root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n",
                                   "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n"})
+        deep = "git commit -m x"
+        for _ in range(4):
+            deep = f"bash -c {shlex.quote(deep)}"
         for (command, tool, reason), result in self.each((
+                ("pwsh -co 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("pwsh -wi Hidden -in -cwa 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("pwsh -wd sub -c 'git commit -F inner.txt'", "Bash", "found in file"),
+                (deep, "Bash", "nested more than"),
                 ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("sh -ec 'git commit -n -m x'", "Bash", "--no-verify"),
                 ("bash -euo pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
@@ -627,8 +637,7 @@ class GuardHookTest(unittest.TestCase):
                 ("pwsh -NoProfile -Command git commit -C HEAD", "PowerShell", "reusing"),
                 ('powershell "git commit --no-verify -m x"', "PowerShell", "--no-verify"),
                 ("pwsh -c 'git commit -F msg.txt'", "Bash", "found in file"),
-                ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time"),
-                ("bash -c \"bash -c \\\"bash -c 'bash -c true'\\\"\"; git commit -m x", "Bash", "nested more than")),
+                ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),
                 lambda command, tool, reason: self.attr(command, tool=tool, project=root)):
             with self.subTest(command=command):
                 self.assert_denied(result, reason)

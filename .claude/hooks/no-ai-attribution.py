@@ -38,10 +38,13 @@ What is scanned, for any git write, gh write or GitHub API call:
     target built at run time, a folder this computer cannot find) is
     denied. A file it cannot read, or one named by text built at run time,
     is denied, so a typo cannot slip a body through unread. A program built
-    at run time has every file flag of its command read. A command string a
-    shell runs (`bash -c '...'`, `sh -c`, `pwsh -Command`, Windows
-    PowerShell's first plain word) is parsed and read like the command, up
-    to three shells deep; one built at run time or nested deeper is denied.
+    at run time has every file flag of its command read. A shell's options
+    are never read: each argument of `bash`, `sh`, `zsh` and the like whose
+    text names a write or a hook change, and PowerShell's arguments joined
+    as `-Command` joins them, is parsed and read like the command, in any
+    folder an argument names, up to three shells deep; one built at run
+    time or nested deeper is denied. A shell named at run time (`$SHELL`)
+    is not read.
 
 The parser is required: it runs on Node 18 or later from Bindwright's
 helper, which setup installs with this guard. A command this hook reads is
@@ -194,12 +197,6 @@ PARSE_SECONDS = 6  # one parse
 ALL_PARSES_SECONDS = 9  # every parse of one command, nested strings included: the hook is stopped at 10 s
 MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
 POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
-BASH_VALUE_OPTIONS = {"--rcfile", "--init-file"}  # and a short cluster that ends in o or O
-PWSH_COMMAND = {"c", "com", "comm", "comma", "comman", "command"}  # -Command and its prefixes
-PWSH_VALUE_PARAMETERS = ("executionpolicy", "workingdirectory", "configurationname", "configurationfile",
-                         "custompipename", "settingsfile", "outputformat", "inputformat", "windowstyle",
-                         "version", "encodedcommand", "encodedarguments", "psconsolefile")
-PWSH_VALUE_ALIASES = {"ep", "ex", "wd", "config", "of", "o", "if", "in", "w", "v", "e", "ec"}
 NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
            " command. Install Node, then run /bindwright:update.")
 NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Run /bindwright:update to install it."
@@ -313,11 +310,12 @@ def node_program(cwd):
     return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
 
 
-def node_too_old(node):
+def node_too_old(node, deadline):
     """Whether `node` is older than Node 18, which the parser needs; asked only once a run failed."""
     try:
-        # Short, so a failed parse and this check together stay inside the hook's time limit.
-        out = subprocess.run([node, "--version"], capture_output=True, timeout=2)
+        # Short, and never past the parses' deadline, so the hook answers before it is stopped.
+        out = subprocess.run([node, "--version"], capture_output=True,
+                             timeout=max(0.1, min(2, deadline - time.monotonic())))
     except (OSError, subprocess.TimeoutExpired):
         return False
     version = re.match(rb"\s*v(\d+)\.", out.stdout)
@@ -345,7 +343,7 @@ def parse(cmd, shell, cwd, deadline):
     except (OSError, ValueError):
         data = None
     if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return None, None, NO_NODE if node_too_old(node) else BROKEN
+        return None, None, NO_NODE if node_too_old(node, deadline) else BROKEN
     if not all(isinstance(command, list) for command in data["commands"]):
         return None, None, BROKEN
     words = [word for command in data["commands"] for word in command]
@@ -359,72 +357,48 @@ def parse(cmd, shell, cwd, deadline):
     return data["commands"], data["assignments"], ""
 
 
-def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=()):
+def with_nested(commands, assignments, shell, cwd, deadline, depth=1, around=(), seen=None):
     """(groups, assignments, ""): a group (commands, the commands that place their folders, shell)
-    for the parsed commands, then one per command string a shell in them runs, whose folder
+    for the parsed commands, then one per command string a shell in them may run, whose folder
     changes move only its own group; (None, None, why) when a string cannot be read."""
-    placing = list(around) + list(commands)
+    placing, seen = list(around) + list(commands), set() if seen is None else seen
     groups, assignments = [(commands, placing, shell)], list(assignments)
-    # The first shell in a command holds any later one inside its own string.
-    scripts = (next(filter(None, (shell_script(w[i:]) for i in range(len(w)))), None) for w in commands)
-    for inner_shell, text in filter(None, scripts):
-        if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
-            return None, None, NESTED_UNREAD
-        inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
-        if not problem:
-            inner_groups, inner_assignments, problem = with_nested(
-                inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing)
-        if problem:
-            return None, None, problem
-        groups, assignments = groups + inner_groups, assignments + inner_assignments
+    for inner_shell, strings, args in filter(None, (shell_strings(w[i:]) for w in commands for i in range(len(w)))):
+        # A shell's options are never read: any argument that names a folder may be where it runs.
+        folders = [["cd", w] for w in args if isinstance(w, str) and os.path.isdir(os.path.join(cwd, w))]
+        for text in strings:
+            if not isinstance(text, str) or depth > MAX_NESTED_SHELLS:
+                return None, None, NESTED_UNREAD
+            if (inner_shell, text) in seen:
+                continue
+            seen.add((inner_shell, text))
+            inner, inner_assignments, problem = parse(text, inner_shell, cwd, deadline)
+            if not problem:
+                inner_groups, inner_assignments, problem = with_nested(
+                    inner, inner_assignments, inner_shell, cwd, deadline, depth + 1, placing + folders, seen)
+            if problem:
+                return None, None, problem
+            groups, assignments = groups + inner_groups, assignments + inner_assignments
     return groups, assignments, ""
 
 
-def shell_script(words):
-    """(parser shell, command string, a dict when built at run time) for a shell run on one."""
+def shell_strings(words):
+    """(parser shell, the command strings it may run, its arguments) for a shell program: each
+    argument whose text names a route (for PowerShell, all its arguments joined, as `-Command`
+    joins them), a dict when built at run time; None for any other program."""
     name, args = program(words), words[1:]
-    if name in POSIX_SHELLS:
-        return posix_script(args)
-    return powershell_script(name, args) if name in ("pwsh", "powershell") else None
-
-
-def posix_script(args):
-    """A POSIX shell's command string: its first plain word once a `-c` (`-lc`, `-ec`) is set."""
-    has_c, i = False, 0
-    while i < len(args) and isinstance(args[i], str) and args[i] != "--":
-        word = args[i]
-        if word.startswith("--"):
-            i += 2 if word in BASH_VALUE_OPTIONS else 1
-        elif re.fullmatch(r"[-+][A-Za-z]+", word):
-            has_c = has_c or word[0] == "-" and "c" in word
-            i += 2 if word[-1] in "oO" else 1  # `-o pipefail`, `-euo pipefail`
-        else:
-            break
-    i += i < len(args) and args[i] == "--"
-    return ("bash", args[i]) if has_c and i < len(args) else None
-
-
-def powershell_script(name, args):
-    """PowerShell's command string: the words after `-Command` (`-c`, `/c`), joined as it joins them."""
-    start, i = None, 0
-    while start is None and i < len(args):
-        parameter = re.fullmatch(r"(?:--?|/)([A-Za-z]+)", args[i]) if isinstance(args[i], str) else None
-        name_read = parameter.group(1).lower() if parameter else None
-        if name_read is None:
-            # Windows PowerShell runs its first plain word as a command; pwsh runs it as a script file.
-            start = i if name == "powershell" else len(args)
-        elif name_read in PWSH_COMMAND:
-            start = i + 1
-        elif "file".startswith(name_read):
-            start = len(args)
-        else:
-            takes_value = name_read in PWSH_VALUE_ALIASES or len(name_read) > 2 and any(
-                p.startswith(name_read) for p in PWSH_VALUE_PARAMETERS)
-            i += 2 if takes_value else 1
-    if start is None or start >= len(args):
+    if name not in POSIX_SHELLS and name not in ("pwsh", "powershell"):
         return None
-    built = [w for w in args[start:] if not isinstance(w, str)]
-    return ("powershell", built[0] if built else " ".join(args[start:]))
+    joined = "shell-arguments " + " ".join(map(text_of, args))
+    candidates = args if name in POSIX_SHELLS else [
+        joined if all(isinstance(w, str) for w in args) else {"dynamic": joined}]
+    return ("bash" if name in POSIX_SHELLS else "powershell",
+            [w for w in candidates if names_route(text_of(w))], args)
+
+
+def names_route(text):
+    """Whether text names a git or GitHub write, or a change to which hooks git runs."""
+    return any(p.search(text) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH, GIT_CONFIG_HOOKS, LEFTHOOK_OFF))
 
 
 def text_of(word):
