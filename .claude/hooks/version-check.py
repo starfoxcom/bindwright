@@ -296,13 +296,62 @@ def without_here_documents(command):
     return "\n".join(kept)
 
 
+def substitution_end(command, index):
+    """The index just past the `)` that closes a `$(` whose text starts at `index`; quotes
+    inside a substitution are its own."""
+    depth, quote = 1, None
+    while index < len(command) and depth:
+        char = command[index]
+        if quote and char == quote:
+            quote = None
+        elif not quote and char in "'\"":
+            quote = char
+        elif quote != "'" and command.startswith("$(", index):
+            index = substitution_end(command, index + 2) - 1
+        elif not quote:
+            depth += {"(": 1, ")": -1}.get(char, 0)
+        index += 1
+    return index
+
+
+def without_substitutions(command, shell):
+    """The command with each `$(...)`, and in bash each backtick span, as `$_`, so the word
+    that holds one reads as built at run time. Single-quoted text is left alone."""
+    escape, kept, index, quote = ESCAPE.get(shell, "\\"), [], 0, None
+    while index < len(command):
+        char = command[index]
+        if quote == "'":
+            quote = None if char == "'" else quote
+        elif char == escape:
+            kept.append(command[index:index + 2])
+            index += 2
+            continue
+        elif char == '"':
+            quote = None if quote == '"' else '"'
+        elif char == "'" and not quote:
+            quote = "'"
+        elif command.startswith("$(", index) or (char == "`" and shell != "powershell"):
+            kept.append("$_")
+            index = backtick_end(command, index) if char == "`" else substitution_end(command, index + 2)
+            continue
+        kept.append(char)
+        index += 1
+    return "".join(kept)
+
+
+def backtick_end(command, index):
+    """The index just past the backtick that closes the one at `index`, or the command's end."""
+    close = command.find("`", index + 1)
+    return len(command) if close < 0 else close + 1
+
+
 def rough_tokens(command, shell):
     """The command's words and operators as `shlex` reads them, quotes kept whole, comments and
     here-document bodies dropped. At a quote that never closes, the words read before it."""
     escape = ESCAPE.get(shell, "\\")
     if shell != "powershell":
         command = without_here_documents(command)
-    joined = re.sub(re.escape(escape) + r"\r?\n", "", command)
+    joined = re.sub(re.escape(escape) + r"\r?\n", "", without_substitutions(command, shell))
     text = MID_WORD_HASH.sub(lambda _: escape + "#", joined)
     lexer = shlex.shlex(KeepNewline(text), posix=True, punctuation_chars=ROUGH_PUNCTUATION)
     lexer.whitespace = " \t\r"
@@ -320,7 +369,8 @@ def rough_tokens(command, shell):
 def rough_commands(command, shell):
     """Each statement's words as a rough cut reads them, for when the shell parser cannot run:
     quoted text is one word, statements end at an operator outside quotes, and redirections
-    and leading assignments are dropped. A word built at run time stays as written."""
+    and leading assignments are dropped. A word holding `$` or a substitution is built at run
+    time, so it is None, as the parser reads it."""
     commands, words, is_target = [], [], False
     for token in rough_tokens(command, shell):
         is_operator = bool(token) and all(char in ROUGH_PUNCTUATION for char in token)
@@ -339,7 +389,7 @@ def rough_commands(command, shell):
     for index, words in enumerate(commands):
         while words and ASSIGNMENT.match(words[0]):
             words = words[1:]
-        commands[index] = words
+        commands[index] = [None if "$" in word else word for word in words]
     return commands
 
 
