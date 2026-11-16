@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Changed
 
 - **Every project is offered the commit checks, not only a team's.** Setup now asks each project, solo ones included, whether to check each change on the computer before it is committed, and recommends it: lefthook (or the hook manager the repo already uses) runs the lint, the type check and, with the size check on, the size check before each commit, and the tests before each push, so commits stay fast. Where no CI runs, setup says it is the only automatic check the project gets. A yes installs lefthook when it is missing; a no, or a declined install, leaves the checks off. With the checks on, the project's deny list also refuses `git commit --no-verify`, `git push --no-verify` and `LEFTHOOK=0`, the usual ways around them, even where the attribution guard is off. A project keeps the answer it has until setup runs again.
+- **Setup shows what each mod gains and costs.** Before asking which mods to turn on, for the computer or for one project, setup now says for each one what turning it on gets, what it costs (a hold, a wait, a few tokens, a row above the prompt) and what leaving it off gives up, so the choice is made knowing both sides. The mods README holds the same table.
 
 ### Fixed
 
