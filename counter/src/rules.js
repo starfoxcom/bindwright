@@ -14,8 +14,19 @@ export const KINDS = Object.freeze([
 /** The four PR counts a send carries, in the order the page shows them. */
 const PR_COUNTS = Object.freeze(["checked", "caught", "deep", "merged"]);
 
+/**
+ * How the PRs of a send ended beyond their review rounds, each 0 when a send leaves it out, so
+ * a plugin that does not send them still counts: merged rebuilds of a PR closed at the review
+ * rules' hard stop (`rebuilt`), those of them held back by a red round (`rebuiltCaught`) or by
+ * STALL_ROUNDS or more (`rebuiltStalled`), and PRs closed unmerged with no fix found
+ * (`dropped`) or with no reason left to exist (`retired`).
+ */
+export const OUTCOME_COUNTS = Object.freeze([
+  "rebuilt", "rebuiltCaught", "rebuiltStalled", "dropped", "retired",
+]);
+
 /** The counts a send carries, each a whole number from 0 to MAX_PER_SEND. */
-export const FIELDS = Object.freeze([...PR_COUNTS, "stalled"]);
+export const FIELDS = Object.freeze([...PR_COUNTS, "stalled", ...OUTCOME_COUNTS]);
 
 /** Every count a send carries: FIELDS, plus the red review rounds, which have their own cap. */
 const COUNT_FIELDS = [...FIELDS, "rounds"];
@@ -74,7 +85,7 @@ export function checkSend(body) {
 
   const counts = {};
   for (const field of COUNT_FIELDS) {
-    const value = body[field];
+    const value = body[field] ?? (OUTCOME_COUNTS.includes(field) ? 0 : undefined);
     const limit = field === "rounds" ? MAX_ROUNDS_PER_SEND : MAX_PER_SEND;
     if (!Number.isInteger(value) || value < 0 || value > limit) {
       return refuse(`${field} must be a whole number from 0 to ${limit}`);
@@ -83,7 +94,8 @@ export function checkSend(body) {
   }
   const contradiction = contradictionOf(counts);
   if (contradiction !== null) return refuse(contradiction);
-  if (PR_COUNTS.every((field) => counts[field] === 0)) return refuse("nothing to add");
+  const added = [...PR_COUNTS, "dropped", "retired"];
+  if (added.every((field) => counts[field] === 0)) return refuse("nothing to add");
   const { project, kind, from, to } = body;
   return { ok: true, send: { project, kind, ...counts, from, to } };
 }
@@ -99,6 +111,23 @@ function contradictionOf(counts) {
     return `rounds must be at least ${STALL_ROUNDS} for each stalled PR`;
   }
   if (counts.caught === 0 && counts.rounds > 0) return "rounds need a caught PR";
+  return rebuildContradictionOf(counts);
+}
+
+// The rebuilds are some of the checked PRs, each in the same round bracket as in the counts
+// they belong to: one never held back, held back fewer than STALL_ROUNDS times, or stalled.
+function rebuildContradictionOf(counts) {
+  const { rebuilt, rebuiltCaught, rebuiltStalled } = counts;
+  if (rebuiltStalled > rebuiltCaught || rebuiltCaught > rebuilt) {
+    return "rebuiltStalled cannot exceed rebuiltCaught, nor rebuiltCaught exceed rebuilt";
+  }
+  if (rebuilt - rebuiltCaught > counts.checked - counts.caught) {
+    return "rebuilds never held back cannot exceed the checked PRs never held back";
+  }
+  if (rebuiltCaught - rebuiltStalled > counts.caught - counts.stalled) {
+    return "rebuilds held back below the stall cannot exceed caught PRs below it";
+  }
+  if (rebuiltStalled > counts.stalled) return "rebuiltStalled cannot exceed stalled";
   return null;
 }
 
