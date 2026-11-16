@@ -1096,8 +1096,8 @@ class GuardHookTest(unittest.TestCase):
                 ("git commit {-F,/m.txt} -{n,q}", ["git", "commit", "-F", "/m.txt", "-n", "-q"]),
                 ('echo {a,} {a,""} x{1..2} stash@{0} "{c,d}"',
                  ["echo", "a", "a", "", "x1", "x2", "stash@{0}", "{c,d}"]),
-                ("echo {01..03} {1..5..-2} {a\\,b,c} {a..e..2}",
-                 ["echo", "01", "02", "03", "1", "3", "5", "a,b", "c", "a", "c", "e"])),
+                ("echo {01..03} {1..5..-2} {a\\,b,c} {a..e..2} {X..Z} {-1..1}",
+                 ["echo", "01", "02", "03", "1", "3", "5", "a,b", "c", "a", "c", "e", "X", "Y", "Z", "-1", "0", "1"])),
                 lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
                                                       capture_output=True, timeout=60)):
             with self.subTest(command=command):
@@ -1105,8 +1105,10 @@ class GuardHookTest(unittest.TestCase):
                 read = [each for word in json.loads(result.stdout)["commands"][0]
                         for each in (word.get("braces", [word]) if isinstance(word, dict) else [word])]
                 self.assertEqual(read, words, result.stderr)
-        # Bash expands `$HOME` again after `{$,x}HOME`, and `{A..c}` passes the backtick: no reading.
-        out = subprocess.run(["node", script, "bash"], input=b"echo {$,x}HOME {A..c}", capture_output=True, timeout=60)
+        # Bash expands `$HOME` again after `{$,x}HOME`, and a letter range across the cases makes `[`,
+        # `\` or the backtick, which bash reads again: no reading.
+        unread = b"echo {$,x}HOME {A..c} {O..a..12}-]n -{V..a..6}-x {1..a} {1..999999999}"
+        out = subprocess.run(["node", script, "bash"], input=unread, capture_output=True, timeout=60)
         self.assertFalse([w for w in json.loads(out.stdout)["commands"][0][1:] if "braces" in w], out.stderr)
 
     def test_vendored_parsers_match_their_recorded_hashes(self):

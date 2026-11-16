@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
@@ -236,7 +237,7 @@ func (r reader) braceWords(word *syntax.Word) *[]string {
 	if !slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
 		_, expands := part.(*syntax.BraceExp)
 		return expands
-	}) || isGlob(word) {
+	}) || isGlob(word) || !rangesMakeOnlyAlphanumerics(split) {
 		return nil
 	}
 	values, made := []string{}, 0
@@ -251,6 +252,32 @@ func (r reader) braceWords(word *syntax.Word) *[]string {
 		}
 	}
 	return &values
+}
+
+// rangesMakeOnlyAlphanumerics reports whether every range in the word, nested ones included, makes
+// only numbers or letters of one case. A range is the one part of a brace that makes characters the
+// command does not hold, and a letter range across the cases makes `[`, `\` and the backtick, which
+// bash then reads as a pattern, an escape or a substitution.
+func rangesMakeOnlyAlphanumerics(word *syntax.Word) bool {
+	return !slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		brace, ok := part.(*syntax.BraceExp)
+		if !ok {
+			return false
+		}
+		if !brace.Sequence {
+			return slices.ContainsFunc(brace.Elems, func(elem *syntax.Word) bool { return !rangesMakeOnlyAlphanumerics(elem) })
+		}
+		from, to := brace.Elems[0].Lit(), brace.Elems[1].Lit()
+		_, fromErr := strconv.Atoi(from)
+		_, toErr := strconv.Atoi(to)
+		return (fromErr != nil || toErr != nil) && !sameCaseLetters(from, to)
+	})
+}
+
+func sameCaseLetters(from, to string) bool {
+	lower := func(s string) bool { return len(s) == 1 && 'a' <= s[0] && s[0] <= 'z' }
+	upper := func(s string) bool { return len(s) == 1 && 'A' <= s[0] && s[0] <= 'Z' }
+	return lower(from) && lower(to) || upper(from) && upper(to)
 }
 
 // literalValue is the word's value when every part is literal text.
