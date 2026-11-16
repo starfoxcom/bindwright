@@ -29,7 +29,7 @@ This skill compares the team's setup in `.bindwright/project.json` with this mac
 
 For each extra in `extras` whose `want` is not `false` and that `installed` says is missing, in the order listed:
 
-- Say in one line what it does, and whether the project rates it `required` or `recommended`.
+- Say in one line what it does, and whether the project rates it `required` or `recommended`. For `tasks`, the line also says that picking it sets `CLAUDE_CODE_ENABLE_TODO_TOOLS` to `"1"` in `~/.claude/settings.json`, over any other value there, since the mod answers Claude Code's task tools, which current models hide without it, and that the setting stays if the mod is removed later.
 - On a yes, install it the way `/bindwright:setup` step 7 does: a mod with `python "<helper>/engine/home.py" add-mod "<helper>/_core/global-template/mods/<name>"` (mods need CLI 2.1.287 or later; check the version this session runs as setup does, from `AI_AGENT`), a guard with `home.py install-hook`, `global-instructions` by merging `CLAUDE.md.additions` with its marker line, rendered the way setup step 7 says when `.bindwright/global/` is not there. Then remember `{"extras": {"<name>": true}}` with `--layer personal`.
 - On a no to a `recommended` extra, remember `{"extras": {"<name>": false}}` with `--layer personal`, so nothing asks again.
 - A `required` extra cannot be declined in the settings. On a no, leave it out, and tell the user the project expects it and the daily notice will keep saying so.
