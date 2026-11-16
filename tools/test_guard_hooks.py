@@ -636,6 +636,7 @@ class GuardHookTest(unittest.TestCase):
                 # An assignment or an option value named like git is not the program.
                 ("env HOME=/home/git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("sudo -u git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("flock sort bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
                 ("bash -c 'git commit -F inner.txt'; bash -c 'cd sub; bash -c \"git commit -F inner.txt\"'",

@@ -197,6 +197,7 @@ PARSE_SECONDS = 6  # one parse
 ALL_PARSES_SECONDS = 9  # every parse of one command, nested strings included: the hook is stopped at 10 s
 MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
 POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
+WRAPPERS = {"sudo", "doas", "env", "command", "builtin", "exec", "nohup", "nice", "time", "xargs"}
 NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
            " command. Install Node, then run /bindwright:update.")
 NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Run /bindwright:update to install it."
@@ -410,11 +411,10 @@ def script_file_at(name, args):
 
 
 def shell_places(words):
-    """Where a shell may start: any word before the first git, gh or text tool run as a program
-    (not `A=git` or `-u git`), whose later words are its data (`gh issue create --label bash`)."""
-    before = [""] + list(words[:-1])
-    data = [i for i, w in enumerate(words) if program(words[i:]) in {"git", "gh"} | TEXT_TOOLS
-            and "=" not in w and isinstance(before[i], str) and not before[i].startswith("-")]
+    """Words a shell may start at: those before a git, gh or text tool first or after a wrapper."""
+    end = next((i for i in range(len(words)) if program(words[i:]) not in WRAPPERS), len(words))
+    data = [i for i in range(end + 1) if program(words[i:]) in {"git", "gh"} | TEXT_TOOLS
+            and "=" not in words[i]]
     return range(data[0] if data else len(words))
 
 
