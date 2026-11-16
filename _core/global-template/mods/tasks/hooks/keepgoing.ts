@@ -96,8 +96,7 @@ export function nearCompactionText(): string {
     '[tasks] The turn ended near the compaction with nothing pending to wake the session and no task on ' +
     'the list to carry on. The compaction carries the context across, so it is no reason to stop: if this ' +
     'turn announced a step or left one open that needs no one, put each such step on the task list ' +
-    '(TaskCreate, or TodoWrite where that is missing) and start the first now, so the list holds the turn ' +
-    'open until they are done. If nothing is left, or what is left waits on a person, say so in one line ' +
-    'and end the turn.'
+    '(TaskCreate) and start the first now, so the list holds the turn open until they are done. If ' +
+    'nothing is left, or what is left waits on a person, say so in one line and end the turn.'
   )
 }
