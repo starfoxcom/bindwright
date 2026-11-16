@@ -121,6 +121,8 @@ test("every manager's commit check takes the breaking marker, and runs the size 
         assert.ok(!rule.test(message), `${pc}: ${message} accepted`);
       }
       assert.equal(config.includes(".github/scripts/size_check.py"), codeSizeCheck, `${pc}: size check`);
+      // Stock macOS and Debian have no `python`, only `python3`.
+      assert.ok(!config.includes("python .github/"), `${pc}: the size check needs a Python lookup`);
     }
   }
 });

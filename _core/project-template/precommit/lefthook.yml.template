@@ -26,8 +26,13 @@ pre-commit:
       #   rust:      cargo check --all-targets
 <!-- TOGGLE:code_size_check START -->
     size-check:
-      # The code-size limits in .claude/rules/code-size.md, on the staged files too.
-      run: "python .github/scripts/size_check.py"
+      # The code-size limits in .claude/rules/code-size.md, with the first Python 3.8+ found.
+      run: |
+        for py in python3 python py; do
+          "$py" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null && exec "$py" .github/scripts/size_check.py
+        done
+        echo "size check: no Python 3.8 or later found" >&2
+        exit 1
 <!-- TOGGLE:code_size_check END -->
 
 commit-msg:
