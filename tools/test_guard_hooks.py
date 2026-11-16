@@ -611,6 +611,27 @@ class GuardHookTest(unittest.TestCase):
                                      "-UserAgent git -inFile msg.txt", tool="PowerShell", project=root),
                            f"found in file {path}")
 
+    def test_a_cd_run_again_moves_on_from_its_last_folder(self):
+        # A loop or a function runs a `cd` again from the folder its last run reached.
+        nested = self.project_with({"msg.txt": "x\n", "sub/msg.txt": "x\n", "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
+        moved = os.path.join(nested, "sub", "sub", "msg.txt")
+        for command, result in self.each(("for i in 1 2; do cd sub; done; git commit -F msg.txt",
+                                          "f() { cd sub; }; f; f; git commit -F msg.txt"),
+                                         lambda command: self.attr(command, project=nested)):
+            with self.subTest(command=command):
+                self.assert_denied(result, f"found in file {moved}")
+        # Windows reads `link\..` by name, so a link to a folder already placed keeps its own parent.
+        if os.name == "nt":
+            import _winapi
+            linked = self.project_with({"msg.txt": "x\n", "real/msg.txt": "x\n", "w/msg.txt": f"{GENERATED_LINE}\n"})
+            _winapi.CreateJunction(os.path.join(linked, "real"), os.path.join(linked, "w", "link"))
+            self.assert_denied(self.attr("cd real; cd w/link; cd ..; git commit -F msg.txt", project=linked),
+                               "found in file")
+        # The first run still needs its folder to exist then: a later `cd` cannot place a folder made first.
+        made = self.project_with({"msg.txt": "x\n", "other/x/msg.txt": "x\n"})
+        self.assert_denied(self.attr('mkdir x; cd x; git commit -F msg.txt; cd other', project=made),
+                           "the command text cannot tell")
+
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
         # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy. A `cd` in a
         # child shell, or one that fails, leaves git in the first folder, so it is read there too.

@@ -185,6 +185,7 @@ GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--c
                      "--super-prefix", "--attr-source"}
 HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
 CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
+MAX_PLACES = 64  # folders one command may run in before the guard stops placing them
 PARSE_SECONDS = 6  # the hook itself is stopped at 10 s
 NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
            " command. Install Node, then run /bindwright:update.")
@@ -590,21 +591,33 @@ def is_run_time_git(word):
 def folder_places(commands, cwd):
     """Every folder a command may run in: the start folder, and each folder a folder change
     in the command names, reached from any folder found before it in the text, since a `cd`
-    may run in a child shell or fail, so the shell may be in any of them. None when a target
-    cannot be placed: one built at run time, or one this computer cannot find, such as a
-    saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made later."""
-    places = [cwd]
-    for words in commands:
-        for target in folder_targets(words):
-            if not isinstance(target, str):
-                return None
-            path = os.path.expanduser(target)
-            reached = [path] if os.path.isabs(path) else [os.path.join(place, path) for place in places]
+    may run in a child shell or fail, so the shell may be in any of them. The changes are then
+    applied again until no folder is added, since a loop or a function may run a `cd` again.
+    None when a target cannot be placed: one built at run time, or one this computer cannot
+    find, such as a saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made
+    later, or when the folders pass MAX_PLACES."""
+    targets = [target for words in commands for target in folder_targets(words)]
+    if not all(isinstance(target, str) for target in targets):
+        return None
+    places, seen, first = [cwd], {os.path.realpath(cwd)}, True
+    while True:
+        count = len(places)
+        for target in map(os.path.expanduser, targets):
+            reached = [target] if os.path.isabs(target) else [os.path.join(place, target) for place in places]
             found = [place for place in reached if os.path.isdir(place)]
-            if not found:
+            if first and not found:
                 return None
-            places += [place for place in found if place not in places]
-    return places
+            # A link keeps its own name in the first pass, since Windows reads `link\..` by name;
+            # the repeated passes compare real paths, so a link back to a parent cannot keep adding.
+            for place in found:
+                if place not in places if first else os.path.realpath(place) not in seen:
+                    seen.add(os.path.realpath(place))
+                    places.append(place)
+        if len(places) == count:
+            return places
+        if len(places) > MAX_PLACES:
+            return None
+        first = False
 
 
 def parsed_files(commands, cwd, shell="bash"):
