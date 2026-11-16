@@ -437,7 +437,9 @@ def git_files(words):
     i = git_subcommand(words)[0]
     if i >= len(words) or (isinstance(words[i], str) and words[i] in GIT_READS):
         return []
-    return body_files(words[i:], GIT_FILE_FLAGS, GIT_MESSAGE_FLAGS, value_letters=git_value_letters(words))
+    # `-t` is commit's short `--template`; on checkout, branch and switch it means track.
+    flags = GIT_FILE_FLAGS | {"-t"} if words[i] == "commit" else GIT_FILE_FLAGS
+    return body_files(words[i:], flags, GIT_MESSAGE_FLAGS, value_letters=git_value_letters(words))
 
 
 def git_value_letters(words):
@@ -514,12 +516,48 @@ def command_files(words, shell="bash"):
 def folder_targets(words):
     """The folders one command names to move to: a `cd`-style command's targets (home for a
     bare `cd`, none for `popd` or a bare `pushd`), or the `-C` folders of a git it runs."""
+    words = past_cd_wrapper(words)
     name = program(words)
     if name in CD_COMMANDS:
         targets = [w for w in words[1:] if text_of(w) == "-" or not text_of(w).startswith("-")]
         return targets or (["~"] if name in HOME_COMMANDS else [])
-    return [folder for i in range(len(words)) if program(words[i:]) == "git" or is_run_time_git(words[i])
-            for folder in git_subcommand(words[i:])[1]]
+    envs = [folder for i in range(len(words)) if program(words[i:]) == "env"
+            for folder in env_folders(words[i + 1:])]
+    return envs + [folder for i in range(len(words)) if program(words[i:]) == "git" or is_run_time_git(words[i])
+                   for folder in git_subcommand(words[i:])[1]]
+
+
+def past_cd_wrapper(words):
+    """The words after `builtin` or `command` (and `command -p`), which run the shell's own
+    `cd`; `command -v` and `-V` only print, so their words stay as they are."""
+    if program(words) == "builtin":
+        return words[1:]
+    if program(words) != "command":
+        return words
+    rest = words[1:]
+    while rest and rest[0] == "-p":
+        rest = rest[1:]
+    return words if rest and text_of(rest[0]).startswith("-") else rest
+
+
+def env_folders(args):
+    """The folders `env -C <dir>` or `--chdir` moves its program to, read before that program."""
+    folders, i = [], 0
+    while i < len(args) and isinstance(args[i], str) and args[i] != "--":
+        word, i = args[i], i + 1
+        if word.startswith("--"):
+            name, has_value, value = word.partition("=")
+            if abbreviates(name, "--chdir", ENV_VALUE_OPTIONS["--chdir"]):
+                folders += [value] if has_value else args[i:i + 1]
+            i += takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
+        elif word.startswith("-") and len(word) > 1:
+            at = word.find("C")
+            if at > 0 and all("-" + letter not in ENV_VALUE_SHORT for letter in word[1:at]):
+                folders += [word[at + 1:]] if word[at + 1:] else args[i:i + 1]
+            i += takes_next_word(word, ENV_VALUE_SHORT, ENV_VALUE_OPTIONS)
+        elif not re.match(r"\w+=", word):
+            break
+    return folders
 
 
 def is_run_time_git(word):
