@@ -120,7 +120,6 @@ function powershell(script) {
 
 function securityLogSkip() {
   if (SKIP) return SKIP;
-  if (process.platform !== "win32") return "Windows only";
   const probe = powershell("Get-WinEvent -LogName Security -MaxEvents 1 -ErrorAction Stop | Out-Null");
   return probe.status === 0 ? false : "this user cannot read the Windows Security log";
 }
@@ -132,13 +131,16 @@ function failedSignInsSince(since) {
   return powershell(query).stdout.split(/\r?\n/).filter((name) => /msedge|chrome/i.test(name));
 }
 
-test("a run makes no failed Windows sign-in, which could lock the account",
-  { skip: securityLogSkip() }, () => {
-    const since = new Date(Date.now() - 1000);
-    const run = runCheck(CLEAN_TWO_COLUMN);
-    assert.equal(run.status, 0, run.stdout + run.stderr);
-    assert.deepEqual(failedSignInsSince(since), []);
-  });
+// Only Windows has the sign-in check, so the test exists only there.
+if (process.platform === "win32") {
+  test("a run makes no failed Windows sign-in, which could lock the account",
+    { skip: securityLogSkip() }, () => {
+      const since = new Date(Date.now() - 1000);
+      const run = runCheck(CLEAN_TWO_COLUMN);
+      assert.equal(run.status, 0, run.stdout + run.stderr);
+      assert.deepEqual(failedSignInsSince(since), []);
+    });
+}
 
 test("two overlapping text boxes fail as overlap", { skip: SKIP }, () => {
   const run = runCheck(OVERLAPPING_BOXES);
