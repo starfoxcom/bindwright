@@ -608,7 +608,7 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_passes(result)
         # A cmdlet's whole-name -InFile keeps reading its file when the command names git.
         self.assert_denied(self.attr("Invoke-WebRequest https://api.github.com/repos/o/r/issues -Method Post "
-                                     "-inFile msg.txt; git status", tool="PowerShell", project=root),
+                                     "-UserAgent git -inFile msg.txt", tool="PowerShell", project=root),
                            f"found in file {path}")
 
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
