@@ -599,11 +599,15 @@ test('the own list tools stand in only where the built-in task tools are missing
   await $.session.start({ cwd: 'C:/Repos/x' } as never)
   expect(registered).toEqual(['create', 'update', 'list', 'get'])
   await turn($)
-  await $.tool.call({ tool: 'mcp__tasks__create', subject: 'one', description: 'first' } as never)
+  const made = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'one', description: 'first' } as never)) as
+    never as { result: unknown }
+  // A stand-in has no built-in result mapper, so the model reads the record as text.
+  expect(typeof made.result).toBe('string')
+  expect(JSON.parse(made.result as string)).toEqual({ task: { id: '1', subject: 'one' } })
   await $.tool.call({ tool: 'mcp__tasks__update', taskId: '1', status: 'in_progress' } as never)
   expect(mirror(seen).tasks.map(t => [t.subject, t.status])).toEqual([['one', 'in_progress']])
   const listed = (await $.tool.call({ tool: 'mcp__tasks__list' } as never)) as never as { result: unknown }
-  expect(JSON.stringify(listed.result)).toContain('one')
+  expect(listed.result as string).toContain('"subject":"one"')
   const fromSubagent = (await $.tool.call({ tool: 'mcp__tasks__create', subject: 'x', description: 'x',
     agentId: 'a1' } as never)) as never as { deny?: string }
   expect(fromSubagent.deny).toContain('main session')

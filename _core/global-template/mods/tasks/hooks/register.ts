@@ -486,7 +486,8 @@ function registerTools(on: On): void {
         mirror.changedAt = now
         await saveMirror($, mirror)
       }
-      return { result: output } as never
+      // A built-in name's record goes through that tool's own mapper; a stand-in has none, so it sends text.
+      return { result: tool === e.tool ? output : JSON.stringify(output) } as never
     }
     const result = await next(e)
     if (e.agentId) return result

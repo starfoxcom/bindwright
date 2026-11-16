@@ -287,7 +287,8 @@ function updateTask(mirror: Mirror, args: TaskArgs, turn: number, now: number): 
 }
 
 // Answers one task tool call from the mirror, returning the record the engine's own tool returns
-// (core maps it to the model's text with that tool's mapper, so the model reads the usual results).
+// (for a built-in name, core maps it to the model's text with that tool's mapper, so the model reads
+// the usual results; a stand-in tool sends the record as JSON text).
 export function answerTool(mirror: Mirror, tool: string, args: TaskArgs, turn: number, now: number): unknown {
   if (tool === 'TaskCreate') return createTask(mirror, args, turn, now)
   if (tool === 'TaskGet') return getTask(mirror, args)
