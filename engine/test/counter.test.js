@@ -243,7 +243,7 @@ test("other routes and methods answer 404", async () => {
 
 // A database made before the outcome counts gains them from the migration, and its rows keep counting.
 test("the migration adds the outcome counts to an older database, which then adds them up", async () => {
-  const older = SCHEMA.replace(/^\s+(rebuilt\w*|dropped|retired)\s+INTEGER[^\n]*\n/gm, "");
+  const older = SCHEMA.replace(/^[ \t]+(rebuilt\w*|dropped|retired)[ \t]+INTEGER[^\n]*\n/gm, "");
   const names = (db) => db.sqlite.prepare("SELECT name FROM pragma_table_info('projects')").all()
     .map((row) => row.name).sort();
   const { store, database } = newStore(older);
