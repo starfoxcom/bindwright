@@ -429,13 +429,15 @@ class Hook(unittest.TestCase):
                 with self.subTest(name):
                     self.assertEqual(got, code, err)
 
-    def test_without_the_parser_only_a_possible_release_is_blocked(self):
+    def test_without_the_parser_a_rough_reading_is_checked(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
             as_project(repo, "semver")
-            code, err = run_hook(repo, "git tag v5.3.0", helper=repo)
+            code, err = run_hook(repo, 'git tag "v5.2.2"', helper=repo)
             self.assertEqual(code, 2)
-            self.assertIn("/bindwright:update", err)
-            for command in ("git log --oneline", "gh pr checks 12 --json name,bucket",
+            self.assertIn("v5.2.2", err)
+            for command in ("git tag v5.3.0", "git tag backup", "gh pr create --base develop --head feature/x",
+                            'git commit -m "docs: run git tag v1 first"',
+                            "git log --oneline", "gh pr checks 12 --json name,bucket",
                             "gh release list", "npm run release", "cat pr.md",
                             "git fetch origin release/1.2.0", "git tag --list", "git tag -l",
                             'git commit -m "fix: tag sorting"', "git add src/tag.py",
@@ -489,7 +491,9 @@ class TrustedProgram(unittest.TestCase):
     def test_a_program_in_the_project_folder_is_never_picked(self):
         spec = importlib.util.spec_from_file_location("version_check_hook", HOOK)
         hook = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(hook)
+        # No __pycache__ beside the template, which the template file list would then hold.
+        with mock.patch.object(sys, "dont_write_bytecode", True):
+            spec.loader.exec_module(hook)
         here = os.getcwd()
         with tempfile.TemporaryDirectory() as project, mock.patch.dict(os.environ):
             planted = os.path.join(project, "git.bat" if os.name == "nt" else "git")

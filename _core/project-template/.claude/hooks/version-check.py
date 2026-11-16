@@ -20,8 +20,9 @@ so quoted text and here-documents are never taken for commands, and a git or gh
 command behind a wrapper (`env`, `sudo`, `xargs`) is checked too. Options are
 read as getopt reads them (`-am <message>`, `--head=<branch>`). `gh release
 create` is measured at the version's tag when it exists, else at `--target`. A
-version, commit or branch built at run time (`git tag $NEXT`) is out of reach. The check refusing, failing to
-run, or the parser missing blocks such a command with the reason.
+version, commit or branch built at run time (`git tag $NEXT`) is out of reach. Without the
+parser (no Node), a rough cut of the command is read instead. The check refusing or failing to
+run blocks the command with the reason.
 """
 
 import json
@@ -67,11 +68,6 @@ TEXT_TOOLS = {"echo", "printf", "write-output", "write-host", "awk", "gawk", "ma
 HOOK_SECONDS = 27
 STARTED = time.monotonic()
 PARSE_SECONDS = 6
-NO_PARSER = ("the shell parser in Bindwright's helper could not run, so the command was not read. "
-             "Run /bindwright:update to install the helper; it needs Node 18 or later.")
-UNREAD = "the shell parser could not read this command. Write the release command plainly."
-SLOW = (f"the shell parser did not answer within {PARSE_SECONDS} s, so the command was not read. "
-        "Run it again once the computer is less busy.")
 OUT_OF_TIME = (f"the version check did not finish within {HOOK_SECONDS} s. Run the command again "
                "once the computer is less busy.")
 
@@ -104,26 +100,22 @@ def trusted_program(name, project):
 
 
 def shell_commands(command, shell, project):
-    """(each simple command's words, "") as the shell reads them, or (None, why) when the
-    parser cannot run or read the command. A word built at run time is None."""
+    """Each simple command's words as the shell reads them, or None when the parser cannot run
+    or read the command. A word built at run time is None."""
     node, script = trusted_program("node", project), parser_script()
     if not node or not script:
-        return None, NO_PARSER
+        return None
     try:
         # Bytes, not text: a text pipe on Windows would turn each LF into CR LF.
         out = subprocess.run([node, script, shell], input=command.encode("utf-8"),
                              capture_output=True, timeout=min(PARSE_SECONDS, seconds_left()))
         data = json.loads(out.stdout.decode("utf-8")) if out.returncode == 0 else None
-    except subprocess.TimeoutExpired:
-        return None, SLOW
     except (OSError, subprocess.SubprocessError, ValueError):
         data = None
-    if not isinstance(data, dict) or not isinstance(data.get("commands"), list):
-        return None, NO_PARSER
-    if data.get("error"):
-        return None, UNREAD
+    if not isinstance(data, dict) or not isinstance(data.get("commands"), list) or data.get("error"):
+        return None
     return [[word if isinstance(word, str) else None for word in words]
-            for words in data["commands"] if isinstance(words, list)], ""
+            for words in data["commands"] if isinstance(words, list)]
 
 
 def long_name(name, names):
@@ -260,17 +252,25 @@ def gh_action(words):
     return words[group], words[action], words[action + 1:]
 
 
-def may_release(command):
-    """Whether a rough reading of the command finds a release: a tag that git would create, or
-    a gh release or PR being created. It decides only whether the command is read in full."""
+def rough_commands(command):
+    """Each statement's words as a rough cut reads them, for when the shell parser cannot run:
+    split at separators and blanks, quotes taken off, leading assignments dropped."""
+    commands = []
     for statement in ROUGH_STATEMENT.split(command):
-        words = statement.split()
+        words = [word.strip("'\"") for word in statement.split()]
         while words and ASSIGNMENT.match(words[0]):
             words = words[1:]
-        for run in runs_in(words):
-            gh = gh_action(run)
-            if release_from_git(run) or (gh and gh[0] in ("release", "pr") and gh[1] in GH_CREATE):
-                return True
+        commands.append(words)
+    return commands
+
+
+def may_release(command):
+    """Whether a rough reading of the command finds a release: a tag that git would create, or
+    a gh release or PR being created."""
+    for run in (run for words in rough_commands(command) for run in runs_in(words)):
+        gh = gh_action(run)
+        if release_from_git(run) or (gh and gh[0] in ("release", "pr") and gh[1] in GH_CREATE):
+            return True
     return False
 
 
@@ -344,7 +344,7 @@ def refusal(command, shell, project):
     try:
         return read_and_check(command, shell, project)
     except OutOfTime:
-        return f"Blocked: this command may make a release, and {OUT_OF_TIME}"
+        return f"Blocked: this command may make a release, and {OUT_OF_TIME}" if may_release(command) else None
 
 
 def read_and_check(command, shell, project):
@@ -354,10 +354,8 @@ def read_and_check(command, shell, project):
     if not scheme_and_format:
         return None
     scheme, fmt = scheme_and_format
-    commands, problem = shell_commands(command, shell, project)
-    if problem:
-        # Without the parser only a command the rough reading finds a release in is blocked.
-        return f"Blocked: this command may make a release, and {problem}" if may_release(command) else None
+    # Without the parser the rough cut is checked the same way: the version check decides.
+    commands = shell_commands(command, shell, project) or rough_commands(command)
     return first_refusal(commands, project, scheme, fmt)
 
 
