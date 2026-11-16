@@ -134,6 +134,10 @@ test("the installed attribution guard brings its modules and refuses an AI co-au
     assert.match(call.stdout, /"deny"/, call.stderr);
     const modules = join(dir, ".claude", "hooks", "no_ai_attribution");
     assert.ok(existsSync(join(modules, "shell.py")));
+    for (const name of ["x", ".py", "...py", "../projects.py", join(dir, "abs.py")]) {
+      assert.equal(home(dir, "remove-hook", name).status, 1, name);
+    }
+    assert.ok(existsSync(modules));
     home(dir, "remove-hook", "no-ai-attribution.py");
     assert.ok(!existsSync(modules));
   });

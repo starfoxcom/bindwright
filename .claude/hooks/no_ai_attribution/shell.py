@@ -6,28 +6,9 @@ import re
 import shutil
 import subprocess
 import time
+from . import routes_in  # the hook file's own, set before this module loads
 
 
-# A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
-# `commit-msg`) names no write.
-_WORD_START = r"(?<![\w./\\:-])"
-_WORD_END = r"(?![\w./-])"
-GIT_WRITE = re.compile(
-    r"\bgit\b[^|;&\n]*?" + _WORD_START
-    + r"(commit-tree|commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)"
-    + _WORD_END, re.I)
-GH_WRITE = re.compile(
-    r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
-    + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
-GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
-HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
-# Commands that may change which hooks run without writing anything.
-GIT_CONFIG_HOOKS = re.compile(
-    r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|--re[mn]|\bre(?:move|name)-section\b)", re.I)
-LEFTHOOK_OFF = re.compile(r"\blefthook\b\W*=|\blefthook\b[^|;&\n]*\buninstall\b", re.I)
-# A line end the shell joins to the next: `\` (an even run of `\` escapes itself) or
-# PowerShell's backtick after a blank.
-CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
 TEXT_TOOLS = {"awk", "gawk", "mawk", "grep", "egrep", "fgrep", "rg", "sed", "sort", "cut", "tr", "uniq",
               "head", "tail", "wc", "jq", "column", "paste", "join", "select-string", "sls", "findstr"}
 PARSE_SECONDS = 6  # one parse
@@ -179,14 +160,6 @@ def shell_places(words):
             and "=" not in words[i]]
     return range(data[0] if data else len(words))
 
-
-def routes_in(text):
-    """(writes, names a route): whether text names a git or GitHub write, or a hook change, as
-    written, with line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
-    joined = CONTINUED_LINE.sub(r"\1", text)
-    texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
-    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
 
 def text_of(word):
     """A word's literal value, or the source text of one the shell builds at run time."""

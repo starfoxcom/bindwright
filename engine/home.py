@@ -39,6 +39,7 @@ failed write never leaves half a settings file.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -284,6 +285,8 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
 
 
 def remove_hook(home, name):
+    if not re.fullmatch(r"[A-Za-z0-9][\w-]*\.py", name):
+        raise HomeError("remove-hook takes a hook's file name, such as push-guard.py: " + name)
     path, data = _load(home)
     removed = sum(_drop(entries, name) for entries in _event_lists(data, path))
     if removed:

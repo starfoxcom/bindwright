@@ -133,6 +133,26 @@ ATTRIBUTION = re.compile(
         r"\U0001F916",                       # robot emoji
         r"\bai" + _Z + r"-?" + _Z + r"(?:assisted|generated|written|authored)",
     ]), re.I | re.M)
+# A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
+# `commit-msg`) names no write.
+_WORD_START = r"(?<![\w./\\:-])"
+_WORD_END = r"(?![\w./-])"
+GIT_WRITE = re.compile(
+    r"\bgit\b[^|;&\n]*?" + _WORD_START
+    + r"(commit-tree|commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)"
+    + _WORD_END, re.I)
+GH_WRITE = re.compile(
+    r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
+    + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
+GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
+HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
+# Commands that may change which hooks run without writing anything.
+GIT_CONFIG_HOOKS = re.compile(
+    r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|--re[mn]|\bre(?:move|name)-section\b)", re.I)
+LEFTHOOK_OFF = re.compile(r"\blefthook\b\W*=|\blefthook\b[^|;&\n]*\buninstall\b", re.I)
+# A line end the shell joins to the next: `\` (an even run of `\` escapes itself) or
+# PowerShell's backtick after a blank.
+CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
 # Text bash rewrites before a program sees it: a backslash escape or an ANSI-C or locale
 # string can spell any word, so the text checks cannot rule such a command out.
 SHELL_ESCAPES = re.compile(r"\\|\$['\"]")
@@ -176,21 +196,33 @@ def scan_text(text, where):
         deny(f"attribution marker '{hit.group(0).strip()}' found in {where}.")
 
 
-def readers(cmd):
+def routes_in(text):
+    """(writes, names a route): whether text names a git or GitHub write, or a hook change, as
+    written, with line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
+    joined = CONTINUED_LINE.sub(r"\1", text)
+    texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
+    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
+    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+
+
+def readers(named):
     """The package's readers, loaded only here so the Attribution workflow can import this file
-    alone; without the package, a command that may write is refused with the fix."""
+    alone; without the package, a command that names a route is refused, as without the parser."""
     sys.dont_write_bytecode = True  # no __pycache__ beside a hook a repo may commit
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     try:
+        import no_ai_attribution
+        no_ai_attribution.routes_in = routes_in
         from no_ai_attribution.files import parsed_files
         from no_ai_attribution.routes import hook_route
-        from no_ai_attribution.shell import parse, routes_in, with_nested
+        from no_ai_attribution.shell import parse, with_nested
     except ImportError:
-        if re.search(r"git|gh|lefthook|api\.github", cmd, re.I):
-            deny("the folder no_ai_attribution/ next to this guard, which holds its parser code, is"
-                 " missing. Run /bindwright:update to restore it.")
+        if named:
+            deny("the folder no_ai_attribution/ beside this guard, which reads the command, is missing."
+                 " Restore it: `git checkout -- .claude/hooks/no_ai_attribution` where the repo commits"
+                 " it, otherwise /bindwright:setup.")
         sys.exit(0)
-    return parse, routes_in, with_nested, parsed_files, hook_route
+    return parse, with_nested, parsed_files, hook_route
 
 
 def main():
@@ -205,13 +237,13 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    parse, routes_in, with_nested, parsed_files, hook_route = readers(cmd)
     writes, named = routes_in(cmd)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     # An escaped bash command goes to the parser even when its text names no route, but only
     # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
     if not (named or shell == "bash" and SHELL_ESCAPES.search(cmd)):
         sys.exit(0)
+    parse, with_nested, parsed_files, hook_route = readers(named)
 
     if writes:
         scan_text(cmd, "the command text")

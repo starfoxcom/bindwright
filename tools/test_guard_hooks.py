@@ -332,13 +332,18 @@ class GuardHookTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
 
-    def test_a_guard_without_its_package_refuses_only_what_may_write(self):
-        # A copy of the hook file alone cannot read a command, so a git or gh call gets the fix.
+    def test_a_guard_without_its_package_refuses_only_what_names_a_route(self):
+        # A copy of the hook file alone cannot read a command, so it refuses as without the parser.
         root = self.temp_project(("run-hook.sh",))
         hooks = os.path.join(root, ".claude", "hooks")
         shutil.copy(os.path.join(REPO, ".claude", "hooks", "no-ai-attribution.py"), hooks)
-        self.assert_denied(self.attr("git commit -m x", project=root), "/bindwright:update")
-        self.assert_passes(self.attr("ls -la", project=root))
+        for command in ("git commit -m x", "g\\it commit -m x", "git config core.hooksPath x"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=root), "git checkout -- .claude/hooks/no_ai_attribution")
+        for command in ("ls -la", "git status --porcelain", "git checkout -- .claude/hooks/no_ai_attribution",
+                        "node ~/.bindwright/helper/engine/cli.js --update ."):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, project=root))
 
     def test_attribution_next_to_repo_name_is_denied(self):
         self.assert_denied(self.attr(
