@@ -136,7 +136,7 @@ test("each check counts where its rule applied and where it broke", needsPython,
 });
 
 test("the tasks mod's stand-in create tool counts as a task list", needsPython, () => {
-  const out = audit({ oldest: [...OLDEST, use("m1", "mcp__tasks__create", { subject: "z" })] });
+  const out = audit({ oldest: [...OLDEST, use("m1", "mcp__tasks__taskmod_create", { subject: "z" })] });
   assert.deepEqual(counts(byId(out)["task-tracking"]), [3, 0, []]);
 });
 
