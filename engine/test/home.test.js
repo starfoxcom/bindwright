@@ -7,6 +7,7 @@ import {
   chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { delimiter, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -335,6 +336,77 @@ test("add-style refuses a missing, non-markdown or unnamed file, and writes noth
     }
     assert.ok(!existsSync(join(dir, ".claude")));
   });
+});
+
+const fingerprint = (text) => createHash("sha256").update(text.replaceAll("\r\n", "\n")).digest("hex");
+
+test("update-style replaces only an unedited earlier shipped copy", { skip }, () => {
+  const OLD = "---\nname: Straight Talk\n---\nBe short.\n";
+  const NEW = "---\nname: Straight Talk\n---\nBe short and sound like a person.\n";
+  const cases = [
+    ["nothing installed", null, "missing", false],
+    ["the current text", NEW, "current", false],
+    ["the current text with CRLF line endings", NEW.replaceAll("\n", "\r\n"), "current", false],
+    ["an earlier shipped copy", OLD, "older", true],
+    ["an earlier shipped copy with CRLF line endings", OLD.replaceAll("\n", "\r\n"), "older", true],
+    ["an earlier shipped copy with a byte order mark", `﻿${OLD}`, "older", true],
+    ["a copy with the user's edits", "---\nname: Straight Talk\n---\nBe short. Mine.\n", "edited", false],
+    ["an edited copy saved as Windows-1252",
+      Buffer.from("---\nname: Straight Talk\n---\nBe short, se\xf1or.\n", "latin1"), "edited", false],
+  ];
+  for (const [label, installed, state, replaced] of cases) {
+    withHome((dir) => {
+      const file = styleFile(dir, NEW);
+      writeFileSync(join(dirname(file), "straight-talk.retired.json"), JSON.stringify({ sha256: [fingerprint(OLD)] }));
+      const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+      if (installed !== null) {
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, installed);
+      }
+      assert.deepEqual(home(dir, "style-status", file).out, { installed: target, state }, label);
+      assert.deepEqual(home(dir, "update-style", file).out, { installed: target, state, replaced }, label);
+      const after = installed === null ? null : readFileSync(target);
+      assert.deepEqual(after, installed === null ? null : Buffer.from(replaced ? NEW : installed), label);
+    });
+  }
+  withHome((dir) => {
+    const file = styleFile(dir, NEW);
+    writeFileSync(join(dirname(file), "straight-talk.retired.json"), JSON.stringify({ sha256: [fingerprint(OLD)] }));
+    const kept = join(dir, "dotfiles-straight-talk.md");
+    writeFileSync(kept, OLD);
+    const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+    mkdirSync(dirname(target), { recursive: true });
+    try {
+      symlinkSync(kept, target, "file");
+    } catch {
+      return; // This machine cannot make file links (Windows without developer mode).
+    }
+    assert.deepEqual(home(dir, "update-style", file).out, { installed: target, state: "linked", replaced: false });
+    assert.equal(readFileSync(kept, "utf8"), OLD, "the file a link points to stays as it was");
+  });
+  withHome((dir) => {
+    const file = styleFile(dir, NEW);
+    const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, OLD);
+    const unlisted = home(dir, "update-style", file).out;
+    assert.deepEqual(unlisted, { installed: target, state: "edited", replaced: false }, "no list of earlier copies");
+    const notStyle = home(dir, "style-status", join(dirname(file), "straight-talk.txt"));
+    assert.equal(notStyle.status, 1);
+    assert.match(notStyle.out.error, /Not an output style file/);
+  });
+  for (const sidecar of ["{", "[]", '{"sha256": "abc"}']) {
+    withHome((dir) => {
+      const file = styleFile(dir, NEW);
+      writeFileSync(join(dirname(file), "straight-talk.retired.json"), sidecar);
+      const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, OLD);
+      const r = home(dir, "style-status", file);
+      assert.equal(r.status, 1, sidecar);
+      assert.match(r.out.error, /Not a list of earlier copies/, sidecar);
+    });
+  }
 });
 
 test("a settings file that is not valid JSON is never written", { skip }, () => {

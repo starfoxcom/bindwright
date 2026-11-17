@@ -72,6 +72,8 @@ Then check that `.claude/settings.local.json`, the personal file that holds the 
 
 Then, when `~/.claude/settings.json` lists the tasks mod in `env.CLAUDE_CODE_PLUGIN_DIRS` and its `env` does not set `CLAUDE_CODE_ENABLE_TODO_TOOLS` to `"1"`, a setup before 5.2.1 installed it: say that the mod answers Claude Code's task tools, which current models hide without that line, so it does nothing until `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` is added to that `env` block, and that it takes effect at the next start of Claude Code. Do not edit the file.
 
+Then, when Python is there, run `python "<helper>/engine/home.py" style-status "<helper>/_core/global-template/output-styles/straight-talk.md"`. On `"state": "older"`, the installed reply style is an earlier Bindwright copy with no edits of the user's: say what the newer text changes (the plugin's changelog names it), and on a yes run the same command with `update-style`, which replaces only such a copy; it applies from the next session. Say nothing on any other state: `"edited"` means the copy holds the user's own changes, which stay, and `"linked"` means it is a link the user keeps, such as into a dotfiles folder, which stays too.
+
 ## 6. Skill contracts
 
 When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, build this project's contracts from the example file the way setup's "Mods in this project" says, and compare them with this repo folder's key in `~/.claude/skill-contracts.json`. When the key is missing or its steps differ, show what changes and write it on a yes, keeping every other key.
