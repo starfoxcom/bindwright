@@ -23,9 +23,11 @@ async function gitIn($: EngineInterface, folder: string | undefined, args: reado
   return git($, cwd, folder ?? cwd, args)
 }
 
-// A push config that sends more than the checked-out branch: a mirror remote, a `remote.<name>.push`
-// refspec or `push.default=matching`. A folder whose config cannot be read counts as one.
-const PUSHES_MORE = /^(?:remote\..+\.(?:mirror|push)=|push\.default=matching$)/im
+// A push config that may send more than the checked-out branch, or send a named branch to another name: a
+// mirror remote, a `remote.<name>.push` refspec, `push.default=matching`, or `upstream` (old name
+// `tracking`), which sends each named branch to its own upstream. A folder whose config cannot be read
+// counts as one.
+const PUSHES_MORE = /^(?:remote\..+\.(?:mirror|push)=|push\.default=(?:matching|upstream|tracking)$)/im
 
 /** The folder holding the file an edit names, or undefined without a path. */
 export function folderOf(e: unknown): string | undefined {

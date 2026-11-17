@@ -193,6 +193,8 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   // A push config that sends more than the checked-out branch, or a shell moved to the red branch's folder.
   w.seen.gitConfig = { 'C:/session': 'remote.origin.mirror=true' }
   expect(await bash('git push')).toHaveProperty('deny')
+  w.seen.gitConfig = { 'C:/session': 'push.default=upstream' }
+  expect(await bash('git push origin try-fix')).toHaveProperty('deny')
   w.seen.cwd = 'C:/repo'
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.cwd = undefined
