@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:update` offers the newer reply style.** A computer whose Straight Talk is an earlier Bindwright copy, unedited, is offered the current text, and it is replaced on a yes; a copy with the user's own edits stays as it is. `home.py style-status` tells the two apart from the fingerprint of every earlier shipped copy, kept in `straight-talk.retired.json` beside the style.
+
 ### Fixed
 
 - **The layout check stops its browsers on a busy Windows machine too.** The query that finds them gave up after 20 seconds and read as no browsers, so a slow machine could leave a headless browser running; it now waits up to 60 seconds.
