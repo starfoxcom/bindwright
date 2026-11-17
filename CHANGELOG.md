@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v5.4.0] — 2026-11-16
+
 ### Added
 
 - **The reply style stays fresh in long sessions.** The CLI puts the output style at the top of a session, and the longer the session runs, the more it sits under, so replies drift from it. Setup now installs a hook with the reply style that restates the active style's own text with every prompt and after every 25 tool calls in a turn, so it is the last thing read before a reply; on a computer that already has the style, the next setup run adds the hook. It follows whichever style is in use, the project's setting first, and adds nothing for a built-in style, which has no file. Removing the reply style removes the hook. Under Straight Talk, the same hook also checks each finished reply, up to its first code block, for the slips a pattern can see (bold labels, em dashes and the banned filler phrases) and names them with the next prompt, so the correction points at the actual slip; a clean reply adds nothing.
