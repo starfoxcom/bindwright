@@ -3,14 +3,14 @@ import type { EngineInterface } from 'claude-code'
 import { plainPush } from './plain'
 
 // Whether a piece of work is the red PR's, so a step back holds only that work. Work is the PR's when
-// its folder is on the PR's branch or its history holds the PR's first commit, whatever the branch is
+// its folder is on the PR's branch or its history holds any of the PR's commits, whatever the branch is
 // called; git answers each question, and any answer that is not a clean no keeps the hold.
 
 /** Where a piece of work acts: a folder (undefined for the shell's own), and whether it pushes from there. */
 export type WorkStep = { folder?: string; isPush?: boolean }
 
-/** The red PR's head branch and its first commit, which every branch built on its work holds. */
-export type RedPr = { branch: string; firstCommit: string }
+/** The red PR's head branch and its commits as GitHub lists them now; a branch built on its work holds one. */
+export type RedPr = { branch: string; commits: readonly string[] }
 
 type GitAnswer = { exitCode: number; out: string }
 const NO_ANSWER: GitAnswer = { exitCode: -1, out: '' }
@@ -28,10 +28,13 @@ async function gitIn($: EngineInterface, folder: string | undefined, args: reado
   }
 }
 
-// `git merge-base --is-ancestor` exits 0 for yes and 1 for no; anything else (a commit the repo lacks, a
-// failure) is no answer, which counts as yes.
-async function holdsCommit($: EngineInterface, folder: string | undefined, commit: string): Promise<boolean> {
-  return (await gitIn($, folder, ['merge-base', '--is-ancestor', commit, 'HEAD'])).exitCode !== 1
+// Whether the folder's history holds any of `commits`. `git merge-base --is-ancestor` exits 0 for yes and
+// 1 for no; anything else (a commit the repo lacks, a failure) is no answer, which counts as yes.
+async function holdsAny($: EngineInterface, folder: string | undefined, commits: readonly string[]) {
+  for (const commit of commits) {
+    if ((await gitIn($, folder, ['merge-base', '--is-ancestor', commit, 'HEAD'])).exitCode !== 1) return true
+  }
+  return false
 }
 
 // Config keys under which a plain push may send refs it does not name, delete or force them, or push
@@ -74,19 +77,20 @@ export function commandSteps(command: string, isPowerShell: boolean): WorkStep[]
   return isPush === null ? null : [{ isPush }]
 }
 
-// Whether a push from `folder` may carry the red PR's work: a local branch holds its first commit, or the
-// config may send refs the push does not name. A push of names that hold none of its commits can update
-// the PR's branch only by force, which no plain push asks for.
+// Whether a push from `folder` may carry the red PR's work: a local branch holds any of its commits (each
+// `--contains` adds one, and a branch holding any is listed), or the config may send refs the push does
+// not name. A push of names that hold none of its commits can update the PR's branch only by force, which
+// no plain push asks for.
 async function mayPushRedWork($: EngineInterface, folder: string | undefined, red: RedPr): Promise<boolean> {
-  const format = '--format=%(refname)'
-  const refs = await gitIn($, folder, ['for-each-ref', '--contains', red.firstCommit, format, 'refs/heads/'])
+  const contains = red.commits.flatMap(commit => ['--contains', commit])
+  const refs = await gitIn($, folder, ['for-each-ref', ...contains, '--format=%(refname)', 'refs/heads/'])
   if (refs.exitCode !== 0 || refs.out) return true
   return pushesMore(await gitIn($, folder, ['config', '--null', '--list']))
 }
 
 /**
  * Whether the work may be the red PR's: in the folder of any of `steps`, its branch is checked out or the
- * history holds its first commit, a push there may carry its work, or the command names its branch.
+ * history holds any of its commits, a push there may carry its work, or the command names its branch.
  * Branch names compare without case, as refs do on Windows and macOS. An unknown PR, unread steps or any
  * answer from git that is not a clean no count as yes, so a hold never lifts on a guess.
  */
@@ -101,7 +105,7 @@ export async function mayBeOn(
   for (const { folder, isPush } of steps) {
     const name = await gitIn($, folder, ['branch', '--show-current'])
     if (name.exitCode !== 0 || name.out.toLowerCase() === wanted) return true
-    if (await holdsCommit($, folder, red.firstCommit)) return true
+    if (await holdsAny($, folder, red.commits)) return true
     if (isPush && (await mayPushRedWork($, folder, red))) return true
   }
   return false

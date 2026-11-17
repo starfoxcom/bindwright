@@ -158,7 +158,7 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   w.seen.checkedOut = { 'C:/session': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
   w.seen.checkedOut['C:\\other'] = 'feature/y'
   // Neither the shell's folder nor C:/other holds any of the red PR's commits, on any local branch.
-  w.seen.redWork = { 'C:/session': false, 'C:/other': false, 'C:\\other': false }
+  w.seen.history = { 'C:/session': [], 'C:/other': [], 'C:\\other': [] }
   w.seen.redRefs = { 'C:/session': '' }
   const passes = [
     'git commit -m "fix the other PR"', 'git commit -m b && git push',
@@ -210,7 +210,7 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   }
   // A file at a drive root is in that root, not in the drive's current folder.
   w.seen.checkedOut['C:'] = 'feature/y'
-  w.seen.redWork['C:'] = false
+  w.seen.history['C:'] = []
   expect(await call({ ...editInput, file_path: 'C:\\a.ts' })).toHaveProperty('deny')
   // A shell moved to the red branch's folder.
   w.seen.cwd = 'C:/repo'
@@ -225,7 +225,16 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   expect(await bash('git push origin try-fix')).toHaveProperty('deny')
   // Work under another name, a fork's checkout or a renamed branch, whose history holds the PR's commits.
   w.seen.checkedOut['C:/session'] = 'alice/main'
-  w.seen.redWork['C:/session'] = true
+  w.seen.history['C:/session'] = ['c0ffee0']
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  // After a rewrite (amend, rebase, force-push) the PR's commits are new, and work holding them waits.
+  w.seen.prCommits = ['d00d000']
+  w.seen.history['C:/session'] = ['d00d000']
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  // A list as long as `gh` lists may be cut, so the PR's commits count as unread.
+  w.seen.history['C:/session'] = []
+  expect(await bash('git commit -m x')).not.toHaveProperty('deny')
+  w.seen.prCommits = Array.from({ length: 100 }, (_, i) => `abc${String(i).padStart(4, '0')}`)
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.isGitDown = true
   expect(await bash('git commit -m "fix the other PR"')).toHaveProperty('deny')
