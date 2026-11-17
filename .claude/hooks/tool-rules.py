@@ -78,6 +78,8 @@ QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(
                                    r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
+# A `jq` call: a word of its own, not the `--jq` option of `gh`.
+JQ = re.compile(r"(?:^|(?<=[\s;&|(]))jq(?:\.exe)?(?=\s|$)")
 
 WRITE_THE_FILE = "its backslashes get eaten. Write the script with the Write tool, then run the file."
 
@@ -255,6 +257,12 @@ def both(*patterns):
     return lambda text, shell: all(p.search(bare(text, shell)) for p in compiled)
 
 
+def cased(pattern):
+    """Like `both`, for one pattern whose letter case carries meaning (`-b` is not `-B`)."""
+    compiled = re.compile(pattern)
+    return lambda text, shell: bool(compiled.search(bare(text, shell)))
+
+
 ENFORCE = "enforce"
 OBSERVE = "observe"
 OBSERVED_LOG = os.path.join(os.path.expanduser("~"), ".bindwright", "tool-rules", "observed.jsonl")
@@ -282,6 +290,20 @@ RULES = [
     ("`<rev>:.<path>` in Git Bash",
      lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
      "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root.", ENFORCE),
+    ("`gh run rerun --failed` or `--job`", both(r"\bgh\s+run\s+rerun\b[^\n|;&]*\s(?:--failed|--job|-j)\b"),
+     "a re-run of only some jobs can leave a required check stuck. Re-run the whole run, or push again.", OBSERVE),
+    ("an interactive git command (`-i`, `-p`)",
+     cased(r"\bgit\s+(?:rebase|add|checkout|reset|stash|restore|clean)\b[^\n|;&]*\s(?:-i|--interactive|-p|--patch)\b"),
+     "it waits for an editor or keys a tool call cannot give. Use the form that takes its input in the command.",
+     OBSERVE),
+    ("an inline body for `gh pr` or `gh issue`",
+     cased(r"\bgh\s+(?:pr|issue)\s+(?:create|comment|edit|review)\b[^\n|;&]*\s(?:--body|-b)(?:[=\s]|$)"),
+     "the shell can cut or change the text. Write the body to a file and pass `--body-file`.", OBSERVE),
+    ("a scratch file in a fixed folder (`/tmp`, `C:/tmp`)",
+     both(r"(?:^|(?<=[\s=>]))(?:/tmp|[a-z]:[\\/]tmp)(?![\w.-])"),
+     "other sessions share it, and nothing cleans it up. Use the session's scratchpad instead.", OBSERVE),
+    ("`jq` in Git Bash", lambda text, shell: GIT_BASH and shell == "bash" and JQ.search(bare(text, shell)),
+     "Git Bash has no `jq`. Filter with the `--jq` option of `gh`, or with Python.", OBSERVE),
 ]
 
 
