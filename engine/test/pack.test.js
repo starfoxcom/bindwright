@@ -46,6 +46,12 @@ test("the helper binds what the repo's engine binds, and the plugin ships no cod
     assert.ok(existsSync(join(helper, "hooks", "counts.mjs")));
     assert.ok(existsSync(join(helper, "workflows", "review-trial.js")));
     assert.ok(pkg.files.includes("workflows"));
+    // Without its list of earlier copies, every installed reply style reads as edited.
+    const styles = join(repo, "_core", "global-template", "output-styles");
+    for (const name of readdirSync(styles).filter((n) => n.endsWith(".retired.json"))) {
+      const packed = join(helper, "_core", "global-template", "output-styles", name);
+      assert.ok(existsSync(packed), `the helper lacks output-styles/${name}`);
+    }
 
     // Every path a skill names, in the plugin or the helper, is in that pack.
     for (const name of readdirSync(join(out, "skills"))) {

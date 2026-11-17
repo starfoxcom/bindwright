@@ -366,6 +366,18 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
       assert.equal(after, replaced ? NEW : installed, label);
     });
   }
+  for (const sidecar of ["{", "[]", '{"sha256": "abc"}']) {
+    withHome((dir) => {
+      const file = styleFile(dir, NEW);
+      writeFileSync(join(dirname(file), "straight-talk.retired.json"), sidecar);
+      const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, OLD);
+      const r = home(dir, "style-status", file);
+      assert.equal(r.status, 1, sidecar);
+      assert.match(r.out.error, /Not a list of earlier copies/, sidecar);
+    });
+  }
 });
 
 test("a settings file that is not valid JSON is never written", { skip }, () => {

@@ -478,8 +478,15 @@ def _retired_fingerprints(file):
     sidecar = os.path.splitext(file)[0] + ".retired.json"
     if not os.path.isfile(sidecar):
         return set()
-    with open(sidecar, encoding="utf-8") as fh:
-        return set(json.load(fh).get("sha256", []))
+    try:
+        with open(sidecar, encoding="utf-8") as fh:
+            listed = json.load(fh)
+    except ValueError:
+        listed = None
+    fingerprints = listed.get("sha256") if isinstance(listed, dict) else None
+    if not (isinstance(fingerprints, list) and all(isinstance(f, str) for f in fingerprints)):
+        raise HomeError('Not a list of earlier copies ({"sha256": [...]}): ' + sidecar)
+    return set(fingerprints)
 
 
 def style_status(home, file):

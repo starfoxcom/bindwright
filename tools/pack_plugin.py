@@ -57,14 +57,15 @@ ENGINE_FILES = [
     "exclude.py", "propose.py",
     "home.py", "authored.py",
 ]
-# The ~/.claude templates bind.js and bind.py read (globalFiles).
+# The ~/.claude templates bind.js and bind.py read (globalFiles), and beside the reply style the
+# fingerprints of its earlier shipped copies, which home.py's style-status reads.
 GLOBAL_FILES = [
     "CLAUDE.md.additions", "memory-template/MEMORY.md",
     "hooks/push-guard.py", "hooks/tool-rules.py",
     "hooks/no-ai-attribution.py", "hooks/session-title.py", "hooks/reply-style.py",
     *(f"hooks/no_ai_attribution/{m}.py" for m in ("__init__", "files", "routes", "shell")),
     "hooks/code-research-profiles.json", "hooks/code-research-first.py.template",
-    "agents/builder.md", "output-styles/straight-talk.md",
+    "agents/builder.md", "output-styles/straight-talk.md", "output-styles/straight-talk.retired.json",
 ]
 # Marks a folder as a pack, so --out never replaces anything else.
 MARKER = ".bindwright-pack.txt"
