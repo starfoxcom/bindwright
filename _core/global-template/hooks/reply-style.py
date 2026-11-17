@@ -12,7 +12,7 @@ The active style is `outputStyle` from the project's `.claude/settings.local.jso
 styles have no file, so they get nothing. A subagent's tool calls are not counted.
 
 Under the style Bindwright ships (CHECKED_STYLE), each finished reply (Stop) is measured against
-the rules a pattern can see, such as headings and em dashes, and the next prompt's restatement
+the rules a pattern can see, such as bold labels and em dashes, and the next prompt's restatement
 names what it broke. Tone, rhythm and word choice are left to the restated text.
 The count of tool calls and the last reply's slips, per session, live in
 ~/.bindwright/reply-style/, outside any `.claude` folder. Every failure prints nothing and exits 0:
@@ -35,24 +35,26 @@ INTRO = ("The reply style in use, {name}, restated here so it is the last thing 
 # The style the checks below measure: the one Bindwright ships. Other styles get no checks.
 CHECKED_STYLE = "straight talk"
 SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids them: "
-# A fence opens with three or more backticks or tildes; only a line of the same mark, at least as long,
-# closes it, as in CommonMark.
-# Any indent, as under a nested list item, and quote marks before it, as inside a block quote.
-FENCE_LINE = re.compile(r"[ \t>]*(`{3,}|~{3,})")
+# Code is left out the way prose checkers that parse Markdown leave it out, without a parser: a line
+# that may be code is dropped, so a check can miss a slip but never report one made in code.
+# A run of three or more backticks or tildes, anywhere on a line.
+FENCE_RUN = re.compile(r"`{3,}|~{3,}")
+# A line of fence marks alone (any indent or quote marks before them): the only line that closes a fence.
+FENCE_CLOSER = re.compile(r"[ \t>]*(`{3,}|~{3,})[ \t]*")
 # An inline span closes on a backtick run of the same length as the one that opened it.
 INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)[^\n]+?(?<!`)\1(?!`)")
 # (what the reminder names, pattern): each counts its matches in a reply, code taken out first.
 CHECKS = (
-    ("a heading", re.compile(r"^#{1,6}\s", re.M)),
-    # A label, not emphasis: a colon or dash right after it, or the bold alone on its line.
+    # A label, not emphasis: a colon or a dash right after the bold.
     ("a bold label at the start of a line or list item",
      re.compile("^[ \\t]*(?:[-*+][ \\t]+|\\d+[.)][ \\t]+)?\\*\\*[^*\\n]+"
-                "(?::\\*\\*|\\*\\*[ \\t]*(?:[:\u2014\u2013-]|$))", re.M)),
+                "(?::\\*\\*|\\*\\*[ \\t]*[:\u2014\u2013-])", re.M)),
     ("an em dash", re.compile("—")),
     ('"essentially"', re.compile(r"\bessentially\b", re.I)),
     ('"basically"', re.compile(r"\bbasically\b", re.I)),
     ("\"here's the thing\"", re.compile(r"\bhere['’]s the thing\b", re.I)),
-    ('"not just X but Y"', re.compile(r"\bnot just\b[^.\n]*\bbut\b", re.I)),
+    # One clause: a "but" past a full stop, colon, semicolon, question or exclamation mark is another's.
+    ('"not just X but Y"', re.compile(r"\bnot just\b[^.;:?!\n]*\bbut\b", re.I)),
 )
 
 
@@ -192,20 +194,27 @@ def reset_count(session):
 
 
 def prose_of(reply):
-    """The reply without its code: fenced blocks (an unclosed one runs to the end) and inline spans."""
+    """The reply's lines that are surely prose.
+
+    A line with one fence run opens a fence wherever the run sits (after a list marker, an indent or a
+    quote), and a line of the same marks, at least as long, closes it; an unclosed fence runs to the end.
+    A line with two or more runs is inline code. Inline spans come out, and a line still holding a
+    backtick, which may be code the spans did not pair, is dropped whole.
+    """
     kept, fence = [], None
     for line in reply.split("\n"):
-        found = FENCE_LINE.match(line)
-        mark, rest = (found.group(1), line[found.end():]) if found else ("", "")
-        if fence is None:
-            # A backtick in the rest of the line makes it inline code (```js```), never a fence.
-            if mark and not (mark[0] == "`" and "`" in rest):
-                fence = mark
-            else:
-                kept.append(line)
-        elif mark[:1] == fence[0] and len(mark) >= len(fence) and not rest.strip():
-            fence = None
-    return INLINE_CODE.sub("", "\n".join(kept))
+        runs = FENCE_RUN.findall(line)
+        if fence is not None:
+            closer = FENCE_CLOSER.fullmatch(line)
+            if closer and closer.group(1)[0] == fence[0] and len(closer.group(1)) >= len(fence):
+                fence = None
+        elif len(runs) == 1:
+            fence = runs[0]
+        elif not runs:
+            prose = INLINE_CODE.sub("", line)
+            if "`" not in prose:
+                kept.append(prose)
+    return "\n".join(kept)
 
 
 def slips_in(reply):

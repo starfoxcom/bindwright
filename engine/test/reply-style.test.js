@@ -133,7 +133,10 @@ const SLIPPED = [
   // A fence under a nested list item and one in a quote are code; inline code that opens with a fence's
   // marks is not a fence, so the prose after it still counts.
   "- Build", "  - then run", "    ```sh", "    echo \"done — basically\"", "    **Note:** x", "    ```",
-  "> ```", "> # quoted —", "> ```", "```js``` marks the language, essentially.",
+  "> ```", "> # quoted —", "> ```", "```js``` marks the language.", "Then it holds, essentially.",
+  // A fence opened on a list marker's line; bold that ends a sentence or names an option; two clauses.
+  "1. ```sh", "npm ci —", "   ```", "**Don't merge until CI is green.**", "- **Merge now**",
+  "Is that not just a typo? I checked but found nothing.", "```", "# install deps —", "```",
   // A fence shown inside a longer one, then a reply cut off inside a fence: all of it code.
   "````md", "```py", "# x —", "```", "````", "~~~", "# cut off —",
 ].join("\n");
@@ -144,7 +147,7 @@ test("what a finished reply broke comes with the next prompt, once", { skip }, (
   writeFileSync(styleFile, STYLE.replace("Plain Speech", "Straight Talk"));
   writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Straight Talk" }));
   assert.deepEqual(run(layout, finished(SLIPPED)), { status: 0, context: null });
-  const slips = "so this one avoids them: a heading; a bold label at the start of a line or list item (2);"
+  const slips = "so this one avoids them: a bold label at the start of a line or list item (2);"
     + ' an em dash (2); "essentially"; "basically".';
   assert.ok(run(layout, prompt).context.additionalContext.endsWith(slips));
   assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
