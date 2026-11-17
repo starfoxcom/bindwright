@@ -190,11 +190,17 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
     "git push origin 'refs/heads/*:refs/heads/*'",
   ]
   for (const command of waits) expect([command, await bash(command)]).toEqual(denied(command))
-  // A push config that sends more than the checked-out branch, or a shell moved to the red branch's folder.
-  w.seen.gitConfig = { 'C:/session': 'remote.origin.mirror=true' }
-  expect(await bash('git push')).toHaveProperty('deny')
-  w.seen.gitConfig = { 'C:/session': 'push.default=upstream' }
-  expect(await bash('git push origin try-fix')).toHaveProperty('deny')
+  // Only a config that sends each pushed name to itself lifts a push; a valueless key counts as set.
+  w.seen.gitConfig = { 'C:/session': 'push.default\nsimple\0remote.origin.url\nu\0' }
+  expect(await bash('git push')).not.toHaveProperty('deny')
+  for (const config of ['remote.origin.mirror\ntrue\0', 'remote.origin.mirror\0', 'push.default\nupstream\0']) {
+    w.seen.gitConfig = { 'C:/session': config }
+    expect([config, await bash('git push origin try-fix')]).toEqual(denied(config))
+  }
+  // A file at a drive root is in that root, not in the drive's current folder.
+  w.seen.checkedOut['C:'] = 'feature/y'
+  expect(await call({ ...editInput, file_path: 'C:\\a.ts' })).toHaveProperty('deny')
+  // A shell moved to the red branch's folder.
   w.seen.cwd = 'C:/repo'
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.cwd = undefined

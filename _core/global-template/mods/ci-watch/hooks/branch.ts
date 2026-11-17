@@ -23,18 +23,33 @@ async function gitIn($: EngineInterface, folder: string | undefined, args: reado
   return git($, cwd, folder ?? cwd, args)
 }
 
-// A push config that may send more than the checked-out branch, or send a named branch to another name: a
-// mirror remote, a `remote.<name>.push` refspec, `push.default=matching`, or `upstream` (old name
-// `tracking`), which sends each named branch to its own upstream. A folder whose config cannot be read
-// counts as one.
-const PUSHES_MORE = /^(?:remote\..+\.(?:mirror|push)=|push\.default=(?:matching|upstream|tracking)$)/im
+// The `push.default` values under which a push of plain names sends each to its own name, or nothing.
+const SAME_NAME_PUSHES = new Set(['simple', 'current', 'nothing'])
 
-/** The folder holding the file an edit names, or undefined without a path. */
+/**
+ * Whether a folder's config, as `git config --null --list` prints it (each entry `key`, or `key` and a
+ * newline and its value, ending in a NUL), may send a push past the names it carries: any mirror or push
+ * refspec on a remote, whatever its value, or a `push.default` outside SAME_NAME_PUSHES. An unread config
+ * counts as one.
+ */
+function pushesMore(config: string): boolean {
+  if (!config) return true
+  return config.split('\0').some(entry => {
+    const end = entry.indexOf('\n')
+    const key = (end < 0 ? entry : entry.slice(0, end)).toLowerCase()
+    if (/^remote\..+\.(?:mirror|push)$/.test(key)) return true
+    return key === 'push.default' && !SAME_NAME_PUSHES.has(end < 0 ? '' : entry.slice(end + 1).trim().toLowerCase())
+  })
+}
+
+/** The folder holding the file an edit names, or undefined without a path. A root keeps its separator. */
 export function folderOf(e: unknown): string | undefined {
   const input = e as { file_path?: unknown; notebook_path?: unknown }
   const path = typeof input.file_path === 'string' ? input.file_path : input.notebook_path
   if (typeof path !== 'string' || !/[\\/]/.test(path)) return undefined
-  return path.replace(/[\\/][^\\/]*$/, '') || undefined
+  const folder = path.replace(/[\\/][^\\/]*$/, '')
+  // `/a.ts` is in `/` and `C:\a.ts` in `C:\`; a bare `C:` is that drive's current folder instead.
+  return folder === '' || /^[a-zA-Z]:$/.test(folder) ? folder + path[folder.length] : folder
 }
 
 /**
@@ -65,8 +80,7 @@ export async function mayBeOn(
     const upstream = await gitIn($, folder, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
     if (upstream.toLowerCase().endsWith(`/${wanted}`)) return true
     if (isPush) {
-      const config = await gitIn($, folder, ['config', '--list'])
-      if (!config || PUSHES_MORE.test(config)) return true
+      if (pushesMore(await gitIn($, folder, ['config', '--null', '--list']))) return true
     }
   }
   return false
