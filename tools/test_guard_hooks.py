@@ -983,6 +983,7 @@ class GuardHookTest(unittest.TestCase):
                  ('nice "$NICE_ARG" git "$@"', "Bash"), ('timeout "$killopt" 30 git "$@"', "Bash"),
                  ('env "$assign" git "$@"', "Bash"),
                  ('f() { sudo "$flag" git "$@"; }; f commit --no-verify -m x', "Bash"),
+                 ("sudo " * 1500 + 'git "$@"', "Bash"),
                  ('g() { git --namespace="$@"; }; g x commit --no-verify -m y', "Bash"),
                  ("git --git-dir=$ARGS", "Bash"), ('git --work-tree="${a[@]}" -m x', "Bash"),
                  ('git -C"$@"', "Bash")),
