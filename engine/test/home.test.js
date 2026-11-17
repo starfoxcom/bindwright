@@ -349,6 +349,7 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
     ["the current text with CRLF line endings", NEW.replaceAll("\n", "\r\n"), "current", false],
     ["an earlier shipped copy", OLD, "older", true],
     ["an earlier shipped copy with CRLF line endings", OLD.replaceAll("\n", "\r\n"), "older", true],
+    ["an earlier shipped copy with a byte order mark", `﻿${OLD}`, "older", true],
     ["a copy with the user's edits", "---\nname: Straight Talk\n---\nBe short. Mine.\n", "edited", false],
     ["an edited copy saved as Windows-1252",
       Buffer.from("---\nname: Straight Talk\n---\nBe short, se\xf1or.\n", "latin1"), "edited", false],
@@ -382,6 +383,17 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
     }
     assert.deepEqual(home(dir, "update-style", file).out, { installed: target, state: "linked", replaced: false });
     assert.equal(readFileSync(kept, "utf8"), OLD, "the file a link points to stays as it was");
+  });
+  withHome((dir) => {
+    const file = styleFile(dir, NEW);
+    const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, OLD);
+    const unlisted = home(dir, "update-style", file).out;
+    assert.deepEqual(unlisted, { installed: target, state: "edited", replaced: false }, "no list of earlier copies");
+    const notStyle = home(dir, "style-status", join(dirname(file), "straight-talk.txt"));
+    assert.equal(notStyle.status, 1);
+    assert.match(notStyle.out.error, /Not an output style file/);
   });
   for (const sidecar of ["{", "[]", '{"sha256": "abc"}']) {
     withHome((dir) => {

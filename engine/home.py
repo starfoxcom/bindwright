@@ -14,7 +14,7 @@ Standard library, Python 3.8+.
     python engine/home.py add-mod DIR
     python engine/home.py add-agent FILE
     python engine/home.py add-style FILE      (copies the output style, turns it on)
-    python engine/home.py style-status FILE   (missing, current, older or edited)
+    python engine/home.py style-status FILE   (missing, linked, current, older or edited)
     python engine/home.py update-style FILE   (replaces an unedited earlier copy)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
@@ -517,7 +517,7 @@ def style_status(home, file):
 
 
 def update_style(home, file):
-    """Replaces an earlier shipped copy of the style `file` with it; a copy with the user's edits stays."""
+    """Replaces an earlier shipped copy of the style `file` with it; an edited or linked copy stays."""
     status = style_status(home, file)
     replaced = status["state"] == "older"
     if replaced:
