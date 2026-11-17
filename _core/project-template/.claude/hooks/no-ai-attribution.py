@@ -64,11 +64,12 @@ setting or unsetting `core.hooksPath` or a `hook.` setting (`git config`,
 reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0` or `false` set
 by the command, `lefthook uninstall`), and a git call whose subcommand
-comes from a word built at run time with none written after it
-(`git "${args[@]}"`, `git "$@"`, PowerShell's `git @args`). Options are read as git reads them,
-bundled (`-nm x`) or shortened (`--no-veri`), so a message that names one
-passes. A word built at run time counts for the literal text around its
-run-time parts (`--trailer=$WHO`, `"-C$SHA"`, `"$S.hooksPath"`), and one
+comes from a word built at run time with no literal word after it other
+than options and their values (`git "${args[@]}"`, `git "$@"`,
+PowerShell's `git @args`). Options are read as git reads them, bundled
+(`-nm x`) or shortened (`--no-veri`), so a message that names one passes.
+A word built at run time counts for the literal text around its run-time
+parts (`--trailer=$WHO`, `"-C$SHA"`, `"$S.hooksPath"`), and one
 that can expand to no word (`$OPTS`, `"$@"`) is also read as absent.
 
 It is a safety net for attribution written the ordinary way, not a sandbox
@@ -82,7 +83,9 @@ not name git (their options are not read as git's), an option, setting or
 the shell builds at run time from a word that does not start with `-` as
 written (`$F` holding `-F msg.txt`), a script PowerShell decodes
 (`-EncodedCommand`), a git named at run time whose subcommand is built too
-(`$GIT "$@"`), one inside `bash -c` whose subcommand is built, a write whose text a redirection holding `&` splits
+(`$GIT "$@"`), one inside `bash -c` whose subcommand is built, one built
+at run time and followed by a literal word such as a pathspec
+(`git "$@" .`), a write whose text a redirection holding `&` splits
 (`git 2>&1 commit`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
@@ -157,7 +160,7 @@ GH_WRITE = re.compile(
 # A git call that may take its subcommand from a word built at run time (`git "${args[@]}"`,
 # PowerShell's `git @args`): a word starting with `$` or `@` after git. It only sends the command
 # to the parser, whose reading decides; a command the parser cannot read is not refused for it.
-GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?[ \t][\"']?[$@]", re.I)
+GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?[ \t][\"']?[$@`]", re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.
@@ -213,12 +216,14 @@ def scan_text(text, where):
 
 
 def routes_in(text):
-    """(writes, names a route): whether text names a git or GitHub write, or a hook change, as
-    written, with line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
+    """(writes, names a route, may build git's subcommand): whether text names a git or GitHub
+    write, a hook change, or a git call with a word built at run time after it, as written, with
+    line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
     joined = CONTINUED_LINE.sub(r"\1", text)
     texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+    named = writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+    return writes, named, any(GIT_BUILT.search(t) for t in texts)
 
 
 def readers(named):
@@ -261,11 +266,11 @@ def main():
     cwd = data.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    writes, named = routes_in(cmd)
+    writes, named, built = routes_in(cmd)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     # An escaped bash command goes to the parser even when its text names no route, but only
     # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
-    if not (named or GIT_BUILT.search(cmd) or shell == "bash" and SHELL_ESCAPES.search(cmd)):
+    if not (named or built or shell == "bash" and SHELL_ESCAPES.search(cmd)):
         sys.exit(0)
     parse, with_nested, parsed_files, hook_route = readers(named)
 

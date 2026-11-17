@@ -10,22 +10,29 @@ LEFTHOOK_OFF_VALUES = {"0", "false"}
 # Options of git's writes that take the next word as their value. After a word built at run time
 # in the subcommand place, a literal word right after one of these (`-m x`) is that value, not a
 # written subcommand.
-GIT_VALUE_FLAGS = {"-m", "-F", "-C", "-c", "-t", "-s", "-S", "-u", "-o", "-X", "-x", "--message",
-                   "--file", "--template", "--author", "--date", "--trailer", "--reuse-message",
-                   "--reedit-message", "--fixup", "--squash", "--cleanup", "--strategy",
-                   "--strategy-option", "--exec", "--onto", "--push-option", "--repo", "--git-dir",
-                   "--work-tree", "--namespace", "--config-env"}
+def exact(*names):
+    """Long options read by their full name only, in the form takes_next_word reads."""
+    return {name: name for name in names}
+
+
+# Long options map each to its shortest accepted prefix, as takes_next_word reads them.
+GIT_VALUE_OPTIONS = ({"-m", "-F", "-C", "-c", "-t", "-s", "-S", "-u", "-o", "-X", "-x"},
+                     exact("--message", "--file", "--template", "--author", "--date", "--trailer",
+                           "--reuse-message", "--reedit-message", "--fixup", "--squash",
+                           "--cleanup", "--strategy", "--strategy-option", "--exec", "--onto",
+                           "--push-option", "--repo", "--git-dir", "--work-tree", "--namespace",
+                           "--config-env"))
 # The options of each wrapper that take the next word as their value (`sudo -u root git`).
 WRAPPER_VALUE_OPTIONS = {
-    "sudo": {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U", "--user", "--group",
-             "--chdir", "--host", "--prompt", "--role", "--type", "--other-user", "--close-from",
-             "--command-timeout"},
-    "doas": {"-u", "-C"},
-    "exec": {"-a"},
-    "env": ENV_VALUE_SHORT | set(ENV_VALUE_OPTIONS),
-    "nice": {"-n", "--adjustment"},
-    "xargs": {"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter",
-              "--max-args", "--max-procs", "--max-chars"},
+    "sudo": ({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U"},
+             exact("--user", "--group", "--chdir", "--host", "--prompt", "--role", "--type",
+                   "--other-user", "--close-from", "--command-timeout")),
+    "doas": ({"-u", "-C"}, {}),
+    "exec": ({"-a"}, {}),
+    "env": (ENV_VALUE_SHORT, ENV_VALUE_OPTIONS),
+    "nice": ({"-n"}, exact("--adjustment")),
+    "xargs": ({"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s"},
+              exact("--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-chars")),
 }
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
@@ -168,18 +175,16 @@ def built_subcommand(words):
     for word in words[i + 1:]:
         if word == "--":
             return True
-        if isinstance(word, str) and not word.startswith("-") and not takes_value(previous, GIT_VALUE_FLAGS):
+        if isinstance(word, str) and not word.startswith("-") and not takes_value(previous, GIT_VALUE_OPTIONS):
             return False
         previous = shape_of(word)
     return True
 
 
-def takes_value(word, flags):
-    """Whether an option takes the next word as its value: a name in `flags`, or a short cluster
-    whose last letter is one (`-nu`, `-am`)."""
-    if word in flags:
-        return True
-    return word[:1] == "-" and word[1:2] != "-" and len(word) > 2 and "-" + word[-1] in flags
+def takes_value(word, options):
+    """Whether `word` is an option that takes the next word as its value, read the getopt way
+    (`-nu root`, but not `-uroot`); `options` is a (short, long) pair."""
+    return word.startswith("-") and takes_next_word(word, *options)
 
 
 def runs_program_at(words, i):
@@ -188,7 +193,7 @@ def runs_program_at(words, i):
     named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not."""
     j = 0
     while j < i and program(words[j:]) in WRAPPERS:
-        flags = WRAPPER_VALUE_OPTIONS.get(program(words[j:]), set())
+        flags = WRAPPER_VALUE_OPTIONS.get(program(words[j:]), (set(), {}))
         if program(words[j:]) == "command" and any(text_of(w) in ("-v", "-V") for w in words[j + 1:i]):
             return False
         j += 1
