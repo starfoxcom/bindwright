@@ -94,10 +94,16 @@ test("every pre-commit manager lands its config file", async () => {
     a.advanced.precommit = pc;
     const files = await run(a);
     assertClean(files);
-    const config = profiles[pc].config_filename;
-    assert.ok(files.has(config), `${pc} config ${config} missing`);
+    for (const { config_filename: config } of [profiles[pc], ...(profiles[pc].extra_files ?? [])]) {
+      assert.ok(files.has(config), `${pc} config ${config} missing`);
+    }
   }
 });
+
+// Every file a manager's profile writes, joined: husky keeps one git hook per file.
+function managerConfig(files, profile) {
+  return [profile, ...(profile.extra_files ?? [])].map((f) => files.get(f.config_filename)).join("\n");
+}
 
 // The commit-message rule each manager's config carries, unescaped from its JSON or YAML string.
 function commitMessageRule(config) {
@@ -112,7 +118,7 @@ test("every manager's commit check takes the breaking marker, and runs the size 
     for (const codeSizeCheck of [true, false]) {
       const a = defaults({ team: true });
       Object.assign(a.advanced, { precommit: pc, codeSizeCheck });
-      const config = (await run(a)).get(profiles[pc].config_filename);
+      const config = managerConfig(await run(a), profiles[pc]);
       const rule = commitMessageRule(config);
       for (const message of ["feat!: drop the flag", "fix(api)!: rename it", "fix: keep the queue"]) {
         assert.ok(rule.test(message), `${pc}: ${message} refused`);
