@@ -188,7 +188,11 @@ class GuardHookTest(unittest.TestCase):
                    ("git commit -m \"docs: x\nA script fed to python <<EOF loses them:\nprint('C:\\\\x')\n\"", "Bash"),
                    ("git commit -F - <<\\EOF\ndocs: never use gh run watch\nEOF", "Bash"),
                    ('git commit -m "$(cat <<\'EOF\'\nfix: never "gh run watch" here\nEOF\n)"', "Bash"),
-                   ('git commit -m "docs: a << b\nnever gh run watch\n"', "PowerShell"))
+                   ('git commit -m "docs: a << b\nnever gh run watch\n"', "PowerShell"),
+                   ("git commit -m \"$(cat <<'EOF'\ndocs: fed with \"python <<EOF\" it loses\n"
+                    "print('C:\\\\x')\nEOF\n)\"", "Bash"),
+                   ("gh pr create --body \"$(cat <<'EOF'\nfed with \"node <<JS\" it breaks\n"
+                    "C:\\\\x\nEOF\n)\"", "Bash"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()

@@ -8,8 +8,10 @@ so the session cannot drift back to X: a note in memory alone does not hold.
 Rules other than the inline-script one read the command with quoted strings
 and PowerShell here-string bodies taken out, and a bash command only as far as
 its first here-document, so a commit message or a PR body that only mentions a
-pattern passes. Where the reading is unsure (a quote that never closes), the
-text is left unread: a missed pattern costs less than a refused command. It is
+pattern passes. The inline-script rule reads only a bash command's first
+here-document, and only when its `<<` stands outside quotes. Where the reading
+is unsure (a quote that never closes, a `<<` inside `"$(...)"`), the text is
+left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
 to slip past it.
 
@@ -54,34 +56,37 @@ def blanked(match):
     return re.sub(r"[^\n]", " ", match.group())
 
 
-def openers(text):
-    """(line number, the line's text outside quotes, match) for each here-document opener of a
-    bash command, in order: each `<<` outside quotes, comments and arithmetic."""
-    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, text)).split("\n")
+def first_opener(text):
+    """(line number, match) of the first line that may open a here-document, quoted or not, or
+    None: a `<<` that is not part of a here-string (`<<<`) followed by a word."""
     for number, line in enumerate(text.split("\n")):
-        for operator in HEREDOC_OPERATOR.finditer(masked[number]):
+        for operator in HEREDOC_OPERATOR.finditer(line):
             match = HEREDOC.match(line, operator.start())
             if match:
-                yield number, masked[number], match
+                return number, match
+    return None
 
 
-def heredocs(text):
-    """(command, body) for each here-document of a bash command. The command is the part of its
-    line between the separators around the `<<`, pipes included, with quoted strings blanked."""
-    lines = text.split("\n")
-    after = 0  # the first line no earlier here-document's body holds
-    for number, masked, match in openers(text):
-        if number < after:
-            continue
-        command = (LIST_SEPARATOR.split(masked[:match.start()])[-1]
-                   + LIST_SEPARATOR.split(masked[match.end():])[0])
-        body = []
-        after = max(after, number + 1)
-        while after < len(lines) and not ends_heredoc(lines[after], match):
-            body.append(lines[after])
-            after += 1
-        after += 1
-        yield command, "\n".join(body)
+def heredoc(text):
+    """(command, body) of a bash command's first here-document, or None when it has none or its
+    `<<` stands inside quotes, a comment or arithmetic, where the reading is unsure
+    (`"$(cat <<'EOF'`). The command is the part of its line between the separators around the
+    `<<`, pipes included, with quoted strings blanked."""
+    first = first_opener(text)
+    if not first:
+        return None
+    number, match = first
+    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, text)).split("\n")[number]
+    if not HEREDOC_OPERATOR.match(masked, match.start()):
+        return None
+    command = (LIST_SEPARATOR.split(masked[:match.start()])[-1]
+               + LIST_SEPARATOR.split(masked[match.end():])[0])
+    body = []
+    for line in text.split("\n")[number + 1:]:
+        if ends_heredoc(line, match):
+            break
+        body.append(line)
+    return command, "\n".join(body)
 
 
 def ends_heredoc(line, match):
@@ -92,8 +97,8 @@ def ends_heredoc(line, match):
 
 def inline_script(text, shell):
     """Whether an interpreter is handed a script holding a backslash."""
-    if shell == "bash" and any(INTERPRETER_WORD.search(command) and "\\" in body
-                               for command, body in heredocs(text)):
+    found = heredoc(text) if shell == "bash" else None
+    if found and INTERPRETER_WORD.search(found[0]) and "\\" in found[1]:
         return True
     if shell == "powershell" and any("\\" in m.group(2) and INTERPRETER_WORD.search(m.group(3))
                                      for m in HERE_STRING.finditer(text)):
@@ -108,11 +113,9 @@ def bare(text, shell):
     if shell == "powershell":
         text = HERE_STRING.sub(r"''\3", text)
     else:
-        lines = text.split("\n")
-        first = next((n for n, line in enumerate(lines) if any(
-            HEREDOC.match(line, m.start()) for m in HEREDOC_OPERATOR.finditer(line))), None)
-        if first is not None:
-            text = "\n".join(lines[:first + 1])
+        first = first_opener(text)
+        if first:
+            text = "\n".join(text.split("\n")[:first[0] + 1])
     return QUOTED[shell].sub("''", text)
 
 
