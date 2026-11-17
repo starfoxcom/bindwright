@@ -5,7 +5,7 @@ import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './br
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsToResearch, SOURCES_NEEDED, withTopic,
+  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsToResearch, sourcesNeeded, withTopic,
 } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
@@ -262,8 +262,8 @@ async function owedResearch(
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
     if (await isClosed($, w.repo, w.number)) continue
     if (!(await mayBeOn($, await redPrOf($, w), steps, command))) continue
-    const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
-    return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
+    const red = await redRoundsOf($, w)
+    return researchRefusal(`${w.repo}#${w.number}`, red, sourcesNeeded(red) - (w.stepBackTopics?.length ?? 0))
   }
   return undefined
 }
@@ -602,7 +602,11 @@ function startPolling($: EngineInterface): Promise<void> {
 async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
   const topic = lookupTopic(e)
   if (topic === undefined || (await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
-  const counted = (w: Watch): Watch => ({ ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic) })
+  const needed = new Map(await Promise.all(live.watches.filter(w => w.stepBackTopics)
+    .map(async w => [`${w.repo}#${w.number}`, sourcesNeeded(await redRoundsOf($, w))] as const)))
+  const counted = (w: Watch): Watch => ({
+    ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic, needed.get(`${w.repo}#${w.number}`)),
+  })
   live.watches = live.watches.map(w => (w.stepBackTopics ? counted(w) : w))
   live.generation++
   await save($)

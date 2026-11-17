@@ -59,7 +59,8 @@ export function researchText(pr: string, red: number): string {
     : `The next step back comes after ${roundsToResearch(red)} more red round(s).`
   return (
     ` ${pr} has had ${red} fix rounds in a row without every check green, both reviews included. Before ` +
-    'the next fix, step back: look up at least three different ways the community solves this problem ' +
+    `the next fix, step back: look up at least ${SOURCE_WORDS[sourcesNeeded(red)]} different ways the ` +
+    'community solves this problem ' +
     '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
     'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
     `apply it and keep going. ${after}`
@@ -73,8 +74,17 @@ export function hardStopRefusal(pr: string, red: number): string {
   )
 }
 
-/** Distinct web lookups a step back takes: one source is a guess, three can be compared. */
+/** Distinct web lookups a step back takes: one source is a guess, three can be compared, and close to
+ * the hard stop five widen the search before the PR has to be rebuilt. */
 export const SOURCES_NEEDED = 3
+export const SOURCES_NEAR_THE_STOP = 5
+/** The red streak from which a step back takes SOURCES_NEAR_THE_STOP lookups. */
+export const NEAR_THE_STOP = 8
+const SOURCE_WORDS: Record<number, string> = { 3: 'three', 5: 'five' }
+
+export function sourcesNeeded(red: number): number {
+  return red >= NEAR_THE_STOP ? SOURCES_NEAR_THE_STOP : SOURCES_NEEDED
+}
 
 /** What a tool call looked up, when it is a web lookup of the main session: a WebSearch's query, a WebFetch's
  * URL or a web-fetch agent's brief. A subagent's own calls are not: a web-fetch agent is one lookup, not its
@@ -89,17 +99,17 @@ export function lookupTopic(e: unknown): string | undefined {
 }
 
 /** A latched step back's topics with one more lookup, lower-cased and trimmed, a repeat counted once;
- * undefined once SOURCES_NEEDED distinct topics were looked up, which ends the step back. */
-export function withTopic(topics: readonly string[], topic: string): string[] | undefined {
+ * undefined once `needed` distinct topics were looked up, which ends the step back. */
+export function withTopic(topics: readonly string[], topic: string, needed = SOURCES_NEEDED): string[] | undefined {
   const clean = topic.trim().toLowerCase()
   const next = clean && !topics.includes(clean) ? [...topics, clean] : [...topics]
-  return next.length >= SOURCES_NEEDED ? undefined : next
+  return next.length >= needed ? undefined : next
 }
 
 export function researchRefusal(pr: string, red: number, owed: number): string {
   return (
     `${pr} has had ${red} red rounds in a row, so edits, commits and pushes wait for a step back. Look up ` +
-    `at least ${SOURCES_NEEDED} different ways others solved this class of problem (${owed} more to go; ` +
+    `at least ${sourcesNeeded(red)} different ways others solved this class of problem (${owed} more to go; ` +
     'each WebSearch, WebFetch or web-fetch agent call on a new topic counts once), compare them against ' +
     'each other, pick the one that removes the whole class most simply, tell the user which one won and ' +
     'why, then make the fix. Where web tools cannot run in this session, only the user can lift the hold, ' +

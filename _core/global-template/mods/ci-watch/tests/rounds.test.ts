@@ -2,7 +2,9 @@ import { type Engine, expect, test } from 'claude-code/testing'
 
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
-import { isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic } from '../hooks/rounds'
+import {
+  isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, sourcesNeeded, withTopic,
+} from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
 
@@ -75,7 +77,7 @@ test('the hard stop holds commits and pushes until the PR is closed', async ($, 
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   const bash = (command: string) => $.tool.call({ tool: 'Bash', command } as never)
   await redRound($, w, 9)
-  for (const query of ['a', 'b', 'c']) await $.tool.call({ tool: 'WebSearch', query } as never)
+  for (const query of ['a', 'b', 'c', 'd', 'e']) await $.tool.call({ tool: 'WebSearch', query } as never)
   expect(await $.tool.call(editInput as never)).not.toHaveProperty('deny')
   expect(String(((await bash('git commit -m "fix"')) as { deny?: string }).deny)).toContain('the hard stop')
   expect(await bash('git push')).toHaveProperty('deny')
@@ -89,6 +91,15 @@ test('a step back counts each topic once and ends at three', () => {
   expect(withTopic(['a'], 'A')).toEqual(['a'])
   expect(withTopic(['a'], '  ')).toEqual(['a'])
   expect(withTopic(['a', 'b'], 'c')).toBeUndefined()
+})
+
+// Close to the hard stop, from the 8th red round on, a step back takes five lookups.
+test('a step back from the 8th red round on takes five lookups', () => {
+  expect([3, 5, 7, 8, 10].map(sourcesNeeded)).toEqual([3, 3, 3, 5, 5])
+  expect(withTopic(['a', 'b'], 'c', 5)).toEqual(['a', 'b', 'c'])
+  expect(withTopic(['a', 'b', 'c', 'd'], 'e', 5)).toBeUndefined()
+  expect(wakeText(failed('failed'), undefined, 8)).toContain('look up at least five different ways the community')
+  expect(wakeText(failed('failed'), undefined, 7)).toContain('look up at least three different ways the community')
 })
 
 type World = ReturnType<typeof world>
