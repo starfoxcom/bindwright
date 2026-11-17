@@ -226,6 +226,7 @@ test("a guard counts as installed only while an entry runs its file with a progr
   const bare = { ...guard, "settings.json": entry("node") };
   const PATHEXT = `${process.env.PATHEXT ?? ".EXE"};`;
   assert.equal(both({ configFiles: bare }, { PATHEXT }).installed["push-guard"], true, "a PATHEXT ending in ;");
+  assert.equal(both({ configFiles: bare }, { PATHEXT: undefined }).installed["push-guard"], true, "no PATHEXT");
 });
 
 // Seeded, so a failure names a case that replays.

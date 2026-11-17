@@ -4,7 +4,6 @@
 import json
 import os
 import re
-import shutil
 
 from model import CODE_RESEARCH_TOOLS, JS_WHITESPACE, TRACKERS, map_removed_tool
 from setupcode import MAX_DEPTH, _depth, _not_json
@@ -249,12 +248,36 @@ def _is_absolute(program):
     return os.path.isabs(program) or (os.name == "nt" and program[:1] in ("/", "\\"))
 
 
+_DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC"
+
+
+def _with_pathext(name):
+    """The file names Windows runs for `name`, as layers.js reads PATHEXT: empty entries skipped, an
+    unset PATHEXT taking the default list. shutil.which is not used: before Python 3.12 it has no
+    default list, and it looks in the current folder first."""
+    exts = [ext for ext in (os.environ.get("PATHEXT") or _DEFAULT_PATHEXT).split(";") if ext]
+    if any(name.lower().endswith(ext.lower()) for ext in exts):
+        return [name]
+    return [name + ext for ext in exts]
+
+
+def _is_runnable(path):
+    """A file, and executable on POSIX: what the shell would run."""
+    return os.path.isfile(path) and (os.name == "nt" or os.access(path, os.X_OK))
+
+
+def _on_path(name):
+    names = _with_pathext(name) if os.name == "nt" else [name]
+    folders = os.environ.get("PATH", "").split(os.pathsep)
+    return any(_is_runnable(os.path.join(folder, each)) for folder in folders for each in names)
+
+
 def _is_missing(program):
     if _is_absolute(program):
         return not os.path.exists(program)
     if "/" in program or "\\" in program:
         return False
-    return shutil.which(program) is None
+    return not _on_path(program)
 
 
 def _hook_files(hook):
