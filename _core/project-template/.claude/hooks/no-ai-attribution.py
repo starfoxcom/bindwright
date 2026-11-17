@@ -155,8 +155,15 @@ GH_WRITE = re.compile(
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
 # A git call whose subcommand may come from a word built at run time (`git "${args[@]}"`,
 # PowerShell's `git @args`): past its options, the next word starts with `$` or `@`.
+# An option may hold quoted text (`-c user.name="A B"`), its value may be quoted (`-C "my dir"`),
+# and a redirection without `&` may sit among them (`2>/dev/null`, `> out.txt`).
+_QUOTED = r"(?:\"[^\"]*\"|'[^']*')"
+_GIT_OPTION = r"-[^\s|;&\"']*(?:" + _QUOTED + r"[^\s|;&\"']*)*"
+_GIT_VALUE = r"(?:[^\s|;&$@\"'<>-]|" + _QUOTED + r")(?:[^\s|;&\"']|" + _QUOTED + r")*"
+_REDIRECT = r"\d*[<>]{1,2}[ \t]*[^\s|;&<>]+"
 GIT_BUILT = re.compile(
-    r"\bgit\b(?:[ \t]+-[^\s|;&]*(?:[ \t]+[^\s|;&$@-][^\s|;&]*)?)*[ \t]+[\"']?[$@]", re.I)
+    r"\bgit(?:\.(?:exe|cmd|bat|com))?(?:[ \t]+(?:" + _REDIRECT + r"|" + _GIT_OPTION + r"(?:[ \t]+"
+    + _GIT_VALUE + r")?))*[ \t]+[\"']?[$@]", re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.

@@ -951,12 +951,21 @@ class GuardHookTest(unittest.TestCase):
         for (command, tool), result in self.each(
                 (('git "$@"', "Bash"), ('g() { git "$@"; }; g commit -m x', "Bash"),
                  ('git -C sub "${a[@]}"', "Bash"), ("git $SUB", "Bash"), ("git @a", "PowerShell"),
-                 ("git $a", "PowerShell")),
+                 ("git $a", "PowerShell"), ("& git @a", "PowerShell"), ('git.exe "$@"', "Bash"),
+                 ('git -C "my dir" "$@"', "Bash"), ('git -c user.name="A B" "$@"', "Bash"),
+                 ('git 2>/dev/null "$@"', "Bash"), ('git > out.txt "$@"', "Bash"),
+                 ('git "$@" -m x', "Bash"), ('g() { git "$@" --no-verify -m x; }; g commit', "Bash"),
+                 ('env A=1 git "$@"', "Bash"), ("sudo git $S", "Bash"), ('sudo -u root git "$@"', "Bash")),
                 lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "takes its subcommand from a word built at run time")
-        for command, result in self.each(('git log "$range"', 'git config "$@" user.name x'),
-                                         lambda command: self.attr(command)):
+        # A git only named as an argument, or inside a word built at run time, runs nothing.
+        for command, result in self.each(
+                ('git log "$range"', 'git config "$@" user.name x', 'grep git "$file"', "echo git $x",
+                 "apt-get install -y git $EXTRA_PKGS", 'cp -r "$src/.git" "$dst"',
+                 'gh pr create --title "$(git log -1 --format=%s)" --body "$body"',
+                 'git tag "v$(git describe)" "$sha"', 'git -C "$dir" log', "sudo git $OPTS status"),
+                lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
 
