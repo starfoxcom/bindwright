@@ -21,7 +21,7 @@ Only when this session claims a feature or milestone complete. Re-read its defin
 - ⚠️ **partial**: works in some cases; list the gaps;
 - ❌ **unmet**: open a follow-up and stop claiming completion.
 
-When `.claude/skills/verify/SKILL.md` exists, say for each change people can see or use whether `/verify` ran on its last commit; one it never ran on is ⚠️ at best.
+When `.claude/skills/verify/SKILL.md` exists, say for each change people can see or use whether `/verify` passed before its last commit; one it never ran before is ⚠️ at best.
 
 One ❌ means the feature is not complete. If an item stopped making sense mid-way, change the definition of done in its own commit first; never quietly call a gap "deferred".
 
