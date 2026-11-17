@@ -165,33 +165,42 @@ def names_no_subcommand_after(words, k):
     return following is None or following.startswith("-")
 
 
-def runs_program_at(words, i):
-    """Whether words[i] may be the program a command runs: its first word, or one after RUNNERS
-    (`sudo -u root`, `env A=1`, `timeout 30`), their options, their other words and NAME=value
-    words. A word right after an option may be its value or the program, so both readings count.
-    A word only named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`)
-    is not, and neither is one behind a program outside RUNNERS."""
-    j = 0
-    while j < i and program(words[j:]) in RUNNERS:
-        if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
-            return False
-        others = RUNNERS[program(words[j:])]
-        j += 1
-        after_option = False
-        while j < i:
-            shape = shape_of(words[j])
-            if shape.startswith("-") or re.match(r"\w+=", shape):
-                after_option = shape.startswith("-")
-            elif may_split(words[j]):
-                after_option = True  # may hold options, their values, or nothing
-            elif after_option:
-                after_option = False
-            elif others:
-                others -= 1
-            else:
-                break
-            j += 1
-    return j == i
+def runs_program_at(words, i, j=0):
+    """Whether words[i] may be the program the command at words[j] runs, in any reading: itself,
+    or one after RUNNERS (`sudo -u root`, `env A=1`, `timeout 30`), each read the same way. A word
+    only named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not,
+    and neither is one behind a program outside RUNNERS."""
+    if j == i:
+        return True
+    if program(words[j:]) not in RUNNERS:
+        return False
+    if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
+        return False
+    return any(runs_program_at(words, i, k) for k in program_starts(words, j, i))
+
+
+def program_starts(words, j, i):
+    """Where the program the runner at words[j] starts may be, up to i: after its options,
+    NAME=value words and other words. A word right after an option, or after a word that may
+    expand to several (`"${vars[@]}"`), may be the option's value or the program, so both
+    readings count."""
+    others = RUNNERS[program(words[j:])]
+    after_option = False
+    for k in range(j + 1, i):
+        shape = shape_of(words[k])
+        if shape.startswith("-") or re.match(r"\w+=", shape):
+            after_option = shape.startswith("-")
+        elif may_split(words[k]):
+            after_option = True  # may hold options, their values, or nothing
+        elif after_option:
+            yield k
+            after_option = False
+        elif others:
+            others -= 1
+        else:
+            yield k
+            return
+    yield i
 
 
 def only_looks_up(words):
