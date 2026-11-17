@@ -144,10 +144,12 @@ jobs:
     # each returns its review as structured output, and "Post the deep
     # review" posts the first one the gate can read.
     env:
-      # Every curl in this workflow starts with -q and npm reads no user
-      # config, so on a self-hosted runner reused between jobs, a ~/.curlrc
-      # or ~/.npmrc an earlier job left cannot change a download or the CLI
-      # install.
+      # Every curl in this workflow starts with -q, and npm reads neither its
+      # user config nor its global one (the first step points that at an
+      # empty file of this job's own), so on a self-hosted runner reused
+      # between jobs, a ~/.curlrc, a ~/.npmrc or the Node folder's
+      # etc/npmrc that an earlier job left cannot change a download or the
+      # CLI install.
       NPM_CONFIG_USERCONFIG: /dev/null
       DEEP_SCHEMA: '{"type":"object","properties":{"review":{"type":"string"}},"required":["review"],"additionalProperties":false}'
       DEEP_REVIEW_PROMPT: |
@@ -159,6 +161,15 @@ jobs:
 
         You post nothing and change nothing: return the review as structured output, in `review` (at most 60,000 characters), which the workflow posts on the PR as you wrote it. Its first line is exactly `## Deep review`. Its last line is the verdict alone: `🟢 LGTM` only when the review is fully clean (no caveats, no nits, no non-blocking findings), otherwise `🔴 Blocking — <one-line reason>`. In a clean review, 🔴 and the word Blocking appear only inside inline backticks on the same line (a line inside a fenced code block counts like any other), since the gate blocks on lines like `**🔴 …**`, `- 🔴 x`, `### Blocking issues` or `**Verdict:** blocking` wherever they sit, and on any 🔴 on the last line, backticks or not, so a 🟢 verdict line holds no 🔴 at all. If the diff shows a file as binary, Read that file in full in the working folder (for the base-copy paths above, `git show HEAD:<path>` instead), since a NUL byte or the PR's own .gitattributes can make a diff hide a code file that way.
     steps:
+      # A file of the job's own: npm refuses /dev/null as both its user and
+      # its global config, a path under /dev/null is a real folder path in
+      # Git Bash on Windows, and job-level env cannot name the temp folder.
+      - name: Keep npm off the runner's global config
+        shell: bash
+        run: |
+          : > "$RUNNER_TEMP/empty-npmrc"
+          echo "NPM_CONFIG_GLOBALCONFIG=$RUNNER_TEMP/empty-npmrc" >> "$GITHUB_ENV"
+
       # A self-hosted runner shares one workspace between jobs and workflows,
       # where a sparse or partial clone can sit (left by an older routine
       # review, or another workflow). A full fetch into a partial clone stays
