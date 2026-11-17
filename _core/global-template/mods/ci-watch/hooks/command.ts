@@ -91,23 +91,37 @@ const ABSOLUTE = /^(?:[a-zA-Z]:|[/\\~])/
 // The patterns run on the masked command, so text inside quotes or here-docs steers nothing; each path
 // is then read from the command at the same place.
 export function targetFolder(command: string, isWindows: boolean, isPowerShell = false): string | undefined {
-  // Git Bash paths (/c/Users/...) mean nothing to a Windows process: turn them into C:/Users/...
-  // Only on Windows: elsewhere `/u/me` is a real one-letter folder.
   const masked = maskedCommand(command, isPowerShell)
-  const pathAt = (match: RegExpExecArray | RegExpMatchArray, offset = 0) => {
-    const at = offset + (match.index ?? 0) + match[0].length - match[1]!.length
-    const bare = command.slice(at, at + match[1]!.length).replace(/^["']|["']$/g, '')
-    return isWindows ? bare.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : bare
-  }
   const push = PUSH_AT.exec(masked)
   // `git -C <dir>` on the push itself wins.
   const gitC = push ? GIT_C.exec(push[0]) : null
-  if (push && gitC) return pathAt(gitC, push.index)
-  // Each `cd` before the push moves on from the one before it, unless it names a whole path.
-  let folder: string | undefined
-  for (const step of masked.slice(0, push?.index ?? masked.length).matchAll(CD)) {
-    const next = pathAt(step)
-    folder = folder === undefined || ABSOLUTE.test(next) ? next : `${folder}/${next}`
+  if (push && gitC) return pathAt(command, isWindows, gitC, push.index)
+  return cdFolders(command, masked.slice(0, push?.index ?? masked.length), isWindows).pop()
+}
+
+// Every folder a command names for git: each `git -C <dir>`, and the folder each `cd` step leaves it in.
+export function namedFolders(command: string, isWindows: boolean, isPowerShell = false): string[] {
+  const masked = maskedCommand(command, isPowerShell)
+  const gitFolders = [...masked.matchAll(new RegExp(GIT_C, 'g'))].map(m => pathAt(command, isWindows, m))
+  return [...new Set([...gitFolders, ...cdFolders(command, masked, isWindows)])]
+}
+
+// The folder after each `cd` step in `masked`: each moves on from the one before, unless it names a whole path.
+function cdFolders(command: string, masked: string, isWindows: boolean): string[] {
+  const folders: string[] = []
+  for (const step of masked.matchAll(CD)) {
+    const next = pathAt(command, isWindows, step)
+    const last = folders.at(-1)
+    folders.push(last === undefined || ABSOLUTE.test(next) ? next : `${last}/${next}`)
   }
-  return folder
+  return folders
+}
+
+// The path a pattern's first group matched, read from the raw command at the same place. Git Bash paths
+// (/c/Users/...) mean nothing to a Windows process, so they become C:/Users/...; only on Windows, since
+// elsewhere `/u/me` is a real one-letter folder.
+function pathAt(command: string, isWindows: boolean, match: RegExpExecArray | RegExpMatchArray, offset = 0) {
+  const at = offset + (match.index ?? 0) + match[0].length - match[1]!.length
+  const bare = command.slice(at, at + match[1]!.length).replace(/^["']|["']$/g, '')
+  return isWindows ? bare.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : bare
 }

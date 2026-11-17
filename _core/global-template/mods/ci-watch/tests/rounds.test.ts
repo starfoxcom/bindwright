@@ -146,6 +146,25 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
 })
 
+// The step back is about the red PR, so work on another branch goes on; an unreadable branch still waits.
+test("a step back holds only work on the red PR's branch", async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: ['Edit', 'Write'] }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const call = (input: Record<string, unknown>) => $.tool.call(input as never)
+  const bash = (command: string) => call({ tool: 'Bash', command })
+  await redRound($, w, 5)
+  w.seen.checkedOut = { '': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
+  expect(await bash('git commit -m "fix the other PR"')).not.toHaveProperty('deny')
+  expect(await call({ ...editInput, file_path: 'C:/other/b.ts' })).not.toHaveProperty('deny')
+  expect(await bash('git push origin feature/x')).toHaveProperty('deny')
+  expect(await call(editInput)).toHaveProperty('deny')
+  expect(await bash('git -C C:/repo commit -m "fix it"')).toHaveProperty('deny')
+  expect(await bash('git -C C:/other commit -m "b"; cd C:/repo && git push')).toHaveProperty('deny')
+  w.seen.isGitDown = true
+  expect(await bash('git commit -m "fix the other PR"')).toHaveProperty('deny')
+})
+
 // A red wake at a count that is not due latches nothing; a new watch of the PR keeps a latched step back,
 // and only a green round or the user's /ci-watch stop lifts it without lookups.
 test('only a due red wake latches a step back, and only lookups, green or a stop lift it', async ($, on) => {

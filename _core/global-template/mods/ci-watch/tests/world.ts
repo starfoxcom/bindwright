@@ -29,6 +29,9 @@ export type Seen = {
   prState: string
   /** The PR of the branch a push names (7 by default), and PRs GitHub reports merged whatever `prState` says. */
   branchPr?: number
+  // The branch `git branch --show-current` names per folder ('' for the session's own); feature/x without one.
+  checkedOut?: Record<string, string>
+  isGitDown?: boolean
   mergedPrs?: number[]
   /** The head commit `gh pr view` reports (default `a1`). */
   head?: string
@@ -108,6 +111,12 @@ export function world(on: On) {
       await seen.duringStatus?.()
       const stdout = seen.status ?? ''
       return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (e.argv[0] === 'git' && args.endsWith('branch --show-current')) {
+      const folder = e.argv[1] === '-C' ? (e.argv[2] ?? '') : ''
+      const stdout = seen.isGitDown ? '' : `${seen.checkedOut?.[folder] ?? 'feature/x'}\n`
+      const exitCode = seen.isGitDown ? 128 : 0
+      return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)
     if (args.includes('pr checks')) seen.checksRead++

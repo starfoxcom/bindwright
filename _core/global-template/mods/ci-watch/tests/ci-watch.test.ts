@@ -1,7 +1,7 @@
 import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 import type { Watch } from '../types'
-import { isPushOrPr, mergedNumber, targetFolder } from '../hooks/command'
+import { isPushOrPr, mergedNumber, namedFolders, targetFolder } from '../hooks/command'
 import { claimWake, HELP, wakeText } from '../hooks/register'
 import { settle } from '../hooks/settle'
 import { moment, type Seen, world } from './world'
@@ -872,6 +872,17 @@ test('a push or a new PR is the subcommand, never words inside a message', () =>
   expect(isPushOrPr('git commit -m "a `"quoted`" git push word"', true)).toBe(false)
   expect(isPushOrPr('git commit -m "C:\\dir\\" -m "then git push it"', true)).toBe(false)
   expect(isPushOrPr('git commit -m "C:\\dir\\" ; git push', true)).toBe(true)
+})
+
+test('every folder a command moves git to is named, quoted text aside', () => {
+  const cases: [string, string[]][] = [
+    ['git commit -m x', []],
+    ['git -C "C:/a b" commit -m x; git -C /c/wt push', ['C:/a b', 'c:/wt']],
+    ['cd a; cd b && git push', ['a', 'a/b']],
+    ['git -C a commit && cd /c/x\ngit push', ['a', 'c:/x']],
+    ['git commit -m "cd elsewhere; git -C x"', []],
+  ]
+  for (const [command, folders] of cases) expect([command, namedFolders(command, true)]).toEqual([command, folders])
 })
 
 test('a push in another folder is looked up there', () => {
