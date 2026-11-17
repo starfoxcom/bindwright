@@ -2,8 +2,8 @@
 import itertools
 import re
 from .shell import WRAPPERS, program, shape_of, text_of
-from .files import (ENV_VALUE_OPTIONS, ENV_VALUE_SHORT, abbreviates, git_subcommand,
-    is_run_time_git, is_uncertain, takes_next_word)
+from .files import (ENV_VALUE_OPTIONS, ENV_VALUE_SHORT, GIT_GLOBAL_FLAGS, GIT_VALUE_OPTIONS, abbreviates,
+    git_subcommand, is_run_time_git, is_uncertain, takes_next_word)
 
 
 LEFTHOOK_OFF_VALUES = {"0", "false"}
@@ -146,12 +146,31 @@ def built_subcommand(words):
     right after the built words (`git $OPTS commit`) is read as usual; an option there may be one
     the built word's subcommand reads, so it names none. Options are read by their shape, as git
     receives them (`"-C$repo"` is `-C` with its value). A word before the subcommand place that
-    may expand to several words (`git -C "$@"`) may fill that place too, so it counts as one."""
+    may expand to several words (`git -C "$@"`) may fill that place too, so it counts as one,
+    unless only git's own options stand between it and a subcommand written out
+    (`git -C $repo -c x=y commit`): git reads those itself, so no subcommand's options are there."""
     i = git_subcommand([shape_of(word) for word in words])[0]
-    places = [k for k in range(1, min(i, len(words))) if may_split(words[k])]
-    if i < len(words) and not isinstance(words[i], str):
+    is_written = i < len(words) and isinstance(words[i], str)
+    places = [k for k in range(1, min(i, len(words)))
+              if may_split(words[k]) and not (is_written and only_git_options(words[k + 1:i]))]
+    if i < len(words) and not is_written:
         places.append(i)
     return any(names_no_subcommand_after(words, k) for k in places)
+
+
+def only_git_options(words):
+    """Whether these words are all git's own options with their values (`-c x=y`, `--no-pager`,
+    `--git-dir=d`), which git reads before its subcommand. Words built at run time are left to
+    their own check."""
+    rest = iter(words)
+    for word in rest:
+        if not isinstance(word, str):
+            continue
+        if word in GIT_VALUE_OPTIONS:
+            next(rest, None)
+        elif word not in GIT_GLOBAL_FLAGS and word.split("=", 1)[0] not in GIT_VALUE_OPTIONS:
+            return False
+    return True
 
 
 def may_split(word):

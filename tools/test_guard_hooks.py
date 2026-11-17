@@ -1000,6 +1000,14 @@ class GuardHookTest(unittest.TestCase):
                 lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
+        # Only git's own options between a list and a subcommand written out: git reads them itself.
+        for (command, tool), result in self.each(
+                (('git -C $repo -c user.name=x commit -m "fix: y"', "PowerShell"),
+                 ("git -C $repo --no-pager log", "PowerShell"),
+                 ("for d in */; do git -C $d --no-pager log -1; done", "Bash")),
+                lambda command, tool: self.attr(command, tool=tool)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
 
     def test_routes_past_the_hooks_are_refused(self):
         hooks, setting, trailer, reuse, lefthook = ("git hook bypass", "changes which hooks git runs",

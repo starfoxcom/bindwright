@@ -32,6 +32,11 @@ ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fm
 READ_CMDLETS = {"get-content", "gc"}
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
                      "--super-prefix", "--attr-source"}
+# git's own options that take no value (git(1)); git matches them whole, never abbreviated.
+GIT_GLOBAL_FLAGS = {"-p", "--paginate", "-P", "--no-pager", "--bare", "--no-replace-objects",
+                    "--no-lazy-fetch", "--no-optional-locks", "--no-advice", "--literal-pathspecs",
+                    "--glob-pathspecs", "--noglob-pathspecs", "--icase-pathspecs", "--exec-path",
+                    "--html-path", "--man-path", "--info-path"}
 HOME_COMMANDS = {"cd", "chdir", "set-location", "sl"}  # alone, each goes home
 CD_COMMANDS = HOME_COMMANDS | {"pushd", "popd", "push-location", "pop-location"}
 MAX_PLACES = 64  # folders one command may run in before the guard stops placing them
