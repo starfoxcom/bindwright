@@ -185,49 +185,44 @@ def names_no_subcommand_after(words, k):
     return following is None or following.startswith("-")
 
 
-def runs_program_at(words, i, j=0):
-    """Whether words[i] may be the program the command at words[j] runs, in any reading: itself,
-    or one after RUNNERS (`sudo -u root`, `env A=1`, `timeout 30`), each read the same way. A word
-    only named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not,
-    and neither is one behind a program outside RUNNERS."""
-    if j == i:
-        return True
-    if program(words[j:]) not in RUNNERS:
-        return False
-    if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
-        return False
-    return any(runs_program_at(words, i, k) for k in program_starts(words, j, i))
+def runs_program_at(words, i):
+    """Whether words[i] may be the program the command runs, in any reading: itself, or one after
+    RUNNERS (`sudo -u root`, `env A=1`, `timeout 30`), each read the same way. A word only named as
+    an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not, and neither
+    is one behind a program outside RUNNERS. Every runner's readings move through the words
+    together, in one pass from the left, so the work grows with the words however long the chain
+    (`sudo -E sudo -E ...`): `states` holds each reading still alive, as the words its runner
+    counts before its program (`timeout`'s duration) and whether the word before may have been an
+    option that takes a value."""
+    states = set()
+    for k in range(i):
+        states, may_start = next_states(words[k], states)
+        name = program(words[k:k + 1]) if may_start or k == 0 else None
+        if name in RUNNERS and not (name == "command" and only_looks_up(itertools.islice(words, k + 1, i))):
+            states.add((RUNNERS[name], False))
+    return i == 0 or bool(states)
 
 
-def program_starts(words, j, i):
-    """Where the program the runner at words[j] starts may be, up to i: after its options,
-    NAME=value words and the words it counts before its program (`timeout`'s duration). A word
-    right after an option, or after a word that may expand to several (`"${vars[@]}"`), may be
-    the option's value, one of the counted words or the program, and a word built at run time
-    from its first sign (`"$flag"`) may also be an option, so every reading is followed at once:
-    `states` holds, per reading still alive, the counted words left and whether the word before
-    may have been an option that takes a value."""
-    starts, states = set(), {(RUNNERS[program(words[j:])], False)}
-    for k in range(j + 1, i):
-        shape, following = shape_of(words[k]), set()
-        for others, after_option in states:
-            if shape.startswith("-") or re.match(r"\w+=", shape):
-                following.add((others, shape.startswith("-")))
-            elif may_split(words[k]):
-                following.add((others, True))  # may hold options, their values, or nothing
-            else:
-                if shape.startswith("\0"):
-                    following.add((others, True))
-                if after_option or not others:
-                    starts.add(k)
-                if after_option:
-                    following.add((others, False))
-                if others:
-                    following.add((others - 1, False))
-        states = following
-        if not states:
-            return starts
-    return starts | {i}
+def next_states(word, states):
+    """(the readings alive after `word`, whether it may be a runner's program). A word right after
+    an option, or after a word that may expand to several (`"${vars[@]}"`), may be the option's
+    value, one of the counted words or the program, and a word built at run time from its first
+    sign (`"$flag"`) may also be an option."""
+    shape, following, may_start = shape_of(word), set(), False
+    for others, after_option in states:
+        if shape.startswith("-") or re.match(r"\w+=", shape):
+            following.add((others, shape.startswith("-")))
+        elif may_split(word):
+            following.add((others, True))  # may hold options, their values, or nothing
+        else:
+            if shape.startswith("\0"):
+                following.add((others, True))
+            may_start = may_start or after_option or not others
+            if after_option:
+                following.add((others, False))
+            if others:
+                following.add((others - 1, False))
+    return following, may_start
 
 
 def only_looks_up(words):
