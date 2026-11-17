@@ -308,7 +308,7 @@ export default {
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
   "settings.global-instructions.value": "Sí",
   "settings.push-guard.title": "Guardia de push",
-  "settings.push-guard.text": "Bloquea los force push en cada repo de tu computadora.",
+  "settings.push-guard.text": "Bloquea los force push y los comandos vetados en cada repo de tu computadora.",
   "settings.push-guard.value": "Sí",
   "settings.session-title.title": "Títulos de sesión",
   "settings.session-title.text": "Nombra cada sesión según su proyecto y en qué está trabajando.",

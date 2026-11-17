@@ -152,6 +152,86 @@ class GuardHookTest(unittest.TestCase):
     def test_plain_push_passes(self):
         self.assert_passes(self.run_hook("push-guard", "git push origin feature/x"))
 
+    def test_tool_rules_refuse_each_pattern_and_pass_mentions(self):
+        refused = (("python - <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("cat <<EOF | python -\nre.compile('\\\\d')\nEOF", "Bash"),
+                   ("python -c \"print('a\\\\b')\"", "Bash"), ("node -e \"console.log('a\\\\b')\"", "Bash"),
+                   ("@'\nprint('C:\\\\x')\n'@ | python -", "PowerShell"), ("gh run watch 123", "Bash"),
+                   ("python .github/scripts/size_check.py && git commit -qm x", "Bash"),
+                   ("git push -u origin x && gh pr create --base develop", "Bash"),
+                   ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"),
+                   ("# it's fine\ngh run watch 1", "Bash"), ("<# note #> gh run watch 1", "PowerShell"),
+                   ("sleep 1 & python - <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("python - 2>&1 <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("cat <<'EOF' | python3\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("bash -s arg <<'EOF'\necho C:\\\\x\nEOF", "Bash"),
+                   ("@'\nprint('C:\\\\x')\n'@ | node", "PowerShell"),
+                   ("@'\nWrite-Host C:\\\\x\n'@ | pwsh -Command -", "PowerShell"),
+                   ("cat <<'EOF' | sed s/a/b/ | python3\nprint('C:\\\\x')\nEOF", "Bash"))
+        passing = (("python - <<'EOF'\nprint('hi')\nEOF", "Bash"),
+                   ("git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
+                   ("python3 tools/x.py && git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
+                   ("@'\nfix: it's why gh run watch is refused\n'@ | git commit -F -", "PowerShell"),
+                   ("cat <<'EOF' > notes.md\nC:\\\\x\nEOF", "Bash"), ('python -c "print(1)"', "Bash"),
+                   ('git commit -m "never use gh run watch"', "Bash"),
+                   ('git commit -m "size_check.py before git push"', "Bash"),
+                   ("git add .github/scripts/size_check.py && git commit -m x", "Bash"),
+                   ("git checkout -q -b feature/x", "Bash"), ("git checkout -- file.txt", "Bash"),
+                   ("gh pr merge 5 --merge", "Bash"), ("node script.mjs C:\\\\x", "Bash"),
+                   ("git show origin/develop:./.claude/settings.json", "Bash"),
+                   ('git commit -m "read it with git show HEAD:.claude/x"', "Bash"),
+                   ('gh pr create --title "Bump Node to 22" --body "$(cat <<\'EOF\'\nC:\\\\Users\nEOF\n)"', "Bash"),
+                   ("git commit -F - <<'EOF'\r\ndocs: stop using gh run watch\r\n\r\nWhy: x\r\nEOF", "Bash"),
+                   ("git commit -m 'docs: don'\\''t chain git push and gh pr create'", "Bash"),
+                   ('git commit -m "docs: never `"gh run watch`" here"', "PowerShell"),
+                   ('Copy-Item a "dist\\"; git commit -m "docs: never gh run watch"', "PowerShell"),
+                   ("python3 tools/confirm.py <<< yes\nprintf 'done\\n'", "Bash"),
+                   ('python3 tools/confirm.py <<<"yes"\nprintf \'done\\n\'', "Bash"),
+                   ('python3 x.py "$((1 << n))"\nprintf \'a\\n\'', "Bash"),
+                   ('python3 x.py "a << b"\nprintf \'a\\n\'', "Bash"),
+                   ("python3 x.py # feeds << EOF\nprintf 'a\\n'", "Bash"),
+                   ('python3 -c "\nmask = 1 << bit | 1 << other\nprint(mask)\n"', "Bash"),
+                   ("echo x\nprintf a << b << c", "Bash"),
+                   ('git commit -m "docs: never use gh run watch\n\nfeed cat <<EOF lines to it\nmore\n"', "Bash"),
+                   ("git commit -m \"docs: x\nA script fed to python <<EOF loses them:\nprint('C:\\\\x')\n\"", "Bash"),
+                   ("git commit -F - <<\\EOF\ndocs: never use gh run watch\nEOF", "Bash"),
+                   ('git commit -m "$(cat <<\'EOF\'\nfix: never "gh run watch" here\nEOF\n)"', "Bash"),
+                   ('git commit -m "docs: a << b\nnever gh run watch\n"', "PowerShell"),
+                   ("git commit -m \"$(cat <<'EOF'\ndocs: fed with \"python <<EOF\" it loses\n"
+                    "print('C:\\\\x')\nEOF\n)\"", "Bash"),
+                   ("gh pr create --body \"$(cat <<'EOF'\nfed with \"node <<JS\" it breaks\n"
+                    "C:\\\\x\nEOF\n)\"", "Bash"),
+                   ("# Commit the fix; it can't wait\ngit commit -m \"docs: don't use gh run watch\"", "Bash"),
+                   ("# don't amend\ngit commit -m \"docs: it's why python <<EOF eats\nC:\\\\x paths\"", "Bash"),
+                   ("<# Don't chain these #>\ngit commit -m 'docs: never use gh run watch'", "PowerShell"),
+                   ("<#\nNever use gh run watch here.\n#>\nls", "PowerShell"),
+                   ("python3 -m http.server 8000 & cat <<'EOF' > notes.md\nC:\\\\x\nEOF", "Bash"),
+                   ("python3 tools/check.py <<'EOF'\n{\"path\": \"C:\\\\x\"}\nEOF", "Bash"),
+                   ("cat <<'EOF' | node x.mjs\nC:\\\\x\nEOF", "Bash"),
+                   ("cat <<'EOF' | grep -c node\nC:\\\\x\nEOF", "Bash"),
+                   ("@'\nC:\\\\x\n'@ | node x.mjs", "PowerShell"),
+                   ("@'\nC:\\\\x\n'@ | Set-Content run.txt; python x.py", "PowerShell"),
+                   ("perl -pe 's/a/b/' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
+                   ("bash -ec 'cat' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
+                   ("python3 -Ic 'import sys' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
+                   ("node --eval='process.stdin.pipe(process.stdout)' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
+                   ("bash -sc 'cat' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
+                   ("php -r 'echo 1;' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
+                   ("python3 gen.py <<'EOF' | sh\nC:\\\\x\nEOF", "Bash"),
+                   ("cat <<'EOF' | python3 tool.py | bash\nC:\\\\x\nEOF", "Bash"))
+        # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
+        rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
+        refused += rev_dot_path if os.name == "nt" else ()
+        passing += () if os.name == "nt" else rev_dot_path
+        for command, tool in refused:
+            with self.subTest(command=command):
+                result = self.run_hook("tool-rules", command, tool=tool)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(b"BLOCKED (tool rule)", result.stdout)
+        for command, tool in passing:
+            with self.subTest(command=command):
+                self.assert_passes(self.run_hook("tool-rules", command, tool=tool))
+
     def test_skipped_when_home_registers_a_working_copy(self):
         self.home_settings('{"command": "python \\"C:/Users/me/.claude/hooks/push-guard.py\\""}',
                            hook_files=["push-guard.py"])
