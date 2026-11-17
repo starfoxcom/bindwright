@@ -29,6 +29,7 @@ file a session could write, so nothing at run time relaxes a rule.
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
 """
+import bisect
 import json
 import os
 import re
@@ -47,9 +48,9 @@ SHELLS = ("bash", "sh", "zsh")
 REDIRECTION = re.compile(r"\d*(?:&>|[<>]&?)")
 # A here-document opener, its word quoted (`<<'EOF'`, `<<"EOF"`), escaped (`<<\EOF`) or bare.
 HEREDOC = re.compile(r"<<(-?)[ \t]*\\?(['\"]?)([A-Za-z_][\w-]*)\2")
-# A `<<` that is not part of a here-string (`<<<`), and arithmetic, where a `<<` opens nothing.
+# A `<<` that is not part of a here-string (`<<<`); `without_arithmetic` blanks arithmetic, where a
+# `<<` opens nothing.
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)")
-NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)")
 # A PowerShell here-string: `@'` or `@"` and any blanks to the end of the line, the body (none when
 # the closing line comes next), then the first line that starts with the same quote and `@`.
 HERE_STRING_PARTS = r"@({quotes})[ \t]*\r?\n(?:(.*?)\r?\n)??\1@"
@@ -63,8 +64,6 @@ INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t
                     re.I | re.S)
 INLINE_CALL = re.compile(r"(?:^|[\s;&|(])(?:(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c"
                          r"|node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print))[ \t]+['\"]", re.I)
-# `origin/develop:.claude/x`: a git object path that starts with a dot.
-REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
 # Comments, quoted strings and escapes as each shell reads them, in one pass across lines, so
 # whichever starts first wins: a `#` that starts a word outside quotes comments out the rest of
 # its line, and a quote character in a comment opens nothing. Bash escapes with a backslash,
@@ -109,6 +108,29 @@ def as_quote(match):
     return spaces
 
 
+def without_arithmetic(text):
+    """The text with each `((...))` and `$((...))` blanked, where a `<<` opens nothing: an opener
+    closes at the first `)` after it when a second `)` follows. That `)` is found once and kept for
+    every opener before it, since searching from each opener takes time that grows with the square
+    of a long run of `(`."""
+    parts, at, look, close = [], 0, 0, -1
+    while True:
+        opener = text.find("((", look)
+        if opener == -1:
+            break
+        if close < opener + 2:
+            close = text.find(")", opener + 2)
+            if close == -1:
+                break
+        start = opener - 1 if opener > at and text[opener - 1] == "$" else opener
+        if text.startswith(")", close + 1):
+            parts += [text[at:start], re.sub(r"[^\n]", " ", text[start:close + 2])]
+            at = look = close + 2
+        else:
+            look = opener + 1
+    return "".join(parts) + text[at:]
+
+
 def as_word(match):
     """A quoted string as one placeholder word the length of the original, line ends kept, so a
     quoted argument (`python3 "$HOOK"`) still counts as a word."""
@@ -135,7 +157,7 @@ def heredoc(text):
     if not first:
         return None
     number, match = first
-    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(as_word, text)).split("\n")[number]
+    masked = without_arithmetic(QUOTED["bash"].sub(as_word, text)).split("\n")[number]
     if not HEREDOC_OPERATOR.match(masked, match.start()):
         return None
     before = LIST_SEPARATOR.split(masked[:match.start()])[-1].split("|")[-1]
@@ -289,17 +311,58 @@ def bare(text, shell):
     return masked(text, shell, "''")
 
 
+class Followed:
+    """A search for `head`, then any characters but `stops`, then `rest`: the same answer as one
+    pattern joining them, in time linear in the text. Every head whose run ends at the same stop
+    finds `rest` only where the head ending first does, so `rest` is tried once per stop, where
+    the joined pattern tries it once per head and a line repeating the head takes time that grows
+    with its length squared. `skip_line` names text whose line a head may not start on."""
+
+    def __init__(self, head, stops, rest, flags=re.I, skip_line=()):
+        self.head = re.compile(head, flags)
+        self.stop = re.compile("[%s]" % stops)
+        self.tail = re.compile("[^%s]*%s" % (stops, rest), flags)
+        self.skip_line = skip_line
+
+    def skips(self, text, newlines, line):
+        begin = newlines[line - 1] + 1 if line else 0
+        end = newlines[line] if line < len(newlines) else len(text)
+        return any(word in text[begin:end] for word in self.skip_line)
+
+    def search(self, text):
+        stops = [match.start() for match in self.stop.finditer(text)]
+        newlines = [match.start() for match in re.finditer("\n", text)] if self.skip_line else []
+        skipped, tried = {}, set()
+        for head in self.head.finditer(text):
+            run_end = bisect.bisect_left(stops, head.end())
+            if run_end in tried:
+                continue
+            if self.skip_line:
+                line = bisect.bisect_left(newlines, head.start())
+                if line not in skipped:
+                    skipped[line] = self.skips(text, newlines, line)
+                if skipped[line]:
+                    continue
+            tried.add(run_end)
+            if self.tail.match(text, head.end()):
+                return True
+        return False
+
+
 def both(*patterns):
-    """A test that holds when every pattern is found in the bare command."""
-    compiled = [re.compile(p, re.I) for p in patterns]
+    """A test that holds when every pattern (a regex, or a `Followed`) is found in the bare command."""
+    compiled = [p if isinstance(p, Followed) else re.compile(p, re.I) for p in patterns]
     return lambda text, shell: all(p.search(bare(text, shell)) for p in compiled)
 
 
 def cased(pattern):
-    """Like `both`, for one pattern whose letter case carries meaning (`-b` is not `-B`)."""
-    compiled = re.compile(pattern)
+    """Like `both`, for one test whose letter case carries meaning (`-b` is not `-B`)."""
+    compiled = pattern if isinstance(pattern, Followed) else re.compile(pattern)
     return lambda text, shell: bool(compiled.search(bare(text, shell)))
 
+
+# `origin/develop:.claude/x`: a git object path that starts with a dot.
+REV_DOT_PATH = Followed(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b", r"\n|;&", r"\s[\w./@~^-]+:\.[^/\s.]")
 
 ENFORCE = "enforce"
 OBSERVE = "observe"
@@ -328,22 +391,24 @@ RULES = [
     ("`git checkout <rev> -- <path>`", both(r"\bgit\s+checkout\s+(?!-)\S+\s+--\s+\S"),
      "it overwrites and stages those files. Peek with `git show <rev>:./<path>`; restore with `git restore`.",
      ENFORCE),
-    ("`gh pr merge --admin`", both(r"\bgh\s+pr\s+merge\b.*\s--admin\b"),
+    ("`gh pr merge --admin`", both(Followed(r"\bgh\s+pr\s+merge\b", r"\n", r"\s--admin\b")),
      "it skips the required checks. Fix what blocks the merge.", ENFORCE),
     ("`<rev>:.<path>` in Git Bash",
      lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
      "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root.", ENFORCE),
-    ("`gh run rerun --failed` or `--job`", both(r"\bgh\s+run\s+rerun\b[^\n|;&]*\s(?:--failed|--job|-j)\b"),
+    ("`gh run rerun --failed` or `--job`",
+     both(Followed(r"\bgh\s+run\s+rerun\b", r"\n|;&", r"\s(?:--failed|--job|-j)\b")),
      "a re-run of only some jobs can leave a required check stuck. Re-run the whole run, or push again.", OBSERVE),
     ("an interactive git command (`-i`, `-p`)",
      # `git stash show -p` only prints, and a rebase given a scripted editor never waits for keys.
-     cased(r"(?m)^(?![^\n]*(?:GIT_SEQUENCE_EDITOR|sequence\.editor)=)[^\n]*?\bgit\s+"
-           r"(?:rebase|add|checkout|reset|stash(?!\s+(?:show|list)\b)|restore|clean)\b"
-           r"[^\n|;&]*\s(?:-i|--interactive|-p|--patch)\b"),
+     cased(Followed(r"\bgit\s+(?:rebase|add|checkout|reset|stash(?!\s+(?:show|list)\b)|restore|clean)\b",
+                    r"\n|;&", r"\s(?:-i|--interactive|-p|--patch)\b", flags=0,
+                    skip_line=("GIT_SEQUENCE_EDITOR=", "sequence.editor="))),
      "it waits for an editor or keys a tool call cannot give. Use the form that takes its input in the command.",
      OBSERVE),
     ("an inline body for `gh pr` or `gh issue`",
-     cased(r"\bgh\s+(?:pr|issue)\s+(?:create|comment|edit|review)\b[^\n|;&]*\s(?:--body|-b)(?:[=\s]|$)"),
+     cased(Followed(r"\bgh\s+(?:pr|issue)\s+(?:create|comment|edit|review)\b", r"\n|;&",
+                    r"\s(?:--body|-b)(?:[=\s]|$)", flags=0)),
      "the shell can cut or change the text. Write the body to a file and pass `--body-file`.", OBSERVE),
     ("a scratch file in a fixed folder (`/tmp`, `C:/tmp`)",
      # Claude Code's own session scratchpad lives under /tmp/claude-<id>/ on Linux.
