@@ -63,27 +63,6 @@ function maskedCommand(command: string, isPowerShell: boolean): string {
     .replace(quotedSpans(isPowerShell), span => span[0] + '_'.repeat(span.length - 2) + span[span.length - 1])
 }
 
-// A step of a plain command: a `cd <dir>`, or a `git commit` / `git push` with at most `-C <dir>` before it,
-// and no redirect, pipe, subshell, group or expansion in it.
-const PLAIN_WORD = String.raw`[^\s(){}<>|&]+`
-const PLAIN_STEP = new RegExp(
-  String.raw`^\s*(?:cd\s+${PLAIN_WORD}|git(?:\s+-C\s+${PLAIN_WORD})?\s+(?:commit|push)(?:\s+[^(){}<>|&]*)?)\s*$`,
-)
-const BRANCH_MOVES = /\b(?:checkout|switch|worktree)\b/
-
-/**
- * Whether a commit or push is one whose folders `namedFolders` reads in full: steps joined by `&&`, `;` or
- * newlines, each a `cd` or a plain `git commit` / `git push`. Anything else (an expansion, a subshell, an
- * `env` or `GIT_DIR` prefix, other git options, a branch switch) may act on a branch the reader cannot see.
- */
-export function isPlainCommitOrPush(command: string, isPowerShell = false): boolean {
-  // `$` and backticks expand inside double quotes too, so they count wherever they are.
-  if (/[$`]/.test(command)) return false
-  const masked = maskedCommand(command, isPowerShell)
-  if (BRANCH_MOVES.test(masked)) return false
-  return masked.split(/&&|;|\n/).every(step => !step.trim() || PLAIN_STEP.test(step))
-}
-
 export function isPushOrPr(command: string, isPowerShell = false): boolean {
   return PUSH_OR_PR.test(commandWords(command, isPowerShell))
 }
@@ -120,13 +99,6 @@ export function targetFolder(command: string, isWindows: boolean, isPowerShell =
   return cdFolders(command, masked.slice(0, push?.index ?? masked.length), isWindows).pop()
 }
 
-// Every folder a command names for git: each `git -C <dir>`, and the folder each `cd` step leaves it in.
-export function namedFolders(command: string, isWindows: boolean, isPowerShell = false): string[] {
-  const masked = maskedCommand(command, isPowerShell)
-  const gitFolders = [...masked.matchAll(new RegExp(GIT_C, 'g'))].map(m => pathAt(command, isWindows, m))
-  return [...new Set([...gitFolders, ...cdFolders(command, masked, isWindows)])]
-}
-
 // The folder after each `cd` step in `masked`: each moves on from the one before, unless it names a whole path.
 function cdFolders(command: string, masked: string, isWindows: boolean): string[] {
   const folders: string[] = []
@@ -138,11 +110,17 @@ function cdFolders(command: string, masked: string, isWindows: boolean): string[
   return folders
 }
 
-// The path a pattern's first group matched, read from the raw command at the same place. Git Bash paths
-// (/c/Users/...) mean nothing to a Windows process, so they become C:/Users/...; only on Windows, since
-// elsewhere `/u/me` is a real one-letter folder.
+// The path a pattern's first group matched, read from the raw command at the same place.
 function pathAt(command: string, isWindows: boolean, match: RegExpExecArray | RegExpMatchArray, offset = 0) {
   const at = offset + (match.index ?? 0) + match[0].length - match[1]!.length
   const bare = command.slice(at, at + match[1]!.length).replace(/^["']|["']$/g, '')
-  return isWindows ? bare.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : bare
+  return fromGitBash(bare, isWindows)
+}
+
+/**
+ * A Git Bash path (/c/Users/...) as a Windows process reads it (C:/Users/...). Only on Windows, since
+ * elsewhere `/u/me` is a real one-letter folder.
+ */
+export function fromGitBash(path: string, isWindows: boolean): string {
+  return isWindows ? path.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : path
 }

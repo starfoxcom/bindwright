@@ -156,7 +156,11 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   await redRound($, w, 5)
   // The shell sits on another PR's branch; the red PR's branch is checked out in C:/repo.
   w.seen.checkedOut = { 'C:/session': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
-  const passes = ['git commit -m "fix the other PR"', 'cd C:/other && git commit -m b && git push']
+  w.seen.checkedOut['../repo'] = 'feature/y'
+  const passes = [
+    'git commit -m "fix the other PR"', 'cd C:/other && git commit -m b && git push',
+    'git commit -m "fix #12, don\'t hold" ; git push -u origin feature/y',
+  ]
   const refusal = expect.objectContaining({ deny: expect.any(String) })
   const denied = (command: string) => expect.arrayContaining([command, refusal])
   for (const command of passes) expect([command, await bash(command)]).not.toEqual(denied(command))
@@ -170,8 +174,22 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
     'git -c user.name=a -C C:/repo commit -m x', 'GIT_DIR=C:/repo/.git git commit -m x',
     'env -C C:/repo git commit -m x', 'gh pr checkout 7 && git commit -am fix', 'git switch - && git commit -am fix',
     'git commit -m "$(git switch feature/x)"', 'git commit -m x | tee log',
+    // Quotes and comments the shell reads differently from a pattern, and a path glued to a quote.
+    "git commit -m a\\'b ; cd C:/repo ; git commit -m c\\'d", 'git commit -m a\\"b ; cd C:/repo ; git commit -m "c"',
+    "git commit -m x # don't\ncd C:/repo; git commit -m y # isn't",
+    "git commit -m 'msg\nsee <<EOF'\ncd C:/repo\ngit commit -m y",
+    'cd "C:/other"/../repo && git commit -m x', 'cd C:/other && git -C ../repo commit -m x',
+    // Pushes that may send the red branch without naming it plainly.
+    'git push origin HEAD:feat"ure"/x', 'git push --all', 'git push origin :',
+    "git push origin 'refs/heads/*:refs/heads/*'",
   ]
   for (const command of waits) expect([command, await bash(command)]).toEqual(denied(command))
+  // A push config that sends more than the checked-out branch, or a shell moved to the red branch's folder.
+  w.seen.gitConfig = { 'C:/session': 'remote.origin.mirror=true' }
+  expect(await bash('git push')).toHaveProperty('deny')
+  w.seen.cwd = 'C:/repo'
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  w.seen.cwd = undefined
   // A local branch pushed to the red PR's branch under another name is the red PR's too.
   w.seen.checkedOut['C:/session'] = 'try-fix'
   w.seen.upstream = { 'C:/session': 'origin/feature/x' }

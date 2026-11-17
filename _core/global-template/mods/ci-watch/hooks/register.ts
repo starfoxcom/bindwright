@@ -1,7 +1,8 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
-import { commandFolders, folderOf, mayBeOn } from './branch'
+import { commandSteps, folderOf, mayBeOn } from './branch'
+import type { GitStep } from './plain'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
@@ -251,12 +252,12 @@ async function branchOf($: EngineInterface, w: Watch): Promise<string | undefine
 // undefined. A closed PR owes nothing, and work on another branch goes on.
 async function owedResearch(
   $: EngineInterface,
-  folders: readonly (string | undefined)[] | null,
+  steps: readonly GitStep[] | null,
   command?: string,
 ): Promise<string | undefined> {
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
     if (await isClosed($, w.repo, w.number)) continue
-    if (!(await mayBeOn($, await branchOf($, w), folders, command))) continue
+    if (!(await mayBeOn($, await branchOf($, w), steps, command))) continue
     const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
     return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
   }
@@ -713,7 +714,7 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isEdit = ['Edit', 'Write', 'NotebookEdit'].includes(String((e as { tool?: unknown }).tool))
-    const refusal = e.agentId === undefined && isEdit ? await owedResearch($, [folderOf(e)]) : undefined
+    const refusal = e.agentId === undefined && isEdit ? await owedResearch($, [{ folder: folderOf(e) }]) : undefined
     if (refusal) return { deny: refusal }
     const result = await next(e)
     if (e.agentId !== undefined || 'deny' in result) return result
@@ -727,8 +728,8 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
-    const folders = isHeld ? await commandFolders($, command, isPowerShell) : []
-    const refusal = isHeld ? (await owedResearch($, folders, command)) ?? (await owedRebuild($)) : undefined
+    const steps = isHeld ? await commandSteps($, command, isPowerShell) : []
+    const refusal = isHeld ? (await owedResearch($, steps, command)) ?? (await owedRebuild($)) : undefined
     if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.

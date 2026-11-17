@@ -34,6 +34,8 @@ export type Seen = {
   cwd?: string
   checkedOut?: Record<string, string>
   upstream?: Record<string, string>
+  // Per folder, what `git config --list` prints (one plain setting without an entry).
+  gitConfig?: Record<string, string>
   isGitDown?: boolean
   mergedPrs?: number[]
   /** The head commit `gh pr view` reports (default `a1`). */
@@ -118,7 +120,9 @@ export function world(on: On) {
     }
     if (e.argv[0] === 'git' && e.argv[1] === '-C') {
       const folder = e.argv[2] ?? ''
-      const named = args.endsWith('@{u}') ? seen.upstream?.[folder] : (seen.checkedOut?.[folder] ?? 'feature/x')
+      const config = seen.gitConfig?.[folder] ?? 'core.bare=false'
+      const branch = args.endsWith('@{u}') ? seen.upstream?.[folder] : (seen.checkedOut?.[folder] ?? 'feature/x')
+      const named = args.endsWith('config --list') ? config : branch
       const stdout = seen.isGitDown || named === undefined ? '' : `${named}\n`
       const exitCode = stdout ? 0 : 128
       return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
