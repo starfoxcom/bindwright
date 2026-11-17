@@ -1,8 +1,7 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
-import { commandSteps, folderOf, mayBeOn } from './branch'
-import type { GitStep } from './plain'
+import { commandSteps, folderOf, mayBeOn, type WorkStep } from './branch'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
@@ -252,7 +251,7 @@ async function branchOf($: EngineInterface, w: Watch): Promise<string | undefine
 // undefined. A closed PR owes nothing, and work on another branch goes on.
 async function owedResearch(
   $: EngineInterface,
-  steps: readonly GitStep[] | null,
+  steps: readonly WorkStep[] | null,
   command?: string,
 ): Promise<string | undefined> {
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
@@ -728,7 +727,7 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
-    const steps = isHeld ? await commandSteps($, command, isPowerShell) : []
+    const steps = isHeld ? commandSteps(command, isPowerShell) : []
     const refusal = isHeld ? (await owedResearch($, steps, command)) ?? (await owedRebuild($)) : undefined
     if (refusal) return { deny: refusal }
     const answered = await next(e)

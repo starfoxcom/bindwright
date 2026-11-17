@@ -110,17 +110,11 @@ function cdFolders(command: string, masked: string, isWindows: boolean): string[
   return folders
 }
 
-// The path a pattern's first group matched, read from the raw command at the same place.
+// The path a pattern's first group matched, read from the raw command at the same place. Git Bash paths
+// (/c/Users/...) mean nothing to a Windows process, so they become C:/Users/...; only on Windows, since
+// elsewhere `/u/me` is a real one-letter folder.
 function pathAt(command: string, isWindows: boolean, match: RegExpExecArray | RegExpMatchArray, offset = 0) {
   const at = offset + (match.index ?? 0) + match[0].length - match[1]!.length
   const bare = command.slice(at, at + match[1]!.length).replace(/^["']|["']$/g, '')
-  return fromGitBash(bare, isWindows)
-}
-
-/**
- * A Git Bash path (/c/Users/...) as a Windows process reads it (C:/Users/...). Only on Windows, since
- * elsewhere `/u/me` is a real one-letter folder.
- */
-export function fromGitBash(path: string, isWindows: boolean): string {
-  return isWindows ? path.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : path
+  return isWindows ? bare.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:') : bare
 }

@@ -1,8 +1,11 @@
 import type { EngineInterface } from 'claude-code'
 
-import { type GitStep, plainSteps } from './plain'
+import { plainPush } from './plain'
 
 // Which branch a piece of work is on, so a step back holds only the red PR's work.
+
+/** Where a piece of work acts: a folder (undefined for the shell's own), and whether it pushes from there. */
+export type WorkStep = { folder?: string; isPush?: boolean }
 
 async function git($: EngineInterface, cwd: string, folder: string, args: readonly string[]) {
   try {
@@ -13,8 +16,8 @@ async function git($: EngineInterface, cwd: string, folder: string, args: readon
   }
 }
 
-// What git reports in `folder` (relative to the shell's folder, which is the folder itself when undefined).
-// The session's folder is the one the shell's last `cd` left it in, read again on every call.
+// What git reports in `folder`, or in the shell's folder when undefined: the one its last `cd` left it in,
+// which the session's folder follows, read again on every call.
 async function gitIn($: EngineInterface, folder: string | undefined, args: readonly string[]) {
   const cwd = await $.session.cwd()
   return git($, cwd, folder ?? cwd, args)
@@ -28,36 +31,37 @@ const PUSHES_MORE = /^(?:remote\..+\.(?:mirror|push)=|push\.default=matching$)/i
 export function folderOf(e: unknown): string | undefined {
   const input = e as { file_path?: unknown; notebook_path?: unknown }
   const path = typeof input.file_path === 'string' ? input.file_path : input.notebook_path
-  if (typeof path !== 'string' || !/[\/]/.test(path)) return undefined
-  return path.replace(/[\/][^\/]*$/, '') || undefined
+  if (typeof path !== 'string' || !/[\\/]/.test(path)) return undefined
+  return path.replace(/[\\/][^\\/]*$/, '') || undefined
 }
 
-/** The commits and pushes a command makes, each in its folder, or null when they cannot be read in full. */
-export async function commandSteps(
-  $: EngineInterface,
-  command: string,
-  isPowerShell: boolean,
-): Promise<GitStep[] | null> {
-  return plainSteps(command, (await $.env.get('OS')) === 'Windows_NT', isPowerShell)
+/**
+ * A plain Bash commit or push, which acts in the shell's folder, as one step; null for anything else. The
+ * PowerShell tool keeps a folder of its own, which the session's folder may not follow.
+ */
+export function commandSteps(command: string, isPowerShell: boolean): WorkStep[] | null {
+  const isPush = isPowerShell ? null : plainPush(command)
+  return isPush === null ? null : [{ isPush }]
 }
 
 /**
  * Whether the work may be on `branch`: it is checked out, or pushed to, in the folder of any of `steps`,
- * a push there may send it, or the command names it. Unread steps or an unread branch count as yes, so a
- * hold never lifts on a guess.
+ * a push there may send it, or the command names it. Branch names compare without case, as refs do on
+ * Windows and macOS. Unread steps or an unread branch count as yes, so a hold never lifts on a guess.
  */
 export async function mayBeOn(
   $: EngineInterface,
   branch: string | undefined,
-  steps: readonly GitStep[] | null,
+  steps: readonly WorkStep[] | null,
   command = '',
 ): Promise<boolean> {
-  if (!branch || !steps || command.includes(branch)) return true
+  const wanted = branch?.toLowerCase()
+  if (!wanted || !steps || command.toLowerCase().includes(wanted)) return true
   for (const { folder, isPush } of steps) {
-    const name = await gitIn($, folder, ['branch', '--show-current'])
-    if (!name || name === branch) return true
+    const name = (await gitIn($, folder, ['branch', '--show-current'])).toLowerCase()
+    if (!name || name === wanted) return true
     const upstream = await gitIn($, folder, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
-    if (upstream.endsWith(`/${branch}`)) return true
+    if (upstream.toLowerCase().endsWith(`/${wanted}`)) return true
     if (isPush) {
       const config = await gitIn($, folder, ['config', '--list'])
       if (!config || PUSHES_MORE.test(config)) return true

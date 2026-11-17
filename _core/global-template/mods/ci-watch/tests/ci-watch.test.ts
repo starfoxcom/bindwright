@@ -2,7 +2,7 @@ import type { Engine } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 import type { Watch } from '../types'
 import { isPushOrPr, mergedNumber, targetFolder } from '../hooks/command'
-import { plainSteps } from '../hooks/plain'
+import { plainPush } from '../hooks/plain'
 import { claimWake, HELP, wakeText } from '../hooks/register'
 import { settle } from '../hooks/settle'
 import { moment, type Seen, world } from './world'
@@ -875,18 +875,14 @@ test('a push or a new PR is the subcommand, never words inside a message', () =>
   expect(isPushOrPr('git commit -m "C:\\dir\\" ; git push', true)).toBe(true)
 })
 
-test('each commit and push of a plain command is read in its folder, and anything else is not plain', () => {
-  const cases: [string, ReturnType<typeof plainSteps>][] = [
-    ['git commit -m x', [{ folder: undefined }]],
-    ['git -C "C:/a b" commit -m x; git -C /c/wt push', [{ folder: 'C:/a b' }, { folder: 'c:/wt', isPush: true }]],
-    ['cd a; cd b && git push', [{ folder: 'a/b', isPush: true }]],
-    ['git -C a commit && cd /c/x\ngit -C ../wt push', [{ folder: 'a' }, { folder: 'c:/x/../wt', isPush: true }]],
-    ['git commit -m "cd elsewhere; git -C x"', [{ folder: undefined }]],
-    ["git commit -m 'a' 'b'c", null], ['git commit -m a\\ b', null], ['cd - && git commit -m x', null],
-    ['git push origin HEAD:x', null], ['git commit -m x &', null], ['git status', null],
+test('a plain commit or push is read word by word, and anything else is not plain', () => {
+  const cases: [string, boolean | null][] = [
+    ['git commit -m x', false], ['git commit -m "cd elsewhere; git -C x" && git push -u origin y', true],
+    ["git commit -m 'a' 'b'c", null], ['git commit -m a\\ b', null], ['cd a && git commit -m x', null],
+    ['git -C a commit -m x', null], ['git push origin HEAD:x', null], ['git push --all', null],
+    ['git commit -m x &', null], ['git commit -m x\r', null], ['git status', null], ['', null],
   ]
-  for (const [command, steps] of cases) expect([command, plainSteps(command, true)]).toEqual([command, steps])
-  expect(plainSteps('cd C:\\wt; git commit -m x', true, true)).toEqual([{ folder: 'C:\\wt' }])
+  for (const [command, isPush] of cases) expect([command, plainPush(command)]).toEqual([command, isPush])
 })
 
 test('a push in another folder is looked up there', () => {

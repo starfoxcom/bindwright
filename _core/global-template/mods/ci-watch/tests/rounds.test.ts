@@ -156,16 +156,20 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   await redRound($, w, 5)
   // The shell sits on another PR's branch; the red PR's branch is checked out in C:/repo.
   w.seen.checkedOut = { 'C:/session': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
-  w.seen.checkedOut['../repo'] = 'feature/y'
+  w.seen.checkedOut['C:\\other'] = 'feature/y'
   const passes = [
-    'git commit -m "fix the other PR"', 'cd C:/other && git commit -m b && git push',
+    'git commit -m "fix the other PR"', 'git commit -m b && git push',
     'git commit -m "fix #12, don\'t hold" ; git push -u origin feature/y',
   ]
   const refusal = expect.objectContaining({ deny: expect.any(String) })
   const denied = (command: string) => expect.arrayContaining([command, refusal])
   for (const command of passes) expect([command, await bash(command)]).not.toEqual(denied(command))
   expect(await call({ ...editInput, file_path: 'C:/other/b.ts' })).not.toHaveProperty('deny')
+  expect(await call({ ...editInput, file_path: 'C:\\other\\b.ts' })).not.toHaveProperty('deny')
   expect(await call(editInput)).toHaveProperty('deny')
+  expect(await call({ ...editInput, file_path: 'C:\\repo\\a.ts' })).toHaveProperty('deny')
+  // The PowerShell tool keeps its own folder, so its commits wait.
+  expect(await call({ tool: 'PowerShell', command: 'git commit -m x' })).toHaveProperty('deny')
   // Every shape whose branch the reader cannot see in full waits, as it did before the hold was narrowed.
   const waits = [
     'git push origin feature/x', 'git -C C:/repo commit -m "fix it"', '  cd C:/repo && git commit -m x',
@@ -179,6 +183,8 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
     "git commit -m x # don't\ncd C:/repo; git commit -m y # isn't",
     "git commit -m 'msg\nsee <<EOF'\ncd C:/repo\ngit commit -m y",
     'cd "C:/other"/../repo && git commit -m x', 'cd C:/other && git -C ../repo commit -m x',
+    // A folder move or a carriage return, which leave the shell where its text does not say.
+    'cd C:/other && git commit -m b && git push', 'git -C C:/other commit -m b', 'git commit -m x\r\ngit push',
     // Pushes that may send the red branch without naming it plainly.
     'git push origin HEAD:feat"ure"/x', 'git push --all', 'git push origin :',
     "git push origin 'refs/heads/*:refs/heads/*'",
@@ -190,6 +196,9 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   w.seen.cwd = 'C:/repo'
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.cwd = undefined
+  // Refs ignore case on Windows and macOS, so a branch that differs only in case is the red PR's.
+  w.seen.checkedOut['C:/session'] = 'Feature/X'
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
   // A local branch pushed to the red PR's branch under another name is the red PR's too.
   w.seen.checkedOut['C:/session'] = 'try-fix'
   w.seen.upstream = { 'C:/session': 'origin/feature/x' }
