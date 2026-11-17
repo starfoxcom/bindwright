@@ -1456,5 +1456,49 @@ class RunnerChainSweepTest(unittest.TestCase):
         self.check(written + named, None)
 
 
+class ToolRulesSweepTest(unittest.TestCase):
+    """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
+    a comment or a here-document body, always passes, and the same trigger run as a command is
+    always refused. GUARD_SWEEP_SEED replays a failing run."""
+
+    TRIGGERS = (("gh run watch 1", "both"), ("python .github/scripts/size_check.py && git commit -m x", "both"),
+                ("git push && gh pr create", "both"), ("git checkout dev -- .", "both"),
+                ("gh pr merge 5 --admin", "both"), ("node -e \"console.log('a\\\\b')\"", "both"),
+                ("@'\nprint('C:\\\\x')\n'@ | python -", "powershell"),
+                ("cat <<'EOF' | python -\nprint('C:\\\\x')\nEOF", "bash"))
+    # Each shape lists the text that would end it early: a trigger holding one would run, not be mentioned.
+    MENTIONS = {"bash": (("git commit -m \"docs: {t}\"", ('"',)), ("echo ok # {t}", ("\n",)),
+                         ("git commit -F - <<'EOF'\ndocs: {t}\nEOF", ("\nEOF",)),
+                         ("git commit -m \"$(cat <<'EOF'\n{t}\nEOF\n)\"", ("\nEOF",)),
+                         ("git commit -m \"one\n{t}\nthree\"", ('"',))),
+                "powershell": (("git commit -m \"docs: {t}\"", ('"',)), ("<# {t} #>\nls", ("#>",)),
+                               ("ls # {t}", ("\n",)), ("@'\ndocs: {t}\n'@ | git commit -F -", ("\n'@",)),
+                               ("<#\n{t}\n#>\nls", ("#>",)))}
+    SAMPLES = 200
+
+    def setUp(self):
+        import importlib.util
+        import random
+        self.seed = int(os.environ.get("GUARD_SWEEP_SEED") or random.randrange(2 ** 32))
+        self.rng = random.Random(self.seed)
+        path = os.path.join(REPO, "_core", "global-template", "hooks", "tool-rules.py")
+        spec = importlib.util.spec_from_file_location("tool_rules", path)
+        self.hook = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.hook)
+
+    def refused(self, text, shell):
+        return [name for name, test, _ in self.hook.RULES if test(text, shell)]
+
+    def test_a_mention_always_passes_and_a_call_is_always_refused(self):
+        for _ in range(self.SAMPLES):
+            trigger, shells = self.rng.choice(self.TRIGGERS)
+            shell = self.rng.choice(("bash", "powershell") if shells == "both" else (shells,))
+            shapes = [shape for shape, enders in self.MENTIONS[shell] if not any(end in trigger for end in enders)]
+            text = self.rng.choice(shapes).format(t=trigger)
+            replay = f"(replay with GUARD_SWEEP_SEED={self.seed})"
+            self.assertEqual(self.refused(text, shell), [], f"{shell} {text!r} {replay}")
+            self.assertNotEqual(self.refused(trigger, shell), [], f"{shell} {trigger!r} {replay}")
+
+
 if __name__ == "__main__":
     unittest.main()
