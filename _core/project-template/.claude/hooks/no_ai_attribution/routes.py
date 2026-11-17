@@ -7,33 +7,6 @@ from .files import (ENV_VALUE_OPTIONS, ENV_VALUE_SHORT, abbreviates, git_subcomm
 
 
 LEFTHOOK_OFF_VALUES = {"0", "false"}
-# Options of git's writes that take the next word as their value. After a word built at run time
-# in the subcommand place, a literal word right after one of these (`-m x`) is that value, not a
-# written subcommand.
-def exact(*names):
-    """Long options read by their full name only, in the form takes_next_word reads."""
-    return {name: name for name in names}
-
-
-# Long options map each to its shortest accepted prefix, as takes_next_word reads them.
-GIT_VALUE_OPTIONS = ({"-m", "-F", "-C", "-c", "-t", "-s", "-S", "-u", "-o", "-X", "-x"},
-                     exact("--message", "--file", "--template", "--author", "--date", "--trailer",
-                           "--reuse-message", "--reedit-message", "--fixup", "--squash",
-                           "--cleanup", "--strategy", "--strategy-option", "--exec", "--onto",
-                           "--push-option", "--repo", "--git-dir", "--work-tree", "--namespace",
-                           "--config-env"))
-# The options of each wrapper that take the next word as their value (`sudo -u root git`).
-WRAPPER_VALUE_OPTIONS = {
-    "sudo": ({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U"},
-             exact("--user", "--group", "--chdir", "--host", "--prompt", "--role", "--type",
-                   "--other-user", "--close-from", "--command-timeout")),
-    "doas": ({"-u", "-C"}, {}),
-    "exec": ({"-a"}, {}),
-    "env": (ENV_VALUE_SHORT, ENV_VALUE_OPTIONS),
-    "nice": ({"-n"}, exact("--adjustment")),
-    "xargs": ({"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s"},
-              exact("--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-chars")),
-}
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
@@ -164,42 +137,49 @@ def git_route(words):
 
 
 def built_subcommand(words):
-    """Whether git's subcommand comes from a word built at run time with no subcommand written after
-    it (`git "${args[@]}"`, `git "$@" -m x`), so that word may hold any subcommand and its options.
-    A written subcommand is a literal word that is not an option's value and not after `--`, so
-    `git $OPTS commit` is read as usual."""
+    """Whether git's subcommand comes from a word built at run time (`git "${args[@]}"`,
+    `git "$@" -m x`), so that word may hold any subcommand and its options. A subcommand written
+    right after the built words (`git $OPTS commit`) is read as usual; an option there may be one
+    the built word's subcommand reads, so it names none."""
     i = git_subcommand(words)[0]
     if i >= len(words) or isinstance(words[i], str):
         return False
-    previous = ""
-    for word in words[i + 1:]:
-        if word == "--":
-            return True
-        if isinstance(word, str) and not word.startswith("-") and not takes_value(previous, GIT_VALUE_OPTIONS):
-            return False
-        previous = shape_of(word)
-    return True
-
-
-def takes_value(word, options):
-    """Whether `word` is an option that takes the next word as its value, read the getopt way
-    (`-nu root`, but not `-uroot`); `options` is a (short, long) pair."""
-    return word.startswith("-") and takes_next_word(word, *options)
+    following = next((word for word in words[i + 1:] if isinstance(word, str)), None)
+    return following is None or following.startswith("-")
 
 
 def runs_program_at(words, i):
-    """Whether words[i] is the program a command runs: its first word, or the first after wrappers
-    (`sudo -u root`, `env A=1`), their options with their values, and NAME=value words. A word only
-    named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not."""
+    """Whether words[i] may be the program a command runs: its first word, or one after wrappers
+    (`sudo -u root`, `env A=1`), their options and NAME=value words. A word right after an option
+    may be its value or the program, so both readings count. A word only named as an argument
+    (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not."""
     j = 0
     while j < i and program(words[j:]) in WRAPPERS:
-        flags = WRAPPER_VALUE_OPTIONS.get(program(words[j:]), (set(), {}))
-        if program(words[j:]) == "command" and any(text_of(w) in ("-v", "-V") for w in words[j + 1:i]):
+        if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
             return False
         j += 1
-        while j < i and (shape_of(words[j]).startswith("-") or re.match(r"\w+=", shape_of(words[j]))):
-            j += 2 if takes_value(shape_of(words[j]), flags) else 1
+        after_option = False
+        while j < i:
+            shape = shape_of(words[j])
+            if shape.startswith("-") or re.match(r"\w+=", shape):
+                after_option = shape.startswith("-")
+            elif after_option:
+                after_option = False
+            else:
+                break
+            j += 1
     return j == i
+
+
+def only_looks_up(words):
+    """Whether `command`'s own options (`-v`, `-pV`) make it print what a name is, not run it."""
+    for word in words:
+        shape = shape_of(word)
+        if not shape.startswith("-") or shape.startswith("--"):
+            return False
+        if "v" in shape or "V" in shape:
+            return True
+    return False
 
 
 def literal_git_route(words):
@@ -297,9 +277,9 @@ def hook_route(groups, assignments):
     for words in commands:
         for i, word in enumerate(words):
             if program(words[i:]) == "git" or is_run_time_git(word):
-                if program(words[i:]) == "git" and runs_program_at(words, i) and built_subcommand(words[i:]):
-                    return "built"
                 route = git_route(words[i:])
                 if route:
                     return route
+                if program(words[i:]) == "git" and runs_program_at(words, i) and built_subcommand(words[i:]):
+                    return "built"
     return None

@@ -64,8 +64,8 @@ setting or unsetting `core.hooksPath` or a `hook.` setting (`git config`,
 reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 `--reedit-message`), and turning lefthook off (`LEFTHOOK=0` or `false` set
 by the command, `lefthook uninstall`), and a git call whose subcommand
-comes from a word built at run time with no literal word after it other
-than options and their values (`git "${args[@]}"`, `git "$@"`,
+comes from a word built at run time with no literal word other than an
+option written right after it (`git "${args[@]}"`, `git "$@" -m x`,
 PowerShell's `git @args`). Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message that names one passes.
 A word built at run time counts for the literal text around its run-time
@@ -84,7 +84,7 @@ the shell builds at run time from a word that does not start with `-` as
 written (`$F` holding `-F msg.txt`), a script PowerShell decodes
 (`-EncodedCommand`), a git named at run time whose subcommand is built too
 (`$GIT "$@"`), one inside `bash -c` whose subcommand is built, one built
-at run time and followed by a literal word such as a pathspec
+at run time and followed right away by a literal word such as a pathspec
 (`git "$@" .`), a write whose text a redirection holding `&` splits
 (`git 2>&1 commit`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
@@ -160,7 +160,7 @@ GH_WRITE = re.compile(
 # A git call that may take its subcommand from a word built at run time (`git "${args[@]}"`,
 # PowerShell's `git @args`): a word starting with `$` or `@` after git. It only sends the command
 # to the parser, whose reading decides; a command the parser cannot read is not refused for it.
-GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?[ \t][\"']?[$@`]", re.I)
+GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?[ \t][\"']?[$@`(]", re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.
