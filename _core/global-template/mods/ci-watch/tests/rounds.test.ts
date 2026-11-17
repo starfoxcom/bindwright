@@ -157,6 +157,22 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
 })
 
+// The bar is fixed when the step back latches, so a count file another session is rewriting meanwhile
+// cannot lower it.
+test('a step back latched at the 8th red round holds until five lookups ran', async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: ['Edit', 'WebSearch'] }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await redRound($, w, 7)
+  w.seen.files.set(path, 'not json')
+  for (const query of ['a', 'b', 'c']) await $.tool.call({ tool: 'WebSearch', query } as never)
+  const held = String(((await $.tool.call(editInput as never)) as { deny?: string }).deny)
+  expect(held).toContain('at least 5 different ways')
+  expect(held).toContain('2 more to go')
+  for (const query of ['d', 'e']) await $.tool.call({ tool: 'WebSearch', query } as never)
+  expect(await $.tool.call(editInput as never)).not.toHaveProperty('deny')
+})
+
 // The step back is about the red PR, so work on another branch goes on; an unreadable branch still waits.
 test("a step back holds only work on the red PR's branch", async ($, on) => {
   const w = world(on)

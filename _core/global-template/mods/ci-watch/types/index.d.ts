@@ -29,9 +29,12 @@ export type Watch = {
   hasWorkflows?: boolean
   /**
    * Set by the red wake that asks for a step back: the distinct topics looked up on the web since. While set,
-   * the session's edits, commits and pushes wait; it clears at three topics, a green round or `/ci-watch stop`.
+   * the session's edits, commits and pushes wait; it clears at `stepBackNeeded` topics, a green round or
+   * `/ci-watch stop`.
    */
   stepBackTopics?: string[]
+  /** The distinct lookups the latched step back takes, fixed when it latched: three, or five near the hard stop. */
+  stepBackNeeded?: number
 }
 
 /** The settings pane's own state: the last refusal per field. */

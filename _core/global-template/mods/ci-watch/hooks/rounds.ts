@@ -3,13 +3,15 @@
 // research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
 // leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
 // also latches it on the watch: the session's edits, commits and pushes wait until three distinct web
-// lookups ran (`withTopic`), so the fix comes after the research. The 10th red round is the hard stop: the
-// PR is closed without merging and rebuilt from its base branch in a new PR, and the session's commits and
-// pushes wait until it is closed. A round is a watch of
+// lookups ran, five from the 8th red round on (`withTopic`), so the fix comes after the research. The
+// 10th red round is the hard stop: the PR is closed without merging and rebuilt from its base branch in a
+// new PR, and the session's commits and pushes wait until it is closed. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
 // counted. Pure, no engine access.
+
+import type { Watch } from '../types'
 
 /** One settled watch of a PR's pushed head: whether a check failed. */
 export type Round = { sha: string; red: boolean }
@@ -98,6 +100,11 @@ export function lookupTopic(e: unknown): string | undefined {
   return String(input.query ?? input.url ?? input.prompt ?? '')
 }
 
+/** A watch's latched step back, carried onto the watch that replaces it. */
+export function stepBackOf(w: Watch): Pick<Watch, 'stepBackTopics' | 'stepBackNeeded'> {
+  return { stepBackTopics: w.stepBackTopics, stepBackNeeded: w.stepBackNeeded }
+}
+
 /** A latched step back's topics with one more lookup, lower-cased and trimmed, a repeat counted once;
  * undefined once `needed` distinct topics were looked up, which ends the step back. */
 export function withTopic(topics: readonly string[], topic: string, needed = SOURCES_NEEDED): string[] | undefined {
@@ -106,10 +113,13 @@ export function withTopic(topics: readonly string[], topic: string, needed = SOU
   return next.length >= needed ? undefined : next
 }
 
-export function researchRefusal(pr: string, red: number, owed: number): string {
+export function researchRefusal(
+  pr: string, red: number, needed = SOURCES_NEEDED, topics: readonly string[] = [],
+): string {
+  const owed = needed - topics.length
   return (
     `${pr} has had ${red} red rounds in a row, so edits, commits and pushes wait for a step back. Look up ` +
-    `at least ${sourcesNeeded(red)} different ways others solved this class of problem (${owed} more to go; ` +
+    `at least ${needed} different ways others solved this class of problem (${owed} more to go; ` +
     'each WebSearch, WebFetch or web-fetch agent call on a new topic counts once), compare them against ' +
     'each other, pick the one that removes the whole class most simply, tell the user which one won and ' +
     'why, then make the fix. Where web tools cannot run in this session, only the user can lift the hold, ' +

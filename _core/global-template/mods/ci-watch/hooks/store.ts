@@ -1,7 +1,7 @@
 // Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import { isResearchDue, recordRound, redStreak, ROUNDS_FILE } from './rounds'
+import { isResearchDue, recordRound, redStreak, ROUNDS_FILE, sourcesNeeded } from './rounds'
 import type { PrRounds } from './rounds'
 
 // The engine's fs makes no missing folders, so the data folder is made through node, once per load.
@@ -47,8 +47,9 @@ async function updateRounds($: EngineInterface, key: string, change: (pr?: PrRou
 // Each watch that settled on a pushed head is one round: red when a check failed. A watch that ran out of
 // time says nothing about the checks and is no round. A failed write leaves the count as it was. Returns
 // the PRs, as `owner/name#N`, whose red round asks for a step back.
-export async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<Set<string>> {
-  const stepBacks = new Set<string>()
+/** Records each settled round; returns, per PR whose red round asks for a step back, the lookups it takes. */
+export async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<Map<string, number>> {
+  const stepBacks = new Map<string, number>()
   for (const w of settled) {
     // A silent watch follows a head someone else pushed: no round of this session's.
     if (w.isSilent || (w.outcome !== 'failed' && w.outcome !== 'passed')) continue
@@ -56,7 +57,7 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
     const key = `${w.repo}#${w.number}`
     const counted = (pr?: PrRounds) => {
       const next = recordRound(pr, w.headSha, red)
-      if (red && isResearchDue(redStreak(next))) stepBacks.add(key)
+      if (red && isResearchDue(redStreak(next))) stepBacks.set(key, sourcesNeeded(redStreak(next)))
       return next
     }
     await updateRounds($, key, counted).catch(() => stepBacks.delete(key))
