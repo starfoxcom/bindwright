@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.0.0] — 2026-11-17
+
 ### Breaking
 
 - **Bindwright's own marketplace is gone: the plugin ships only through the wrights marketplace.** This repo no longer lists the plugin in `.claude-plugin/marketplace.json`, so an install added with `/plugin marketplace add starfoxcom/bindwright` stops getting updates. Move it with `/plugin marketplace remove bindwright`, then `/plugin marketplace add starfoxcom/wrights` and `/plugin install bindwright@wrights`. An install from `starfoxcom/wrights` or the plugin directory needs nothing.
