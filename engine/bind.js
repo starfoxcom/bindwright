@@ -132,7 +132,9 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
   }
   if (a.advanced.precommit !== "none") {
     const profile = precommitProfiles[a.advanced.precommit];
-    plan.push({ src: CORE + profile.template_ref, dest: profile.config_filename });
+    for (const file of [profile, ...(profile.extra_files ?? [])]) {
+      plan.push({ src: CORE + file.template_ref, dest: file.config_filename });
+    }
   }
   // Plain code-unit order: localeCompare depends on the browser's locale,
   // and the Python twin sorts the same way.

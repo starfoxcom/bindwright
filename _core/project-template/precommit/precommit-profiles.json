@@ -13,7 +13,8 @@
     "optional_fields": {
       "runtime_note": "string - runtime/toolchain the user must have (shown in install-hint)",
       "_skip_install": "bool - true for 'none' (write nothing, still run gate cleanup)",
-      "_uses_user_input": "bool - true for 'custom' (hint-only stub)"
+      "_uses_user_input": "bool - true for 'custom' (hint-only stub)",
+      "extra_files": "array of {template_ref, config_filename} - further files the manager reads, written beside the config (husky reads one file per git hook)"
     }
   },
   "lefthook": {
@@ -28,6 +29,10 @@
     "config_filename": ".husky/pre-commit",
     "config_format": "POSIX-sh",
     "template_ref": "precommit/husky-pre-commit.template",
+    "extra_files": [
+      { "template_ref": "precommit/husky-commit-msg.template", "config_filename": ".husky/commit-msg" },
+      { "template_ref": "precommit/husky-pre-push.template", "config_filename": ".husky/pre-push" }
+    ],
     "activation_command": "npm install --save-dev husky && npm pkg set scripts.prepare=husky && npm run prepare",
     "url": "https://typicode.github.io/husky",
     "runtime_note": "requires Node + package.json (activation rides the npm prepare script)"
