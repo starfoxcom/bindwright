@@ -13,7 +13,8 @@
 // seat, cycled), pin the judges; unpinned judges run on the session model. judge_effort: 'high'.
 // allow_credits: true to run fable on pro, which bills paid usage credits. dry_run: true to
 // validate and count without calling an agent.
-// Cost: arms x rounds x tasks reviews, plus tasks x judges judge runs.
+// Cost: arms x rounds x tasks reviews, plus tasks x judges judge runs; a task whose every review
+// failed gets no judge, and a run where every review failed stops before judging.
 // Invoke: Workflow({scriptPath: "<helper>/workflows/review-trial.js", args: {...}})
 
 export const meta = {
@@ -304,17 +305,22 @@ function judgeOptions(config, task, j) {
   }
 }
 
-// judged[k] holds task k's judge outputs, one per seat (null when a judge died).
+// judged[k] holds task k's judge outputs, one per seat (null when a judge died). A task with no
+// review at all gets no judge, since there is nothing to score: its list is empty.
 async function judgeAll(config, reviewIds) {
   const jobs = []
   config.tasks.forEach((task, k) => {
+    if (reviewIds[k].length === 0) {
+      log(`${task.id}: every review is missing, so no judge runs on it`)
+      return
+    }
     const prompt = judgePromptOf(config, task, reviewIds[k])
     for (let j = 0; j < config.judges; ++j) {
-      jobs.push(() => agent(prompt, judgeOptions(config, task, j)))
+      jobs.push({ k, run: () => agent(prompt, judgeOptions(config, task, j)) })
     }
   })
-  const flat = await parallel(jobs)
-  return config.tasks.map((_, k) => flat.slice(k * config.judges, (k + 1) * config.judges))
+  const flat = await parallel(jobs.map((job) => job.run))
+  return config.tasks.map((_, k) => flat.filter((_, n) => jobs[n].k === k))
 }
 
 // ── Ranking: fixed before any result exists ──
@@ -512,5 +518,9 @@ for (let i = 0; i < config.arms.length; ++i) {
 
 phase('Judge')
 const reviewIds = config.tasks.map((_, k) => reviewIdsOf(config, results, k))
+if (reviewIds.every((ids) => ids.length === 0)) {
+  throw new Error('Every review failed (a usage limit or a crash), so no judge ran; '
+    + 'run the trial again once the arms can run')
+}
 const judged = await judgeAll(config, reviewIds)
 return reportOf(config, { results, spends, reviewIds, judged })
