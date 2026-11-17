@@ -27,10 +27,9 @@ INTERPRETER = r"(?:python3?|py|node|deno|bun|perl|ruby|php|bash|sh|zsh|pwsh|powe
 INTERPRETER_WORD = re.compile(r"(?:^|[\s;&|(])" + INTERPRETER + r"(?=[\s;&|)]|$)", re.I)
 # A here-document opener, its word quoted (`<<'EOF'`, `<<"EOF"`), escaped (`<<\EOF`) or bare.
 HEREDOC = re.compile(r"<<(-?)[ \t]*\\?(['\"]?)([A-Za-z_][\w-]*)\2")
-# A `<<` that is not part of a here-string (`<<<`), and the spans where a `<<` opens nothing:
-# arithmetic (`$((1 << n))`) and a comment.
+# A `<<` that is not part of a here-string (`<<<`), and arithmetic, where a `<<` opens nothing.
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)")
-NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)|(?:^|(?<=\s))#[^\n]*")
+NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)")
 HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
 # The separators between the commands of one line; a pipe joins two parts of one command.
 LIST_SEPARATOR = re.compile(r"&&|\|\||;")
@@ -40,11 +39,15 @@ INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t
                     re.I | re.S)
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
-# Quoted strings and escapes as each shell reads them, across lines: bash escapes with a
-# backslash, PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is
-# plain text (`"C:\"`). A quote that never closes runs to the end of the command.
-QUOTED = {"bash": re.compile(r"\\.|'[^']*(?:'|\Z)|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(r"`.|'(?:[^']|'')*(?:'|\Z)|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
+# Comments, quoted strings and escapes as each shell reads them, in one pass across lines, so
+# whichever starts first wins: a `#` that starts a word outside quotes comments out the rest of
+# its line, and a quote character in a comment opens nothing. Bash escapes with a backslash,
+# PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is plain text
+# (`"C:\"`). A quote that never closes runs to the end of the command.
+COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
+QUOTED = {"bash": re.compile(COMMENT + r"|\\.|'[^']*(?:'|\Z)|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
+          "powershell": re.compile(COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)",
+                                   re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 
