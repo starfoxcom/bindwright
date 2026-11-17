@@ -1254,5 +1254,71 @@ class HookSourceTest(unittest.TestCase):
                     compile(source, rel, "exec")
 
 
+class RunnerChainSweepTest(unittest.TestCase):
+    """A seeded sweep of the spellings a git call can take behind runners, read by the real parser
+    and the attribution guard's routes: a subcommand from a list is always refused, a written one
+    and a git only named as an argument always pass. GUARD_SWEEP_SEED replays a failing run."""
+
+    RUNNERS = ("sudo", "sudo -E", "sudo -u root", "sudo -nu root", "sudo --preserve-env", 'sudo "$flag"',
+               "sudo $SUDO_FLAGS", "env", "env A=1", "env -i", "env -u X", 'env "${vars[@]}"', 'env "$assign"',
+               "timeout 30", "timeout -s KILL 30", "timeout --foreground 30", "timeout -- 30",
+               'timeout "$killopt" 30', "nice", "nice -n 5", "nice --adj 5", 'nice "$NICE_ARG"', "chrt 99",
+               "chrt -f 99", 'chrt "$policy" 99', "taskset 0x1", "taskset -c 0", "taskset $OPTS 0", "stdbuf -oL",
+               "setsid", "ionice -c 2", "nohup", "exec", "exec -a name", "command", "time", "noglob", "xargs")
+    GITS = ("git", "git.exe", '"git"', "g'i't", "/usr/bin/git")
+    GIT_OPTIONS = ("", "-C sub", '-C "my dir"', "-c user.name=x", "--no-pager", '-C "$d"', "--git-dir=$d",
+                   "-q 2>/dev/null")
+    LISTS = ('"$@"', '"${args[@]}"', "$SUB", '"${a[@]}"')
+    TAILS = ("", "-m x", "--no-verify -m x", '-sm "msg"', "-- config")
+    SUBCOMMANDS = ("log", "status", "diff --stat", "show", "rev-parse HEAD")
+    NAMERS = ("echo", "grep", "printf %s", "cp -r")
+    SAMPLES = 300
+
+    def setUp(self):
+        import random
+        import sys
+        self.seed = int(os.environ.get("GUARD_SWEEP_SEED") or random.randrange(2 ** 32))
+        self.rng = random.Random(self.seed)
+        sys.path.insert(0, os.path.join(REPO, "_core", "global-template", "hooks"))
+        from no_ai_attribution.routes import hook_route
+        self.hook_route = hook_route
+
+    def chain(self):
+        return [self.rng.choice(self.RUNNERS) for _ in range(self.rng.randrange(4))]
+
+    def git(self):
+        return [self.rng.choice(self.GITS), self.rng.choice(self.GIT_OPTIONS)]
+
+    def routes(self, commands):
+        """The guard's route for each command, all read in one parser call. The input goes as bytes,
+        as the guard sends it: a text pipe on Windows would turn each LF into CR LF."""
+        if not shutil.which("node"):
+            self.skipTest("the parser needs Node")
+        result = subprocess.run(["node", os.path.join(HELPER, "hooks", "shell-words.mjs"), "bash"],
+                                input="\n".join(commands).encode("utf-8"), capture_output=True, timeout=60)
+        parsed = json.loads(result.stdout)
+        self.assertFalse(parsed["error"], f"seed {self.seed}")
+        self.assertEqual(len(parsed["commands"]), len(commands), f"seed {self.seed}")
+        return [self.hook_route([([words], None, None)], [], only_built=True) for words in parsed["commands"]]
+
+    def check(self, commands, expected):
+        for command, route in zip(commands, self.routes(commands)):
+            self.assertEqual(route, expected, f"{command!r} (replay with GUARD_SWEEP_SEED={self.seed})")
+
+    def test_a_subcommand_from_a_list_is_always_refused(self):
+        self.check([" ".join(filter(None, self.chain() + self.git()
+                                    + [self.rng.choice(self.LISTS), self.rng.choice(self.TAILS)]))
+                    for _ in range(self.SAMPLES)], "built")
+
+    def test_a_written_subcommand_and_a_named_git_always_pass(self):
+        written = [" ".join(filter(None, self.chain() + self.git()
+                                   + [self.rng.choice(self.SUBCOMMANDS), self.rng.choice(self.LISTS)]))
+                   for _ in range(self.SAMPLES)]
+        named = [" ".join(filter(None, [self.rng.choice(self.NAMERS)] + self.chain() + self.git()
+                                 + [self.rng.choice(self.LISTS)]))
+                 for _ in range(self.SAMPLES)]
+        self.check(written + named, None)
+
+
 if __name__ == "__main__":
     unittest.main()
