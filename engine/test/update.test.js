@@ -472,3 +472,47 @@ test("a move into a path the project owns is not made, and the old file is repor
   }
   if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
 });
+
+test("a file held back for a later PR keeps its old base, so the next update offers it", needsPython, async () => {
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    let today;
+    const repo = await makeRepo((r) => {
+      today = r.read(RULE);
+      r.pristine.files[RULE] = older(today);
+      r.write(RULE, older(today));
+    });
+    const run = (flags, input) =>
+      JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
+    const early = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE] }));
+    assert.match(early.error, /No record from before the last update/, cmd);
+    // A record that cannot be saved stops the update before it writes anything.
+    const blocker = repo.at(".git/bindwright-pristine-before.json");
+    mkdirSync(blocker);
+    const [ruleBefore, pristineBefore] = [repo.read(RULE), repo.read(PRISTINE)];
+    assert.ok(run(["--update", repo.at("")]).error, `${cmd}: an unsavable record is an error`);
+    assert.deepEqual([repo.read(RULE), repo.read(PRISTINE)], [ruleBefore, pristineBefore], `${cmd}: nothing written`);
+    rmSync(blocker, { recursive: true });
+    // The update moves the file's base to today's text; the file itself is then held back.
+    assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), cmd);
+    repo.write(RULE, older(today));
+    const moved = JSON.parse(repo.read(PRISTINE));
+    delete moved.files[OTHER]; // as an update records a file the templates dropped
+    repo.write(PRISTINE, JSON.stringify(moved));
+    const kept = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE, OTHER, "docs/new.md"] }));
+    assert.deepEqual(kept, { kept: [RULE, OTHER], dropped: ["docs/new.md"] }, cmd);
+    const order = Object.keys(JSON.parse(repo.read(PRISTINE)).files);
+    assert.deepEqual(order, [...order].sort(), `${cmd}: a base put back lands at its sorted place`);
+    assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), `${cmd}: the held-back change comes again`);
+    // Names an object inherits in JavaScript are plain paths, and a record with no files is refused.
+    const inherited = run(["--keep-base", repo.at("")], JSON.stringify({ paths: ["constructor", "__proto__"] }));
+    const afterInherited = repo.read(PRISTINE);
+    repo.write(PRISTINE, "[]");
+    const broken = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [] }));
+    outs.push({ early, kept, inherited, afterInherited, broken });
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  assert.deepEqual(outs[0].inherited, { kept: [], dropped: ["constructor", "__proto__"] });
+  assert.match(outs[0].broken.error, /holds no record of the files setup wrote/);
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report and write alike");
+});

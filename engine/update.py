@@ -15,6 +15,7 @@ from model import expand_answers
 STAGING = ".bindwright/incoming/"
 ANSWERS = ".bindwright/project.json"
 PRISTINE = ".bindwright/pristine.json"
+BEFORE = "bindwright-pristine-before.json"  # in git's folder: the record the last update replaced
 
 # What can happen to a file; update.js explains each one.
 OUTCOMES = [
@@ -240,6 +241,11 @@ def run_update(root, bind_with, version, state_json):
             files[path] = pristine["files"][base]
         else:
             files.pop(path, None)
+    # The replaced record is saved first, so a failure to save it stops the update before any repo write.
+    before = _before_path(root)
+    if before is not None:
+        with open(before, "w", encoding="utf-8", newline="") as fh:
+            fh.write(saved)
     for path, text in plan["write"]:
         _put(root, path, text)
     for path, text in plan["stage"]:
@@ -252,3 +258,64 @@ def run_update(root, bind_with, version, state_json):
     out["renamed"] = plan["renamed"]
     out["skipped"] = skipped
     return out
+
+
+def _record_of(text, what):
+    """See recordOf in update.js: a pristine record with a files object, or refused naming `what`."""
+    try:
+        record = json.loads(text)
+    except ValueError:
+        record = None
+    if not (isinstance(record, dict) and isinstance(record.get("files"), dict)):
+        raise ValueError("%s holds no record of the files setup wrote" % what)
+    return record
+
+
+def _before_path(root):
+    """See beforePath in update.js: the file in git's folder holding the record the last update replaced."""
+    try:
+        out = subprocess.run(["git", "-C", root, "rev-parse", "--git-path", BEFORE],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    try:
+        path = out.stdout.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None
+    return path if os.path.isabs(path) else os.path.join(root, path)
+
+
+def keep_base(root, paths, state_json):
+    """See keepBase in update.js: each path's base goes back to the record the last update replaced."""
+    bad = [p for p in paths if not _safe(p)]
+    if bad:
+        raise ValueError("Refusing paths outside the repo: %s" % ", ".join(bad))
+    current = _reader(root)(PRISTINE)
+    if current is None:
+        raise ValueError("%s is missing: this repo was not set up with /bindwright:setup" % PRISTINE)
+    what = "the record the last update replaced"
+    saved = _before_path(root)
+    previous = None if saved is None else read_state(saved, what)
+    if previous is None:
+        raise ValueError("No record from before the last update: run /bindwright:update first")
+    try:
+        text = previous.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("%s is not UTF-8 text" % what)
+    before = _record_of(text.replace("\r\n", "\n"), what)["files"]
+    state = _record_of(current, PRISTINE)
+    result = {"kept": [], "dropped": []}
+    for path in paths:
+        if path in before:
+            state["files"][path] = before[path]
+            result["kept"].append(path)
+        else:
+            state["files"].pop(path, None)
+            result["dropped"].append(path)
+    # Sorted as plan_update writes them, so a base put back lands at its place, not at the end.
+    state["files"] = {p: state["files"][p] for p in sorted(state["files"], key=_code_units)}
+    refuse_links(root, [PRISTINE])
+    _put(root, PRISTINE, state_json(state))
+    return result

@@ -8,11 +8,14 @@ import {
   lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
 import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
+
+// The file in git's folder that holds the pristine record the last update replaced.
+const BEFORE = "bindwright-pristine-before.json";
 
 // The rendered repo files under the paths they belong at, as the pristine
 // render records them: staged ones without the staging prefix, and none of
@@ -258,6 +261,9 @@ export async function runUpdate(root, { bindWith, version }) {
     if (base in pristine.files) plan.pristine.files[path] = pristine.files[base];
     else delete plan.pristine.files[path];
   }
+  // The replaced record is saved first, so a failure to save it stops the update before any repo write.
+  const before = beforePath(root);
+  if (before !== null) writeFileSync(before, saved);
   for (const [path, text] of plan.write) put(root, path, text);
   for (const [path, text] of plan.stage) {
     if (!skipped.includes(path.slice(STAGING.length))) put(root, path, text, "wx");
@@ -265,4 +271,69 @@ export async function runUpdate(root, { bindWith, version }) {
   for (const path of plan.remove) removeMoved(root, path);
   put(root, PRISTINE, stateJson(plan.pristine));
   return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
+}
+
+// A pristine record parsed from its JSON text, with a files object; anything else is refused,
+// naming `what`.
+function recordOf(text, what) {
+  const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  let record;
+  try {
+    record = JSON.parse(text);
+  } catch {
+    record = null;
+  }
+  if (!isObject(record) || !isObject(record.files)) throw new Error(`${what} holds no record of the files setup wrote`);
+  return record;
+}
+
+// Where an update keeps the record it replaced, as dpkg and ucf keep a config file's previous copy:
+// inside git's own folder, so it is never committed, also where .bindwright/ stays out of git. Null
+// outside a git repo.
+function beforePath(root) {
+  try {
+    const args = ["-C", root, "rev-parse", "--git-path", BEFORE];
+    const out = execFileSync("git", args, { stdio: ["ignore", "pipe", "ignore"] });
+    const path = decode(out, "git's answer").trim();
+    return isAbsolute(path) ? path : join(root, path);
+  } catch {
+    return null;
+  }
+}
+
+// Puts each path's base back to the one in the record the last update replaced, for files it
+// changed that ship in a later PR: a base older than the file reads as unchanged on the next
+// update and moves on, while a base newer than the file would hide the change for good. A path
+// that record lacks loses its base, so the next update adds it again.
+export function keepBase(root, paths) {
+  const bad = paths.filter((p) => !safe(p));
+  if (bad.length) throw new Error(`Refusing paths outside the repo: ${bad.join(", ")}`);
+  const current = reader(root)(PRISTINE);
+  if (current === null) throw new Error(`${PRISTINE} is missing: this repo was not set up with /bindwright:setup`);
+  const saved = beforePath(root);
+  const previous = saved === null ? null : readState(saved, "the record the last update replaced");
+  if (previous === null) throw new Error("No record from before the last update: run /bindwright:update first");
+  const what = "the record the last update replaced";
+  const before = recordOf(decode(previous, what).replace(/\r\n/g, "\n"), what).files;
+  const state = recordOf(current, PRISTINE);
+  const result = { kept: [], dropped: [] };
+  const files = new Map(Object.entries(state.files));
+  for (const path of paths) {
+    if (Object.hasOwn(before, path)) {
+      files.set(path, before[path]);
+      result.kept.push(path);
+    } else {
+      files.delete(path);
+      result.dropped.push(path);
+    }
+  }
+  // Sorted as planUpdate writes them, so a base put back lands at its place, not at the end.
+  // defineProperty, since a plain assignment to "__proto__" would set the prototype instead.
+  state.files = {};
+  for (const path of [...files.keys()].sort()) {
+    Object.defineProperty(state.files, path, { value: files.get(path), enumerable: true, writable: true });
+  }
+  refuseLinks(root, [PRISTINE]);
+  put(root, PRISTINE, stateJson(state));
+  return result;
 }
