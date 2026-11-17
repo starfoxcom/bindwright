@@ -484,10 +484,12 @@ jobs:
       request: ${{ steps.answer.outputs.request }}
       reviewer: ${{ steps.credits-answer.outputs.ok == 'yes' && format('{0} {1} (API credits)', needs.init-gate.outputs.routine_model, needs.init-gate.outputs.routine_effort) || steps.main-answer.outputs.ok == 'yes' && format('{0} {1}', needs.init-gate.outputs.routine_model, needs.init-gate.outputs.routine_effort) || steps.backup-answer.outputs.ok == 'yes' && format('{0} {1} (backup)', needs.init-gate.outputs.routine_fallback_model, needs.init-gate.outputs.routine_fallback_effort) || 'none' }}
     env:
-      # Every curl in this workflow starts with -q and npm reads no user
-      # config, so on a self-hosted runner reused between jobs, a ~/.curlrc
-      # or ~/.npmrc an earlier job left cannot change a download or the CLI
-      # install.
+      # Every curl in this workflow starts with -q, and npm reads neither its
+      # user config nor its global one (the first step points that at an
+      # empty file of this job's own), so on a self-hosted runner reused
+      # between jobs, a ~/.curlrc, a ~/.npmrc or the Node folder's
+      # etc/npmrc that an earlier job left cannot change a download or the
+      # CLI install.
       NPM_CONFIG_USERCONFIG: /dev/null
       # What every review attempt returns (Step 3): the comment to post, and
       # the deep-review request ("" when it did not escalate).
@@ -638,6 +640,15 @@ jobs:
       checks: read
       statuses: read
     steps:
+      # A file of the job's own: npm refuses /dev/null as both its user and
+      # its global config, a path under /dev/null is a real folder path in
+      # Git Bash on Windows, and job-level env cannot name the temp folder.
+      - name: Keep npm off the runner's global config
+        shell: bash
+        run: |
+          : > "$RUNNER_TEMP/empty-npmrc"
+          echo "NPM_CONFIG_GLOBALCONFIG=$RUNNER_TEMP/empty-npmrc" >> "$GITHUB_ENV"
+
       # As in Project triggers: a full checkout starts from a fresh clone.
       - name: Drop a partial clone left by an earlier job
         run: |
