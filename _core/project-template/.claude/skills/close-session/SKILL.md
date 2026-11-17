@@ -94,6 +94,19 @@ Run `python3 .claude/scripts/research-adherence.py` from the repo root (`python`
 When `$HOME/.findwright/helper/node_modules/findwright/src/cli.mjs` exists and `node --version` shows 22.16 or later on the 22 line, or 24 or later, run `node "$HOME/.findwright/helper/node_modules/findwright/src/cli.mjs" hits` from the repo root; otherwise say the hit rate is not recorded on this computer, and why, and go on. It scores this session's FindWright searches (a hit when the file the session opened next was in the answer), records the figure in `.findwright/hits.jsonl` and prints `{rate, scored, goal, assess}`. Report the rate against the goal (90% unless `.findwright/config.json` sets `goal`). When it also prints `saved`, add one line from it: with `saved.main` set, "and you saved an estimated $<main> in the main session and $<helpers> in helper sessions", said as an estimate that counts only the extra turns a missed search costs, so it errs low; with `saved.main` null, say the saving is not measurable yet and give `saved.why`. Name each model in `saved.unpriced` as left out of the estimate. When `assess` is true, the last three sessions all fell short: run the same command with `assess`, explain each cause and suggested change in plain words, and apply a change to `.findwright/config.json` only on the user's yes.
 
 <!-- TOGGLE:code_research:findwright END -->
+## Pruning pass
+
+Rules, tests and memory only ever grow, and a long rule file is where a session reads past a rule. So at most once a month, offer to prune. `.bindwright/last-pruning` holds the date of the last pass, offered or run; when it is less than 30 days old, skip this step. Otherwise ask once: "It has been a month: look for rules, tests and memory entries nothing uses any more?" On a no, write today's date and go on.
+
+On a yes, list the candidates, each with one line on why:
+
+- Rule text in `.claude/rules/` and `CLAUDE.md` that repeats another file, or names a file, command or setting that no longer exists.
+- Tests that are skipped for good, or that fail for the same reason as another test in their file (`.claude/rules/testing.md`, rule 2).
+- Memory entries in `~/.claude/projects/<project-slug>/memory/` that name a file or function that no longer exists, repeat another entry, or say what the repo's rules already say.
+- Hooks in `.claude/settings.json` whose file is gone.
+
+Propose each removal one at a time and make it only on a yes; a removal from the repo goes into this session's commit. Then write today's date to `.bindwright/last-pruning`. The file stays out of git: the first time, add the line `.bindwright/last-pruning` to the file `git rev-parse --git-path info/exclude` prints.
+
 ## Project steps
 
 If `.bindwright/session-steps.md` lists "Extra close steps", run them now, except those marked *after the hand-off*: they run at the end, before the last message.
