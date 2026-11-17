@@ -93,7 +93,7 @@ def parse(cmd, shell, cwd, deadline):
     if not all(isinstance(word, (str, dict)) for word in words):
         return None, None, BROKEN
     if not isinstance(data.get("assignments"), list) or any(
-            isinstance(word, dict) and not {"shape", "canBeEmpty"} <= word.keys() for word in words):
+            isinstance(word, dict) and not {"shape", "canBeEmpty", "canBeMany"} <= word.keys() for word in words):
         return None, None, OLD_HELPER
     if any(isinstance(word, dict) and not is_word_list(word.get("braces", [])) for word in words):
         return None, None, BROKEN
