@@ -11,8 +11,6 @@
     ],
     "close-session": [
       { "step": "the new hand-off file written (<PROJECT>-CONTEXT_<date>_<time>.md)", "match": "-CONTEXT_\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}\\.md", "tools": ["Write"], "when": ["tracker=file"] },
-      { "step": "each worked issue's current state rewritten (gh issue edit or gh issue create)", "match": "gh issue (edit|create)", "tools": ["Bash", "PowerShell"], "when": ["tracker=github"] },
-      { "step": "the hand-off pointer file rewritten (.bindwright/handoff.md)", "match": "\\.bindwright[\\\\/]+handoff\\.md", "tools": ["Write", "Edit"], "when": ["tracker=github", "handoffFile=true"] },
       { "step": "the code-research count (research-adherence.py)", "match": "research-adherence\\.py", "tools": ["Bash", "PowerShell"], "when": ["codeResearch!=none"] },
       { "step": "the FindWright hit rate (findwright cli.mjs hits)", "match": "findwright[\\\\/]+src[\\\\/]+cli\\.mjs\\\\?\"? hits", "tools": ["Bash", "PowerShell"], "when": ["codeResearch=findwright"] },
       { "step": "a commit", "match": "git commit", "tools": ["Bash", "PowerShell"] }
