@@ -127,6 +127,51 @@ test("a subagent's tool calls are not counted", { skip }, () => withLayout((layo
   assert.notEqual(run(layout, toolCall).context, null);
 }));
 
+const SLIPPED = [
+  "## Done", "", "**Outcome:** it works — mostly — and basically holds.", "- **Next:** ship it", "",
+  // Emphasis, bold that ends a sentence, names an option or sits in a hyphenated word, and two clauses:
+  // none of it is a slip.
+  "**Do not** run it yet.", "**Don't merge until CI is green.**", "- **Merge now**",
+  "Is that not just a typo? I checked but found nothing.", "**Ctrl**-C stops it.",
+  "- **Pre**-release builds come first.", "",
+  // A paragraph with any backtick, wrapped, escaped or stray, or with a line indented like code after
+  // any mix of spaces, tabs, quote marks and list markers, is not measured at all.
+  "Run `## x —` here, and ``a ` — b`` too.", "", "Run `git log", "--format=%s — %an", "--no-merges` to see it.", "",
+  "Wrap it in \\` like `a — b` with a closing \\`.", "", "- use ` to quote", "- run `a — b`", "- and ` again", "",
+  "    echo \"a — b\"  # basically", "", ">     code — basically", "", "  \ta — b", "", "-     a — b", "",
+  "  -     a — b", "", " 1.     basically", "", "- >     a — b", "", "- -     a — b", "",
+  "Then it holds, essentially.",
+  // From the first fence mark on, nothing is measured, whatever the fences hold or wherever they end.
+  "A fence opens with ``` on its own line.", "Prose — basically, **Note:** essentially.", "```md", "> ```",
+  "> code — basically", "> ```", "```", "- **Note:** then — basically.",
+].join("\n");
+const finished = (reply) => ({ hook_event_name: "Stop", session_id: "s-1", last_assistant_message: reply });
+
+test("what a finished reply broke comes with the next prompt, once", { skip }, () => withLayout((layout) => {
+  const styleFile = join(layout.home, ".claude", "output-styles", "plain.md");
+  writeFileSync(styleFile, STYLE.replace("Plain Speech", "Straight Talk"));
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Straight Talk" }));
+  assert.deepEqual(run(layout, finished(SLIPPED)), { status: 0, context: null });
+  const slips = "so this one avoids them: a bold label at the start of a line or list item (2);"
+    + ' an em dash (2); "essentially"; "basically".';
+  assert.ok(run(layout, prompt).context.additionalContext.endsWith(slips));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+  run(layout, finished(SLIPPED));
+  run(layout, finished("All clean, plain words."));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+}));
+
+test("replies under another style are not measured, nor named after a switch", { skip }, () => withLayout((layout) => {
+  run(layout, finished(SLIPPED));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+  const straight = join(layout.home, ".claude", "output-styles", "straight.md");
+  writeFileSync(straight, "---\nname: Straight Talk\n---\nPlain.\n");
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Straight Talk" }));
+  run(layout, finished(SLIPPED));
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Plain Speech" }));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+}));
+
 test("a session id that could leave the counts folder is never counted", { skip }, () => withLayout((layout) => {
   const escape = { hook_event_name: "PostToolUse", session_id: "../x" };
   assert.ok(Array.from({ length: 25 }, () => run(layout, escape)).every((r) => r.status === 0 && !r.context));

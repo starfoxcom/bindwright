@@ -16,7 +16,7 @@ global-template/
 │   ├── push-guard.py                      # PreToolUse hook that blocks ordinary force pushes
 │   ├── no-ai-attribution.py               # PreToolUse hook that blocks AI attribution in commits and PRs
 │   ├── no_ai_attribution/                 # Its modules: the shell reader, the file reader, the hook routes
-│   ├── reply-style.py                     # UserPromptSubmit and PostToolUse hook that restates the reply style
+│   ├── reply-style.py                     # UserPromptSubmit, PostToolUse and Stop hook that restates the reply style
 │   ├── session-title.py                   # SessionStart and UserPromptSubmit hook that names each session
 │   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
 └── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
@@ -170,7 +170,7 @@ The project's deny rules match command text, so a force push written as a bundle
 
 `/bindwright:setup` installs it to `~/.claude/hooks/session-title.py` and registers it for `SessionStart` and `UserPromptSubmit` (`engine/home.py install-hook --events`).
 
-`hooks/reply-style.py` restates the active output style's text where the model reads last: with every prompt, and after every 25 tool calls since the last prompt, since the CLI puts the style at the top of a session, where a long session buries it. It reads `outputStyle` from the project's `.claude/settings.local.json`, then `.claude/settings.json`, then `~/.claude/settings.json` (a style set by managed policy settings or a `--settings` file is not seen), and the style file named that way in the project's or `~/.claude`'s `output-styles/`; a built-in style has no file, so it adds nothing, and a subagent's tool calls are not counted. The count lives in `~/.bindwright/reply-style/`. `/bindwright:setup` installs it with the reply style and registers it for `UserPromptSubmit` and `PostToolUse`.
+`hooks/reply-style.py` restates the active output style's text where the model reads last: with every prompt, and after every 25 tool calls since the last prompt, since the CLI puts the style at the top of a session, where a long session buries it. It reads `outputStyle` from the project's `.claude/settings.local.json`, then `.claude/settings.json`, then `~/.claude/settings.json` (a style set by managed policy settings or a `--settings` file is not seen), and the style file named that way in the project's or `~/.claude`'s `output-styles/`; a built-in style has no file, so it adds nothing, and a subagent's tool calls are not counted. Under Straight Talk, the style Bindwright ships, it also measures each finished reply (`Stop`), up to its first code fence and skipping every paragraph with a backtick or an indented line, against the rules a pattern can see: bold labels at the start of a line, em dashes and the banned filler phrases. The next prompt's restatement names what the reply broke, with a count, and a clean reply adds nothing. Tone and rhythm stay with the restated text. The count and the slips live in `~/.bindwright/reply-style/`. `/bindwright:setup` installs it with the reply style and registers it for `UserPromptSubmit`, `PostToolUse` and `Stop`.
 
 ## 4c. Install the attribution guard (hook location "home")
 
