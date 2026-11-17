@@ -162,22 +162,39 @@ test("answers saved before a key was added still pass the doctor", needsPython, 
   assert.equal(report.problems, 0, JSON.stringify(failing(report)));
 });
 
-test("an old CLI is named only with mods installed and the session's version known", needsPython, async () => {
-  const withMods = ({ config }) => mkdirSync(join(config, "mods", "session-facts"), { recursive: true });
-  const old = await doctor(withMods, "claude-code_2-1-286_agent");
-  assert.deepEqual(failing(old), ["cli"]);
-  assert.match(old.checks.at(-1).say, /runs CLI 2\.1\.286, older than the 2\.1\.287/);
-  assert.match(old.checks.at(-1).fix, /Claude Desktop, update the app/);
-  assert.equal((await doctor(withMods, "")).problems, 0, "unknown version");
-  assert.equal((await doctor(() => {}, "claude-code_2-1-286_agent")).problems, 0, "no mods");
-  // A mod whose name ends like a guard's is still a mod; a guard hook alone needs no newer CLI.
-  const guardNamedMod = ({ config }) => mkdirSync(join(config, "mods", "usage-guard"), { recursive: true });
-  assert.deepEqual(failing(await doctor(guardNamedMod, "claude-code_2-1-286_agent")), ["cli"]);
-  const guardHook = ({ config }) => {
-    mkdirSync(join(config, "hooks"), { recursive: true });
-    writeFileSync(join(config, "hooks", "push-guard.py"), "");
-  };
-  assert.equal((await doctor(guardHook, "claude-code_2-1-286_agent")).problems, 0, "a guard hook only");
+// An old CLI is named for the guard hooks it would let fail open, and for the mods it cannot load.
+// Each row: the scene, the session's agent name, and the text the finding holds (null: no finding).
+const withMods = ({ config }) => mkdirSync(join(config, "mods", "session-facts"), { recursive: true });
+const guardsAtHome = (also = () => {}) => (scene) => {
+  const answers = JSON.parse(readFileSync(scene.at(".bindwright/project.json"), "utf8"));
+  answers.advanced.hookLocation = "home";
+  writeFileSync(scene.at(".bindwright/project.json"), `${JSON.stringify(answers, null, 2)}\n`);
+  also(scene);
+};
+const pushGuardAtHome = guardsAtHome(({ config }) => {
+  const guard = join(config, "hooks", "push-guard.py");
+  mkdirSync(dirname(guard), { recursive: true });
+  writeFileSync(guard, "");
+  const hook = { type: "command", command: process.execPath, args: [guard.replaceAll("\\", "/")] };
+  writeFileSync(join(config, "settings.json"), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [hook] }] } }));
+});
+const cliRows = [
+  ["the repo's guards on a CLI before 2.1.295", () => {}, "2-1-294", /2\.1\.294, older than the 2\.1\.295 the guard/],
+  ["the guards and a mod on a CLI before 2.1.287", withMods, "2-1-286", /guard hooks .*, and the 2\.1\.287 the mods/],
+  ["the guards and a mod on 2.1.295", withMods, "2-1-295", null],
+  ["an unknown CLI", withMods, null, null],
+  ["no guards anywhere, a mod on 2.1.290", guardsAtHome(withMods), "2-1-290", null],
+  ["the push guard in the config folder on 2.1.290", pushGuardAtHome, "2-1-290", /the 2\.1\.295 the guard hooks need/],
+];
+
+test("an old CLI is named for the guard hooks and the mods it fails", needsPython, async () => {
+  for (const [name, change, version, says] of cliRows) {
+    const report = await doctor(change, version ? `claude-code_${version}_agent` : "");
+    const cli = report.checks.find((c) => c.id === "cli");
+    assert.equal(cli.ok, says === null, name);
+    if (says) assert.match(cli.say, says, name);
+    if (says) assert.match(cli.fix, /Claude Desktop, update the app/, name);
+  }
 });
 
 // The hooks check reads <config>/settings.json. Each row is one settings file:

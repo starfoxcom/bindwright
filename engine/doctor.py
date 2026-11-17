@@ -30,6 +30,7 @@ FIX = {
 
 
 MODS_SINCE = [2, 1, 287]
+GUARDS_SINCE = [2, 1, 295]
 
 
 def cli_version_from(agent):
@@ -196,15 +197,23 @@ def _settings_checks(root, config):
     return {"checks": [first, second], "installed": settings["installed"]}
 
 
-def _cli_check(installed, cli_version):
-    # Only mods need the newer CLI; the guards are plain hooks.
+def _has_guards(answers, pristine, installed):
+    in_repo = answers["advanced"]["hookLocation"] == "repo" and ".claude/hooks/run-hook.sh" in pristine["files"]
+    return in_repo or bool(installed.get("push-guard") or installed.get("attribution-guard"))
+
+
+def _cli_check(installed, cli_version, guards):
     mods = any(has and name in MODS for name, has in installed.items())
-    if not mods or not cli_version or not _before(cli_version, MODS_SINCE):
-        return _check("cli", True, "The CLI runs the installed mods.")
-    running, needed = ".".join(map(str, cli_version)), ".".join(map(str, MODS_SINCE))
+    old_for_mods = mods and _before(cli_version or MODS_SINCE, MODS_SINCE)
+    old_for_guards = guards and _before(cli_version or GUARDS_SINCE, GUARDS_SINCE)
+    if not old_for_mods and not old_for_guards:
+        return _check("cli", True, "The CLI runs the guard hooks and the installed mods.")
+    needs = [text for old, text in (
+        (old_for_guards, "the %s the guard hooks need, so a guard that crashes or runs out of time lets the "
+                         "command through" % ".".join(map(str, GUARDS_SINCE))),
+        (old_for_mods, "the %s the mods need, so none of them load" % ".".join(map(str, MODS_SINCE)))) if old]
     return _check("cli", False,
-                  "This session runs CLI %s, older than the %s the mods need, so none of them load."
-                  % (running, needed),
+                  "This session runs CLI %s, older than %s." % (".".join(map(str, cli_version)), ", and ".join(needs)),
                   FIX["cli"])
 
 
@@ -237,5 +246,6 @@ def run_doctor(root, config, plugin_version, cli_version):
         if state["answers"]["advanced"]["tracker"] == "file":
             checks.append(_roadmap_check(root))
         settings = _settings_checks(root, config)
-        checks += settings["checks"] + [_cli_check(settings["installed"], cli_version)]
+        guards = _has_guards(state["answers"], state["pristine"], settings["installed"])
+        checks += settings["checks"] + [_cli_check(settings["installed"], cli_version, guards)]
     return {"problems": sum(1 for c in checks if not c["ok"]), "checks": checks}

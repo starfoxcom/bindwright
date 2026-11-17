@@ -50,6 +50,7 @@ Then read `<helper>/VERSION` again. On a no, or when the install fails, stop: se
 | Size check | Python 3.8 or later | `python3 --version` or `python --version` shows it |
 | Mods | Node 18 or later, and CLI 2.1.287 or later | `node --version` shows it, and the version this session runs does: take it from the `AI_AGENT` environment variable (`claude-code_2-1-316_agent` is 2.1.316), not from `claude --version`, since the desktop app runs its own copy of the CLI, which can be older than the one on the PATH; only when `AI_AGENT` is unset, use `claude --version` |
 | FindWright | Node 22.16 or later on the 22 line, or 24 or later | `node --version` shows it |
+| Guard hooks | CLI 2.1.295 or later, the first that blocks a command when its guard crashes or runs out of time | the version this session runs does, read as for Mods |
 
 Work out this run's plan once, from the engine, never from the settings files by hand (it resolves their layers and drops values it ignores), and follow it in every later step: step 2 asks exactly the questions it lists. Run the engine with `--settings <repo root>` (the current folder outside a repo). With a `bw1-` code, also run it a second, separate time with `--code <the code>` and no `--write`, which writes nothing and prints the files the code would write.
 
@@ -57,6 +58,7 @@ Work out this run's plan once, from the engine, never from the settings files by
 - **Size check:** open on a run that sets up a project: closed on `global`, and on a first run outside a git repo, which sets up only the computer. With a code, open only when `.github/scripts/size_check.py` is among its files.
 - **FindWright:** open when the plan asks the code-search question, when the resolved `codeResearch` is `findwright`, or when a code's `.claude/skills/find/SKILL.md` names FindWright.
 - **Mods:** open when the plan asks about any mod, or when a mod's entry wants it (`want` true, the project's `required` included) while `installed` shows it `false` or leaves it out.
+- **Guard hooks:** always open, since every setup writes or installs them.
 
 For each program missing for an open feature, say which features need it and ask once per program: "<program> is needed for <features>. Install it now?", with "Yes" first. On a yes, install it as above: on Windows with `winget install` (`winget upgrade --id <id>` when an older one is there) and `Python.Python.3.12` or `OpenJS.NodeJS.LTS`, the CLI with `claude update` (in Claude Desktop, say to update the app, which carries its own CLI); on macOS and Linux give the download (https://www.python.org/downloads, https://nodejs.org/en/download) for the user to install. Then say to restart Claude Code as above and run `/bindwright:setup` again with the same argument, and stop: nothing is saved or created yet. On a no, the features that need it are off, as § "A feature whose program was declined" (step 3) says.
 
@@ -135,6 +137,7 @@ For a "Let me pick", ask one multiple-choice question with that group's items; w
 - **Size check** (no Python): round two's checks do not offer it, and the answers save `"codeSizeCheck": false`.
 - **Mods** (no Node, or an older CLI): step 2 skips the mods question, and step 7 installs no mod. Every mod with no saved answer is saved as a no with step 2's save; a mod already saved as a yes keeps that answer and stays uninstalled until the program is in place. A mod the project requires (its rating in the project's shared settings) is named as required and left uninstalled too.
 - **FindWright** (Node older than it needs, declined in step 0 or never offered): step 2 does not offer it. When the engine's `codeResearch` entry is still `findwright` and its `from` is `"personal"`, the user's own computer choice, save `none` with `--layer personal`, which `/bindwright:setup global` changes. When it is `from` the project or `local`, save nothing: that choice stays the project's, so say that FindWright stays unwired on this computer until Node is updated, and later runs offer the Node again.
+- **Guard hooks** (an older CLI): every setup writes them, and on that CLI a guard that crashes or runs out of time lets the command through, so step 0 stops: say to update the CLI first and run `/bindwright:setup` again.
 - **A `bw1-` code:** its answers cannot be changed, so step 0 already stopped on a declined program they need.
 
 Say in one line which features are off and why.

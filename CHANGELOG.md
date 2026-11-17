@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Breaking
+
+- **Setup needs CLI 2.1.295 or later.** The guard hooks block a command when they crash or run out of time only from that version (`onFailure: block`); on an older CLI a guard that fails lets the command through. Setup now checks the version the session runs before it writes anything, offers the update, and stops on a no, since every setup writes guards. `/bindwright:doctor` names an older CLI wherever guard hooks run, in the repo or in `~/.claude`, not only where mods are installed.
+
 ### Added
 
 - **Setup writes a verify skill that checks a change in the running app.** For a project with something to run (an app, a web page, a server, a game, a command-line tool), setup asks whether to check each change in the running app before it is committed, with what it catches and what it costs. On a yes it writes the project's own `/verify` skill from what it reads in the repo: how to start the app and know it is ready, how to reach the changed part, and what to look at, the layout check included for a web page. The session runs it before each commit of a change people can see or use, the visual rule names it in place of a plain headless start, and `/close-session` says whether it ran on each such change. The project owns the skill, so updates never touch it.
