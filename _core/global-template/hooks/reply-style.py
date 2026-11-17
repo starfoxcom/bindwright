@@ -40,12 +40,13 @@ SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids t
 # code is skipped. A check can miss a slip, but never report one made in code.
 # A run of three or more backticks or tildes, anywhere on a line.
 FENCE_RUN = re.compile(r"`{3,}|~{3,}")
-# The block-quote marks a line opens with.
-QUOTE_MARKS = re.compile(r"(?: {0,3}> ?)*")
-# After its quote marks, a line indented four spaces or a tab may be an indented code block.
-INDENTED = re.compile(r"(?: {4}|\t)")
-# An inline span closes on a backtick run of the same length as the one that opened it.
-INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)[^\n]+?(?<!`)\1(?!`)")
+# A line that may be indented code: after any quote marks and a list marker, four spaces or a tab.
+MAY_BE_CODE = re.compile(r"(?: {0,3}> ?)*(?:(?:[-*+]|\d+[.)]) ?)?(?: {4}|[ ]*\t)")
+# A blank line, quote marks aside: it ends a paragraph, which no code span crosses.
+PARAGRAPH_BREAK = re.compile(r"\n[ \t>]*\n")
+# An inline span closes on a backtick run of the same length as the one that opened it, anywhere in
+# its paragraph.
+INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.S)
 # (what the reminder names, pattern): each counts its matches in a reply, code taken out first.
 CHECKS = (
     # A label, not emphasis: a colon or a dash right after the bold.
@@ -197,18 +198,21 @@ def reset_count(session):
 
 
 def prose_of(reply):
-    """The reply's lines that are surely prose: those before its first fence mark, with inline spans
-    taken out, less any that may be indented code or still hold a backtick the spans did not pair."""
-    kept = []
+    """The reply's paragraphs that are surely prose: those before its first fence mark, with inline
+    spans taken out, less any with a line that may be indented code or a backtick the spans left."""
+    before_fence = []
     for line in reply.split("\n"):
         if FENCE_RUN.search(line):
             break
-        if INDENTED.match(line, QUOTE_MARKS.match(line).end()):
+        before_fence.append(line)
+    kept = []
+    for paragraph in PARAGRAPH_BREAK.split("\n".join(before_fence)):
+        if any(MAY_BE_CODE.match(line) for line in paragraph.split("\n")):
             continue
-        prose = INLINE_CODE.sub("", line)
+        prose = INLINE_CODE.sub("", paragraph)
         if "`" not in prose:
             kept.append(prose)
-    return "\n".join(kept)
+    return "\n\n".join(kept)
 
 
 def slips_in(reply):

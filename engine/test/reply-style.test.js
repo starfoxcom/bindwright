@@ -134,7 +134,10 @@ const SLIPPED = [
   "Run `## x —` here, and ``a ` — b`` too.", "**Do not** run it yet.", "**Don't merge until CI is green.**",
   "- **Merge now**", "Is that not just a typo? I checked but found nothing.", "**Ctrl**-C stops it.",
   "- **Pre**-release builds come first.", "", "    echo \"a — b\"  # basically", ">     code — basically", "",
-  "Then it holds, essentially.",
+  // Inline code wrapped over three lines, two wrapped spans meeting on a line, and code indented by a
+  // tab after spaces, after quote marks or after a list marker.
+  "Run `git log", "--format=%s — %an", "--no-merges` to see it.", "", "Use `a", "b — c` then `d", "e` ok.", "",
+  "  \ta — b", "", ">   \ta — b", "", "-     a — b", "", "Then it holds, essentially.",
   // From the first fence mark on, nothing is measured, whatever the fences hold or wherever they end.
   "A fence opens with ``` on its own line.", "Prose — basically, **Note:** essentially.", "```md", "> ```",
   "> code — basically", "> ```", "```", "- **Note:** then — basically.",
