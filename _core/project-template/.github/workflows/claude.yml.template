@@ -161,14 +161,27 @@ jobs:
 
         You post nothing and change nothing: return the review as structured output, in `review` (at most 60,000 characters), which the workflow posts on the PR as you wrote it. Its first line is exactly `## Deep review`. Its last line is the verdict alone: `🟢 LGTM` only when the review is fully clean (no caveats, no nits, no non-blocking findings), otherwise `🔴 Blocking — <one-line reason>`. In a clean review, 🔴 and the word Blocking appear only inside inline backticks on the same line (a line inside a fenced code block counts like any other), since the gate blocks on lines like `**🔴 …**`, `- 🔴 x`, `### Blocking issues` or `**Verdict:** blocking` wherever they sit, and on any 🔴 on the last line, backticks or not, so a 🟢 verdict line holds no 🔴 at all. If the diff shows a file as binary, Read that file in full in the working folder (for the base-copy paths above, `git show HEAD:<path>` instead), since a NUL byte or the PR's own .gitattributes can make a diff hide a code file that way.
     steps:
-      # A file of the job's own: npm refuses /dev/null as both its user and
+      # Files of the job's own: npm refuses /dev/null as both its user and
       # its global config, a path under /dev/null is a real folder path in
       # Git Bash on Windows, and job-level env cannot name the temp folder.
-      - name: Keep npm off the runner's global config
+      # The review action installs its packages with Bun, which reads a
+      # global .bunfig.toml from XDG_CONFIG_HOME when that is set, reuses
+      # a cached package without checking its hash again, and trusts the
+      # compiled code in its runtime cache, so both folders start empty and
+      # the runtime cache is off. Fresh names, in case the runner's cleanup
+      # left a folder behind.
+      - name: Keep npm and Bun off the runner's own config
         shell: bash
         run: |
           : > "$RUNNER_TEMP/empty-npmrc"
-          echo "NPM_CONFIG_GLOBALCONFIG=$RUNNER_TEMP/empty-npmrc" >> "$GITHUB_ENV"
+          config="$(mktemp -d "$RUNNER_TEMP/config.XXXXXX")"
+          cache="$(mktemp -d "$RUNNER_TEMP/bun-cache.XXXXXX")"
+          {
+            echo "NPM_CONFIG_GLOBALCONFIG=$RUNNER_TEMP/empty-npmrc"
+            echo "XDG_CONFIG_HOME=$config"
+            echo "BUN_INSTALL_CACHE_DIR=$cache"
+            echo "BUN_RUNTIME_TRANSPILER_CACHE_PATH=0"
+          } >> "$GITHUB_ENV"
 
       # A self-hosted runner shares one workspace between jobs and workflows,
       # where a sparse or partial clone can sit (left by an older routine
@@ -483,6 +496,62 @@ jobs:
           fi
           echo "::notice::The CLI install runs on Node $NODE_VERSION, brought by this job"
           echo "bin=$RUNNER_TEMP/linux-node/bin" >> "$GITHUB_OUTPUT"
+
+      # The review action sets Bun up with setup-bun, which keeps a Bun it
+      # finds in ~/.bun/bin when that one reports the pinned version, so on a
+      # runner reused between jobs an earlier job could leave its own there.
+      # On Linux this job brings the Bun the action pins (BUN_VERSION follows
+      # the bun-version in the action's action.yml), checked against the
+      # checksum Bun publishes; anywhere else, or when this fails, the action
+      # sets Bun up itself.
+      - name: Bring a Bun for the review action
+        id: bun
+        if: steps.pr-head.outputs.head_sha != ''
+        working-directory: ${{ runner.temp }}
+        timeout-minutes: 10
+        continue-on-error: true
+        shell: bash
+        env:
+          BUN_VERSION: "1.4.4"
+          BUN_SHA256_X64: e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76
+          BUN_SHA256_ARM64: baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e
+        run: |
+          set -euo pipefail
+          if [ "$(uname -s)" != Linux ]; then
+            echo "Not a Linux runner: the review action sets up its own Bun"
+            exit 0
+          fi
+          # The baseline x64 build runs on every x64 CPU, AVX2 or not.
+          case "$(uname -m)" in
+            x86_64) name=bun-linux-x64-baseline; sum="$BUN_SHA256_X64" ;;
+            aarch64 | arm64) name=bun-linux-aarch64; sum="$BUN_SHA256_ARM64" ;;
+            *)
+              echo "::warning::No Bun build for $(uname -m): the review action sets up its own Bun"
+              exit 1
+              ;;
+          esac
+          dir="$(mktemp -d "$RUNNER_TEMP/bun.XXXXXX")"
+          zip="$dir/$name.zip"
+          if ! curl -q --fail --silent --show-error --location --proto '=https' --retry 2 --max-time 120 -o "$zip" "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/$name.zip"; then
+            echo "::warning::The Bun $BUN_VERSION download failed: the review action sets up its own Bun"
+            rm -f "$zip"
+            exit 1
+          fi
+          if ! printf '%s  %s\n' "$sum" "$zip" | sha256sum --check --status; then
+            echo "::warning::The Bun $BUN_VERSION download does not match its pinned checksum: the review action sets up its own Bun"
+            rm -f "$zip"
+            exit 1
+          fi
+          python3 -I -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract(sys.argv[2] + "/bun", sys.argv[3])' "$zip" "$name" "$dir"
+          rm -f "$zip"
+          bun="$dir/$name/bun"
+          chmod +x "$bun"
+          if [ "$(timeout 30 "$bun" --version 2>/dev/null || true)" != "$BUN_VERSION" ]; then
+            echo "::warning::The Bun $BUN_VERSION build does not run on this runner: the review action sets up its own Bun"
+            exit 1
+          fi
+          echo "::notice::The review action runs on Bun $BUN_VERSION, brought by this job"
+          echo "path=$bun" >> "$GITHUB_OUTPUT"
 
       # The attribution guard in the project's hooks reads every command it
       # guards with Bindwright's helper, which no runner has. This step installs
@@ -883,6 +952,9 @@ jobs:
           # install failed, and then the action installs the CLI it bundles.
           # The retry and the fallback pass the same path.
           path_to_claude_code_executable: ${{ steps.claude-cli.outputs.path }}
+          # The Bun from "Bring a Bun for the review action". Empty off Linux
+          # or when that step failed, and then the action sets up its own.
+          path_to_bun_executable: ${{ steps.bun.outputs.path }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: '--setting-sources user,project --permission-mode default --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read${{ steps.gate.outputs.tools_suffix }}" --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" --max-turns ${{ steps.gate.outputs.deep_max_turns }} --model ${{ steps.gate.outputs.deep_model }} --effort ${{ steps.gate.outputs.deep_effort }} --json-schema ''${{ env.DEEP_SCHEMA }}'''
           show_full_output: false
@@ -975,6 +1047,9 @@ jobs:
           APPEND_SYSTEM_PROMPT: "In this checkout the top-level .claude/, CLAUDE.md, CLAUDE.local.md, .mcp.json, .claude.json, .gitmodules, .ripgreprc and .husky/ hold the base branch's copies, put there before you start: read the PR's version of any of them with `git show HEAD:<path>`, never with Read, also when the diff shows one as binary. CLAUDE.md and .claude/rules/ are read from the base on purpose: they hold the rules. ${{ steps.gate.outputs.guide_note }}"
         with:
           path_to_claude_code_executable: ${{ steps.claude-cli.outputs.path }}
+          # The Bun from "Bring a Bun for the review action". Empty off Linux
+          # or when that step failed, and then the action sets up its own.
+          path_to_bun_executable: ${{ steps.bun.outputs.path }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: '--setting-sources user,project --permission-mode default --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read${{ steps.gate.outputs.tools_suffix }}" --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" --max-turns ${{ steps.gate.outputs.deep_max_turns }} --model ${{ steps.gate.outputs.deep_model }} --effort ${{ steps.gate.outputs.deep_effort }} --json-schema ''${{ env.DEEP_SCHEMA }}'''
           show_full_output: false
@@ -1113,6 +1188,9 @@ jobs:
           APPEND_SYSTEM_PROMPT: "In this checkout the top-level .claude/, CLAUDE.md, CLAUDE.local.md, .mcp.json, .claude.json, .gitmodules, .ripgreprc and .husky/ hold the base branch's copies, put there before you start: read the PR's version of any of them with `git show HEAD:<path>`, never with Read, also when the diff shows one as binary. CLAUDE.md and .claude/rules/ are read from the base on purpose: they hold the rules. ${{ steps.gate.outputs.guide_note }}"
         with:
           path_to_claude_code_executable: ${{ steps.claude-cli-stable.outputs.path }}
+          # The Bun from "Bring a Bun for the review action". Empty off Linux
+          # or when that step failed, and then the action sets up its own.
+          path_to_bun_executable: ${{ steps.bun.outputs.path }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: '--setting-sources user,project --permission-mode default --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read${{ steps.gate.outputs.tools_suffix }}" --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" --max-turns ${{ steps.gate.outputs.deep_max_turns }} --model ${{ steps.gate.outputs.deep_fallback_model }} --effort ${{ steps.gate.outputs.deep_fallback_effort }} --json-schema ''${{ env.DEEP_SCHEMA }}'''
           show_full_output: false
