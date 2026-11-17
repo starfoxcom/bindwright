@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The layout check stops its browsers on a busy Windows machine too.** The query that finds them gave up after 20 seconds and read as no browsers, so a slow machine could leave a headless browser running; it now waits up to 60 seconds.
+
 ## [v7.0.0] — 2026-11-17
 
 ### Breaking
