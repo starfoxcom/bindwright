@@ -3,10 +3,9 @@
 
 import os
 import re
-import shutil
 
 from model import JS_WHITESPACE, expand_answers, validate
-from layers import MODS, _read_layer_file, run_settings
+from layers import MODS, _command_hooks, _is_missing, _program, _read_layer_file, run_settings
 from update import ANSWERS, PRISTINE, STAGING, _code_units
 
 # What to do about each finding, in plain words.
@@ -207,59 +206,6 @@ def _cli_check(installed, cli_version):
                   "This session runs CLI %s, older than the %s the mods need, so none of them load."
                   % (running, needed),
                   FIX["cli"])
-
-
-def _as(value, kind):
-    """The value when it is of the kind, else an empty one, so a malformed entry is skipped."""
-    return value if isinstance(value, kind) else kind()
-
-
-def _command_hooks(settings):
-    """The command hooks under every event of a settings file, in file order."""
-    hooks = []
-    for entries in _as(_as(settings, dict).get("hooks"), dict).values():
-        for entry in _as(entries, list):
-            for hook in _as(_as(entry, dict).get("hooks"), list):
-                if isinstance(hook, dict) and hook.get("type") == "command":
-                    hooks.append(hook)
-    return hooks
-
-
-def _first_word(command):
-    text = command.strip(JS_WHITESPACE)
-    if text[:1] in ('"', "'"):
-        return text[1:].split(text[0], 1)[0]
-    return text.split(" ", 1)[0]
-
-
-def _program(hook):
-    """The program a command hook starts, or None when it is not judged."""
-    command = hook.get("command")
-    if not isinstance(command, str):
-        return None
-    if "args" in hook:
-        program = command
-    else:
-        # A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
-        program = _first_word(command)
-        if not _is_absolute(program):
-            return None
-    if not program or "$" in program or "%" in program:
-        return None
-    return program
-
-
-def _is_absolute(program):
-    # Node counts a rooted path as absolute on Windows too, as Python 3.13 no longer does.
-    return os.path.isabs(program) or (os.name == "nt" and program[:1] in ("/", "\\"))
-
-
-def _is_missing(program):
-    if _is_absolute(program):
-        return not os.path.exists(program)
-    if "/" in program or "\\" in program:
-        return False
-    return shutil.which(program) is None
 
 
 def _hooks_check(config):

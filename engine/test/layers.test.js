@@ -90,7 +90,7 @@ test("the extras list matches the mods setup ships, plus the seven file extras",
 
 // A repo and a config folder with the given files; missing ones are left out.
 // `repoPaths` maps a repo path to its text, or to null for a folder.
-function scene({ personal, project, local, claudeMd, installed = [], repoPaths = {} }) {
+function scene({ personal, project, local, claudeMd, installed = [], repoPaths = {}, configFiles = {} }) {
   const root = mkdtempSync(join(tmpdir(), "bw-layers-"));
   const repo = join(root, "repo");
   const config = join(root, "config");
@@ -108,6 +108,7 @@ function scene({ personal, project, local, claudeMd, installed = [], repoPaths =
     else put(join(repo, ...path.split("/")), text);
   }
   for (const path of installed) mkdirSync(join(config, ...path.split("/")), { recursive: true });
+  for (const [path, text] of Object.entries(configFiles)) put(join(config, ...path.split("/")), text);
   return { root, repo, config };
 }
 
@@ -203,6 +204,24 @@ test("global-instructions needs its marker on a line of CLAUDE.md", needsPython,
   for (const [name, claudeMd, want] of rows) {
     assert.equal(both({ claudeMd }).installed["global-instructions"], want, name);
   }
+});
+
+test("a guard counts as installed only while an entry runs its file with a program that exists", needsPython, () => {
+  const entry = (command, file = "push-guard.py") => ({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [
+    { type: "command", command, args: ["-I", "-c", "launch", `/home/me/.claude/hooks/${file}`] }] }] } });
+  const guard = { "hooks/push-guard.py": "" };
+  const node = process.execPath;
+  const rows = [
+    ["the file with no settings file", guard, false],
+    ["the file with no entry", { ...guard, "settings.json": { hooks: {} } }, false],
+    ["the file with another guard's entry", { ...guard, "settings.json": entry(node, "tool-rules.py") }, false],
+    ["an entry with no file", { "settings.json": entry(node) }, false],
+    ["an entry whose program path is gone", { ...guard, "settings.json": entry(join(tmpdir(), "bw-gone")) }, false],
+    ["an entry whose bare program is not on PATH", { ...guard, "settings.json": entry("bw-no-python") }, false],
+    ["an entry whose program exists", { ...guard, "settings.json": entry(node) }, true],
+    ["an entry whose program cannot be judged", { ...guard, "settings.json": entry("$PY") }, true],
+  ];
+  for (const [name, configFiles, want] of rows) assert.equal(both({ configFiles }).installed["push-guard"], want, name);
 });
 
 // Seeded, so a failure names a case that replays.
