@@ -66,7 +66,9 @@ reuses another commit's message (`-C`, `-c`, `--reuse-message`,
 by the command, `lefthook uninstall`), and a git call whose subcommand
 comes from a word built at run time with no literal word other than an
 option written right after it (`git "${args[@]}"`, `git "$@" -m x`,
-PowerShell's `git @args`). Options are read as git reads them, bundled
+PowerShell's `git @args`), or from a word before it that may become several
+(`git -C "$@"`, `git --namespace="$@"`) unless only git's own options stand
+between that word and a subcommand written out (`git -C $d --no-pager log`). Options are read as git reads them, bundled
 (`-nm x`) or shortened (`--no-veri`), so a message that names one passes.
 A word built at run time counts for the literal text around its run-time
 parts (`--trailer=$WHO`, `"-C$SHA"`, `"$S.hooksPath"`), and one
@@ -161,9 +163,10 @@ GH_WRITE = re.compile(
     r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
 # A git call that may take its subcommand from a word built at run time (`git "${args[@]}"`,
-# PowerShell's `git @args`): a word starting with `$` or `@` after git. It only sends the command
-# to the parser, whose reading decides; a command the parser cannot read is not refused for it.
-GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?[ \t][\"']?[$@`(]", re.I)
+# PowerShell's `git @args`): a `$` or backtick anywhere after git (`--namespace="$@"`), or a word
+# starting with `@` or `(`. It only sends the command to the parser, whose reading decides; a
+# command the parser cannot read is not refused for it.
+GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?(?:[$`]|[ \t][\"']?[@(])", re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.

@@ -174,8 +174,9 @@ def only_git_options(words):
 
 
 def may_split(word):
-    """Whether a word built at run time may expand to any number of words (`"$@"`, `$X`)."""
-    return not isinstance(word, str) and bool(word["canBeEmpty"])
+    """Whether a word built at run time may expand to several words, with literal text or without
+    (`"$@"`, `$X`, `--git-dir=$X`, `"--namespace=$@"`)."""
+    return not isinstance(word, str) and bool(word["canBeMany"])
 
 
 def names_no_subcommand_after(words, k):

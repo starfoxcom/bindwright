@@ -5,7 +5,8 @@
 // `shellWordsInput` to the command, runs the module, and reads the global `shellWordsOutput`, a
 // JSON object {"error": bool, "commands": [[word, ...], ...], "assignments": [{"name", "value"}]}.
 // A word is a string, or {"dynamic": <source text>, "prefix": <literal start>, "shape": <literal
-// text, NUL for each run-time part>, "canBeEmpty": bool} when the shell builds it at run time;
+// text, NUL for each run-time part>, "canBeEmpty": bool, "canBeMany": bool} when the shell builds it
+// at run time;
 // a command word whose braces hold only plain text also has "braces": [string, ...], bash's words.
 package main
 
@@ -44,6 +45,9 @@ type dynamic struct {
 	Shape string `json:"shape"`
 	// CanBeEmpty is whether the word can expand to no word at all.
 	CanBeEmpty bool `json:"canBeEmpty"`
+	// CanBeMany is whether the word can expand to more than one word, a literal part or not
+	// (`--git-dir=$X`, `"--namespace=$@"`).
+	CanBeMany bool `json:"canBeMany"`
 	// Braces, for a command word whose braces hold only plain text, is the words bash's brace
 	// expansion makes of it (`{-F,msg.txt}` is "-F", "msg.txt"). The word stays built at run time,
 	// since a shell that does not expand braces (dash, `set +B`) gives it as written.
@@ -76,7 +80,8 @@ func (r reader) text(node syntax.Node) string {
 }
 
 func (r reader) dynamicWord(word *syntax.Word) dynamic {
-	return dynamic{Dynamic: r.text(word), Prefix: r.prefix(word), Shape: shape(word), CanBeEmpty: canBeEmpty(word)}
+	return dynamic{Dynamic: r.text(word), Prefix: r.prefix(word), Shape: shape(word), CanBeEmpty: canBeEmpty(word),
+		CanBeMany: !staysOneWord(word)}
 }
 
 // unknownPart stands for a part of a word bash builds at run time.
