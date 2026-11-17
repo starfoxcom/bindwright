@@ -45,9 +45,8 @@ async function updateRounds($: EngineInterface, key: string, change: (pr?: PrRou
 }
 
 // Each watch that settled on a pushed head is one round: red when a check failed. A watch that ran out of
-// time says nothing about the checks and is no round. A failed write leaves the count as it was. Returns
-// the PRs, as `owner/name#N`, whose red round asks for a step back.
-/** Records each settled round; returns, per PR whose red round asks for a step back, the lookups it takes. */
+// time says nothing about the checks and is no round. A failed write leaves the count as it was. Returns,
+// per PR (as `owner/name#N`) whose red round asks for a step back, the lookups that step back takes.
 export async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<Map<string, number>> {
   const stepBacks = new Map<string, number>()
   for (const w of settled) {
