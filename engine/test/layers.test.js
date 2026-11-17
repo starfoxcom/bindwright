@@ -129,10 +129,10 @@ test("drift: extras the project rates that this machine lacks and nobody decline
 });
 
 // Both engines' --settings on the same scene; returns the JS report.
-function both(files) {
+function both(files, extraEnv = {}) {
   const s = scene(files);
   try {
-    const env = { ...process.env, CLAUDE_CONFIG_DIR: s.config };
+    const env = { ...process.env, ...extraEnv, CLAUDE_CONFIG_DIR: s.config };
     const run = (cmd, args) => spawnSync(cmd, [...args, "--settings", s.repo], { env, encoding: "utf8" });
     const js = run(process.execPath, [join(engine, "cli.js")]);
     const py = run(python, ["-I", join(engine, "bind.py")]);
@@ -222,6 +222,10 @@ test("a guard counts as installed only while an entry runs its file with a progr
     ["an entry whose program cannot be judged", { ...guard, "settings.json": entry("$PY") }, true],
   ];
   for (const [name, configFiles, want] of rows) assert.equal(both({ configFiles }).installed["push-guard"], want, name);
+  // An empty PATHEXT entry, as a trailing `;` leaves, still finds a bare name the shell runs.
+  const bare = { ...guard, "settings.json": entry("node") };
+  const PATHEXT = `${process.env.PATHEXT ?? ".EXE"};`;
+  assert.equal(both({ configFiles: bare }, { PATHEXT }).installed["push-guard"], true, "a PATHEXT ending in ;");
 });
 
 // Seeded, so a failure names a case that replays.

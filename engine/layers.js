@@ -230,8 +230,9 @@ export function programOf(hook) {
 }
 
 // Windows runs a name with a PATHEXT suffix, unless the name already has one.
+// Empty entries are skipped and an unset PATHEXT takes Windows' default list, as Python's shutil.which does.
 function withPathext(name) {
-  const exts = (process.env.PATHEXT ?? "").split(";");
+  const exts = (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC").split(";").filter(Boolean);
   if (exts.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()))) return [name];
   return exts.map((ext) => name + ext);
 }
