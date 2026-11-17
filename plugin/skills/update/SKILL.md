@@ -72,11 +72,15 @@ Then check that `.claude/settings.local.json`, the personal file that holds the 
 
 Then, when `~/.claude/settings.json` lists the tasks mod in `env.CLAUDE_CODE_PLUGIN_DIRS` and its `env` does not set `CLAUDE_CODE_ENABLE_TODO_TOOLS` to `"1"`, a setup before 5.2.1 installed it: say that the mod answers Claude Code's task tools, which current models hide without that line, so it does nothing until `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` is added to that `env` block, and that it takes effect at the next start of Claude Code. Do not edit the file.
 
-## 6. Review counts
+## 6. Skill contracts
+
+When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, build this project's contracts from the example file the way setup's "Mods in this project" says, and compare them with this repo folder's key in `~/.claude/skill-contracts.json`. When the key is missing or its steps differ, show what changes and write it on a yes, keeping every other key.
+
+## 7. Review counts
 
 When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and its batch question when the history check calls for it, and save the answers the same way.
 
-## 7. Finish
+## 8. Finish
 
 Tell the user, in plain words and grouped by kind (rules, skills, hooks, workflows, docs) rather than file by file: what was updated, what merged, what they settled, what was added or removed, and anything left unsettled in `.bindwright/incoming/`.
 
