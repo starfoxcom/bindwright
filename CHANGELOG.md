@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **`/bindwright:update` can hold a file back for a later PR without losing its change.** An update that changed the routine review workflow had to ship it in a PR of its own, but the record of what the update wrote already listed the new text, so the next update read the old copy as a local edit and kept it. The engine's new `--keep-base` puts a held-back file's record back to the last commit's, and the update skill runs it for every file left out of the commit.
+- **`/bindwright:update` can hold a file back for a later PR without losing its change.** An update that changed the routine review workflow had to ship it in a PR of its own, but the record of what the update wrote already listed the new text, so the next update read the old copy as a local edit and kept it. The engine's new `--keep-base` puts a held-back file's record back to the one the update replaced, and the update skill runs it for every file left out of the commit.
 - **`/bindwright:update` offers the newer reply style.** A computer whose Straight Talk is an earlier Bindwright copy, unedited, is offered the current text, and it is replaced on a yes; a copy with the user's own edits stays as it is. `home.py style-status` tells the two apart from the fingerprint of every earlier shipped copy, kept in `straight-talk.retired.json` beside the style.
 
 ### Fixed

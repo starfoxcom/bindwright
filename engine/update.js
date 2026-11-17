@@ -8,11 +8,14 @@ import {
   lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
 import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
+
+// The file in git's folder that holds the pristine record the last update replaced.
+const BEFORE = "bindwright-pristine-before.json";
 
 // The rendered repo files under the paths they belong at, as the pristine
 // render records them: staged ones without the staging prefix, and none of
@@ -263,6 +266,8 @@ export async function runUpdate(root, { bindWith, version }) {
     if (!skipped.includes(path.slice(STAGING.length))) put(root, path, text, "wx");
   }
   for (const path of plan.remove) removeMoved(root, path);
+  const before = beforePath(root);
+  if (before !== null) writeFileSync(before, saved);
   put(root, PRISTINE, stateJson(plan.pristine));
   return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
 }
@@ -281,24 +286,34 @@ function recordOf(text, what) {
   return record;
 }
 
-// Puts each path's base back to the one in the last commit's pristine.json, for files an update
+// Where an update keeps the record it replaced, as dpkg and ucf keep a config file's previous copy:
+// inside git's own folder, so it is never committed, also where .bindwright/ stays out of git. Null
+// outside a git repo.
+function beforePath(root) {
+  try {
+    const args = ["-C", root, "rev-parse", "--git-path", BEFORE];
+    const out = execFileSync("git", args, { stdio: ["ignore", "pipe", "ignore"] });
+    const path = decode(out, "git's answer").trim();
+    return isAbsolute(path) ? path : join(root, path);
+  } catch {
+    return null;
+  }
+}
+
+// Puts each path's base back to the one in the record the last update replaced, for files it
 // changed that ship in a later PR: a base older than the file reads as unchanged on the next
 // update and moves on, while a base newer than the file would hide the change for good. A path
-// the committed record lacks loses its base, so the next update adds it again.
+// that record lacks loses its base, so the next update adds it again.
 export function keepBase(root, paths) {
   const bad = paths.filter((p) => !safe(p));
   if (bad.length) throw new Error(`Refusing paths outside the repo: ${bad.join(", ")}`);
   const current = reader(root)(PRISTINE);
   if (current === null) throw new Error(`${PRISTINE} is missing: this repo was not set up with /bindwright:setup`);
-  let committed;
-  try {
-    const show = ["-C", root, "show", `HEAD:./${PRISTINE}`];
-    committed = execFileSync("git", show, { stdio: ["ignore", "pipe", "ignore"] });
-  } catch {
-    throw new Error(`The last commit holds no ${PRISTINE} to take the old base from`);
-  }
-  const what = `the committed ${PRISTINE}`;
-  const before = recordOf(decode(committed, what).replace(/\r\n/g, "\n"), what).files;
+  const saved = beforePath(root);
+  const previous = saved === null ? null : readState(saved, "the record the last update replaced");
+  if (previous === null) throw new Error("No record from before the last update: run /bindwright:update first");
+  const what = "the record the last update replaced";
+  const before = recordOf(decode(previous, what).replace(/\r\n/g, "\n"), what).files;
   const state = recordOf(current, PRISTINE);
   const result = { kept: [], dropped: [] };
   const files = new Map(Object.entries(state.files));

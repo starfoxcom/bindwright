@@ -482,15 +482,14 @@ test("a file held back for a later PR keeps its old base, so the next update off
       r.pristine.files[RULE] = older(today);
       r.write(RULE, older(today));
     });
-    const identity = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"];
-    const git = (...a) => spawnSync("git", [...identity, ...a], { cwd: repo.at("") });
     const run = (flags, input) =>
       JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
-    git("add", "-A");
-    git("commit", "-q", "--no-verify", "-m", "bind");
-    // An update moved the file's base to today's text, and the file itself was held back.
+    const early = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE] }));
+    assert.match(early.error, /No record from before the last update/, cmd);
+    // The update moves the file's base to today's text; the file itself is then held back.
+    assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), cmd);
+    repo.write(RULE, older(today));
     const moved = JSON.parse(repo.read(PRISTINE));
-    moved.files[RULE] = today;
     delete moved.files[OTHER]; // as an update records a file the templates dropped
     repo.write(PRISTINE, JSON.stringify(moved));
     const kept = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE, OTHER, "docs/new.md"] }));
@@ -503,9 +502,8 @@ test("a file held back for a later PR keeps its old base, so the next update off
     const afterInherited = repo.read(PRISTINE);
     repo.write(PRISTINE, "[]");
     const broken = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [] }));
-    outs.push({ kept, inherited, afterInherited, broken });
-    // Git leaves its object files read-only, which Windows may refuse to delete at the first try.
-    rmSync(repo.at(""), { recursive: true, force: true, maxRetries: 3 });
+    outs.push({ early, kept, inherited, afterInherited, broken });
+    rmSync(repo.at(""), { recursive: true, force: true });
   }
   assert.deepEqual(outs[0].inherited, { kept: [], dropped: ["constructor", "__proto__"] });
   assert.match(outs[0].broken.error, /holds no record of the files setup wrote/);

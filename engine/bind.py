@@ -21,7 +21,7 @@
 #   python engine/bind.py --propose-merge DIR            -> the merge each staged file suggests, read only
 #   python engine/bind.py --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.py)
 #   python engine/bind.py --releases-since DIR -> the plugin's releases since DIR's bound version (releases.py)
-#   python engine/bind.py --keep-base DIR < {"paths": [...]} -> those files' bases put back to the last commit's
+#   python engine/bind.py --keep-base DIR < {"paths": [...]} -> their bases put back to the replaced record's
 # A failed bind gives {"error": message} and, alone, exit status 1.
 
 import json
@@ -340,7 +340,7 @@ def _update(argv, read_file, core_files):
 
 
 def _keep_base(argv):
-    """--keep-base DIR: the bases of the {"paths"} on stdin put back to the last commit's."""
+    """--keep-base DIR: the bases of the {"paths"} on stdin put back to the replaced record's."""
     try:
         folder = _option(argv, "--keep-base")
         request = _choices_from_stdin()

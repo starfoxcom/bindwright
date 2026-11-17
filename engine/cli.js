@@ -17,7 +17,7 @@
 //   node engine/cli.js --propose-merge DIR -> the merge each staged file suggests, read only (propose.js)
 //   node engine/cli.js --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.js)
 //   node engine/cli.js --releases-since DIR -> the plugin's releases since DIR's bound version (releases.js)
-//   node engine/cli.js --keep-base DIR < {"paths": [...]} -> their bases put back to the last commit's (update.js)
+//   node engine/cli.js --keep-base DIR < {"paths": [...]} -> their bases put back to the replaced record's (update.js)
 // A failure gives {"error": message} and exit status 1.
 
 import { readFileSync } from "node:fs";
