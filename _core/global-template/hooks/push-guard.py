@@ -476,11 +476,8 @@ def main():
     tool = data.get("tool_name") if isinstance(data, dict) else None
     if tool not in ("Bash", "PowerShell"):
         return 0
-    try:
-        reason = check((data.get("tool_input") or {}).get("command") or "", tool)
-    except Exception:
-        # An error is not a certain force push.
-        return 0
+    # An error in the check exits 1, which the hook entry's onFailure turns into a refusal.
+    reason = check((data.get("tool_input") or {}).get("command") or "", tool)
     if reason:
         print(f"Blocked a force push: {reason}. Use `--force-with-lease` instead, which refuses "
               "to overwrite commits you have not fetched. If the command only mentions a force "
