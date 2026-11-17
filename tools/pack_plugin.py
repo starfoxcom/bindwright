@@ -17,12 +17,12 @@ only the exact helper the plugin was packed with.
     python tools/pack_plugin.py --tgz DIR         -> the helper's npm tarball, built from git at HEAD
     python tools/pack_plugin.py --wheel DIR       -> the helper's wheel, built from git at HEAD
     ... --zip, --helper-out, --tgz or --wheel with --ref REF  -> the same, from REF
-    python tools/pack_plugin.py --marketplace     -> .claude-plugin/marketplace.json for HEAD's zip
+    python tools/pack_plugin.py --marketplace     -> prints the wrights marketplace entry for HEAD's zip
 
 The zip, the tarball and the wheel are read from git, not from the working
 tree, so every machine builds the same bytes whatever its line endings; the
 release workflow rebuilds them and refuses to publish a zip whose SHA-256
-differs from the marketplace file. Every plugin pack is checked against the
+differs from the pin in the starfoxcom/wrights marketplace. Every plugin pack is checked against the
 directory's rules (tools/directory_check.py). Try a pack with
 `claude --plugin-dir dist/bindwright`. Standard library only.
 """
@@ -69,10 +69,8 @@ GLOBAL_FILES = [
 # Marks a folder as a pack, so --out never replaces anything else.
 MARKER = ".bindwright-pack.txt"
 
-# Where releases are published, and the marketplace file that lists them.
+# Where releases are published.
 REPO = "starfoxcom/bindwright"
-MARKETPLACE = ".claude-plugin/marketplace.json"
-DESCRIPTION = "The Bindwright plugin, from its GitHub releases."
 HELPER_DESCRIPTION = "The files the Bindwright plugin runs on your computer: its setup engine, templates and scripts."
 HOMEPAGE = "https://starfoxcom.github.io/bindwright/"
 # What npm installs from the helper folder, beside package.json, README.md and LICENSE.
@@ -335,19 +333,16 @@ def write_helper_file(kind, folder, ref="HEAD"):
     return path
 
 
-def marketplace(manifest, sha256):
-    """The marketplace file that lists the release zip of the plugin `manifest` describes."""
+def marketplace_entry(manifest, sha256):
+    """Bindwright's entry in the wrights marketplace, listing the release zip of the plugin `manifest` describes."""
     version = manifest["version"]
     url = "https://github.com/%s/releases/download/v%s/bindwright-%s.zip" % (REPO, version, version)
-    entry = {
+    return {
         "name": "bindwright",
         "description": manifest["description"],
         "version": version,
         "source": {"source": "archive", "url": url, "sha256": sha256},
     }
-    owner = {"name": REPO.split("/")[0], "url": "https://github.com/" + REPO.split("/")[0]}
-    data = {"name": "bindwright", "description": DESCRIPTION, "owner": owner, "plugins": [entry]}
-    return json.dumps(data, indent=2) + "\n"
 
 
 def _value(argv, flag):
@@ -359,26 +354,18 @@ def _value(argv, flag):
     return argv[i]
 
 
-def _write_marketplace(argv, ref):
+def _print_marketplace_entry(ref):
     tmp = os.path.join(ROOT, "dist", "marketplace-check.zip")
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
     manifest, sha = pack_zip(tmp, ref)
     os.remove(tmp)
-    # An optional path after the flag, for tests; the repo's own file otherwise.
-    i = argv.index("--marketplace") + 1
-    target = os.path.join(ROOT, *MARKETPLACE.split("/"))
-    if i < len(argv) and not argv[i].startswith("--"):
-        target = argv[i]
-    os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)
-    with open(target, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(marketplace(manifest, sha))
-    print("Wrote %s for %s (sha256 %s)" % (MARKETPLACE, manifest["version"], sha))
+    print(json.dumps(marketplace_entry(manifest, sha), indent=2))
 
 
 def main(argv):
     ref = _value(argv, "--ref")
     if "--marketplace" in argv:
-        _write_marketplace(argv, ref or "HEAD")
+        _print_marketplace_entry(ref or "HEAD")
         return
     zip_path = _value(argv, "--zip")
     if zip_path is not None:

@@ -110,25 +110,22 @@ test("the release zip has the same bytes on every build and the folder pack's fi
     join(root, "dir")]).stdout.trim().split(/\r?\n/);
     assert.deepEqual(names, walk.filter((p) => p !== ".bindwright-pack.txt"));
 
-    // --marketplace creates its folder and pins the zip just built.
-    const file = join(root, "new", ".claude-plugin", "marketplace.json");
-    const wrote = run(python, [join(repo, "tools", "pack_plugin.py"), "--marketplace", file]);
-    assert.equal(wrote.status, 0, wrote.stderr);
+    // --marketplace prints the wrights entry that pins the zip just built.
+    const printed = run(python, [join(repo, "tools", "pack_plugin.py"), "--marketplace"]);
+    assert.equal(printed.status, 0, printed.stderr);
     const sha = createHash("sha256").update(zip("c.zip")).digest("hex");
-    assert.equal(JSON.parse(readFileSync(file, "utf8")).plugins[0].source.sha256, sha);
+    assert.equal(JSON.parse(printed.stdout).source.sha256, sha);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("the marketplace file lists the release zip by version and SHA-256", needsPython, () => {
-  const script = "import sys; sys.path.insert(0, sys.argv[1]); import pack_plugin as p; "
-    + "print(p.marketplace({'version': '2.0.0', 'description': 'd'}, 'ab' * 32), end='')";
+test("the marketplace entry lists the release zip by version and SHA-256", needsPython, () => {
+  const script = "import json, sys; sys.path.insert(0, sys.argv[1]); import pack_plugin as p; "
+    + "print(json.dumps(p.marketplace_entry({'version': '2.0.0', 'description': 'd'}, 'ab' * 32)))";
   const out = run(python, ["-I", "-c", script, join(repo, "tools")]);
   assert.equal(out.status, 0, out.stderr);
-  const market = JSON.parse(out.stdout);
-  assert.equal(market.name, "bindwright");
-  assert.deepEqual(market.plugins, [{
+  assert.deepEqual(JSON.parse(out.stdout), {
     name: "bindwright",
     description: "d",
     version: "2.0.0",
@@ -137,7 +134,7 @@ test("the marketplace file lists the release zip by version and SHA-256", needsP
       url: "https://github.com/starfoxcom/bindwright/releases/download/v2.0.0/bindwright-2.0.0.zip",
       sha256: "ab".repeat(32),
     },
-  }]);
+  });
 });
 
 // npm's own script, run with this Node: where Node installers put it on Windows and elsewhere.
