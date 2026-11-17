@@ -30,7 +30,7 @@ Tell the user, grouped by kind (rules, skills, hooks, workflows, docs) and not f
 - **`missing`**: already gone; nothing to do.
 - **`owned`**: listed in `.bindwright/owned` as the project's own; they stay.
 
-Also offer to take out what setup changed outside those files: the `.claude/settings.local.json` line it added to `.gitignore`, and the `.bindwright/handoff.md` line in the file `git rev-parse --git-path info/exclude` prints.
+Also offer to take out what setup changed outside those files: the `.claude/settings.local.json` line it added to `.gitignore`, the `.bindwright/handoff.md` line in the file `git rev-parse --git-path info/exclude` prints, and the date `/close-session` keeps in the clone's git config (`git config --local --unset bindwright.lastPruning`).
 
 **On GitHub, before the review workflows go.** When the repo has the review gate (`.github/workflows/claude-code-review.yml` among the files), say first that its branch rules still require the `Review gate` check: once the workflows are gone, no pull request can merge until that required check is removed from the branch rules (repo Settings, then Rules or Branches). Name the review secret and, with a board, the board too; this skill changes nothing on GitHub, so the user removes those by hand.
 

@@ -96,7 +96,7 @@ When `$HOME/.findwright/helper/node_modules/findwright/src/cli.mjs` exists and `
 <!-- TOGGLE:code_research:findwright END -->
 ## Pruning pass
 
-Rules, tests and memory only ever grow, and a long rule file is where a session reads past a rule. So at most once a month, offer to prune. `.bindwright/last-pruning` holds the date of the last pass, offered or run. When it is missing, write today's date and skip this step, so the first offer comes a month after setup; when it is less than 30 days old, skip this step. Otherwise ask once: "It has been a month: look for rules, tests and memory entries nothing uses any more?" On a no, write today's date and go on. The file stays out of git: whenever you write it, on either answer, first make sure the line `.bindwright/last-pruning` is in the file `git rev-parse --git-path info/exclude` prints, and add it when it is not.
+Rules, tests and memory only ever grow, and a long rule file is where a session reads past a rule. So at most once a month, offer to prune. The date of the last pass, offered or run, lives in this clone's git config, which its worktrees share and no commit carries: `git config --local bindwright.lastPruning` prints it, and `git config --local bindwright.lastPruning <YYYY-MM-DD>` sets it. When it prints nothing, set today's date and skip this step, so the first offer comes a month after the first close that runs it; when it is less than 30 days old, skip this step. Otherwise ask once: "It has been a month: look for rules, tests and memory entries nothing uses any more?" On a no, set today's date and go on.
 
 On a yes, list the candidates, each with one line on why:
 
@@ -104,7 +104,7 @@ On a yes, list the candidates, each with one line on why:
 - Tests that are skipped for good, or that fail for the same reason as another test in their file (`.claude/rules/testing.md`, rule 2).
 - Memory entries in `~/.claude/projects/<project-slug>/memory/` that name a file or function that no longer exists, repeat another entry, or say what the repo's rules already say.
 
-Propose each removal one at a time and make it only on a yes; a removal from the repo goes into this session's commit. Then write today's date to `.bindwright/last-pruning`.
+Propose each removal one at a time and make it only on a yes; a removal from the repo goes into this session's commit. Then set today's date.
 
 ## Project steps
 
