@@ -295,6 +295,8 @@ def keep_base(root, paths, state_json):
         else:
             state["files"].pop(path, None)
             result["dropped"].append(path)
+    # Sorted as plan_update writes them, so a base put back lands at its place, not at the end.
+    state["files"] = {p: state["files"][p] for p in sorted(state["files"], key=_code_units)}
     refuse_links(root, [PRISTINE])
     _put(root, PRISTINE, state_json(state))
     return result

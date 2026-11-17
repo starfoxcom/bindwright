@@ -301,16 +301,21 @@ export function keepBase(root, paths) {
   const before = recordOf(decode(committed, what).replace(/\r\n/g, "\n"), what).files;
   const state = recordOf(current, PRISTINE);
   const result = { kept: [], dropped: [] };
+  const files = new Map(Object.entries(state.files));
   for (const path of paths) {
     if (Object.hasOwn(before, path)) {
-      // A plain assignment to "__proto__" would set the prototype instead of an entry.
-      const field = { value: before[path], enumerable: true, writable: true, configurable: true };
-      Object.defineProperty(state.files, path, field);
+      files.set(path, before[path]);
       result.kept.push(path);
     } else {
-      delete state.files[path];
+      files.delete(path);
       result.dropped.push(path);
     }
+  }
+  // Sorted as planUpdate writes them, so a base put back lands at its place, not at the end.
+  // defineProperty, since a plain assignment to "__proto__" would set the prototype instead.
+  state.files = {};
+  for (const path of [...files.keys()].sort()) {
+    Object.defineProperty(state.files, path, { value: files.get(path), enumerable: true, writable: true });
   }
   refuseLinks(root, [PRISTINE]);
   put(root, PRISTINE, stateJson(state));

@@ -491,9 +491,12 @@ test("a file held back for a later PR keeps its old base, so the next update off
     // An update moved the file's base to today's text, and the file itself was held back.
     const moved = JSON.parse(repo.read(PRISTINE));
     moved.files[RULE] = today;
+    delete moved.files[OTHER]; // as an update records a file the templates dropped
     repo.write(PRISTINE, JSON.stringify(moved));
-    const kept = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE, "docs/new.md"] }));
-    assert.deepEqual(kept, { kept: [RULE], dropped: ["docs/new.md"] }, cmd);
+    const kept = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE, OTHER, "docs/new.md"] }));
+    assert.deepEqual(kept, { kept: [RULE, OTHER], dropped: ["docs/new.md"] }, cmd);
+    const order = Object.keys(JSON.parse(repo.read(PRISTINE)).files);
+    assert.deepEqual(order, [...order].sort(), `${cmd}: a base put back lands at its sorted place`);
     assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), `${cmd}: the held-back change comes again`);
     // Names an object inherits in JavaScript are plain paths, and a record with no files is refused.
     const inherited = run(["--keep-base", repo.at("")], JSON.stringify({ paths: ["constructor", "__proto__"] }));
