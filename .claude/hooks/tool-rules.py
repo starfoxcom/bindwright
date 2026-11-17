@@ -5,15 +5,16 @@ Each rule in RULES names a pattern that keeps failing, why, and what to use
 instead. A correction of the kind "never use X, use Y" lands here as a new rule,
 so the session cannot drift back to X: a note in memory alone does not hold.
 
-Rules read the command's text. A rule marked `bare` reads it with quoted
-strings and here-document bodies taken out, so a commit message or a PR body
-that only mentions the pattern passes. It is a safety net for the ordinary
-spelling, not a sandbox against a command built to slip past it.
+Rules other than the inline-script one read the command with quoted strings,
+here-document bodies and PowerShell here-string bodies taken out, so a commit
+message or a PR body that only mentions a pattern passes. It is a safety net
+for the ordinary spelling, not a sandbox against a command built to slip past it.
 
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
 """
 import json
+import os
 import re
 import sys
 
@@ -21,38 +22,46 @@ INTERPRETER = r"(?:python3?|py|node|deno|bun|perl|ruby|php|bash|sh|zsh|pwsh|powe
 INTERPRETER_WORD = re.compile(r"(?:^|[\s;&|(])" + INTERPRETER + r"(?=[\s;&|)]|$)", re.I)
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][\w-]*)\2")
 HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
+# The separators between the commands of one line; a pipe joins two parts of one command.
+LIST_SEPARATOR = re.compile(r"&&|\|\||;")
 # `python -c '...'`, `node -e "..."`: the script text, as far as its closing quote.
 INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c[ \t]+(['\"])(.*?)\1"
                     r"|(?:^|[\s;&|(])node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print)[ \t]+(['\"])(.*?)\3",
                     re.I | re.S)
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
-REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?[\s\"'][\w./@~^-]+:\.[^/\s.]", re.I)
+REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
 QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
+# Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
+GIT_BASH = os.name == "nt"
 
 WRITE_THE_FILE = "its backslashes get eaten. Write the script with the Write tool, then run the file."
 
 
 def heredoc_bodies(text):
-    """(line holding the `<<`, body) for each here-document in the text."""
+    """(the command holding the `<<`, body) for each here-document in the text: the part of its
+    line between the separators around the `<<`, pipes included."""
     lines = text.split("\n")
     i = 0
     while i < len(lines):
-        found = list(HEREDOC.finditer(lines[i]))
-        start, i = i, i + 1
+        line = lines[i]
+        found = list(HEREDOC.finditer(line))
+        i += 1
         for match in found:
+            command = (LIST_SEPARATOR.split(line[:match.start()])[-1]
+                       + LIST_SEPARATOR.split(line[match.end():])[0])
             body = []
             while i < len(lines):
-                line = lines[i].rstrip("\r")
+                body_line = lines[i].rstrip("\r")
                 i += 1
-                if (line.lstrip("\t") if match.group(1) else line) == match.group(3):
+                if (body_line.lstrip("\t") if match.group(1) else body_line) == match.group(3):
                     break
-                body.append(line)
-            yield lines[start], "\n".join(body)
+                body.append(body_line)
+            yield command, "\n".join(body)
 
 
 def inline_script(text, shell):
     """Whether an interpreter is handed a script holding a backslash."""
-    if any(INTERPRETER_WORD.search(line) and "\\" in body for line, body in heredoc_bodies(text)):
+    if any(INTERPRETER_WORD.search(command) and "\\" in body for command, body in heredoc_bodies(text)):
         return True
     if shell == "powershell" and any("\\" in m.group(2) and INTERPRETER_WORD.search(m.group(3))
                                      for m in HERE_STRING.finditer(text)):
@@ -61,7 +70,8 @@ def inline_script(text, shell):
 
 
 def bare(text):
-    """The command with quoted strings and here-document bodies taken out."""
+    """The command with here-string bodies, here-document bodies and quoted strings taken out."""
+    text = HERE_STRING.sub(r"''\3", text)
     for _, body in heredoc_bodies(text):
         if body:
             text = text.replace(body, "")
@@ -78,7 +88,8 @@ RULES = [
     ("an inline script holding a backslash", inline_script, WRITE_THE_FILE),
     ("`gh run watch`", both(r"\bgh\s+run\s+watch\b"),
      "it blocks the session. ci-watch (or a bounded watcher, token-efficiency.md) watches checks."),
-    ("the size check chained with a commit or push", both(r"size_check\.py", r"\bgit\s+(?:commit|push)\b"),
+    ("the size check chained with a commit or push",
+     both(r"\b(?:python3?|py)(?:\.exe)?\s+(?:-\S+\s+)*\S*size_check\.py", r"\bgit\s+(?:commit|push)\b"),
      "the commit runs past its breaches. Run size_check.py in its own call first."),
     ("`git push` and `gh pr create` in one command", both(r"\bgit\s+push\b", r"\bgh\s+pr\s+create\b"),
      "the chain gets refused. Push, then open the PR in a separate call."),
@@ -86,8 +97,9 @@ RULES = [
      "it overwrites and stages those files. Peek with `git show <rev>:./<path>`; restore with `git restore`."),
     ("`gh pr merge --admin`", both(r"\bgh\s+pr\s+merge\b.*\s--admin\b"),
      "it skips the required checks. Fix what blocks the merge."),
-    ("`<rev>:.<path>` in Git Bash", lambda text, shell: shell == "bash" and REV_DOT_PATH.search(text),
-     "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>`."),
+    ("`<rev>:.<path>` in Git Bash",
+     lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text)),
+     "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root."),
 ]
 
 

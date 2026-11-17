@@ -159,21 +159,31 @@ class GuardHookTest(unittest.TestCase):
                    ("@'\nprint('C:\\\\x')\n'@ | python -", "PowerShell"), ("gh run watch 123", "Bash"),
                    ("python .github/scripts/size_check.py && git commit -qm x", "Bash"),
                    ("git push -u origin x && gh pr create --base develop", "Bash"),
-                   ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"),
-                   ("git show origin/develop:.claude/settings.json", "Bash"))
-        passing = ("python - <<'EOF'\nprint('hi')\nEOF", "git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF",
-                   "cat <<'EOF' > notes.md\nC:\\\\x\nEOF", 'python -c "print(1)"',
-                   'git commit -m "never use gh run watch"', 'git commit -m "size_check.py before git push"',
-                   "git checkout -q -b feature/x", "git checkout -- file.txt", "gh pr merge 5 --merge",
-                   "node script.mjs C:\\\\x", "git show origin/develop:./.claude/settings.json")
+                   ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"))
+        passing = (("python - <<'EOF'\nprint('hi')\nEOF", "Bash"),
+                   ("git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
+                   ("python3 tools/x.py && git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
+                   ("@'\nfix: it's why gh run watch is refused\n'@ | git commit -F -", "PowerShell"),
+                   ("cat <<'EOF' > notes.md\nC:\\\\x\nEOF", "Bash"), ('python -c "print(1)"', "Bash"),
+                   ('git commit -m "never use gh run watch"', "Bash"),
+                   ('git commit -m "size_check.py before git push"', "Bash"),
+                   ("git add .github/scripts/size_check.py && git commit -m x", "Bash"),
+                   ("git checkout -q -b feature/x", "Bash"), ("git checkout -- file.txt", "Bash"),
+                   ("gh pr merge 5 --merge", "Bash"), ("node script.mjs C:\\\\x", "Bash"),
+                   ("git show origin/develop:./.claude/settings.json", "Bash"),
+                   ('git commit -m "read it with git show HEAD:.claude/x"', "Bash"))
+        # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
+        rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
+        refused += rev_dot_path if os.name == "nt" else ()
+        passing += () if os.name == "nt" else rev_dot_path
         for command, tool in refused:
             with self.subTest(command=command):
                 result = self.run_hook("tool-rules", command, tool=tool)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(b"BLOCKED (tool rule)", result.stdout)
-        for command in passing:
+        for command, tool in passing:
             with self.subTest(command=command):
-                self.assert_passes(self.run_hook("tool-rules", command))
+                self.assert_passes(self.run_hook("tool-rules", command, tool=tool))
 
     def test_skipped_when_home_registers_a_working_copy(self):
         self.home_settings('{"command": "python \\"C:/Users/me/.claude/hooks/push-guard.py\\""}',
