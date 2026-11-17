@@ -37,7 +37,8 @@ CHECKED_STYLE = "straight talk"
 SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids them: "
 # A fence opens with three or more backticks or tildes; only a line of the same mark, at least as long,
 # closes it, as in CommonMark.
-FENCE_LINE = re.compile(r"[ \t]{0,3}(`{3,}|~{3,})")
+# Any indent, as under a nested list item, and quote marks before it, as inside a block quote.
+FENCE_LINE = re.compile(r"[ \t>]*(`{3,}|~{3,})")
 # An inline span closes on a backtick run of the same length as the one that opened it.
 INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)[^\n]+?(?<!`)\1(?!`)")
 # (what the reminder names, pattern): each counts its matches in a reply, code taken out first.
@@ -194,13 +195,15 @@ def prose_of(reply):
     """The reply without its code: fenced blocks (an unclosed one runs to the end) and inline spans."""
     kept, fence = [], None
     for line in reply.split("\n"):
-        opener = FENCE_LINE.match(line)
-        if fence is None and opener:
-            fence = opener.group(1)
-        elif fence is None:
-            kept.append(line)
-        elif opener and opener.group(1)[0] == fence[0] and len(opener.group(1)) >= len(fence) \
-                and not line[opener.end():].strip():
+        found = FENCE_LINE.match(line)
+        mark, rest = (found.group(1), line[found.end():]) if found else ("", "")
+        if fence is None:
+            # A backtick in the rest of the line makes it inline code (```js```), never a fence.
+            if mark and not (mark[0] == "`" and "`" in rest):
+                fence = mark
+            else:
+                kept.append(line)
+        elif mark[:1] == fence[0] and len(mark) >= len(fence) and not rest.strip():
             fence = None
     return INLINE_CODE.sub("", "\n".join(kept))
 
