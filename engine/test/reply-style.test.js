@@ -137,6 +137,10 @@ const SLIPPED = [
   // A fence opened on a list marker's line; bold that ends a sentence or names an option; two clauses.
   "1. ```sh", "npm ci —", "   ```", "**Don't merge until CI is green.**", "- **Merge now**",
   "Is that not just a typo? I checked but found nothing.", "```", "# install deps —", "```",
+  // Prose that names fence marks opens nothing; an indented code block; bold inside a hyphenated word.
+  "A fence opens with ``` on its own line.", "```", "# build — then basically done", "**Note:** x", "```",
+  "Wrap it in `` ``` `` marks.", "```", "**Note:** y —", "```", "", "    echo \"a — b\"  # basically", "",
+  "**Ctrl**-C stops it.", "- **Pre**-release builds come first.", "That is all.",
   // A fence shown inside a longer one, then a reply cut off inside a fence: all of it code.
   "````md", "```py", "# x —", "```", "````", "~~~", "# cut off —",
 ].join("\n");
