@@ -1349,6 +1349,45 @@ class HookSourceTest(unittest.TestCase):
                     compile(source, rel, "exec")
 
 
+def load_tool_rules():
+    import importlib.util
+    path = os.path.join(REPO, "_core", "global-template", "hooks", "tool-rules.py")
+    spec = importlib.util.spec_from_file_location("tool_rules", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ToolRulesModeTest(unittest.TestCase):
+    """Observe mode runs the command and logs it without tokens; enforce refuses; a mention breaks neither."""
+
+    def setUp(self):
+        self.hook = load_tool_rules()
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        self.hook.OBSERVED_LOG = os.path.join(folder, "tool-rules", "observed.jsonl")
+
+    def logged(self):
+        if not os.path.exists(self.hook.OBSERVED_LOG):
+            return []
+        with open(self.hook.OBSERVED_LOG, encoding="utf-8") as log:
+            return [json.loads(line) for line in log]
+
+    def test_observe_logs_and_passes_and_enforce_refuses(self):
+        watch = self.hook.both(r"\bgh\s+run\s+watch\b")
+        token = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        self.hook.RULES = [("watch", watch, "why", self.hook.OBSERVE)]
+        self.assertIsNone(self.hook.refusal('git commit -m "gh run watch 1"', "bash"))
+        self.assertEqual(self.logged(), [])
+        self.assertIsNone(self.hook.refusal(f"gh run watch 1 --token {token}", "powershell"))
+        entries = self.logged()
+        self.assertEqual([(entry["rule"], entry["shell"]) for entry in entries], [("watch", "powershell")])
+        self.assertNotIn(token, entries[0]["command"])
+        self.hook.RULES = [("watch", watch, "why", self.hook.ENFORCE)]
+        self.assertEqual(self.hook.refusal("gh run watch 1", "bash"), ("watch", "why"))
+        self.assertEqual(len(self.logged()), 1)
+
+
 class RunnerChainSweepTest(unittest.TestCase):
     """A seeded sweep of the spellings a git call can take behind runners, read by the real parser
     and the attribution guard's routes: a subcommand from a list is always refused, a written one
@@ -1436,17 +1475,14 @@ class ToolRulesSweepTest(unittest.TestCase):
     SAMPLES = 200
 
     def setUp(self):
-        import importlib.util
         import random
         self.seed = int(os.environ.get("GUARD_SWEEP_SEED") or random.randrange(2 ** 32))
         self.rng = random.Random(self.seed)
-        path = os.path.join(REPO, "_core", "global-template", "hooks", "tool-rules.py")
-        spec = importlib.util.spec_from_file_location("tool_rules", path)
-        self.hook = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(self.hook)
+        self.hook = load_tool_rules()
 
     def refused(self, text, shell):
-        return [name for name, test, _ in self.hook.RULES if test(text, shell)]
+        """Every rule the text breaks, in either mode: an observe rule's hit is a refusal to come."""
+        return [name for name, test, *_ in self.hook.RULES if test(text, shell)]
 
     def test_a_mention_always_passes_and_a_call_is_always_refused(self):
         for _ in range(self.SAMPLES):
