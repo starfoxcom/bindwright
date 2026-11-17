@@ -192,7 +192,7 @@ def runs_program_at(words, i):
     an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not, and neither
     is one behind a program outside RUNNERS. Each place a program may start is walked once, so a
     long chain of runners (`sudo -E sudo -E ...`) stays fast."""
-    @functools.cache
+    @functools.lru_cache(maxsize=None)
     def reaches(j):
         if j == i:
             return True
