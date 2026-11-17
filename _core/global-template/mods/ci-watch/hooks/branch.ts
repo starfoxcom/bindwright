@@ -9,8 +9,9 @@ export type WorkStep = { folder?: string; isPush?: boolean }
 
 async function git($: EngineInterface, cwd: string, folder: string, args: readonly string[]) {
   try {
-    const { stdout, exitCode } = await $.process.run(['git', '-C', folder, ...args], { cwd, timeoutMs: 10_000 })
-    return exitCode === 0 ? stdout.trim() : ''
+    const run = await $.process.run(['git', '-C', folder, ...args], { cwd, timeoutMs: 10_000 })
+    // Output cut at the engine's limit is read as no answer, so a key past the cut can never lift a hold.
+    return run.exitCode === 0 && !run.isStdoutTruncated ? run.stdout.trim() : ''
   } catch {
     return ''
   }

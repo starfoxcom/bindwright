@@ -193,6 +193,10 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   // Only a config that sends each pushed name to itself lifts a push; a valueless key counts as set.
   w.seen.gitConfig = { 'C:/session': 'push.default\nsimple\0remote.origin.url\nu\0' }
   expect(await bash('git push')).not.toHaveProperty('deny')
+  // Output cut at the engine's limit may hide a key past the cut, so it is no answer.
+  w.seen.isGitCut = true
+  expect(await bash('git push')).toHaveProperty('deny')
+  w.seen.isGitCut = false
   for (const config of ['remote.origin.mirror\ntrue\0', 'remote.origin.mirror\0', 'push.default\nupstream\0']) {
     w.seen.gitConfig = { 'C:/session': config }
     expect([config, await bash('git push origin try-fix')]).toEqual(denied(config))

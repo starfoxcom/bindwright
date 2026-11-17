@@ -36,6 +36,8 @@ export type Seen = {
   upstream?: Record<string, string>
   // Per folder, what `git config --null --list` prints (one plain setting without an entry).
   gitConfig?: Record<string, string>
+  // Whether git's output comes back cut at the engine's limit, its exit code still 0.
+  isGitCut?: boolean
   isGitDown?: boolean
   mergedPrs?: number[]
   /** The head commit `gh pr view` reports (default `a1`). */
@@ -125,7 +127,8 @@ export function world(on: On) {
       const named = args.endsWith('config --null --list') ? config : branch
       const stdout = seen.isGitDown || named === undefined ? '' : `${named}\n`
       const exitCode = stdout ? 0 : 128
-      return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+      const isStdoutTruncated = seen.isGitCut === true
+      return { value: { exitCode, stdout, stderr: '', isStdoutTruncated, isStderrTruncated: false } }
     }
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)
     if (args.includes('pr checks')) seen.checksRead++
