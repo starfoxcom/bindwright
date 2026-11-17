@@ -32,7 +32,8 @@ ATTACHED = ("-F", "-d")  # short flags read with a value written onto them (`-Fm
 READ_CMDLETS = {"get-content", "gc"}
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
                      "--super-prefix", "--attr-source"}
-# git's own options that take no value (git(1)); git matches them whole, never abbreviated.
+# git's own options that take no next word (git(1)), `--exec-path` only an optional `=<path>`;
+# git matches them whole, never abbreviated.
 GIT_GLOBAL_FLAGS = {"-p", "--paginate", "-P", "--no-pager", "--bare", "--no-replace-objects",
                     "--no-lazy-fetch", "--no-optional-locks", "--no-advice", "--literal-pathspecs",
                     "--glob-pathspecs", "--noglob-pathspecs", "--icase-pathspecs", "--exec-path",

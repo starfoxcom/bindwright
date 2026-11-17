@@ -1004,6 +1004,7 @@ class GuardHookTest(unittest.TestCase):
         for (command, tool), result in self.each(
                 (('git -C $repo -c user.name=x commit -m "fix: y"', "PowerShell"),
                  ("git -C $repo --no-pager log", "PowerShell"),
+                 ('git -C $repo --exec-path=/opt/git-core commit -m "fix: y"', "Bash"),
                  ("for d in */; do git -C $d --no-pager log -1; done", "Bash")),
                 lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):

@@ -168,7 +168,7 @@ def only_git_options(words):
             continue
         if word in GIT_VALUE_OPTIONS:
             next(rest, None)
-        elif word not in GIT_GLOBAL_FLAGS and word.split("=", 1)[0] not in GIT_VALUE_OPTIONS:
+        elif word.split("=", 1)[0] not in GIT_GLOBAL_FLAGS | GIT_VALUE_OPTIONS:
             return False
     return True
 
