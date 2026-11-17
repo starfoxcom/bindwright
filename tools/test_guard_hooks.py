@@ -973,7 +973,11 @@ class GuardHookTest(unittest.TestCase):
                  ('env "${vars[@]}" git "$@"', "Bash"), ('sudo $SUDO_FLAGS git "$@"', "Bash"),
                  ('sudo -E timeout 30 git "$@"', "Bash"), ('env "${v[@]}" timeout 30 sudo -u r git "$@"', "Bash"),
                  ('f() { sudo -E timeout 30 git "$@"; }; f commit --no-verify -m x', "Bash"),
-                 ('env -i timeout 30 git "$@"', "Bash"), ('sudo -n chrt 99 git "$@"', "Bash")),
+                 ('env -i timeout 30 git "$@"', "Bash"), ('sudo -n chrt 99 git "$@"', "Bash"),
+                 ('chrt -f 99 timeout 30 git "$@"', "Bash"), ('taskset -c 0 timeout 30 git "$@"', "Bash"),
+                 ('timeout --foreground 30 chrt 99 git "$@"', "Bash"), ('timeout -- 30 chrt 99 git "$@"', "Bash"),
+                 ('timeout -v 30 taskset 0x1 git "$@"', "Bash"), ('taskset $OPTS 0 timeout 30 git "$@"', "Bash"),
+                 ('f() { chrt -f 99 timeout 30 git "$@"; }; f commit --no-verify -m x', "Bash")),
                 lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "takes its subcommand from a word built at run time")

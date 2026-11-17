@@ -181,26 +181,30 @@ def runs_program_at(words, i, j=0):
 
 def program_starts(words, j, i):
     """Where the program the runner at words[j] starts may be, up to i: after its options,
-    NAME=value words and other words. A word right after an option, or after a word that may
-    expand to several (`"${vars[@]}"`), may be the option's value or the program, so both
-    readings count."""
-    others = RUNNERS[program(words[j:])]
-    after_option = False
+    NAME=value words and the words it counts before its program (`timeout`'s duration). A word
+    right after an option, or after a word that may expand to several (`"${vars[@]}"`), may be
+    the option's value, one of the counted words or the program, so every reading is followed at
+    once: `states` holds, per reading still alive, the counted words left and whether the word
+    before may have been an option that takes a value."""
+    starts, states = set(), {(RUNNERS[program(words[j:])], False)}
     for k in range(j + 1, i):
-        shape = shape_of(words[k])
-        if shape.startswith("-") or re.match(r"\w+=", shape):
-            after_option = shape.startswith("-")
-        elif may_split(words[k]):
-            after_option = True  # may hold options, their values, or nothing
-        elif after_option:
-            yield k
-            after_option = False
-        elif others:
-            others -= 1
-        else:
-            yield k
-            return
-    yield i
+        shape, following = shape_of(words[k]), set()
+        for others, after_option in states:
+            if shape.startswith("-") or re.match(r"\w+=", shape):
+                following.add((others, shape.startswith("-")))
+            elif may_split(words[k]):
+                following.add((others, True))  # may hold options, their values, or nothing
+            else:
+                if after_option or not others:
+                    starts.add(k)
+                if after_option:
+                    following.add((others, False))
+                if others:
+                    following.add((others - 1, False))
+        states = following
+        if not states:
+            return starts
+    return starts | {i}
 
 
 def only_looks_up(words):
