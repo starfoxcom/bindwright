@@ -261,13 +261,14 @@ export async function runUpdate(root, { bindWith, version }) {
     if (base in pristine.files) plan.pristine.files[path] = pristine.files[base];
     else delete plan.pristine.files[path];
   }
+  // The replaced record is saved first, so a failure to save it stops the update before any repo write.
+  const before = beforePath(root);
+  if (before !== null) writeFileSync(before, saved);
   for (const [path, text] of plan.write) put(root, path, text);
   for (const [path, text] of plan.stage) {
     if (!skipped.includes(path.slice(STAGING.length))) put(root, path, text, "wx");
   }
   for (const path of plan.remove) removeMoved(root, path);
-  const before = beforePath(root);
-  if (before !== null) writeFileSync(before, saved);
   put(root, PRISTINE, stateJson(plan.pristine));
   return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
 }

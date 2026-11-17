@@ -241,6 +241,11 @@ def run_update(root, bind_with, version, state_json):
             files[path] = pristine["files"][base]
         else:
             files.pop(path, None)
+    # The replaced record is saved first, so a failure to save it stops the update before any repo write.
+    before = _before_path(root)
+    if before is not None:
+        with open(before, "w", encoding="utf-8", newline="") as fh:
+            fh.write(saved)
     for path, text in plan["write"]:
         _put(root, path, text)
     for path, text in plan["stage"]:
@@ -248,10 +253,6 @@ def run_update(root, bind_with, version, state_json):
             _put(root, path, text, exclusive=True)
     for path in plan["remove"]:
         _remove_moved(at(path))
-    before = _before_path(root)
-    if before is not None:
-        with open(before, "w", encoding="utf-8", newline="") as fh:
-            fh.write(saved)
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
     out["renamed"] = plan["renamed"]
@@ -279,7 +280,10 @@ def _before_path(root):
         return None
     if out.returncode != 0:
         return None
-    path = out.stdout.decode("utf-8", "replace").strip()
+    try:
+        path = out.stdout.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None
     return path if os.path.isabs(path) else os.path.join(root, path)
 
 

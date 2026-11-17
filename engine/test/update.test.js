@@ -486,6 +486,13 @@ test("a file held back for a later PR keeps its old base, so the next update off
       JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
     const early = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE] }));
     assert.match(early.error, /No record from before the last update/, cmd);
+    // A record that cannot be saved stops the update before it writes anything.
+    const blocker = repo.at(".git/bindwright-pristine-before.json");
+    mkdirSync(blocker);
+    const [ruleBefore, pristineBefore] = [repo.read(RULE), repo.read(PRISTINE)];
+    assert.ok(run(["--update", repo.at("")]).error, `${cmd}: an unsavable record is an error`);
+    assert.deepEqual([repo.read(RULE), repo.read(PRISTINE)], [ruleBefore, pristineBefore], `${cmd}: nothing written`);
+    rmSync(blocker, { recursive: true });
     // The update moves the file's base to today's text; the file itself is then held back.
     assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), cmd);
     repo.write(RULE, older(today));
