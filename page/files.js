@@ -24,6 +24,7 @@ const EXTRA_READS = [
   ...["MIT", "Apache-2.0", "BSD-3-Clause", "Proprietary"].map((l) => `_core/licenses/${l}.txt`),
   ...["CLAUDE.md.additions", "memory-template/MEMORY.md", "hooks/push-guard.py",
     "hooks/no-ai-attribution.py", "hooks/code-research-profiles.json",
+    ...["__init__", "files", "routes", "shell"].map((m) => `hooks/no_ai_attribution/${m}.py`),
     "hooks/code-research-first.py.template"].map((p) => `_core/global-template/${p}`),
 ];
 

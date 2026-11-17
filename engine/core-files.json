@@ -1,6 +1,10 @@
 [
   ".bindwright/session-steps.md",
   ".claude/hooks/no-ai-attribution.py",
+  ".claude/hooks/no_ai_attribution/__init__.py",
+  ".claude/hooks/no_ai_attribution/files.py",
+  ".claude/hooks/no_ai_attribution/routes.py",
+  ".claude/hooks/no_ai_attribution/shell.py",
   ".claude/hooks/push-guard.py",
   ".claude/hooks/run-hook.sh",
   ".claude/hooks/version-check.py",

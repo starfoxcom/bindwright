@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -30,6 +31,15 @@ AI_TRAILER = "Co-" + "Authored-By: Cla" + "ude <noreply@anthro" + "pic.com>"
 HUMAN_TRAILER = "Co-" + "Authored-By: Jane Doe <12345+jane@users.noreply.github.com>"
 GENERATED_LINE = "Gener" + "ated with [Cla" + "ude Code](https://cla" + "ude.com/claude-code)"
 SESSION_LINK = "https://cla" + "ude.ai/code/session_" + "01V8SAUxUZBbVPekZUHDL9FZ"
+# Brace forms checked against real bash: lists, ranges, steps, padding, escapes, quotes, nesting,
+# empties, dots in a list, and the forms that must get no reading (a `$`, a range across cases).
+BRACE_ROWS = (
+    "{{a,b}", "{a,b}}", r"\{a,b}", r"{a\,b}", '{a","b}', '{a,b"}"}', "{a..3}", "{1..10..0}", "{01..03}",
+    "{a..e..2}", "{1..5..-2}", "{5..1}", "{a,{b,c}d}", "{,}", "{a,}{b,}", "-{F,}m.txt", "{-03..2}",
+    r"{a,b\}}", '{"a,b"}', "{a..c}{1..2}", 'a{b,c}"d"', "{1..3..2}", "{z..x}", "{A..c}", "'{a,b}'",
+    r"{a,b}\ ", "{,a}", "{}", "{a}", "{1..}", "{a,b}{}", "{$,x}HOME", r"{\$,x}H", "{O..a..12}-]n",
+    "-{V..a..6}-x", "{a..c}{X..Z}", "{1..a}", "{-1..1}", "{-F,../msg.txt}", "{1..2,3}", "{-n,-m..}",
+    '{a,""}', "''{,}", "x{,}")
 # The deep-review trigger, split so a review that quotes this file cannot
 # carry the whole phrase into a PR comment and start a deep review.
 DEEP_TRIGGER = "@cla" + "ude rev" + "iew this PR"
@@ -66,6 +76,15 @@ def settings_command(name):
 
 @unittest.skipIf(SH is None, "needs a POSIX sh on PATH (Git Bash on Windows)")
 class GuardHookTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # The first Node start on a Windows runner (cold disk cache, the virus scanner reading
+        # node.exe) can pass the guard's parse time limit; one start here keeps it out of the rows.
+        node = shutil.which("node")
+        for shell in ("bash", "powershell") if node else ():
+            subprocess.run([node, os.path.join(HELPER, "hooks", "shell-words.mjs"), shell],
+                           input=b"true", capture_output=True, timeout=60)
+
     def setUp(self):
         self.home = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
@@ -98,6 +117,11 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(root, ".claude", "hooks"))
         for name in files:
             shutil.copy(os.path.join(REPO, ".claude", "hooks", name), os.path.join(root, ".claude", "hooks"))
+            package = name[:-3].replace("-", "_")  # a hook's package, as an install copies it
+            if name.endswith(".py") and os.path.isdir(os.path.join(REPO, ".claude", "hooks", package)):
+                shutil.copytree(os.path.join(REPO, ".claude", "hooks", package),
+                                os.path.join(root, ".claude", "hooks", package),
+                                ignore=shutil.ignore_patterns("__pycache__"))
         return root
 
     def home_settings(self, text, hook_files=()):
@@ -316,6 +340,26 @@ class GuardHookTest(unittest.TestCase):
                                 text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
+
+    def test_a_guard_without_its_package_refuses_only_what_names_a_route(self):
+        # A copy of the hook file alone cannot read a command, so it refuses as without the parser.
+        root = self.temp_project(("run-hook.sh",))
+        hooks = os.path.join(root, ".claude", "hooks")
+        shutil.copy(os.path.join(REPO, ".claude", "hooks", "no-ai-attribution.py"), hooks)
+        for command in ("git commit -m x", "g\\it commit -m x", "git config core.hooksPath x"):
+            with self.subTest(command=command):
+                self.assert_denied(self.attr(command, project=root), "global-template/hooks/no_ai_attribution")
+        # The two restores the refusal names pass, and so does a read.
+        restore = f"cp -r {os.path.join(REPO, '_core', 'global-template', 'hooks', 'no_ai_attribution')} {hooks}"
+        for command in ("git status --porcelain", "git checkout -- .claude/hooks/no_ai_attribution", restore):
+            with self.subTest(command=command):
+                self.assert_passes(self.attr(command, project=root))
+        shutil.copytree(os.path.join(REPO, "_core", "global-template", "hooks", "no_ai_attribution"),
+                        os.path.join(hooks, "no_ai_attribution"))  # what the cp line does
+        # A file beside the hook never stands in for a module the guard imports.
+        with open(os.path.join(hooks, "subprocess.py"), "w", encoding="utf-8") as f:
+            f.write("raise SystemExit(3)\n")
+        self.assert_denied(self.attr("git commit --no-verify -m x", project=root), "--no-verify")
 
     def test_attribution_next_to_repo_name_is_denied(self):
         self.assert_denied(self.attr(
@@ -564,14 +608,46 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "Write it as plain commands")
 
-    def test_brace_and_pattern_words_are_read_as_built_at_run_time(self):
+    def test_pattern_and_mixed_brace_words_are_read_as_built_at_run_time(self):
         # The file such a word names is never read as a literal, quotes inside it included
-        # (`ms["g"]` is the pattern `ms[g]`).
-        for command, result in self.each(("gh pr create --body-file={a,b}", "git commit -F msg{1..3}.txt",
-                                          'git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]"),
+        # (`ms["g"]` is the pattern `ms[g]`), nor a brace holding a part built at run time.
+        for command, result in self.each(('git commit -F ms["g"]', "gh pr create --body-file=[a\"b\"]",
+                                          "git commit -F {a,$B}", "git commit -F msg{1..3}*.txt",
+                                          "git commit -F {A..c}"),
                                          lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_denied(result, "text the shell builds at run time")
+
+    def test_plain_text_braces_are_read_as_the_words_bash_makes(self):
+        # Bash expands `{-F,msg.txt}` to `-F msg.txt` before it runs git, so the file is read.
+        flagged = self.body_file(f"{GENERATED_LINE}\n").replace("\\", "/")
+        clean = self.body_file("Plain body.\n").replace("\\", "/")
+        for (command, flags), result in self.each((
+                (f"git commit {{-F,{flagged}}}", True), (f"gh pr create --title t {{--body-file,{flagged}}}", True),
+                (f"gh pr create --title {{,}} --title --body-file {flagged}", True),
+                (f"git commit {{-F,{clean}}}", False)),
+                lambda command, flags: self.attr(command)):
+            with self.subTest(command=command):
+                if flags:
+                    self.assert_denied(result, "attribution marker")
+                else:
+                    self.assert_passes(result)
+
+    def test_a_brace_is_read_both_as_written_and_as_bash_expands_it(self):
+        # A shell that does not expand braces (dash, `set +B`) gives git `-m '{,}' -n`, which skips
+        # the hooks; bash gives `{-n,-m} x` as `-n -m x`. Either reading is refused.
+        for (command, refused), result in self.each((
+                ("git commit -m {,} -n", True), ("sh -c 'git commit -m {,} -n'", True),
+                ("shopt -u -o braceexpand; git commit -m {,} -n", True), ("git commit {-n,-m} x", True),
+                ("bash -c 'git commit {-n,-m} x'", True), ("git commit -m {,} -m -n", True),
+                ("git commit -m x " + "{,}" * 30, False),
+                ("git commit -m {a,b}", False)),
+                lambda command, refused: self.attr(command)):
+            with self.subTest(command=command):
+                if refused:
+                    self.assert_denied(result, "git hook bypass")
+                else:
+                    self.assert_passes(result)
 
     def project_with(self, files):
         """A throwaway project with the guard and the given {relative path: text} files."""
@@ -581,6 +657,110 @@ class GuardHookTest(unittest.TestCase):
             with open(os.path.join(root, name), "w", encoding="utf-8") as fh:
                 fh.write(text)
         return root
+
+    def test_a_git_cluster_ending_in_F_reads_its_file(self):
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n"})
+        path = os.path.join(root, "msg.txt")
+        for command, result in self.each(
+                ("git commit -aF msg.txt", "git commit -aFmsg.txt", "git commit -vaF msg.txt"),
+                lambda command: self.attr(command, project=root)):
+            with self.subTest(command=command):
+                self.assert_denied(result, f"found in file {path}")
+        # -S takes its key attached, so `F` is the key and msg.txt a path to commit; on other
+        # subcommands a capital F is another option's value (`-bFeature-x` names a branch).
+        for command, result in self.each(
+                ("git commit -SF msg.txt", "git checkout -bFeature-x origin/develop && git push -u origin x"),
+                lambda command: self.attr(command, project=root)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+        # A cmdlet's whole-name -InFile keeps reading its file when the command names git.
+        self.assert_denied(self.attr("Invoke-WebRequest https://api.github.com/repos/o/r/issues -Method Post "
+                                     "-UserAgent git -inFile msg.txt", tool="PowerShell", project=root),
+                           f"found in file {path}")
+
+    def test_a_command_string_a_shell_runs_is_read_like_the_command(self):
+        root = self.project_with({"msg.txt": f"{GENERATED_LINE}\n", "clean.txt": "x\n", "inner.txt": "x\n",
+                                  "sub/msg.txt": "x\n", "sub/inner.txt": f"{GENERATED_LINE}\n"})
+        deep = "git commit -m x"
+        for _ in range(4):
+            deep = f"bash -c {shlex.quote(deep)}"
+        for (command, tool, reason), result in self.each((
+                ("pwsh -co 'git commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                ("pwsh -c 'git' 'commit --no-verify -m \"see git push\"'", "Bash", "nested PowerShell"),
+                ('powershell "git commit --no-verify -m x"', "PowerShell", "nested PowerShell"),
+                ("pwsh -NoProfile -Command \"git commit -m 'fix: y'\"", "PowerShell", "nested PowerShell"),
+                ("pwsh -Command { git commit --no-verify -m x }", "PowerShell", "--no-verify"),
+                # A script file counts only first, and `powershell` reads a first plain word as a command.
+                ('pwsh -Command "git commit --no-verify -m x; ./x.ps1"', "Bash", "nested PowerShell"),
+                ("powershell ./x.ps1 ';' 'git commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                # From bash a word starting with `{` is text or a brace expansion, never a script block.
+                ("pwsh -c {git,true}' commit --no-verify -m x'", "Bash", "nested PowerShell"),
+                # A block followed by text words is part of the joined script.
+                ("sudo pwsh -c {git commit} --no-verify -m x", "PowerShell", "nested PowerShell"),
+                ("sudo pwsh -c git { commit --no-verify -m x }", "PowerShell", "nested PowerShell"),
+                ("sudo pwsh -c '-not $x; git' { commit --no-verify -m x }", "PowerShell", "nested PowerShell"),
+                # An assignment or an option value named like git is not the program.
+                ("env HOME=/home/git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("sudo -u git bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("flock sort bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -oe pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash $OPTS -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -c 'git commit -F inner.txt'; bash -c 'cd sub; bash -c \"git commit -F inner.txt\"'",
+                 "Bash", "found in file"),
+                ("bash -c 'g\"i\"t commit --no-verify -m x'", "Bash", "--no-verify"),
+                (deep, "Bash", "nested more than"),
+                ("bash -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("sh -ec 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -euo pipefail -c 'git commit --no-verify -m x'", "Bash", "--no-verify"),
+                ("bash -ceo pipefail 'git commit -n -m x'", "Bash", "--no-verify"),
+                ("bash -c 'cd sub && git commit -F inner.txt'", "Bash", "found in file"),
+                ("bash --norc -o pipefail -c -- 'git -c core.hooksPath=x commit -m x'", "Bash", "core.hooksPath"),
+                ("bash -c \"bash -c 'git commit --trailer a=b -m x'\"", "Bash", "--trailer"),
+                ("sudo zsh -c 'LEFTHOOK=0 git commit -m x'", "Bash", "lefthook"),
+                ('bash -c "g\\it commit --no-verify $FLAGS"', "Bash", "built at run time"),
+                # The inner shell joins a line its own quoting ends in `\`, which the outer text hides.
+                ('bash -c "git \\\\\ncommit -F msg.txt -m x"', "Bash", "found in file"),
+                (f"bash -c 'git \\'\"\ncommit -m x -m '{GENERATED_LINE}'\"", "Bash", "a shell runs"),
+                ('bash -c "git \\\\\ncommit --no-verify $FLAGS"', "Bash", "built at run time"),
+                ('bash -c "git commit $FLAGS -m x"', "Bash", "built at run time")),
+                lambda command, tool, reason: self.attr(command, tool=tool, project=root)):
+            with self.subTest(command=command):
+                self.assert_denied(result, reason)
+        for (command, tool), result in self.each((
+                ("bash -c 'git commit -F clean.txt'", "Bash"), ("bash -c 'git status --no-verify'", "Bash"),
+                ("bash ./build.sh; git commit -m x", "Bash"), ("pwsh ./x.ps1; git commit -m x", "PowerShell"),
+                ("pwsh ./build.ps1 -c $cfg; git commit -m x", "Bash"),
+                ('gh issue create --label bash --body "git push fails on $BRANCH"', "Bash"),
+                ('sudo gh issue create --label bash --body "use git commit --no-verify to skip"', "Bash"),
+                ("pwsh -NoProfile -Command { git commit -m 'fix: y' }", "PowerShell"),
+                # A child shell's `cd` never moves the commands around it.
+                ("sh -c 'cd /no/such/folder && git commit -m x' && git commit -F clean.txt", "Bash"),
+                ('pwsh ./build.ps1 -Message "git push done"', "Bash"),
+                ('pwsh -NoProfile ./build.ps1 -Message "git push done"', "PowerShell")),
+                lambda command, tool: self.attr(command, tool=tool, project=root)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+
+    def test_a_cd_run_again_moves_on_from_its_last_folder(self):
+        # A loop or a function runs a `cd` again from the folder its last run reached.
+        nested = self.project_with({"msg.txt": "x\n", "sub/msg.txt": "x\n", "sub/sub/msg.txt": f"{GENERATED_LINE}\n"})
+        moved = os.path.join(nested, "sub", "sub", "msg.txt")
+        for command, result in self.each(("for i in 1 2; do cd sub; done; git commit -F msg.txt",
+                                          "f() { cd sub; }; f; f; git commit -F msg.txt"),
+                                         lambda command: self.attr(command, project=nested)):
+            with self.subTest(command=command):
+                self.assert_denied(result, f"found in file {moved}")
+        # Windows reads `link\..` by name, so a link to a folder already placed keeps its own parent.
+        if os.name == "nt":
+            import _winapi
+            linked = self.project_with({"msg.txt": "x\n", "real/msg.txt": "x\n", "w/msg.txt": f"{GENERATED_LINE}\n"})
+            _winapi.CreateJunction(os.path.join(linked, "real"), os.path.join(linked, "w", "link"))
+            self.assert_denied(self.attr("cd real; cd w/link; cd ..; git commit -F msg.txt", project=linked),
+                               "found in file")
+        # The first run still needs its folder to exist then: a later `cd` cannot place a folder made first.
+        made = self.project_with({"msg.txt": "x\n", "other/x/msg.txt": "x\n"})
+        self.assert_denied(self.attr('mkdir x; cd x; git commit -F msg.txt; cd other', project=made),
+                           "the command text cannot tell")
 
     def test_body_file_is_read_in_the_folder_the_command_runs_in(self):
         # Each commit reads a flagged msg.txt; a wrong folder would scan a clean copy. A `cd` in a
@@ -599,6 +779,33 @@ class GuardHookTest(unittest.TestCase):
         for command, result in self.each(
                 ("(cd sub && true); git commit -F msg.txt", "pushd sub; popd; git commit -F msg.txt",
                         "cd; git commit -F msg.txt"), lambda command: self.attr(command, project=clean)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+        # A wrapped `cd` and env's own folder option move git too; `command -v cd` only prints.
+        inner = self.project_with({"msg.txt": "x\n", "sub/msg.txt": f"{GENERATED_LINE}\n"})
+        moved = os.path.join(inner, "sub", "msg.txt")
+        for command, result in self.each(
+                ("builtin cd sub && git commit -F msg.txt", "command cd sub; git commit -F msg.txt",
+                 "command -p cd sub; git commit -F msg.txt", "env -C sub git commit -F msg.txt",
+                 "env -Csub git commit -F msg.txt", "env --chdir=sub git commit -F msg.txt",
+                 "env --ch sub git commit -F msg.txt", "env -i -C sub git commit -F msg.txt",
+                 "env -iC sub git commit -F msg.txt"),
+                lambda command: self.attr(command, project=inner)):
+            with self.subTest(command=command):
+                self.assert_denied(result, f"found in file {moved}")
+        self.assert_denied(self.attr("git commit -t sub/msg.txt", project=inner),
+                           f"found in file {os.path.join(inner, 'sub/msg.txt')}")
+        # A folder built at run time cannot be placed, however env's option is spelled.
+        for command, result in self.each(
+                ('env --chdir="$ROOT" git commit -F msg.txt', "env -C$ROOT git commit -F msg.txt",
+                 "env $OPTS -C sub git commit -F msg.txt"), lambda command: self.attr(command, project=inner)):
+            with self.subTest(command=command):
+                self.assert_denied(result)
+        for command, result in self.each(
+                ("command -v cd sub; git commit -F msg.txt", "env -u sub git commit -F msg.txt",
+                 "env -uC sub git commit -F msg.txt", "env A=$B git commit -F msg.txt",
+                 "rg TODO env -C 3; git commit -F msg.txt", "git checkout -t sub/msg.txt"),
+                lambda command: self.attr(command, project=inner)):
             with self.subTest(command=command):
                 self.assert_passes(result)
         # `cd -` goes to a folder the text does not hold; a loop or a function can run a later
@@ -685,9 +892,13 @@ class GuardHookTest(unittest.TestCase):
         os.makedirs(os.path.join(broken, "hooks"))
         with open(os.path.join(broken, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
             f.write("process.exit(1);\n")
-        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object.
+        # Replies of the wrong shape: a command that is not a list, a word neither text nor an object,
+        # a brace reading that is not a list of strings.
+        built = '[["git", "commit", {dynamic: "{a,b}", shape: "{a,b}", canBeEmpty: false, braces: %s}]]'
         malformed = []
-        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]')):
+        for name, commands in (("listless", '["git commit"]'), ("numbered", '[["git", "commit", 5]]'),
+                               ("null-braces", built % "null"), ("number-braces", built % "5"),
+                               ("text-braces", built % '"ab"')):
             folder = os.path.join(self.home, name + "-helper")
             os.makedirs(os.path.join(folder, "hooks"))
             with open(os.path.join(folder, "hooks", "shell-words.mjs"), "w", encoding="utf-8") as f:
@@ -884,17 +1095,53 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result, "git hook bypass")
 
-    def test_shipped_bash_parser_reads_escapes_as_bash_does(self):
+    def test_shipped_bash_parser_reads_words_as_bash_does(self):
         # Runs helper/parsers/shell-words-bash.wasm itself, so the rows prove the shipped bytes.
         script = os.path.join(HELPER, "hooks", "shell-words.mjs")
         for (command, words), result in self.each((
                 ('git commit -m "a\\\\\nb"', ["git", "commit", "-m", "a\\\nb"]),
                 ('git commit -m "a\\\nb"', ["git", "commit", "-m", "ab"]),
-                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"])),
+                ("git commit -m a\\\\\\\nb", ["git", "commit", "-m", "a\\b"]),
+                ("git commit {-F,/m.txt} -{n,q}", ["git", "commit", "-F", "/m.txt", "-n", "-q"]),
+                ('echo {a,} {a,""} x{1..2} stash@{0} "{c,d}"',
+                 ["echo", "a", "a", "", "x1", "x2", "stash@{0}", "{c,d}"]),
+                ("echo {01..03} {1..5..-2} {a\\,b,c} {a..e..2} {X..Z} {-1..1}",
+                 ["echo", "01", "02", "03", "1", "3", "5", "a,b", "c", "a", "c", "e", "X", "Y", "Z", "-1", "0", "1"])),
                 lambda command, words: subprocess.run(["node", script, "bash"], input=command.encode("utf-8"),
                                                       capture_output=True, timeout=60)):
             with self.subTest(command=command):
-                self.assertEqual(json.loads(result.stdout)["commands"], [words], result.stderr)
+                # A brace keeps its run-time word and carries bash's reading in `braces`.
+                read = [each for word in json.loads(result.stdout)["commands"][0]
+                        for each in (word.get("braces", [word]) if isinstance(word, dict) else [word])]
+                self.assertEqual(read, words, result.stderr)
+        # Bash expands `$HOME` again after `{$,x}HOME`, and a letter range across the cases makes `[`,
+        # `\` or the backtick, which bash reads again: no reading.
+        unread = b"echo {$,x}HOME {A..c} {O..a..12}-]n -{V..a..6}-x {1..a} {1..999999999}"
+        out = subprocess.run(["node", script, "bash"], input=unread, capture_output=True, timeout=60)
+        self.assertFalse([w for w in json.loads(out.stdout)["commands"][0][1:] if "braces" in w], out.stderr)
+
+    def test_brace_readings_match_real_bash(self):
+        # Bash is the oracle: every brace reading the shipped parser gives is the words bash makes.
+        found = (r"C:\Program Files\Git\bin\bash.exe", shutil.which("bash"))
+        bash = next((path for path in found if path and os.path.isfile(path)), None)
+        if not bash:
+            self.skipTest("no bash on this computer")
+        script = os.path.join(HELPER, "hooks", "shell-words.mjs")
+        source = "\n".join(f"x {row}" for row in BRACE_ROWS).encode("utf-8")
+        parsed = json.loads(subprocess.run(["node", script, "bash"], input=source, capture_output=True,
+                                           timeout=60).stdout)["commands"]
+        program = "\n".join(f"printf '%s\\0' x {row}; printf '\\1'" for row in BRACE_ROWS)
+        real = subprocess.run([bash, "--norc", "--noprofile", "-c", program], capture_output=True, timeout=60).stdout
+        made = [chunk.decode("utf-8").split("\0")[:-1] for chunk in real.split(b"\1")[:-1]]
+        self.assertEqual((len(parsed), len(made)), (len(BRACE_ROWS), len(BRACE_ROWS)))
+        read = 0
+        for row, words, bash_words in zip(BRACE_ROWS, parsed, made):
+            if any(isinstance(word, dict) and "braces" in word for word in words):
+                read += 1
+                with self.subTest(row=row):
+                    self.assertEqual([each for word in words for each in (
+                        word.get("braces", [word]) if isinstance(word, dict) else [word])], bash_words)
+        self.assertGreaterEqual(read, 25)
 
     def test_vendored_parsers_match_their_recorded_hashes(self):
         with open(os.path.join(HELPER, "parsers", "SOURCE.md"), encoding="utf-8") as fh:
@@ -918,8 +1165,9 @@ class HookSourceTest(unittest.TestCase):
     escape (a DeprecationWarning before 3.12, a SyntaxWarning from 3.12)
     reaches stderr on every tool call."""
 
-    DIRS = (".claude/hooks", "_core/global-template/hooks",
-            "_core/project-template/.claude/hooks", "_core/project-template/.claude/scripts")
+    DIRS = (".claude/hooks", "_core/global-template/hooks", "_core/project-template/.claude/hooks",
+            "_core/project-template/.claude/scripts", ".claude/hooks/no_ai_attribution",
+            "_core/global-template/hooks/no_ai_attribution", "_core/project-template/.claude/hooks/no_ai_attribution")
 
     def test_compiles_without_warnings(self):
         files = [os.path.join(d, name) for d in self.DIRS
