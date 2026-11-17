@@ -22,10 +22,10 @@ Mistakes this repo has made more than once. Each item names a trigger the diff s
 
 | Trigger in the diff | Check | Source |
 |---|---|---|
-| A hook or script under `_core/` changes | Every copy of it matches byte for byte (`.claude/hooks/`, the project template's copy of a global hook), and `.bindwright/pristine.json` changes in the same commit | #931 |
+| A hook or script under `_core/` changes | Every copy of it matches byte for byte (`.claude/hooks/`, the project template's copy of a global hook), and when this repo's bind writes the file, so `.bindwright/pristine.json` has a key for it, that entry changes in the same commit | #931 |
 | A test or script compares a file's text line by line, or replays a saved file | It drops `\r` before comparing, since a Windows checkout turns line endings into CRLF | #382, #938 |
 | Rule, README or CHANGELOG text states how many of something there are (checks, counts, rows, tests) | The number matches the code after this diff | #940 |
-| A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says for unreadable input: a guard that decides git or GitHub writes blocks, with what to fix, and never exits silently | #350, #740 |
+| A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says it does with input it cannot read: a hook whose header says it blocks then (the push and attribution guards) blocks with what to fix, and one whose header says it lets such input through (the tool-rules guard) exits 0 | #350, #740 |
 
 ## Also escalate when the diff includes
 

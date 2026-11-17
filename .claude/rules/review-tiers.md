@@ -37,7 +37,7 @@ Skip escalation for docs, CI or settings tweaks, version bumps, mechanical refac
 
 ## After a 🔴
 
-Fix on the same PR branch and push; the review re-runs. Then search the codebase for the same mistake elsewhere and fix every copy in that commit, because the reviewer only sees the diff. When the same finding already came up on an earlier PR, add it to the checklist in `.github/review-guide.md` in the same PR: a trigger the diff shows, the check, and both PRs. Every later review then checks it whenever the trigger matches.
+Fix on the same PR branch and push; the review re-runs. Then search the codebase for the same mistake elsewhere and fix every copy in that commit, because the reviewer only sees the diff. When the same finding already came up on an earlier PR, add it to the checklist in `.github/review-guide.md` in the same PR: a trigger the diff shows, the check, and both PRs. A PR that must hold only its own files (§ PRs that edit the review workflow, § If the gate itself breaks) leaves the item to the next PR. Every later review then checks it whenever the trigger matches.
 
 ## What a finding blocks on
 
