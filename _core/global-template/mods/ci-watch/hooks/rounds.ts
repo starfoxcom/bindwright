@@ -3,13 +3,15 @@
 // research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
 // leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
 // also latches it on the watch: the session's edits, commits and pushes wait until three distinct web
-// lookups ran (`withTopic`), so the fix comes after the research. The 10th red round is the hard stop: the
-// PR is closed without merging and rebuilt from its base branch in a new PR, and the session's commits and
-// pushes wait until it is closed. A round is a watch of
+// lookups ran, five from the 8th red round on (`withTopic`), so the fix comes after the research. The
+// 10th red round is the hard stop: the PR is closed without merging and rebuilt from its base branch in a
+// new PR, and the session's commits and pushes wait until it is closed. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
 // counted. Pure, no engine access.
+
+import type { Watch } from '../types'
 
 /** One settled watch of a PR's pushed head: whether a check failed. */
 export type Round = { sha: string; red: boolean }
@@ -59,7 +61,8 @@ export function researchText(pr: string, red: number): string {
     : `The next step back comes after ${roundsToResearch(red)} more red round(s).`
   return (
     ` ${pr} has had ${red} fix rounds in a row without every check green, both reviews included. Before ` +
-    'the next fix, step back: look up at least three different ways the community solves this problem ' +
+    `the next fix, step back: look up at least ${SOURCE_WORDS[sourcesNeeded(red)]} different ways the ` +
+    'community solves this problem ' +
     '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
     'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
     `apply it and keep going. ${after}`
@@ -73,8 +76,17 @@ export function hardStopRefusal(pr: string, red: number): string {
   )
 }
 
-/** Distinct web lookups a step back takes: one source is a guess, three can be compared. */
+/** Distinct web lookups a step back takes: one source is a guess, three can be compared, and close to
+ * the hard stop five widen the search before the PR has to be rebuilt. */
 export const SOURCES_NEEDED = 3
+export const SOURCES_NEAR_THE_STOP = 5
+/** The red streak from which a step back takes SOURCES_NEAR_THE_STOP lookups. */
+export const NEAR_THE_STOP = 8
+const SOURCE_WORDS: Record<number, string> = { 3: 'three', 5: 'five' }
+
+export function sourcesNeeded(red: number): number {
+  return red >= NEAR_THE_STOP ? SOURCES_NEAR_THE_STOP : SOURCES_NEEDED
+}
 
 /** What a tool call looked up, when it is a web lookup of the main session: a WebSearch's query, a WebFetch's
  * URL or a web-fetch agent's brief. A subagent's own calls are not: a web-fetch agent is one lookup, not its
@@ -88,18 +100,26 @@ export function lookupTopic(e: unknown): string | undefined {
   return String(input.query ?? input.url ?? input.prompt ?? '')
 }
 
-/** A latched step back's topics with one more lookup, lower-cased and trimmed, a repeat counted once;
- * undefined once SOURCES_NEEDED distinct topics were looked up, which ends the step back. */
-export function withTopic(topics: readonly string[], topic: string): string[] | undefined {
-  const clean = topic.trim().toLowerCase()
-  const next = clean && !topics.includes(clean) ? [...topics, clean] : [...topics]
-  return next.length >= SOURCES_NEEDED ? undefined : next
+/** A watch's latched step back, carried onto the watch that replaces it. */
+export function stepBackOf(w: Watch): Pick<Watch, 'stepBackTopics' | 'stepBackNeeded'> {
+  return { stepBackTopics: w.stepBackTopics, stepBackNeeded: w.stepBackNeeded }
 }
 
-export function researchRefusal(pr: string, red: number, owed: number): string {
+/** A latched step back's topics with one more lookup, lower-cased and trimmed, a repeat counted once;
+ * undefined once `needed` distinct topics were looked up, which ends the step back. */
+export function withTopic(topics: readonly string[], topic: string, needed = SOURCES_NEEDED): string[] | undefined {
+  const clean = topic.trim().toLowerCase()
+  const next = clean && !topics.includes(clean) ? [...topics, clean] : [...topics]
+  return next.length >= needed ? undefined : next
+}
+
+export function researchRefusal(
+  pr: string, red: number, needed = SOURCES_NEEDED, topics: readonly string[] = [],
+): string {
+  const owed = needed - topics.length
   return (
     `${pr} has had ${red} red rounds in a row, so edits, commits and pushes wait for a step back. Look up ` +
-    `at least ${SOURCES_NEEDED} different ways others solved this class of problem (${owed} more to go; ` +
+    `at least ${needed} different ways others solved this class of problem (${owed} more to go; ` +
     'each WebSearch, WebFetch or web-fetch agent call on a new topic counts once), compare them against ' +
     'each other, pick the one that removes the whole class most simply, tell the user which one won and ' +
     'why, then make the fix. Where web tools cannot run in this session, only the user can lift the hold, ' +

@@ -2,6 +2,7 @@
 // engine access.
 
 import type { Watch } from '../types'
+import { stepBackOf } from './rounds'
 
 export const PENDING = new Set(['pending'])
 export const FAILED = new Set(['fail', 'cancel'])
@@ -36,7 +37,7 @@ export function reconcile(current: Watch[], polled: Watch[]): Watch[] {
     // A step back is memory's: a poll never changes it, and a lookup made meanwhile stays counted.
     const isStepBackKept = p.stepBackTopics === w.stepBackTopics
     if (isKept && isStepBackKept) return p
-    return { ...p, wakePending: w.wakePending, incidentPending, incident, ...pushed, stepBackTopics: w.stepBackTopics }
+    return { ...p, wakePending: w.wakePending, incidentPending, incident, ...pushed, ...stepBackOf(w) }
   })
 }
 
