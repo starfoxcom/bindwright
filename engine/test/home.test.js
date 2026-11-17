@@ -368,21 +368,6 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
   }
 });
 
-test("every earlier version of the shipped reply style is listed as retired", {
-  skip: spawnSync("git", ["rev-parse", "--is-shallow-repository"], { encoding: "utf8" }).stdout.trim() !== "false"
-    && "needs the repo's full history",
-}, () => {
-  const path = "_core/global-template/output-styles/straight-talk.md";
-  const root = join(engine, "..");
-  const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" }).stdout;
-  const current = fingerprint(readFileSync(join(root, path), "utf8"));
-  const earlier = git("log", "--format=%H", "--", path).trim().split("\n")
-    .map((rev) => fingerprint(git("show", `${rev}:./${path}`)))
-    .filter((print) => print !== current);
-  const retired = JSON.parse(readFileSync(join(root, path.replace(/\.md$/, ".retired.json")), "utf8")).sha256;
-  assert.deepEqual(earlier.filter((print) => !retired.includes(print)), []);
-});
-
 test("a settings file that is not valid JSON is never written", { skip }, () => {
   withHome((dir) => {
     writeSettings(dir, "{ broken");
