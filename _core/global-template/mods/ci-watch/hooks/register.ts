@@ -1,6 +1,7 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
+import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './branch'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
@@ -230,11 +231,37 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// The refusal for an edit, commit or push while a watch of this session has a step back latched, or
-// undefined. A closed PR owes nothing.
-async function owedResearch($: EngineInterface): Promise<string | undefined> {
+// `gh` lists at most this many of a PR's commits, so a list this long may be cut and counts as unread.
+const LISTED_COMMITS = 100
+const COMMIT_ID = /^[0-9a-f]{7,64}$/i
+
+// A watched PR's head branch and commits, read on every call: an amend, rebase or force-push replaces the
+// commits. Undefined when unread, so the caller holds the work.
+async function redPrOf($: EngineInterface, w: Watch): Promise<RedPr | undefined> {
+  try {
+    const args = ['pr', 'view', String(w.number), '--repo', w.repo, '--json', 'headRefName,commits']
+    const view = JSON.parse(await gh($, args))
+    const commits: unknown[] = Array.isArray(view.commits) ? view.commits.map((c: { oid?: unknown }) => c?.oid) : []
+    const isListed = commits.length > 0 && commits.length < LISTED_COMMITS
+    if (!isListed || !commits.every(c => typeof c === 'string' && COMMIT_ID.test(c))) return undefined
+    return typeof view.headRefName === 'string' && view.headRefName
+      ? { branch: view.headRefName, commits: commits as string[] }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// The refusal for an edit, commit or push on a PR of this session with a step back latched, or
+// undefined. A closed PR owes nothing, and work on another branch goes on.
+async function owedResearch(
+  $: EngineInterface,
+  steps: readonly WorkStep[] | null,
+  command?: string,
+): Promise<string | undefined> {
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
     if (await isClosed($, w.repo, w.number)) continue
+    if (!(await mayBeOn($, await redPrOf($, w), steps, command))) continue
     const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
     return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
   }
@@ -691,7 +718,7 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isEdit = ['Edit', 'Write', 'NotebookEdit'].includes(String((e as { tool?: unknown }).tool))
-    const refusal = e.agentId === undefined && isEdit ? await owedResearch($) : undefined
+    const refusal = e.agentId === undefined && isEdit ? await owedResearch($, [{ folder: folderOf(e) }]) : undefined
     if (refusal) return { deny: refusal }
     const result = await next(e)
     if (e.agentId !== undefined || 'deny' in result) return result
@@ -705,7 +732,8 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
-    const refusal = isHeld ? (await owedResearch($)) ?? (await owedRebuild($)) : undefined
+    const steps = isHeld ? commandSteps(command, isPowerShell) : []
+    const refusal = isHeld ? (await owedResearch($, steps, command)) ?? (await owedRebuild($)) : undefined
     if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.

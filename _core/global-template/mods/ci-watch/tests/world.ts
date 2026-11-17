@@ -29,6 +29,22 @@ export type Seen = {
   prState: string
   /** The PR of the branch a push names (7 by default), and PRs GitHub reports merged whatever `prState` says. */
   branchPr?: number
+  // The shell's folder (C:/session by default); per folder, the branch checked out (feature/x without one),
+  // the commits its history holds (every one without an entry) and the local branches that hold the red
+  // PR's work (feature/x without an entry).
+  cwd?: string
+  checkedOut?: Record<string, string>
+  history?: Record<string, string[]>
+  redRefs?: Record<string, string>
+  // The folders that are shallow clones (none without an entry).
+  shallow?: string[]
+  /** The PR's commits `gh pr view` lists, oldest first (two without an entry). */
+  prCommits?: string[]
+  // Per folder, what `git config --null --list` prints (one plain setting without an entry).
+  gitConfig?: Record<string, string>
+  // Whether git's output comes back cut at the engine's limit, its exit code still 0.
+  isGitCut?: boolean
+  isGitDown?: boolean
   mergedPrs?: number[]
   /** The head commit `gh pr view` reports (default `a1`). */
   head?: string
@@ -73,6 +89,7 @@ export function world(on: On) {
   const clock = mock.clock(on, { now: 1_000 })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   on('session.id', () => ({ value: seen.session }))
+  on('session.cwd', () => ({ value: seen.cwd ?? 'C:/session' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.end', ($, e) => ({ sessionId: e.sessionId }))
   on('tool.register', ($, e) => ({ value: { tool: `mcp__ci-watch__${e.name}` } }))
@@ -109,6 +126,8 @@ export function world(on: On) {
       const stdout = seen.status ?? ''
       return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
+    const folderAt = e.argv.indexOf('-C')
+    if (e.argv[0] === 'git' && folderAt > 0) return { value: gitAnswer(seen, e.argv.slice(folderAt + 1)) }
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)
     if (args.includes('pr checks')) seen.checksRead++
     if (args.includes('pr checks')) await seen.duringChecks?.()
@@ -156,7 +175,22 @@ export function world(on: On) {
 function prView(seen: Seen, repo: string, number: number): string {
   const state = seen.mergedPrs?.includes(number) ? 'MERGED' : seen.prState
   const url = `https://github.com/${repo}/pull/${number}`
-  return JSON.stringify({ number, url, headRefOid: seen.head ?? 'a1', headRefName: 'feature/x', state })
+  const commits = (seen.prCommits ?? ['c0ffee0', 'a1a1a1a']).map(oid => ({ oid }))
+  return JSON.stringify({ number, url, headRefOid: seen.head ?? 'a1', headRefName: 'feature/x', commits, state })
+}
+
+// git in a folder, as the hold asks it: the branch checked out, whether the clone is shallow, whether the
+// history holds one of the red PR's commits, the local branches that hold its work, and the config.
+function gitAnswer(seen: Seen, [folder = '', ...args]: readonly string[]) {
+  const answer = (exitCode: number, stdout = '') =>
+    ({ exitCode, stdout, stderr: '', isStdoutTruncated: seen.isGitCut === true, isStderrTruncated: false })
+  if (seen.isGitDown) return answer(128)
+  if (args[0] === 'rev-parse') return answer(0, `${seen.shallow?.includes(folder) === true}\n`)
+  const held = seen.history?.[folder]
+  if (args[0] === 'merge-base') return answer(held === undefined || held.includes(args[2] ?? '') ? 0 : 1)
+  if (args[0] === 'for-each-ref') return answer(0, `${seen.redRefs?.[folder] ?? 'refs/heads/feature/x'}\n`)
+  if (args[0] === 'config') return answer(0, seen.gitConfig?.[folder] ?? 'core.bare\nfalse\0')
+  return answer(0, `${seen.checkedOut?.[folder] ?? 'feature/x'}\n`)
 }
 
 // The test runner has timers; the mod sandbox's types do not list them.
