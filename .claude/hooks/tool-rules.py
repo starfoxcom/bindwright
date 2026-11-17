@@ -293,14 +293,18 @@ RULES = [
     ("`gh run rerun --failed` or `--job`", both(r"\bgh\s+run\s+rerun\b[^\n|;&]*\s(?:--failed|--job|-j)\b"),
      "a re-run of only some jobs can leave a required check stuck. Re-run the whole run, or push again.", OBSERVE),
     ("an interactive git command (`-i`, `-p`)",
-     cased(r"\bgit\s+(?:rebase|add|checkout|reset|stash|restore|clean)\b[^\n|;&]*\s(?:-i|--interactive|-p|--patch)\b"),
+     # `git stash show -p` only prints, and a rebase given a scripted editor never waits for keys.
+     cased(r"(?m)^(?![^\n]*(?:GIT_SEQUENCE_EDITOR|sequence\.editor)=)[^\n]*?\bgit\s+"
+           r"(?:rebase|add|checkout|reset|stash(?!\s+(?:show|list)\b)|restore|clean)\b"
+           r"[^\n|;&]*\s(?:-i|--interactive|-p|--patch)\b"),
      "it waits for an editor or keys a tool call cannot give. Use the form that takes its input in the command.",
      OBSERVE),
     ("an inline body for `gh pr` or `gh issue`",
      cased(r"\bgh\s+(?:pr|issue)\s+(?:create|comment|edit|review)\b[^\n|;&]*\s(?:--body|-b)(?:[=\s]|$)"),
      "the shell can cut or change the text. Write the body to a file and pass `--body-file`.", OBSERVE),
     ("a scratch file in a fixed folder (`/tmp`, `C:/tmp`)",
-     both(r"(?:^|(?<=[\s=>]))(?:/tmp|[a-z]:[\\/]tmp)(?![\w.-])"),
+     # Claude Code's own session scratchpad lives under /tmp/claude-<id>/ on Linux.
+     both(r"(?:^|(?<=[\s=>]))(?:/tmp|[a-z]:[\\/]tmp)(?![\w.-]|/claude-\d+/)"),
      "other sessions share it, and nothing cleans it up. Use the session's scratchpad instead.", OBSERVE),
     ("`jq` in Git Bash", lambda text, shell: GIT_BASH and shell == "bash" and JQ.search(bare(text, shell)),
      "Git Bash has no `jq`. Filter with the `--jq` option of `gh`, or with Python.", OBSERVE),
