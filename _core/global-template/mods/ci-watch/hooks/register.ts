@@ -1,7 +1,7 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
-import { commandSteps, folderOf, mayBeOn, type WorkStep } from './branch'
+import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './branch'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
@@ -231,20 +231,24 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// Each watched PR's branch, looked up once while the module runs: a PR keeps its branch.
-const branchOfPr = new Map<string, string>()
+// Each watched PR's branch and first commit, looked up once while the module runs: a PR keeps both.
+const redPrs = new Map<string, RedPr>()
 
-async function branchOf($: EngineInterface, w: Watch): Promise<string | undefined> {
+async function redPrOf($: EngineInterface, w: Watch): Promise<RedPr | undefined> {
   const key = `${w.repo}#${w.number}`
-  if (!branchOfPr.has(key)) {
+  if (!redPrs.has(key)) {
     try {
-      const view = JSON.parse(await gh($, ['pr', 'view', String(w.number), '--repo', w.repo, '--json', 'headRefName']))
-      if (typeof view.headRefName === 'string' && view.headRefName) branchOfPr.set(key, view.headRefName)
+      const args = ['pr', 'view', String(w.number), '--repo', w.repo, '--json', 'headRefName,commits']
+      const view = JSON.parse(await gh($, args))
+      const firstCommit = view.commits?.[0]?.oid
+      if (typeof view.headRefName === 'string' && view.headRefName && typeof firstCommit === 'string' && firstCommit) {
+        redPrs.set(key, { branch: view.headRefName, firstCommit })
+      }
     } catch {
       // Unknown, so the caller holds the work.
     }
   }
-  return branchOfPr.get(key)
+  return redPrs.get(key)
 }
 
 // The refusal for an edit, commit or push on a PR of this session with a step back latched, or
@@ -256,7 +260,7 @@ async function owedResearch(
 ): Promise<string | undefined> {
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
     if (await isClosed($, w.repo, w.number)) continue
-    if (!(await mayBeOn($, await branchOf($, w), steps, command))) continue
+    if (!(await mayBeOn($, await redPrOf($, w), steps, command))) continue
     const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
     return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
   }

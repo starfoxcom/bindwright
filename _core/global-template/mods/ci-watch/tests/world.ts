@@ -29,11 +29,13 @@ export type Seen = {
   prState: string
   /** The PR of the branch a push names (7 by default), and PRs GitHub reports merged whatever `prState` says. */
   branchPr?: number
-  // The shell's folder (C:/session by default); per folder, the branch checked out (feature/x without one)
-  // and the branch it pushes to (none without one).
+  // The shell's folder (C:/session by default); per folder, the branch checked out (feature/x without one),
+  // whether its history holds the red PR's first commit (yes without an entry) and the local branches that
+  // hold it (feature/x without an entry).
   cwd?: string
   checkedOut?: Record<string, string>
-  upstream?: Record<string, string>
+  redWork?: Record<string, boolean>
+  redRefs?: Record<string, string>
   // Per folder, what `git config --null --list` prints (one plain setting without an entry).
   gitConfig?: Record<string, string>
   // Whether git's output comes back cut at the engine's limit, its exit code still 0.
@@ -120,16 +122,7 @@ export function world(on: On) {
       const stdout = seen.status ?? ''
       return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    if (e.argv[0] === 'git' && e.argv[1] === '-C') {
-      const folder = e.argv[2] ?? ''
-      const config = seen.gitConfig?.[folder] ?? 'core.bare\nfalse\0'
-      const branch = args.endsWith('@{u}') ? seen.upstream?.[folder] : (seen.checkedOut?.[folder] ?? 'feature/x')
-      const named = args.endsWith('config --null --list') ? config : branch
-      const stdout = seen.isGitDown || named === undefined ? '' : `${named}\n`
-      const exitCode = stdout ? 0 : 128
-      const isStdoutTruncated = seen.isGitCut === true
-      return { value: { exitCode, stdout, stderr: '', isStdoutTruncated, isStderrTruncated: false } }
-    }
+    if (e.argv[0] === 'git' && e.argv[1] === '-C') return { value: gitAnswer(seen, e.argv.slice(2)) }
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)
     if (args.includes('pr checks')) seen.checksRead++
     if (args.includes('pr checks')) await seen.duringChecks?.()
@@ -177,7 +170,20 @@ export function world(on: On) {
 function prView(seen: Seen, repo: string, number: number): string {
   const state = seen.mergedPrs?.includes(number) ? 'MERGED' : seen.prState
   const url = `https://github.com/${repo}/pull/${number}`
-  return JSON.stringify({ number, url, headRefOid: seen.head ?? 'a1', headRefName: 'feature/x', state })
+  const commits = [{ oid: 'c0' }, { oid: seen.head ?? 'a1' }]
+  return JSON.stringify({ number, url, headRefOid: seen.head ?? 'a1', headRefName: 'feature/x', commits, state })
+}
+
+// git in a folder, as the hold asks it: the branch checked out, whether the history holds the red PR's
+// first commit, the local branches that hold it, and the config.
+function gitAnswer(seen: Seen, [folder = '', ...args]: readonly string[]) {
+  const answer = (exitCode: number, stdout = '') =>
+    ({ exitCode, stdout, stderr: '', isStdoutTruncated: seen.isGitCut === true, isStderrTruncated: false })
+  if (seen.isGitDown) return answer(128)
+  if (args[0] === 'merge-base') return answer(seen.redWork?.[folder] === false ? 1 : 0)
+  if (args[0] === 'for-each-ref') return answer(0, `${seen.redRefs?.[folder] ?? 'refs/heads/feature/x'}\n`)
+  if (args[0] === 'config') return answer(0, seen.gitConfig?.[folder] ?? 'core.bare\nfalse\0')
+  return answer(0, `${seen.checkedOut?.[folder] ?? 'feature/x'}\n`)
 }
 
 // The test runner has timers; the mod sandbox's types do not list them.

@@ -2,43 +2,55 @@ import type { EngineInterface } from 'claude-code'
 
 import { plainPush } from './plain'
 
-// Which branch a piece of work is on, so a step back holds only the red PR's work.
+// Whether a piece of work is the red PR's, so a step back holds only that work. Work is the PR's when
+// its folder is on the PR's branch or its history holds the PR's first commit, whatever the branch is
+// called; git answers each question, and any answer that is not a clean no keeps the hold.
 
 /** Where a piece of work acts: a folder (undefined for the shell's own), and whether it pushes from there. */
 export type WorkStep = { folder?: string; isPush?: boolean }
 
-async function git($: EngineInterface, cwd: string, folder: string, args: readonly string[]) {
+/** The red PR's head branch and its first commit, which every branch built on its work holds. */
+export type RedPr = { branch: string; firstCommit: string }
+
+type GitAnswer = { exitCode: number; out: string }
+const NO_ANSWER: GitAnswer = { exitCode: -1, out: '' }
+
+// What git answers in `folder`, or in the shell's folder when undefined: the one its last `cd` left it in,
+// which the session's folder follows, read again on every call. Output cut at the engine's limit, a
+// timeout or a failure to start is no answer.
+async function gitIn($: EngineInterface, folder: string | undefined, args: readonly string[]): Promise<GitAnswer> {
   try {
-    const run = await $.process.run(['git', '-C', folder, ...args], { cwd, timeoutMs: 10_000 })
-    // Output cut at the engine's limit is read as no answer, so a key past the cut can never lift a hold.
-    return run.exitCode === 0 && !run.isStdoutTruncated ? run.stdout.trim() : ''
+    const cwd = await $.session.cwd()
+    const run = await $.process.run(['git', '-C', folder ?? cwd, ...args], { cwd, timeoutMs: 10_000 })
+    return run.isStdoutTruncated ? NO_ANSWER : { exitCode: run.exitCode, out: run.stdout.trim() }
   } catch {
-    return ''
+    return NO_ANSWER
   }
 }
 
-// What git reports in `folder`, or in the shell's folder when undefined: the one its last `cd` left it in,
-// which the session's folder follows, read again on every call.
-async function gitIn($: EngineInterface, folder: string | undefined, args: readonly string[]) {
-  const cwd = await $.session.cwd()
-  return git($, cwd, folder ?? cwd, args)
+// `git merge-base --is-ancestor` exits 0 for yes and 1 for no; anything else (a commit the repo lacks, a
+// failure) is no answer, which counts as yes.
+async function holdsCommit($: EngineInterface, folder: string | undefined, commit: string): Promise<boolean> {
+  return (await gitIn($, folder, ['merge-base', '--is-ancestor', commit, 'HEAD'])).exitCode !== 1
 }
 
+// Config keys under which a plain push may send refs it does not name, delete or force them, or push
+// another repository: a mirror or push refspec on a remote, and submodule recursion. Any value counts.
+const PUSHES_ELSEWHERE = /^(?:remote\..+\.(?:mirror|push)|push\.recursesubmodules|submodule\.recurse)$/
 // The `push.default` values under which a push of plain names sends each to its own name, or nothing.
 const SAME_NAME_PUSHES = new Set(['simple', 'current', 'nothing'])
 
 /**
  * Whether a folder's config, as `git config --null --list` prints it (each entry `key`, or `key` and a
- * newline and its value, ending in a NUL), may send a push past the names it carries: any mirror or push
- * refspec on a remote, whatever its value, or a `push.default` outside SAME_NAME_PUSHES. An unread config
+ * newline and its value, ending in a NUL), may send a push past the names it carries. An unread config
  * counts as one.
  */
-function pushesMore(config: string): boolean {
-  if (!config) return true
-  return config.split('\0').some(entry => {
+function pushesMore(config: GitAnswer): boolean {
+  if (config.exitCode !== 0 || !config.out) return true
+  return config.out.split('\0').some(entry => {
     const end = entry.indexOf('\n')
     const key = (end < 0 ? entry : entry.slice(0, end)).toLowerCase()
-    if (/^remote\..+\.(?:mirror|push)$/.test(key)) return true
+    if (PUSHES_ELSEWHERE.test(key)) return true
     return key === 'push.default' && !SAME_NAME_PUSHES.has(end < 0 ? '' : entry.slice(end + 1).trim().toLowerCase())
   })
 }
@@ -62,27 +74,35 @@ export function commandSteps(command: string, isPowerShell: boolean): WorkStep[]
   return isPush === null ? null : [{ isPush }]
 }
 
+// Whether a push from `folder` may carry the red PR's work: a local branch holds its first commit, or the
+// config may send refs the push does not name. A push of names that hold none of its commits can update
+// the PR's branch only by force, which no plain push asks for.
+async function mayPushRedWork($: EngineInterface, folder: string | undefined, red: RedPr): Promise<boolean> {
+  const format = '--format=%(refname)'
+  const refs = await gitIn($, folder, ['for-each-ref', '--contains', red.firstCommit, format, 'refs/heads/'])
+  if (refs.exitCode !== 0 || refs.out) return true
+  return pushesMore(await gitIn($, folder, ['config', '--null', '--list']))
+}
+
 /**
- * Whether the work may be on `branch`: it is checked out, or pushed to, in the folder of any of `steps`,
- * a push there may send it, or the command names it. Branch names compare without case, as refs do on
- * Windows and macOS. Unread steps or an unread branch count as yes, so a hold never lifts on a guess.
+ * Whether the work may be the red PR's: in the folder of any of `steps`, its branch is checked out or the
+ * history holds its first commit, a push there may carry its work, or the command names its branch.
+ * Branch names compare without case, as refs do on Windows and macOS. An unknown PR, unread steps or any
+ * answer from git that is not a clean no count as yes, so a hold never lifts on a guess.
  */
 export async function mayBeOn(
   $: EngineInterface,
-  branch: string | undefined,
+  red: RedPr | undefined,
   steps: readonly WorkStep[] | null,
   command = '',
 ): Promise<boolean> {
-  const wanted = branch?.toLowerCase()
-  if (!wanted || !steps || command.toLowerCase().includes(wanted)) return true
+  const wanted = red?.branch.toLowerCase()
+  if (!red || !wanted || !steps || command.toLowerCase().includes(wanted)) return true
   for (const { folder, isPush } of steps) {
-    const name = (await gitIn($, folder, ['branch', '--show-current'])).toLowerCase()
-    if (!name || name === wanted) return true
-    const upstream = await gitIn($, folder, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
-    if (upstream.toLowerCase().endsWith(`/${wanted}`)) return true
-    if (isPush) {
-      if (pushesMore(await gitIn($, folder, ['config', '--null', '--list']))) return true
-    }
+    const name = await gitIn($, folder, ['branch', '--show-current'])
+    if (name.exitCode !== 0 || name.out.toLowerCase() === wanted) return true
+    if (await holdsCommit($, folder, red.firstCommit)) return true
+    if (isPush && (await mayPushRedWork($, folder, red))) return true
   }
   return false
 }

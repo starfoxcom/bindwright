@@ -157,6 +157,9 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   // The shell sits on another PR's branch; the red PR's branch is checked out in C:/repo.
   w.seen.checkedOut = { 'C:/session': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
   w.seen.checkedOut['C:\\other'] = 'feature/y'
+  // Neither the shell's folder nor C:/other holds any of the red PR's commits, on any local branch.
+  w.seen.redWork = { 'C:/session': false, 'C:/other': false, 'C:\\other': false }
+  w.seen.redRefs = { 'C:/session': '' }
   const passes = [
     'git commit -m "fix the other PR"', 'git commit -m b && git push',
     'git commit -m "fix #12, don\'t hold" ; git push -u origin feature/y',
@@ -197,12 +200,17 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   w.seen.isGitCut = true
   expect(await bash('git push')).toHaveProperty('deny')
   w.seen.isGitCut = false
-  for (const config of ['remote.origin.mirror\ntrue\0', 'remote.origin.mirror\0', 'push.default\nupstream\0']) {
+  const configs = [
+    'remote.origin.mirror\ntrue\0', 'remote.origin.mirror\0', 'push.default\nupstream\0',
+    'push.recursesubmodules\non-demand\0', 'submodule.recurse\ntrue\0',
+  ]
+  for (const config of configs) {
     w.seen.gitConfig = { 'C:/session': config }
     expect([config, await bash('git push origin try-fix')]).toEqual(denied(config))
   }
   // A file at a drive root is in that root, not in the drive's current folder.
   w.seen.checkedOut['C:'] = 'feature/y'
+  w.seen.redWork['C:'] = false
   expect(await call({ ...editInput, file_path: 'C:\\a.ts' })).toHaveProperty('deny')
   // A shell moved to the red branch's folder.
   w.seen.cwd = 'C:/repo'
@@ -211,9 +219,13 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   // Refs ignore case on Windows and macOS, so a branch that differs only in case is the red PR's.
   w.seen.checkedOut['C:/session'] = 'Feature/X'
   expect(await bash('git commit -m x')).toHaveProperty('deny')
-  // A local branch pushed to the red PR's branch under another name is the red PR's too.
-  w.seen.checkedOut['C:/session'] = 'try-fix'
-  w.seen.upstream = { 'C:/session': 'origin/feature/x' }
+  // A push of a local branch that holds the red PR's work, whatever the branch it sits on.
+  w.seen.checkedOut['C:/session'] = 'feature/y'
+  w.seen.redRefs['C:/session'] = 'refs/heads/try-fix'
+  expect(await bash('git push origin try-fix')).toHaveProperty('deny')
+  // Work under another name, a fork's checkout or a renamed branch, whose history holds the PR's commits.
+  w.seen.checkedOut['C:/session'] = 'alice/main'
+  w.seen.redWork['C:/session'] = true
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.isGitDown = true
   expect(await bash('git commit -m "fix the other PR"')).toHaveProperty('deny')
