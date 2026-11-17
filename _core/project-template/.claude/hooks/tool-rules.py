@@ -50,7 +50,10 @@ HEREDOC = re.compile(r"<<(-?)[ \t]*\\?(['\"]?)([A-Za-z_][\w-]*)\2")
 # A `<<` that is not part of a here-string (`<<<`), and arithmetic, where a `<<` opens nothing.
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)")
 NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)")
-HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
+# A PowerShell here-string: `@'` or `@"` and any blanks to the end of the line, the body (none when
+# the closing line comes next), then the first line that starts with the same quote and `@`.
+HERE_STRING_PARTS = r"@({quotes})[ \t]*\r?\n(?:(.*?)\r?\n)??\1@"
+HERE_STRING = re.compile(HERE_STRING_PARTS.format(quotes="['\"]") + r"([^\n]*)", re.S)
 # The separators between the commands of one line, a lone `&` (run in the background) among them
 # but not a redirection (`2>&1`, `&>f`) or `|&`; a pipe joins two parts of one command.
 LIST_SEPARATOR = re.compile(r"&&|\|\||;|(?<![>&|])&(?![>&])")
@@ -79,7 +82,7 @@ POWERSHELL_QUOTED = (r"<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
 # The PowerShell scan for each set of quotes whose here-strings may still close. An opener with
 # no closing line after it never matches, and trying one reads to the end of the command, so the
 # scan leaves those out: many of them would take time that grows with the command's length squared.
-POWERSHELL_SCANS = {quotes: re.compile((r"@([%s])\r?\n.*?\r?\n\1@|" % quotes if quotes else "")
+POWERSHELL_SCANS = {quotes: re.compile((HERE_STRING_PARTS.format(quotes="[%s]" % quotes) + "|" if quotes else "")
                                        + POWERSHELL_QUOTED, re.S) for quotes in ("'\"", "'", "\"", "")}
 # Where any part of the PowerShell scan can start.
 POWERSHELL_QUOTE_START = re.compile(r"[@<#`'\"]")
@@ -219,7 +222,8 @@ def inline_script(text, shell):
     found = heredoc(text) if shell == "bash" else None
     if found and "\\" in found[1] and first_interpreter_reads(found[0]):
         return True
-    if shell == "powershell" and any("\\" in here.group(2) and first_interpreter_reads(piped_to(here.group(3)))
+    if shell == "powershell" and any("\\" in (here.group(2) or "")
+                                     and first_interpreter_reads(piped_to(here.group(3)))
                                      for here in here_strings(text)):
         return True
     # A `python -c '...'` a message only mentions leaves no call where its quotes are taken out.

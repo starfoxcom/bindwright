@@ -89,6 +89,14 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
                 self.assertEqual(self.hook.refusal(merge, "powershell")[0], "`gh pr merge --admin`")
         self.assertIsNone(self.hook.refusal("$doc = [xml]@'\n<note>Don't use gh run watch</note>\n'@", "powershell"))
 
+    def test_a_here_string_header_may_end_in_blanks_and_its_body_may_be_empty(self):
+        # Each reading is the one PowerShell's own parser gives.
+        script = "@'  \nprint('C:\\x')\n'@ | python -"
+        self.assertEqual(self.hook.refusal(script, "powershell")[0], "an inline script holding a backslash")
+        merge = "$m = @'\n'@\ngh pr merge 5 --admin\n'@"
+        self.assertEqual(self.hook.refusal(merge, "powershell")[0], "`gh pr merge --admin`")
+        self.assertIsNone(self.hook.refusal("$m = @'\n'@\n'@ gh pr merge 5 --admin\n'@", "powershell"))
+
     def test_each_row_lets_its_command_run_and_logs_its_own_name(self):
         for command, shell, want in self.ROWS:
             with self.subTest(command=command, shell=shell):
