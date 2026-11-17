@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v6.0.0] — 2026-11-17
+
 ### Breaking
 
 - **Setup needs CLI 2.1.295 or later.** The guard hooks block a command when they crash or run out of time only from that version (`onFailure: block`); on an older CLI a guard that fails lets the command through. Setup now checks the version the session runs before it writes anything, offers the update, and stops on a no, since every setup writes guards. `/bindwright:doctor` names an older CLI wherever guard hooks run, in the repo or in `~/.claude`, not only where mods are installed.
@@ -50,7 +52,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Security
 
-- **Long commands no longer run the guards out of time.** Random and hostile commands fed to every guard made none of them throw, but seven patterns took time that grew with the square or the cube of a command's length: the attribution guard's tests for a GitHub write (`gh pr ... create`) and a hook change (`git config ... hook`), its attribution phrases after "made by" or "ai" and a co-author trailer followed by a long run of blanks, the version check's first pass for a release command, and the tool-rules guard's reading of PowerShell here-strings and its masking of tokens in the observe log. A 2 KB line of repeated `gh pr` took 5 s and a 20 KB one more than a minute, past the hook's 10 or 30 s limit, so the command was refused, and on a CLI older than 2.1.295 it would have run unchecked. Each now takes time in step with the command's length and gives the same answers (compared on 20,000 random commands), and those 20 KB inputs take under 20 ms. The PowerShell quote scan keeps its reading: it now tries a here-string opener only while a line that may close it follows.
+- **Long commands no longer run the guards out of time.** Random and hostile commands fed to every guard made none of them throw, but several patterns took time that grew with the square or the cube of a command's length: the attribution guard's tests for a GitHub write (`gh pr ... create`) and a hook change (`git config ... hook`), its attribution phrases after "made by" or "ai" and a co-author trailer followed by a long run of blanks, the version check's first pass for a release command, and the tool-rules guard's reading of PowerShell here-strings, its masking of tokens in the observe log, its blanking of shell arithmetic in a here-document, and its checks for a flag after `gh pr merge`, `gh run rerun`, an interactive git command, `gh pr create` or `git show`. A 2 KB line of repeated `gh pr` took 5 s and a 20 KB one more than a minute, past the hook's 10 or 30 s limit, so the command was refused, and on a CLI older than 2.1.295 it would have run unchecked. Each now takes time in step with the command's length and gives the same answers (compared on 20,000 random commands), and those 20 KB inputs take under 20 ms. The PowerShell quote scan keeps its reading: it now tries a here-string opener only while a line that may close it follows.
 - **The push guard refuses a command its own check fails on.** An error inside the check let the push through; it now exits as a crash does, which the hook entry's `onFailure: block` refuses.
 
 ## [v5.3.1] — 2026-11-15
