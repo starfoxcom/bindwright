@@ -42,7 +42,7 @@ export const COMPUTER = [
   {
     id: "push-guard",
     title: "Push guard",
-    text: "Blocks force pushes in every repo on your computer.",
+    text: "Blocks force pushes and banned shell commands in every repo on your computer.",
     value: "Yes",
     keys: ["extra:push-guard"],
   },

@@ -7,6 +7,7 @@
   ".claude/hooks/no_ai_attribution/shell.py",
   ".claude/hooks/push-guard.py",
   ".claude/hooks/run-hook.sh",
+  ".claude/hooks/tool-rules.py",
   ".claude/hooks/version-check.py",
   ".claude/rules/architecture/README.md",
   ".claude/rules/architecture/clean.md",
