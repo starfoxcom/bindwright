@@ -19,6 +19,13 @@ text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
 to slip past it.
 
+Each rule carries its mode. An `enforce` rule refuses the command. An `observe`
+rule only appends what it would have refused to the user's Bindwright folder
+(OBSERVED_LOG), which `/bindwright:doctor` reports, so a false refusal shows up
+before anyone is stopped. A new rule ships as `observe` and moves to `enforce`
+in a later release once its log shows none. The mode lives here, never in a
+file a session could write, so nothing at run time relaxes a rule.
+
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
 """
@@ -26,6 +33,7 @@ import json
 import os
 import re
 import sys
+import time
 
 INTERPRETER = r"(?:python3?|py|node|deno|bun|perl|ruby|php|bash|sh|zsh|pwsh|powershell)(?:\.exe)?"
 PROGRAM = re.compile(r"(?:.*[/\\])?" + INTERPRETER, re.I)
@@ -247,24 +255,58 @@ def both(*patterns):
     return lambda text, shell: all(p.search(bare(text, shell)) for p in compiled)
 
 
+ENFORCE = "enforce"
+OBSERVE = "observe"
+OBSERVED_LOG = os.path.join(os.path.expanduser("~"), ".bindwright", "tool-rules", "observed.jsonl")
+# Past this many bytes the log moves to a single `.old` copy and starts over, so it never grows unbounded.
+OBSERVED_LOG_LIMIT = 256 * 1024
+# A long run of letters and digits holding a digit reads as a token or key: the log keeps a placeholder.
+TOKEN_LIKE = re.compile(r"(?=[A-Za-z0-9_\-]*\d)[A-Za-z0-9_\-]{24,}")
+
 RULES = [
-    ("an inline script holding a backslash", inline_script, WRITE_THE_FILE),
+    ("an inline script holding a backslash", inline_script, WRITE_THE_FILE, ENFORCE),
     ("`gh run watch`", both(r"\bgh\s+run\s+watch\b"),
-     "it blocks the session. ci-watch (or a bounded watcher, token-efficiency.md) watches checks."),
+     "it blocks the session. ci-watch (or a bounded watcher, token-efficiency.md) watches checks.", ENFORCE),
     ("the size check chained with a commit or push",
      both(r"(?:^|(?<=[\s;&|(]))(?:python3?|py)(?:\.exe)?\s+(?:-\S+\s+)*\S*size_check\.py",
           r"\bgit\s+(?:commit|push)\b"),
-     "the commit runs past its breaches. Run size_check.py in its own call first."),
+     "the commit runs past its breaches. Run size_check.py in its own call first.", ENFORCE),
     ("`git push` and `gh pr create` in one command", both(r"\bgit\s+push\b", r"\bgh\s+pr\s+create\b"),
-     "the chain gets refused. Push, then open the PR in a separate call."),
+     "the chain gets refused. Push, then open the PR in a separate call.", ENFORCE),
     ("`git checkout <rev> -- <path>`", both(r"\bgit\s+checkout\s+(?!-)\S+\s+--\s+\S"),
-     "it overwrites and stages those files. Peek with `git show <rev>:./<path>`; restore with `git restore`."),
+     "it overwrites and stages those files. Peek with `git show <rev>:./<path>`; restore with `git restore`.",
+     ENFORCE),
     ("`gh pr merge --admin`", both(r"\bgh\s+pr\s+merge\b.*\s--admin\b"),
-     "it skips the required checks. Fix what blocks the merge."),
+     "it skips the required checks. Fix what blocks the merge.", ENFORCE),
     ("`<rev>:.<path>` in Git Bash",
      lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
-     "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root."),
+     "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root.", ENFORCE),
 ]
+
+
+def observe(name, text, shell):
+    """Append one would-be refusal to OBSERVED_LOG; a log that cannot be written is skipped."""
+    entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rule": name, "shell": shell,
+             "command": TOKEN_LIKE.sub("<token>", text)[:500]}
+    try:
+        os.makedirs(os.path.dirname(OBSERVED_LOG), exist_ok=True)
+        if os.path.exists(OBSERVED_LOG) and os.path.getsize(OBSERVED_LOG) > OBSERVED_LOG_LIMIT:
+            os.replace(OBSERVED_LOG, OBSERVED_LOG + ".old")
+        with open(OBSERVED_LOG, "a", encoding="utf-8") as log:
+            log.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass
+
+
+def refusal(text, shell):
+    """The first enforce rule the command breaks, as (name, why), or None; observe rules it breaks are logged."""
+    for name, test, why, mode in RULES:
+        if not test(text, shell):
+            continue
+        if mode == ENFORCE:
+            return name, why
+        observe(name, text, shell)
+    return None
 
 
 def deny(name, why):
@@ -284,9 +326,9 @@ def main():
     if not isinstance(text, str):
         sys.exit(0)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
-    for name, test, why in RULES:
-        if test(text, shell):
-            deny(name, why)
+    refused = refusal(text, shell)
+    if refused:
+        deny(*refused)
     sys.exit(0)
 
 

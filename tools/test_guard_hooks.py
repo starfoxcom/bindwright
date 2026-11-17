@@ -1349,6 +1349,47 @@ class HookSourceTest(unittest.TestCase):
                     compile(source, rel, "exec")
 
 
+def load_tool_rules():
+    """The shipped tool-rules guard as a module, so a test can call its rules directly."""
+    import importlib.util
+    path = os.path.join(REPO, "_core", "global-template", "hooks", "tool-rules.py")
+    spec = importlib.util.spec_from_file_location("tool_rules", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ToolRulesModeTest(unittest.TestCase):
+    """A rule in observe mode lets the command run and logs it, with tokens taken out; in enforce
+    mode the same rule refuses it. A mention breaks neither."""
+
+    def setUp(self):
+        self.hook = load_tool_rules()
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        self.hook.OBSERVED_LOG = os.path.join(folder, "tool-rules", "observed.jsonl")
+
+    def logged(self):
+        if not os.path.exists(self.hook.OBSERVED_LOG):
+            return []
+        with open(self.hook.OBSERVED_LOG, encoding="utf-8") as log:
+            return [json.loads(line) for line in log]
+
+    def test_observe_logs_and_passes_and_enforce_refuses(self):
+        watch = self.hook.both(r"\bgh\s+run\s+watch\b")
+        token = "ghp_" + "a1" * 18
+        self.hook.RULES = [("watch", watch, "why", self.hook.OBSERVE)]
+        self.assertIsNone(self.hook.refusal('git commit -m "gh run watch 1"', "bash"))
+        self.assertEqual(self.logged(), [])
+        self.assertIsNone(self.hook.refusal(f"gh run watch 1 --token {token}", "powershell"))
+        entries = self.logged()
+        self.assertEqual([(entry["rule"], entry["shell"]) for entry in entries], [("watch", "powershell")])
+        self.assertNotIn(token, entries[0]["command"])
+        self.hook.RULES = [("watch", watch, "why", self.hook.ENFORCE)]
+        self.assertEqual(self.hook.refusal("gh run watch 1", "bash"), ("watch", "why"))
+        self.assertEqual(len(self.logged()), 1)
+
+
 class RunnerChainSweepTest(unittest.TestCase):
     """A seeded sweep of the spellings a git call can take behind runners, read by the real parser
     and the attribution guard's routes: a subcommand from a list is always refused, a written one
