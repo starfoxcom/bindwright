@@ -129,20 +129,15 @@ test("a subagent's tool calls are not counted", { skip }, () => withLayout((layo
 
 const SLIPPED = [
   "## Done", "", "**Outcome:** it works — mostly — and basically holds.", "- **Next:** ship it",
-  "```", "## code, — basically", "```", "Run `## x —` here, and ``a ` — b`` too.", "**Do not** run it yet.",
-  // A fence under a nested list item and one in a quote are code; inline code that opens with a fence's
-  // marks is not a fence, so the prose after it still counts.
-  "- Build", "  - then run", "    ```sh", "    echo \"done — basically\"", "    **Note:** x", "    ```",
-  "> ```", "> # quoted —", "> ```", "```js``` marks the language.", "Then it holds, essentially.",
-  // A fence opened on a list marker's line; bold that ends a sentence or names an option; two clauses.
-  "1. ```sh", "npm ci —", "   ```", "**Don't merge until CI is green.**", "- **Merge now**",
-  "Is that not just a typo? I checked but found nothing.", "```", "# install deps —", "```",
-  // Prose that names fence marks opens nothing; an indented code block; bold inside a hyphenated word.
-  "A fence opens with ``` on its own line.", "```", "# build — then basically done", "**Note:** x", "```",
-  "Wrap it in `` ``` `` marks.", "```", "**Note:** y —", "```", "", "    echo \"a — b\"  # basically", "",
-  "**Ctrl**-C stops it.", "- **Pre**-release builds come first.", "That is all.",
-  // A fence shown inside a longer one, then a reply cut off inside a fence: all of it code.
-  "````md", "```py", "# x —", "```", "````", "~~~", "# cut off —",
+  // Inline code, emphasis, bold that ends a sentence, names an option or sits in a hyphenated word, two
+  // clauses, and code indented under a quote or on its own: none of it is a slip.
+  "Run `## x —` here, and ``a ` — b`` too.", "**Do not** run it yet.", "**Don't merge until CI is green.**",
+  "- **Merge now**", "Is that not just a typo? I checked but found nothing.", "**Ctrl**-C stops it.",
+  "- **Pre**-release builds come first.", "", "    echo \"a — b\"  # basically", ">     code — basically", "",
+  "Then it holds, essentially.",
+  // From the first fence mark on, nothing is measured, whatever the fences hold or wherever they end.
+  "A fence opens with ``` on its own line.", "Prose — basically, **Note:** essentially.", "```md", "> ```",
+  "> code — basically", "> ```", "```", "- **Note:** then — basically.",
 ].join("\n");
 const finished = (reply) => ({ hook_event_name: "Stop", session_id: "s-1", last_assistant_message: reply });
 

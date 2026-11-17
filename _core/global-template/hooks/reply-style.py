@@ -35,16 +35,15 @@ INTRO = ("The reply style in use, {name}, restated here so it is the last thing 
 # The style the checks below measure: the one Bindwright ships. Other styles get no checks.
 CHECKED_STYLE = "straight talk"
 SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids them: "
-# Code is left out the way prose checkers that parse Markdown leave it out, without a parser: a line
-# that may be code is dropped, so a check can miss a slip but never report one made in code.
+# Prose checkers keep code out with a Markdown parser; without one, where a fence ends cannot be told
+# for sure, so a reply is measured only up to its first fence mark, and a line that may be indented
+# code is skipped. A check can miss a slip, but never report one made in code.
 # A run of three or more backticks or tildes, anywhere on a line.
 FENCE_RUN = re.compile(r"`{3,}|~{3,}")
-# A fence opener: the run starts the line, after any indent, quote marks or a list marker.
-FENCE_OPENER = re.compile(r"[ \t>]*(?:(?:[-*+]|\d+[.)])[ \t]+)?(`{3,}|~{3,})")
-# A line indented four spaces or a tab may be an indented code block.
+# The block-quote marks a line opens with.
+QUOTE_MARKS = re.compile(r"(?: {0,3}> ?)*")
+# After its quote marks, a line indented four spaces or a tab may be an indented code block.
 INDENTED = re.compile(r"(?: {4}|\t)")
-# A line of fence marks alone (any indent or quote marks before them): the only line that closes a fence.
-FENCE_CLOSER = re.compile(r"[ \t>]*(`{3,}|~{3,})[ \t]*")
 # An inline span closes on a backtick run of the same length as the one that opened it.
 INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)[^\n]+?(?<!`)\1(?!`)")
 # (what the reminder names, pattern): each counts its matches in a reply, code taken out first.
@@ -198,28 +197,17 @@ def reset_count(session):
 
 
 def prose_of(reply):
-    """The reply's lines that are surely prose.
-
-    A fence opens on a line that starts with its run (after any indent, quote marks or a list marker; a
-    backtick run with another backtick after it is inline code) and closes on a line of the same marks,
-    at least as long; an unclosed fence runs to the end. Every other line holding a run, and every line
-    indented like a code block, is dropped without opening anything. Inline spans come out, and a line
-    still holding a backtick, which may be code the spans did not pair, is dropped whole.
-    """
-    kept, fence = [], None
+    """The reply's lines that are surely prose: those before its first fence mark, with inline spans
+    taken out, less any that may be indented code or still hold a backtick the spans did not pair."""
+    kept = []
     for line in reply.split("\n"):
-        if fence is not None:
-            closer = FENCE_CLOSER.fullmatch(line)
-            if closer and closer.group(1)[0] == fence[0] and len(closer.group(1)) >= len(fence):
-                fence = None
+        if FENCE_RUN.search(line):
+            break
+        if INDENTED.match(line, QUOTE_MARKS.match(line).end()):
             continue
-        opener = FENCE_OPENER.match(line)
-        if opener and not (opener.group(1)[0] == "`" and "`" in line[opener.end():]):
-            fence = opener.group(1)
-        elif not FENCE_RUN.search(line) and not INDENTED.match(line):
-            prose = INLINE_CODE.sub("", line)
-            if "`" not in prose:
-                kept.append(prose)
+        prose = INLINE_CODE.sub("", line)
+        if "`" not in prose:
+            kept.append(prose)
     return "\n".join(kept)
 
 
