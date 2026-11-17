@@ -149,6 +149,10 @@ GIT_WRITE = re.compile(
 GH_WRITE = re.compile(
     r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
+# A git call whose subcommand may come from a word built at run time (`git "${args[@]}"`,
+# PowerShell's `git @args`): past its options, the next word starts with `$` or `@`.
+GIT_BUILT = re.compile(
+    r"\bgit\b(?:[ \t]+-[^\s|;&]*(?:[ \t]+[^\s|;&$@-][^\s|;&]*)?)*[ \t]+[\"']?[$@]", re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.
@@ -173,6 +177,8 @@ BYPASS_REASONS = {
     "lefthook": "turning lefthook off removes the commit-msg attribution check.",
     "unread": ("this git call has more words built at run time than the guard reads every way;"
                " split it, or write some of them out."),
+    "built": ("this git call takes its subcommand from a word built at run time (`git \"${args[@]}\"`),"
+              " which may hold a commit and its options; write the subcommand out."),
 }
 
 
@@ -207,7 +213,7 @@ def routes_in(text):
     joined = CONTINUED_LINE.sub(r"\1", text)
     texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
+    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF, GIT_BUILT) for t in texts)
 
 
 def readers(named):

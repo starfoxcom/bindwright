@@ -945,6 +945,21 @@ class GuardHookTest(unittest.TestCase):
         self.assertIn("could not read this command", reason)
         self.assertNotIn("/bindwright:update", reason)
 
+    def test_a_subcommand_built_at_run_time_is_refused(self):
+        # A word built at run time in git's subcommand place, with no subcommand written after it,
+        # may hold a commit and its options, so the call is refused; one that names its subcommand passes.
+        for (command, tool), result in self.each(
+                (('git "$@"', "Bash"), ('g() { git "$@"; }; g commit -m x', "Bash"),
+                 ('git -C sub "${a[@]}"', "Bash"), ("git $SUB", "Bash"), ("git @a", "PowerShell"),
+                 ("git $a", "PowerShell")),
+                lambda command, tool: self.attr(command, tool=tool)):
+            with self.subTest(command=command):
+                self.assert_denied(result, "takes its subcommand from a word built at run time")
+        for command, result in self.each(('git log "$range"', 'git config "$@" user.name x'),
+                                         lambda command: self.attr(command)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+
     def test_routes_past_the_hooks_are_refused(self):
         hooks, setting, trailer, reuse, lefthook = ("git hook bypass", "changes which hooks git runs",
                                                     "--trailer is not allowed", "reusing another",

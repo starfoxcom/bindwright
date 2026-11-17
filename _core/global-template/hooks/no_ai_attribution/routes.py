@@ -122,6 +122,8 @@ def git_route(words):
     read as its literal text with a NUL for each part built at run time (`--trailer=$WHO`,
     `"$S.hooksPath"`), and each one the parser says can expand to nothing is also read as no
     word, apart from the others (`git $OPTS commit`)."""
+    if built_subcommand(words):
+        return "built"
     head, rest = words[:1], words[1:]
     run_time = [i for i, word in enumerate(rest) if not isinstance(word, str) and word["canBeEmpty"]]
     if len(run_time) > MAX_RUN_TIME_WORDS:
@@ -134,6 +136,16 @@ def git_route(words):
         if route:
             return route
     return None
+
+
+def built_subcommand(words):
+    """Whether git's subcommand comes from a word built at run time with no literal word after it
+    that can be the subcommand (`git "${args[@]}"`, `git "$@"`), so that word may hold any
+    subcommand and its options. `git $OPTS commit` names its subcommand and is read as usual."""
+    i = git_subcommand(words)[0]
+    if i >= len(words) or isinstance(words[i], str):
+        return False
+    return not any(isinstance(word, str) and not word.startswith("-") for word in words[i + 1:])
 
 
 def literal_git_route(words):
