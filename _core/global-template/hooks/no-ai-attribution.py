@@ -81,7 +81,8 @@ not name git (their options are not read as git's), an option, setting or
 `$(echo --no-verify)`, `"$KEY"`, `core.ho$'o'ksPath`), a body-file flag
 the shell builds at run time from a word that does not start with `-` as
 written (`$F` holding `-F msg.txt`), a script PowerShell decodes
-(`-EncodedCommand`), a write whose text a redirection holding `&` splits
+(`-EncodedCommand`), a git named at run time whose subcommand is built too
+(`$GIT "$@"`), one inside `bash -c` whose subcommand is built, a write whose text a redirection holding `&` splits
 (`git 2>&1 commit`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
@@ -153,17 +154,10 @@ GIT_WRITE = re.compile(
 GH_WRITE = re.compile(
     r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
     + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
-# A git call whose subcommand may come from a word built at run time (`git "${args[@]}"`,
-# PowerShell's `git @args`): past its options, the next word starts with `$` or `@`.
-# An option may hold quoted text (`-c user.name="A B"`), its value may be quoted (`-C "my dir"`),
-# and a redirection without `&` may sit among them (`2>/dev/null`, `> out.txt`).
-_QUOTED = r"(?:\"[^\"]*\"|'[^']*')"
-_GIT_OPTION = r"-[^\s|;&\"']*(?:" + _QUOTED + r"[^\s|;&\"']*)*"
-_GIT_VALUE = r"(?:[^\s|;&$@\"'<>-]|" + _QUOTED + r")(?:[^\s|;&\"']|" + _QUOTED + r")*"
-_REDIRECT = r"\d*[<>]{1,2}[ \t]*[^\s|;&<>]+"
-GIT_BUILT = re.compile(
-    r"\bgit(?:\.(?:exe|cmd|bat|com))?(?:[ \t]+(?:" + _REDIRECT + r"|" + _GIT_OPTION + r"(?:[ \t]+"
-    + _GIT_VALUE + r")?))*[ \t]+[\"']?[$@]", re.I)
+# A git call that may take its subcommand from a word built at run time (`git "${args[@]}"`,
+# PowerShell's `git @args`): a word starting with `$` or `@` after git. It only sends the command
+# to the parser, whose reading decides; a command the parser cannot read is not refused for it.
+GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?[ \t][\"']?[$@]", re.I)
 GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
 HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
 # Commands that may change which hooks run without writing anything.
@@ -224,7 +218,7 @@ def routes_in(text):
     joined = CONTINUED_LINE.sub(r"\1", text)
     texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
     writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF, GIT_BUILT) for t in texts)
+    return writes, writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
 
 
 def readers(named):
@@ -271,7 +265,7 @@ def main():
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     # An escaped bash command goes to the parser even when its text names no route, but only
     # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
-    if not (named or shell == "bash" and SHELL_ESCAPES.search(cmd)):
+    if not (named or GIT_BUILT.search(cmd) or shell == "bash" and SHELL_ESCAPES.search(cmd)):
         sys.exit(0)
     parse, with_nested, parsed_files, hook_route = readers(named)
 

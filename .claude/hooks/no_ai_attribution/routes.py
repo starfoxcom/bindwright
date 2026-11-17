@@ -7,26 +7,21 @@ from .files import (ENV_VALUE_OPTIONS, ENV_VALUE_SHORT, abbreviates, git_subcomm
 
 
 LEFTHOOK_OFF_VALUES = {"0", "false"}
-# git's own subcommands (`git help -a`). After a word built at run time in the subcommand place,
-# only one of these names a subcommand; any other literal word may be an option's value (`-m x`).
-GIT_SUBCOMMANDS = {
-    "add", "am", "annotate", "apply", "archive", "bisect", "blame", "branch", "bundle", "cat-file",
-    "check-attr", "check-ignore", "checkout", "cherry", "cherry-pick", "citool", "clean", "clone",
-    "commit", "commit-graph", "commit-tree", "config", "count-objects", "describe", "diff",
-    "diff-files", "diff-index", "diff-tree", "difftool", "fetch", "for-each-ref", "format-patch",
-    "fsck", "gc", "grep", "hash-object", "help", "init", "log", "ls-files", "ls-remote", "ls-tree",
-    "maintenance", "merge", "merge-base", "mergetool", "mv", "name-rev", "notes", "prune", "pull",
-    "push", "range-diff", "rebase", "reflog", "remote", "repack", "replace", "reset", "restore",
-    "rev-list", "rev-parse", "revert", "rm", "shortlog", "show", "show-ref", "sparse-checkout",
-    "stash", "status", "submodule", "switch", "symbolic-ref", "tag", "update-index", "update-ref",
-    "var", "verify-commit", "verify-tag", "version", "whatchanged", "worktree", "write-tree",
-}
+# Options of git's writes that take the next word as their value. After a word built at run time
+# in the subcommand place, a literal word right after one of these (`-m x`) is that value, not a
+# written subcommand.
+GIT_VALUE_FLAGS = {"-m", "-F", "-C", "-c", "-t", "-s", "-S", "-u", "-o", "-X", "-x", "--message",
+                   "--file", "--template", "--author", "--date", "--trailer", "--reuse-message",
+                   "--reedit-message", "--fixup", "--squash", "--cleanup", "--strategy",
+                   "--strategy-option", "--exec", "--onto", "--push-option", "--repo", "--git-dir",
+                   "--work-tree", "--namespace", "--config-env"}
 # The options of each wrapper that take the next word as their value (`sudo -u root git`).
 WRAPPER_VALUE_OPTIONS = {
     "sudo": {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-T", "-U", "--user", "--group",
              "--chdir", "--host", "--prompt", "--role", "--type", "--other-user", "--close-from",
              "--command-timeout"},
     "doas": {"-u", "-C"},
+    "exec": {"-a"},
     "env": ENV_VALUE_SHORT | set(ENV_VALUE_OPTIONS),
     "nice": {"-n", "--adjustment"},
     "xargs": {"-a", "-d", "-E", "-I", "-L", "-n", "-P", "-s", "--arg-file", "--delimiter",
@@ -162,25 +157,43 @@ def git_route(words):
 
 
 def built_subcommand(words):
-    """Whether git's subcommand comes from a word built at run time with no git subcommand written
-    after it (`git "${args[@]}"`, `git "$@" -m x`), so that word may hold any subcommand and its
-    options. `git $OPTS commit` names its subcommand and is read as usual."""
+    """Whether git's subcommand comes from a word built at run time with no subcommand written after
+    it (`git "${args[@]}"`, `git "$@" -m x`), so that word may hold any subcommand and its options.
+    A written subcommand is a literal word that is not an option's value and not after `--`, so
+    `git $OPTS commit` is read as usual."""
     i = git_subcommand(words)[0]
     if i >= len(words) or isinstance(words[i], str):
         return False
-    return not any(isinstance(word, str) and word in GIT_SUBCOMMANDS for word in words[i + 1:])
+    previous = ""
+    for word in words[i + 1:]:
+        if word == "--":
+            return True
+        if isinstance(word, str) and not word.startswith("-") and not takes_value(previous, GIT_VALUE_FLAGS):
+            return False
+        previous = shape_of(word)
+    return True
+
+
+def takes_value(word, flags):
+    """Whether an option takes the next word as its value: a name in `flags`, or a short cluster
+    whose last letter is one (`-nu`, `-am`)."""
+    if word in flags:
+        return True
+    return word[:1] == "-" and word[1:2] != "-" and len(word) > 2 and "-" + word[-1] in flags
 
 
 def runs_program_at(words, i):
     """Whether words[i] is the program a command runs: its first word, or the first after wrappers
     (`sudo -u root`, `env A=1`), their options with their values, and NAME=value words. A word only
-    named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`) is not."""
+    named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not."""
     j = 0
     while j < i and program(words[j:]) in WRAPPERS:
-        takes_value = WRAPPER_VALUE_OPTIONS.get(program(words[j:]), set())
+        flags = WRAPPER_VALUE_OPTIONS.get(program(words[j:]), set())
+        if program(words[j:]) == "command" and any(text_of(w) in ("-v", "-V") for w in words[j + 1:i]):
+            return False
         j += 1
         while j < i and (shape_of(words[j]).startswith("-") or re.match(r"\w+=", shape_of(words[j]))):
-            j += 2 if shape_of(words[j]) in takes_value else 1
+            j += 2 if takes_value(shape_of(words[j]), flags) else 1
     return j == i
 
 
@@ -279,7 +292,7 @@ def hook_route(groups, assignments):
     for words in commands:
         for i, word in enumerate(words):
             if program(words[i:]) == "git" or is_run_time_git(word):
-                if runs_program_at(words, i) and built_subcommand(words[i:]):
+                if program(words[i:]) == "git" and runs_program_at(words, i) and built_subcommand(words[i:]):
                     return "built"
                 route = git_route(words[i:])
                 if route:

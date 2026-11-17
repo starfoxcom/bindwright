@@ -955,7 +955,10 @@ class GuardHookTest(unittest.TestCase):
                  ('git -C "my dir" "$@"', "Bash"), ('git -c user.name="A B" "$@"', "Bash"),
                  ('git 2>/dev/null "$@"', "Bash"), ('git > out.txt "$@"', "Bash"),
                  ('git "$@" -m x', "Bash"), ('g() { git "$@" --no-verify -m x; }; g commit', "Bash"),
-                 ('env A=1 git "$@"', "Bash"), ("sudo git $S", "Bash"), ('sudo -u root git "$@"', "Bash")),
+                 ('env A=1 git "$@"', "Bash"), ("sudo git $S", "Bash"), ('sudo -u root git "$@"', "Bash"),
+                 ('sudo -nu root git "$@"', "Bash"), ('exec -a name git "$@"', "Bash"),
+                 ('git "$@" -m merge', "Bash"), ('git "$@" -- config', "Bash"),
+                 ('"git" -C "my dir" "$@"', "Bash"), ('git -q 2>a "$@"', "Bash")),
                 lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "takes its subcommand from a word built at run time")
@@ -964,7 +967,9 @@ class GuardHookTest(unittest.TestCase):
                 ('git log "$range"', 'git config "$@" user.name x', 'grep git "$file"', "echo git $x",
                  "apt-get install -y git $EXTRA_PKGS", 'cp -r "$src/.git" "$dst"',
                  'gh pr create --title "$(git log -1 --format=%s)" --body "$body"',
-                 'git tag "v$(git describe)" "$sha"', 'git -C "$dir" log', "sudo git $OPTS status"),
+                 'git tag "v$(git describe)" "$sha"', 'git -C "$dir" log', "sudo git $OPTS status",
+                 'repos=(a b); for r in "${repos[@]}"; do git -C "$r" status; done', 'command -v git "$x"',
+                 '"$(git rev-parse --show-toplevel)/run.sh" "$1"', 'sudo -Hu git "$cmd"', "git $OPTS rerere"),
                 lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
