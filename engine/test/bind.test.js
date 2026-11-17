@@ -1005,11 +1005,12 @@ test("guard hooks and settings follow the hook location and the attribution guar
       if (repoHooks) {
         const commands = settings.hooks.PreToolUse.flatMap((e) => e.hooks.map((h) => h.command));
         assert.deepEqual(commands.map((c) => c.match(/exec sh "\$0" ([\w-]+)'/)[1]),
-          attributionGuard ? ["no-ai-attribution", "push-guard"] : ["push-guard"], label);
+          attributionGuard ? ["no-ai-attribution", "push-guard", "tool-rules"] : ["push-guard", "tool-rules"], label);
         for (const c of commands) assert.ok(c.includes("${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh"), label);
       }
       assert.equal(files.has(".claude/hooks/run-hook.sh"), repoHooks, `${label}: launcher`);
       assert.equal(files.has(".claude/hooks/push-guard.py"), repoHooks, `${label}: push guard`);
+      assert.equal(files.has(".claude/hooks/tool-rules.py"), repoHooks, `${label}: tool rules`);
       assert.equal(files.has(".claude/hooks/no-ai-attribution.py"), repoHooks && attributionGuard, `${label}: attribution guard`);
       assert.equal(files.has(`${STAGING}.gitattributes`), repoHooks, `${label}: .gitattributes`);
       if (repoHooks) assert.match(files.get(`${STAGING}.gitattributes`), /^\*\.sh text eol=lf$/m, label);
@@ -1023,11 +1024,11 @@ test("guard hooks and settings follow the hook location and the attribution guar
 
 test("shipped guard hooks match this repo's live copies byte for byte", () => {
   const read = (p) => readFileSync(join(repo, p));
-  for (const name of ["run-hook.sh", "push-guard.py", "no-ai-attribution.py"]) {
+  for (const name of ["run-hook.sh", "push-guard.py", "tool-rules.py", "no-ai-attribution.py"]) {
     assert.ok(read(`_core/project-template/.claude/hooks/${name}`).equals(read(`.claude/hooks/${name}`)),
       `_core/project-template/.claude/hooks/${name} differs from .claude/hooks/${name}`);
   }
-  for (const name of ["push-guard.py", "no-ai-attribution.py"]) {
+  for (const name of ["push-guard.py", "tool-rules.py", "no-ai-attribution.py"]) {
     assert.ok(read(`_core/global-template/hooks/${name}`).equals(read(`.claude/hooks/${name}`)),
       `_core/global-template/hooks/${name} differs from .claude/hooks/${name}`);
   }

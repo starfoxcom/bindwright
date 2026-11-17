@@ -152,6 +152,28 @@ class GuardHookTest(unittest.TestCase):
     def test_plain_push_passes(self):
         self.assert_passes(self.run_hook("push-guard", "git push origin feature/x"))
 
+    def test_tool_rules_refuse_each_pattern_and_pass_mentions(self):
+        refused = (("python - <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("cat <<EOF | python -\nre.compile('\\\\d')\nEOF", "Bash"),
+                   ("python -c \"print('a\\\\b')\"", "Bash"), ("node -e \"console.log('a\\\\b')\"", "Bash"),
+                   ("@'\nprint('C:\\\\x')\n'@ | python -", "PowerShell"), ("gh run watch 123", "Bash"),
+                   ("python .github/scripts/size_check.py && git commit -qm x", "Bash"),
+                   ("git push -u origin x && gh pr create --base develop", "Bash"),
+                   ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"))
+        passing = ("python - <<'EOF'\nprint('hi')\nEOF", "git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF",
+                   "cat <<'EOF' > notes.md\nC:\\\\x\nEOF", 'python -c "print(1)"',
+                   'git commit -m "never use gh run watch"', 'git commit -m "size_check.py before git push"',
+                   "git checkout -q -b feature/x", "git checkout -- file.txt", "gh pr merge 5 --merge",
+                   "node script.mjs C:\\\\x")
+        for command, tool in refused:
+            with self.subTest(command=command):
+                result = self.run_hook("tool-rules", command, tool=tool)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(b"BLOCKED (tool rule)", result.stdout)
+        for command in passing:
+            with self.subTest(command=command):
+                self.assert_passes(self.run_hook("tool-rules", command))
+
     def test_skipped_when_home_registers_a_working_copy(self):
         self.home_settings('{"command": "python \\"C:/Users/me/.claude/hooks/push-guard.py\\""}',
                            hook_files=["push-guard.py"])
