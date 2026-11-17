@@ -9,14 +9,14 @@ name: Release plugin
 # The zip and the helper files are rebuilt from the release tag by
 # tools/pack_plugin.py, which reads the files git stores, so the helper files
 # match the pins the zip carries. The job refuses to upload a zip whose
-# SHA-256 differs from the one the starfoxcom/wrights marketplace pins on its
-# default branch, since that file is the only marketplace that lists the
-# plugin, and it would refuse the zip anyway. The release steps bump that pin
-# in a wrights PR (python tools/pack_plugin.py --marketplace prints its
-# version, url and sha256) before the release is published. The same files
-# then go to the `plugin` branch, which the plugin directory follows.
+# SHA-256 differs from a pin installs read: the starfoxcom/wrights
+# marketplace's, and this repo's own .claude-plugin/marketplace.json on the
+# default branch while that file exists, since a marketplace refuses a zip
+# that differs from its pin. The release steps bump the wrights pin in a
+# wrights PR before the release is published. The same files then go to the
+# `plugin` branch, which the plugin directory follows.
 #
-# When a run refuses, fix the pin in wrights and run this again for the same
+# When a run refuses, fix each pin it names and run this again for the same
 # release, never moving its tag:
 #   gh workflow run release-plugin.yml -f tag=vX.Y.Z
 
@@ -95,42 +95,53 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build the zip and check it against the wrights marketplace
+      - name: Build the zip and check it against the marketplace pins
         if: steps.market.outputs.present == 'true'
         id: build
         env:
           GH_TOKEN: ${{ github.token }}
           MARKETPLACE_REPO: starfoxcom/wrights
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           version="${TAG#v}"
           zip="bindwright-$version.zip"
-          market="$RUNNER_TEMP/marketplace.json"
-          path="repos/$MARKETPLACE_REPO/contents/.claude-plugin/marketplace.json"
-          gh api -H "Accept: application/vnd.github.raw+json" "$path" > "$market"
+          raw="Accept: application/vnd.github.raw+json"
+          file=".claude-plugin/marketplace.json"
+          gh api -H "$raw" "repos/$MARKETPLACE_REPO/contents/$file" > "$RUNNER_TEMP/wrights.json"
+          markets=("$MARKETPLACE_REPO=$RUNNER_TEMP/wrights.json")
+          own="repos/$GITHUB_REPOSITORY/contents/$file?ref=$DEFAULT_BRANCH"
+          if gh api -H "$raw" "$own" > "$RUNNER_TEMP/own.json" 2> "$RUNNER_TEMP/own.err"; then
+            markets+=("$DEFAULT_BRANCH's $file=$RUNNER_TEMP/own.json")
+          elif ! grep -q "HTTP 404" "$RUNNER_TEMP/own.err"; then
+            cat "$RUNNER_TEMP/own.err" >&2
+            exit 1
+          fi
           python3 tools/pack_plugin.py --zip "$zip" --ref HEAD
-          python3 - "$zip" "$version" "$market" "$MARKETPLACE_REPO" <<'EOF'
+          python3 - "$zip" "$version" "${markets[@]}" <<'EOF'
           import hashlib, json, sys
-          zip_path, version, market, repo = sys.argv[1:5]
-          with open(market, encoding="utf-8") as fh:
-              entry = next((p for p in json.load(fh)["plugins"] if p["name"] == "bindwright"), None)
-          if entry is None:
-              print("::error::the %s marketplace does not list bindwright" % repo)
-              sys.exit(1)
+          zip_path, version = sys.argv[1:3]
           with open(zip_path, "rb") as fh:
               built = hashlib.sha256(fh.read()).hexdigest()
-          source = entry.get("source") or {}
           problems = []
-          if entry.get("version") != version:
-              problems.append("%s lists version %s, the tag is %s" % (repo, entry.get("version"), version))
-          if source.get("sha256", "").lower() != built:
-              problems.append("%s pins %s, the rebuilt zip is %s" % (repo, source.get("sha256"), built))
-          if not source.get("url", "").endswith("/v%s/bindwright-%s.zip" % (version, version)):
-              problems.append("%s's url does not name this release's zip" % repo)
+          for market in sys.argv[3:]:
+              label, path = market.rsplit("=", 1)
+              with open(path, encoding="utf-8") as fh:
+                  entry = next((p for p in json.load(fh)["plugins"] if p["name"] == "bindwright"), None)
+              if entry is None:
+                  problems.append("%s does not list bindwright" % label)
+                  continue
+              source = entry.get("source") or {}
+              if entry.get("version") != version:
+                  problems.append("%s lists version %s, the tag is %s" % (label, entry.get("version"), version))
+              if source.get("sha256", "").lower() != built:
+                  problems.append("%s pins %s, the rebuilt zip is %s" % (label, source.get("sha256"), built))
+              if not source.get("url", "").endswith("/v%s/bindwright-%s.zip" % (version, version)):
+                  problems.append("%s's url does not name this release's zip" % label)
           for p in problems:
               print("::error::" + p)
           if problems:
-              print("::error::pin the zip in a %s PR (python tools/pack_plugin.py --marketplace prints the entry), "
-                    "then run: gh workflow run release-plugin.yml -f tag=v%s" % (repo, version))
+              print("::error::fix each pin named above (python tools/pack_plugin.py --marketplace), "
+                    "then run: gh workflow run release-plugin.yml -f tag=v%s" % version)
           sys.exit(1 if problems else 0)
           EOF
           echo "zip=$zip" >> "$GITHUB_OUTPUT"
