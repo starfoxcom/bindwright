@@ -127,6 +127,31 @@ test("a subagent's tool calls are not counted", { skip }, () => withLayout((layo
   assert.notEqual(run(layout, toolCall).context, null);
 }));
 
+const SLIPPED = [
+  "## Done", "", "**Outcome:** it works — mostly — and basically holds.", "- **Next:** ship it",
+  "```", "## code, — basically", "```", "Run `## x —` here.",
+].join("\n");
+const finished = (reply) => ({ hook_event_name: "Stop", session_id: "s-1", last_assistant_message: reply });
+
+test("what a finished reply broke comes with the next prompt, once", { skip }, () => withLayout((layout) => {
+  const styleFile = join(layout.home, ".claude", "output-styles", "plain.md");
+  writeFileSync(styleFile, STYLE.replace("Plain Speech", "Straight Talk"));
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Straight Talk" }));
+  assert.deepEqual(run(layout, finished(SLIPPED)), { status: 0, context: null });
+  const slips = "so this one avoids them: a heading; a bold label at the start of a line or list item (2);"
+    + ' an em dash (2); "basically".';
+  assert.ok(run(layout, prompt).context.additionalContext.endsWith(slips));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+  run(layout, finished(SLIPPED));
+  run(layout, finished("All clean, plain words."));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+}));
+
+test("replies under another style are not measured", { skip }, () => withLayout((layout) => {
+  run(layout, finished(SLIPPED));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+}));
+
 test("a session id that could leave the counts folder is never counted", { skip }, () => withLayout((layout) => {
   const escape = { hook_event_name: "PostToolUse", session_id: "../x" };
   assert.ok(Array.from({ length: 25 }, () => run(layout, escape)).every((r) => r.status === 0 && !r.context));
