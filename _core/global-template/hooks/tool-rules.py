@@ -73,9 +73,16 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # inside a message or a comment is part of that text.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
 QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(?:'|\Z)"
-                             r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(r"@(['\"])\r?\n.*?\r?\n\1@|<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
-                                   r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
+                             r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S)}
+POWERSHELL_QUOTED = (r"<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
+                     r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)")
+# The PowerShell scan for each set of quotes whose here-strings may still close. An opener with
+# no closing line after it never matches, and trying one reads to the end of the command, so the
+# scan leaves those out: many of them would take time that grows with the command's length squared.
+POWERSHELL_SCANS = {quotes: re.compile((r"@([%s])\r?\n.*?\r?\n\1@|" % quotes if quotes else "")
+                                       + POWERSHELL_QUOTED, re.S) for quotes in ("'\"", "'", "\"", "")}
+# Where any part of the PowerShell scan can start.
+POWERSHELL_QUOTE_START = re.compile(r"[@<#`'\"]")
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 # A `jq` call: a word of its own, not the `--jq` option of `gh`.
@@ -224,8 +231,35 @@ def inline_script(text, shell):
 def here_strings(text):
     """The PowerShell here-strings that stand outside quotes and comments, with the rest of the
     line each one ends on: the quote scan meets them before anything that would hold them."""
-    return [HERE_STRING.match(text, m.start()) for m in QUOTED["powershell"].finditer(text)
-            if m.group().startswith("@")]
+    return [HERE_STRING.match(text, m.start()) for m in quoted(text, "powershell") if m.group().startswith("@")]
+
+
+def quoted(text, shell):
+    """The quoted strings, comments and escapes the shell's scan finds, in order. A PowerShell
+    here-string opener is tried only while a line that may close it follows."""
+    if shell == "bash":
+        return list(QUOTED["bash"].finditer(text))
+    closes = {quote: text.rfind("\n" + quote + "@") for quote in "'\""}
+    found, at = [], 0
+    while True:
+        start = POWERSHELL_QUOTE_START.search(text, at)
+        if not start:
+            return found
+        quotes = "".join(quote for quote in "'\"" if closes[quote] > start.start())
+        match = POWERSHELL_SCANS[quotes].match(text, start.start())
+        if match:
+            found.append(match)
+        at = match.end() if match else start.start() + 1
+
+
+def masked(text, shell, replace):
+    """The command with each match of the shell's scan replaced by `replace`, a text or a
+    function of the match, as `re.sub` takes it."""
+    parts, at = [], 0
+    for match in quoted(text, shell):
+        parts += [text[at:match.start()], replace(match) if callable(replace) else replace]
+        at = match.end()
+    return "".join(parts + [text[at:]])
 
 
 def masked_calls(text, shell):
@@ -237,7 +271,7 @@ def masked_calls(text, shell):
         first = first_opener(text)
         if first:
             end = len("\n".join(text.split("\n")[:first[0] + 1]))
-    return QUOTED[shell].sub(as_quote, text), end
+    return masked(text, shell, as_quote), end
 
 
 def bare(text, shell):
@@ -248,7 +282,7 @@ def bare(text, shell):
         first = first_opener(text)
         if first:
             text = "\n".join(text.split("\n")[:first[0] + 1])
-    return QUOTED[shell].sub("''", text)
+    return masked(text, shell, "''")
 
 
 def both(*patterns):
@@ -269,8 +303,13 @@ OBSERVED_LOG = os.path.join(os.path.expanduser("~"), ".bindwright", "tool-rules"
 # Past this many bytes the log moves to a single `.old` copy and starts over, so it never grows unbounded.
 OBSERVED_LOG_LIMIT = 256 * 1024
 # A run of 24 or more letters, digits and _-+/= holding a digit reads as a token or key (base64 included):
-# the log keeps a placeholder.
-TOKEN_LIKE = re.compile(r"(?=[A-Za-z0-9_\-+/=]*\d)[A-Za-z0-9_\-+/=]{24,}")
+# the log keeps a placeholder. The digit is checked on each run found, since a lookahead for it
+# makes a long run take time that grows with its length squared.
+TOKEN_RUN = re.compile(r"[A-Za-z0-9_\-+/=]{24,}")
+
+
+def without_tokens(text):
+    return TOKEN_RUN.sub(lambda run: "<token>" if re.search(r"\d", run.group()) else run.group(), text)
 
 RULES = [
     ("an inline script holding a backslash", inline_script, WRITE_THE_FILE, ENFORCE),
@@ -314,7 +353,7 @@ RULES = [
 def observe(name, text, shell):
     """Append one would-be refusal to OBSERVED_LOG; a log that cannot be written is skipped."""
     entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rule": name, "shell": shell,
-             "command": TOKEN_LIKE.sub("<token>", text)[:500]}
+             "command": without_tokens(text)[:500]}
     try:
         os.makedirs(os.path.dirname(OBSERVED_LOG), exist_ok=True)
         if os.path.exists(OBSERVED_LOG) and os.path.getsize(OBSERVED_LOG) > OBSERVED_LOG_LIMIT:

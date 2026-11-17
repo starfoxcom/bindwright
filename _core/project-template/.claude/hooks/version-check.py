@@ -39,8 +39,24 @@ SEMVER_TAG = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+
 CALVER_TAG = re.compile(r"v?\d+(?:\.\d+)*")
 # The first pass over a command's text: it may match commands that make no release, never
 # miss one that does; only a match is read by the shell parser.
-MAY_BE_RELEASE = re.compile(r"\bgit\b.*\btag\b|\bgh\b.*\b(?:release|pr)\b.*\b(?:create|new)\b",
-                            re.DOTALL | re.IGNORECASE)
+MAY_BE_RELEASE = [[re.compile(word, re.IGNORECASE) for word in words]
+                  for words in ([r"\bgit\b", r"\btag\b"], [r"\bgh\b", r"\b(?:release|pr)\b", r"\b(?:create|new)\b"])]
+
+
+def may_be_release(command):
+    """Whether the words of one MAY_BE_RELEASE list appear in order anywhere in the command. The
+    earliest match of each word is enough, so it runs in linear time, where one pattern joining
+    them with `.*` takes time that grows with the cube of a long command's length."""
+    for words in MAY_BE_RELEASE:
+        at = 0
+        for word in words:
+            hit = word.search(command, at)
+            if not hit:
+                break
+            at = hit.end()
+        else:
+            return True
+    return False
 GH_CREATE = ("create", "new")
 # The rest of an option word built at run time, and the key `read_options` records when a run-time
 # word may be any option at all.
@@ -375,7 +391,7 @@ def check_release(project, scheme, fmt, version, ref):
 def refusal(command, shell, project):
     """Why the command's release is blocked, or None. A command that cannot make a release
     returns before anything that can fail; past that, a failure blocks with its reason."""
-    if not MAY_BE_RELEASE.search(command):
+    if not may_be_release(command):
         return None
     try:
         return read_and_check(command, shell, project)

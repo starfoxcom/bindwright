@@ -30,6 +30,9 @@ const FIX = {
 
 // The first CLI with mods; older ones load none of them.
 export const MODS_SINCE = [2, 1, 287];
+// The first CLI that honours a hook's `onFailure: block`; on older ones a guard that crashes or
+// runs out of time lets the command through.
+export const GUARDS_SINCE = [2, 1, 295];
 
 // "claude-code_2-1-286_agent", the variable the CLI sets for what it runs,
 // as [2, 1, 286]; null when unknown. Read from the session, not from PATH,
@@ -136,15 +139,22 @@ function settingsChecks(root, config) {
   return { checks: out, installed: settings.installed };
 }
 
-function cliCheck(installed, cliVersion) {
-  // Only mods need the newer CLI; the guards are plain hooks.
+// Whether guard hooks run here: the repo's own, or the push or attribution guard in <config>.
+function hasGuards(answers, pristine, installed) {
+  const inRepo = answers.advanced.hookLocation === "repo"
+    && Object.hasOwn(pristine.files, ".claude/hooks/run-hook.sh");
+  return inRepo || Boolean(installed["push-guard"] || installed["attribution-guard"]);
+}
+
+function cliCheck(installed, cliVersion, guards) {
   const mods = Object.entries(installed ?? {}).some(([name, has]) => has && MODS.includes(name));
-  if (!mods || !cliVersion || !before(cliVersion, MODS_SINCE)) {
-    return check("cli", true, "The CLI runs the installed mods.");
-  }
-  const [running, needed] = [cliVersion.join("."), MODS_SINCE.join(".")];
-  const say = `This session runs CLI ${running}, older than the ${needed} the mods need, so none of them load.`;
-  return check("cli", false, say,
+  const oldForMods = mods && before(cliVersion ?? MODS_SINCE, MODS_SINCE);
+  const oldForGuards = guards && before(cliVersion ?? GUARDS_SINCE, GUARDS_SINCE);
+  if (!oldForMods && !oldForGuards) return check("cli", true, "The CLI runs the guard hooks and the installed mods.");
+  const needs = [oldForGuards && `the ${GUARDS_SINCE.join(".")} the guard hooks need, so a guard that crashes `
+    + "or runs out of time lets the command through", oldForMods && `the ${MODS_SINCE.join(".")} the mods need, `
+    + "so none of them load"].filter(Boolean);
+  return check("cli", false, `This session runs CLI ${cliVersion.join(".")}, older than ${needs.join(", and ")}.`,
     FIX.cli);
 }
 
@@ -234,7 +244,8 @@ export function runDoctor(root, config, { pluginVersion, cliVersion }) {
     checks.push(stagedCheck(root));
     if (state.answers.advanced.tracker === "file") checks.push(roadmapCheck(root));
     const settings = settingsChecks(root, config);
-    checks.push(...settings.checks, cliCheck(settings.installed, cliVersion));
+    const guards = hasGuards(state.answers, state.pristine, settings.installed);
+    checks.push(...settings.checks, cliCheck(settings.installed, cliVersion, guards));
   }
   return { problems: checks.filter((c) => !c.ok).length, checks };
 }

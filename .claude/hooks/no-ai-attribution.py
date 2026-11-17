@@ -135,10 +135,12 @@ AN = r"(?:an?" + _Z + r")?"
 ATTRIBUTION = re.compile(
     "|".join([
         # Co-Authored-By naming an AI; a human co-author passes.
-        r"co" + _Z + r"-?" + _Z + r"authored" + _Z + r"-?" + _Z + r"by\s*:?[^\n]*?\b" + AI + r"\b",
+        # No two separator runs touch: `-` is one of them, and two in a row make a long run of
+        # separators take time that grows with its length squared.
+        r"co" + _Z + r"authored" + _Z + r"by\s*:?[^\n]*?\b" + AI + r"\b",
         r"noreply@" + ANTHROPIC,
         r"\b(?:generated|written|created|made|authored|produced|assisted|co-?written)" + _Z
-        + r"(?:with|by|using|via)" + _Z + r":?" + _Z + AN + AI + r"\b",
+        + r"(?:with|by|using|via)" + _Z + r"(?::" + _Z + r")?" + AN + AI + r"\b",
         # Trailer forms with a colon: "Assisted-by: <AI>:<model>", "Made-with: Cursor".
         r"\b(?:generated|written|created|made|authored|produced|assisted|co-?written)" + _Z
         + r"(?:with|by|using|via)" + _Z + r":[ \t]*" + AN + r"(?:" + AI + r"|cursor)\b",
@@ -149,30 +151,55 @@ ATTRIBUTION = re.compile(
         r"\b" + CLAUDE + r"[-_]session\s*:",
         r"session_[0-9a-z]{20,}",
         r"\U0001F916",                       # robot emoji
-        r"\bai" + _Z + r"-?" + _Z + r"(?:assisted|generated|written|authored)",
+        r"\bai" + _Z + r"(?:assisted|generated|written|authored)",
     ]), re.I | re.M)
 # A subcommand is a whole word: one inside a path or a name (`.claude/hooks/push-guard.py`,
 # `commit-msg`) names no write.
 _WORD_START = r"(?<![\w./\\:-])"
 _WORD_END = r"(?![\w./-])"
-GIT_WRITE = re.compile(
-    r"\bgit\b[^|;&\n]*?" + _WORD_START
-    + r"(commit-tree|commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace)"
-    + _WORD_END, re.I)
-GH_WRITE = re.compile(
-    r"\bgh\b[^|;&\n]*?" + _WORD_START + r"(pr|issue|release|gist|repo)" + _WORD_END + r"[^|;&\n]*?"
-    + _WORD_START + r"(create|edit|comment|review|merge|close|reopen)" + _WORD_END, re.I)
+# One command of a line: the text between `|`, `;`, `&` and line ends.
+_SEGMENT = re.compile(r"[^|;&\n]+")
+
+
+def _in_order(*patterns):
+    """A test of text: each pattern matches after the one before it, inside one segment. The
+    earliest match of each is enough, so it runs in linear time, where one pattern joined by
+    lazy runs takes time that grows with the cube of a long line's length."""
+    compiled = [re.compile(p, re.I) for p in patterns]
+
+    def test(text):
+        for segment in _SEGMENT.finditer(text):
+            at = segment.start()
+            for pattern in compiled:
+                hit = pattern.search(text, at, segment.end())
+                if not hit:
+                    break
+                at = hit.end()
+            else:
+                return True
+        return False
+    return test
+
+
+def _word(alternatives):
+    return _WORD_START + "(?:" + alternatives + ")" + _WORD_END
+
+
+GIT_WRITE = _in_order(r"\bgit\b", _word(
+    "commit-tree|commit|merge|push|tag|notes|am|cherry-pick|revert|rebase|replace"))
+GH_WRITE = _in_order(r"\bgh\b", _word("pr|issue|release|gist|repo"),
+                     _word("create|edit|comment|review|merge|close|reopen"))
 # A git call that may take its subcommand from a word built at run time (`git "${args[@]}"`,
 # PowerShell's `git @args`): a `$` or backtick anywhere after git (`--namespace="$@"`), or a word
 # starting with `@` or `(`. It only sends the command to the parser, whose reading decides; a
 # command the parser cannot read is not refused for it.
-GIT_BUILT = re.compile(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b[^|;&\n]*?(?:[$`]|[ \t][\"']?[@(])", re.I)
-GH_API = re.compile(r"\bgh\b[^|;&\n]*?" + _WORD_START + r"api" + _WORD_END, re.I)
-HTTP_GH = re.compile(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b[^|;&\n]*api\.github\.com", re.I)
+GIT_BUILT = _in_order(r"\bgit(?:\.(?:exe|cmd|bat|com))?\b", r"[$`]|[ \t][\"']?[@(]")
+GH_API = _in_order(r"\bgh\b", _word("api"))
+HTTP_GH = _in_order(r"\b(?:curl|Invoke-(?:RestMethod|WebRequest))\b", r"api\.github\.com")
 # Commands that may change which hooks run without writing anything.
-GIT_CONFIG_HOOKS = re.compile(
-    r"\bgit\b[^|;&\n]*?\bconfig\b[^|;&\n]*(?:hook|--re[mn]|\bre(?:move|name)-section\b)", re.I)
-LEFTHOOK_OFF = re.compile(r"\blefthook\b\W*=|\blefthook\b[^|;&\n]*\buninstall\b", re.I)
+GIT_CONFIG_HOOKS = _in_order(r"\bgit\b", r"\bconfig\b", r"hook|--re[mn]|\bre(?:move|name)-section\b")
+LEFTHOOK_SET = re.compile(r"\blefthook\b\W*=", re.I)
+LEFTHOOK_UNINSTALL = _in_order(r"\blefthook\b", r"\buninstall\b")
 # A line end the shell joins to the next: `\` (an even run of `\` escapes itself) or
 # PowerShell's backtick after a blank.
 CONTINUED_LINE = re.compile(r"(?<!\\)((?:\\\\)*)\\\r?\n|(?<=[ \t])`\r?\n")
@@ -227,9 +254,10 @@ def routes_in(text):
     line ends joined, and without quotes (`com'mit'`) or escapes (`g\\it`)."""
     joined = CONTINUED_LINE.sub(r"\1", text)
     texts = (text, joined, re.sub(r"[\"'`]", "", joined), re.sub(r"[\"'`\\]", "", joined))
-    writes = any(p.search(t) for p in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
-    named = writes or any(p.search(t) for p in (GIT_CONFIG_HOOKS, LEFTHOOK_OFF) for t in texts)
-    return writes, named, any(GIT_BUILT.search(t) for t in texts)
+    writes = any(test(t) for test in (GIT_WRITE, GH_WRITE, GH_API, HTTP_GH) for t in texts)
+    named = writes or any(test(t) for test in (GIT_CONFIG_HOOKS, LEFTHOOK_SET.search, LEFTHOOK_UNINSTALL)
+                          for t in texts)
+    return writes, named, any(GIT_BUILT(t) for t in texts)
 
 
 def readers(named):

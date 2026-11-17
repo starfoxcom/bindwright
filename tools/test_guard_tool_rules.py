@@ -80,6 +80,15 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
         self.hook.OBSERVED_LOG = os.path.join(folder, "tool-rules", "observed.jsonl")
         self.hook.GIT_BASH = True
 
+    def test_a_powershell_command_after_a_here_string_is_read(self):
+        # A cast, an empty here-string, `@'` inside a bareword and a word operator before `@'`.
+        for before in ("$x = [string]@'\nit's done\n'@", "$m = @'\n'@", "Write-Output a.b@'\nx'",
+                       "\"{0}\" -f@'\nit's\n'@"):
+            with self.subTest(before=before):
+                merge = before + "; gh pr merge 5 --admin"
+                self.assertEqual(self.hook.refusal(merge, "powershell")[0], "`gh pr merge --admin`")
+        self.assertIsNone(self.hook.refusal("$doc = [xml]@'\n<note>Don't use gh run watch</note>\n'@", "powershell"))
+
     def test_each_row_lets_its_command_run_and_logs_its_own_name(self):
         for command, shell, want in self.ROWS:
             with self.subTest(command=command, shell=shell):
