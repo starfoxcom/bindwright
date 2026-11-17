@@ -170,7 +170,7 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   expect(await call({ ...editInput, file_path: 'C:\\repo\\a.ts' })).toHaveProperty('deny')
   // The PowerShell tool keeps its own folder, so its commits wait.
   expect(await call({ tool: 'PowerShell', command: 'git commit -m x' })).toHaveProperty('deny')
-  // Every shape whose branch the reader cannot see in full waits, as it did before the hold was narrowed.
+  // Every shape whose branch the reader cannot see in full waits.
   const waits = [
     'git push origin feature/x', 'git -C C:/repo commit -m "fix it"', '  cd C:/repo && git commit -m x',
     'git -C C:/other commit -m "b"; cd C:/repo && git push', '(cd C:/repo && git commit -m x)',
