@@ -16,6 +16,17 @@ The project's own part of the review prompt. Both review tiers read this file fr
 6. **Versioning policy**: the `[Unreleased]` entry's section matches `CONTRIBUTING.md` § Versioning: a change a user must act on goes under `### Breaking` (a major), a new feature or a changed default that keeps working under `### Added` or `### Changed` (a minor), a fix under `### Fixed` (a patch).
 7. **No AI-attribution markers**: per `_core/project-template/.claude/rules/git.md`, never `Co-Authored-By: Claude`, never "Generated with Claude Code" footers, never claude.com links in PR bodies or commit messages.
 
+## Checklist
+
+Mistakes this repo has made more than once. Each item names a trigger the diff shows: check only the items whose trigger this diff matches, and skip the rest. A failed check is a blocking finding. A finding that comes up in a second PR becomes an item here, with the PRs it came from.
+
+| Trigger in the diff | Check | Source |
+|---|---|---|
+| A hook or script under `_core/` changes | Every copy of it matches byte for byte (`.claude/hooks/`, the project template's copy of a global hook), and `.bindwright/pristine.json` changes in the same commit | #931 |
+| A test or script compares a file's text line by line, or replays a saved file | It drops `\r` before comparing, since a Windows checkout turns line endings into CRLF | #382, #938 |
+| Rule, README or CHANGELOG text states how many of something there are (checks, counts, rows, tests) | The number matches the code after this diff | #940 |
+| A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says for unreadable input: a guard that decides git or GitHub writes blocks, with what to fix, and never exits silently | #350, #740 |
+
 ## Also escalate when the diff includes
 
 These escalate on their own: the gate's own files in every project (`.github/scripts/**`, `.github/review-gate.yml`, this guide, the review workflows and the project's check folder), and this repo's trigger paths in `.github/review-gate.yml` (`escalate.paths`: `_core/`, `engine/`). Mark these for escalation too:
