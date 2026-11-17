@@ -67,19 +67,22 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # its line, and a quote character in a comment opens nothing. Bash escapes with a backslash,
 # PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is plain text
 # (`"C:\"`). A PowerShell block comment runs from `<#` to the first `#>`. Bash's `$'...'` ends
-# only at an unescaped quote. A quote, block comment or here-string that never closes, and a double-quoted
+# only at an unescaped quote. A quote or block comment that never closes, and a double-quoted
 # string holding `$(`, whose own quotes nest, run to the end of the command. A PowerShell
 # here-string (`@'` to a line starting `'@`) is one more quoted string in the same scan, so one
 # inside a message or a comment is part of that text.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
-# PowerShell opens a here-string where a token starts, after a cast (`[xml]@'`) or an operator
-# too; glued to a word (`me@'`), the `@` is part of that word and the quote a quoted part of it.
-HERE_STRING_START = r"(?<!\w)"
 QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(?:'|\Z)"
-                             r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(HERE_STRING_START + r"@(['\"])\r?\n.*?(?:\r?\n\1@|\Z)|<#.*?(?:#>|\Z)|"
-                                   + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
-                                   r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
+                             r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S)}
+POWERSHELL_QUOTED = (r"<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
+                     r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)")
+# The PowerShell scan for each set of quotes whose here-strings may still close. An opener with
+# no closing line after it never matches, and trying one reads to the end of the command, so the
+# scan leaves those out: many of them would take time that grows with the command's length squared.
+POWERSHELL_SCANS = {quotes: re.compile((r"@([%s])\r?\n.*?\r?\n\1@|" % quotes if quotes else "")
+                                       + POWERSHELL_QUOTED, re.S) for quotes in ("'\"", "'", "\"", "")}
+# Where any part of the PowerShell scan can start.
+POWERSHELL_QUOTE_START = re.compile(r"[@<#`'\"]")
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 # A `jq` call: a word of its own, not the `--jq` option of `gh`.
@@ -227,11 +230,36 @@ def inline_script(text, shell):
 
 def here_strings(text):
     """The PowerShell here-strings that stand outside quotes and comments, with the rest of the
-    line each one ends on: the quote scan meets them before anything that would hold them. One
-    that never closes holds the rest of the command and is not listed."""
-    found = (HERE_STRING.match(text, m.start()) for m in QUOTED["powershell"].finditer(text)
-             if m.group().startswith("@"))
-    return [here for here in found if here]
+    line each one ends on: the quote scan meets them before anything that would hold them."""
+    return [HERE_STRING.match(text, m.start()) for m in quoted(text, "powershell") if m.group().startswith("@")]
+
+
+def quoted(text, shell):
+    """The quoted strings, comments and escapes the shell's scan finds, in order. A PowerShell
+    here-string opener is tried only while a line that may close it follows."""
+    if shell == "bash":
+        return list(QUOTED["bash"].finditer(text))
+    closes = {quote: text.rfind("\n" + quote + "@") for quote in "'\""}
+    found, at = [], 0
+    while True:
+        start = POWERSHELL_QUOTE_START.search(text, at)
+        if not start:
+            return found
+        quotes = "".join(quote for quote in "'\"" if closes[quote] > start.start())
+        match = POWERSHELL_SCANS[quotes].match(text, start.start())
+        if match:
+            found.append(match)
+        at = match.end() if match else start.start() + 1
+
+
+def masked(text, shell, replace):
+    """The command with each match of the shell's scan replaced by `replace`, a text or a
+    function of the match, as `re.sub` takes it."""
+    parts, at = [], 0
+    for match in quoted(text, shell):
+        parts += [text[at:match.start()], replace(match) if callable(replace) else replace]
+        at = match.end()
+    return "".join(parts + [text[at:]])
 
 
 def masked_calls(text, shell):
@@ -243,7 +271,7 @@ def masked_calls(text, shell):
         first = first_opener(text)
         if first:
             end = len("\n".join(text.split("\n")[:first[0] + 1]))
-    return QUOTED[shell].sub(as_quote, text), end
+    return masked(text, shell, as_quote), end
 
 
 def bare(text, shell):
@@ -254,7 +282,7 @@ def bare(text, shell):
         first = first_opener(text)
         if first:
             text = "\n".join(text.split("\n")[:first[0] + 1])
-    return QUOTED[shell].sub("''", text)
+    return masked(text, shell, "''")
 
 
 def both(*patterns):
