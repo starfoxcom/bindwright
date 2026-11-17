@@ -1,12 +1,16 @@
 """The attribution guard's hook routes: commands that skip or change the hooks git runs."""
 import itertools
 import re
-from .shell import program, shape_of, text_of
+from .shell import WRAPPERS, program, shape_of, text_of
 from .files import (ENV_VALUE_OPTIONS, ENV_VALUE_SHORT, abbreviates, git_subcommand,
     is_run_time_git, is_uncertain, takes_next_word)
 
 
 LEFTHOOK_OFF_VALUES = {"0", "false"}
+# Programs that run the command after their own words, and how many of those words are not
+# options (`timeout 30 git`): the shell's wrappers and the common process runners.
+RUNNERS = {**{name: 0 for name in WRAPPERS}, "timeout": 1, "chrt": 1, "taskset": 1, "stdbuf": 0,
+           "setsid": 0, "ionice": 0, "noglob": 0, "strace": 0}
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
@@ -136,6 +140,87 @@ def git_route(words):
     return None
 
 
+def built_subcommand(words):
+    """Whether git's subcommand comes from a word built at run time (`git "${args[@]}"`,
+    `git "$@" -m x`), so that word may hold any subcommand and its options. A subcommand written
+    right after the built words (`git $OPTS commit`) is read as usual; an option there may be one
+    the built word's subcommand reads, so it names none. Options are read by their shape, as git
+    receives them (`"-C$repo"` is `-C` with its value). A word before the subcommand place that
+    may expand to several words (`git -C "$@"`) may fill that place too, so it counts as one."""
+    i = git_subcommand([shape_of(word) for word in words])[0]
+    places = [k for k in range(1, min(i, len(words))) if may_split(words[k])]
+    if i < len(words) and not isinstance(words[i], str):
+        places.append(i)
+    return any(names_no_subcommand_after(words, k) for k in places)
+
+
+def may_split(word):
+    """Whether a word built at run time may expand to any number of words (`"$@"`, `$X`)."""
+    return not isinstance(word, str) and bool(word["canBeEmpty"])
+
+
+def names_no_subcommand_after(words, k):
+    """Whether the first literal word after words[k] is missing or an option."""
+    following = next((word for word in words[k + 1:] if isinstance(word, str)), None)
+    return following is None or following.startswith("-")
+
+
+def runs_program_at(words, i, j=0):
+    """Whether words[i] may be the program the command at words[j] runs, in any reading: itself,
+    or one after RUNNERS (`sudo -u root`, `env A=1`, `timeout 30`), each read the same way. A word
+    only named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not,
+    and neither is one behind a program outside RUNNERS."""
+    if j == i:
+        return True
+    if program(words[j:]) not in RUNNERS:
+        return False
+    if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
+        return False
+    return any(runs_program_at(words, i, k) for k in program_starts(words, j, i))
+
+
+def program_starts(words, j, i):
+    """Where the program the runner at words[j] starts may be, up to i: after its options,
+    NAME=value words and the words it counts before its program (`timeout`'s duration). A word
+    right after an option, or after a word that may expand to several (`"${vars[@]}"`), may be
+    the option's value, one of the counted words or the program, and a word built at run time
+    from its first sign (`"$flag"`) may also be an option, so every reading is followed at once:
+    `states` holds, per reading still alive, the counted words left and whether the word before
+    may have been an option that takes a value."""
+    starts, states = set(), {(RUNNERS[program(words[j:])], False)}
+    for k in range(j + 1, i):
+        shape, following = shape_of(words[k]), set()
+        for others, after_option in states:
+            if shape.startswith("-") or re.match(r"\w+=", shape):
+                following.add((others, shape.startswith("-")))
+            elif may_split(words[k]):
+                following.add((others, True))  # may hold options, their values, or nothing
+            else:
+                if shape.startswith("\0"):
+                    following.add((others, True))
+                if after_option or not others:
+                    starts.add(k)
+                if after_option:
+                    following.add((others, False))
+                if others:
+                    following.add((others - 1, False))
+        states = following
+        if not states:
+            return starts
+    return starts | {i}
+
+
+def only_looks_up(words):
+    """Whether `command`'s own options (`-v`, `-pV`) make it print what a name is, not run it."""
+    for word in words:
+        shape = shape_of(word)
+        if not shape.startswith("-") or shape.startswith("--"):
+            return False
+        if "v" in shape or "V" in shape:
+            return True
+    return False
+
+
 def literal_git_route(words):
     """The route of a git call whose words after the program are all literal, or None."""
     i = git_subcommand(words)[0]
@@ -221,17 +306,19 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-def hook_route(groups, assignments):
+def hook_route(groups, assignments, only_built=False):
     """The kind of route past git's hooks the commands of `with_nested`'s groups take, or None.
     A git run through a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run
-    time that names git (`$GIT`)."""
+    time that names git (`$GIT`). With `only_built`, only a subcommand built at run time counts."""
     commands = [words for group, _, _ in groups for words in group]
-    if turns_lefthook_off(commands, assignments):
+    if not only_built and turns_lefthook_off(commands, assignments):
         return "lefthook"
     for words in commands:
         for i, word in enumerate(words):
             if program(words[i:]) == "git" or is_run_time_git(word):
-                route = git_route(words[i:])
+                route = None if only_built else git_route(words[i:])
                 if route:
                     return route
+                if program(words[i:]) == "git" and runs_program_at(words, i) and built_subcommand(words[i:]):
+                    return "built"
     return None

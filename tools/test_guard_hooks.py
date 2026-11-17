@@ -945,6 +945,62 @@ class GuardHookTest(unittest.TestCase):
         self.assertIn("could not read this command", reason)
         self.assertNotIn("/bindwright:update", reason)
 
+    def test_a_subcommand_built_at_run_time_is_refused(self):
+        # A word built at run time in git's subcommand place, with no subcommand written after it,
+        # may hold a commit and its options, so the call is refused; one that names its subcommand passes.
+        for (command, tool), result in self.each(
+                (('git "$@"', "Bash"), ('g() { git "$@"; }; g commit -m x', "Bash"),
+                 ('git -C sub "${a[@]}"', "Bash"), ("git $SUB", "Bash"), ("git @a", "PowerShell"),
+                 ("git $a", "PowerShell"), ("& git @a", "PowerShell"), ('git.exe "$@"', "Bash"),
+                 ('git -C "my dir" "$@"', "Bash"), ('git -c user.name="A B" "$@"', "Bash"),
+                 ('git 2>/dev/null "$@"', "Bash"), ('git > out.txt "$@"', "Bash"),
+                 ('git "$@" -m x', "Bash"), ('g() { git "$@" --no-verify -m x; }; g commit', "Bash"),
+                 ('env A=1 git "$@"', "Bash"), ("sudo git $S", "Bash"), ('sudo -u root git "$@"', "Bash"),
+                 ('sudo -nu root git "$@"', "Bash"), ('exec -a name git "$@"', "Bash"),
+                 ('git "$@" -m merge', "Bash"), ('git "$@" -- config', "Bash"),
+                 ('"git" -C "my dir" "$@"', "Bash"), ('git -q 2>a "$@"', "Bash"),
+                 ("g'i't \"$@\"", "Bash"), ('gi""t "${a[@]}"', "Bash"), ("git `cat sub` -m x", "Bash"),
+                 ("g`it @a", "PowerShell"), ("git `\n@a", "PowerShell"), ('sudo -uroot git "$@"', "Bash"),
+                 ('git "$@" -sm "msg"', "Bash"), ('g() { git "$@" --mess x; }; g commit --no-verify', "Bash"),
+                 ('sudo --us root git "$@"', "Bash"), ('nice --adj 5 git "$@"', "Bash"),
+                 ('/usr/bin/time -o t.log git "$@"', "Bash"), ('command env -v git "$@"', "Bash"),
+                 ("$a = 'commit','-m','x'; git ($a)", "PowerShell"), ('timeout 30 git "$@"', "Bash"),
+                 ('timeout -s KILL 30 stdbuf -oL git "$@"', "Bash"),
+                 ('f() { timeout 60 git "$@"; }; f commit --no-verify -m x', "Bash"),
+                 ('git "-C$d" "$@"', "Bash"), ('git -C "$@"', "Bash"), ('git -c "$@"', "Bash"),
+                 ('gin() { git -C "$@"; }; gin . commit -m x', "Bash"),
+                 ('g() { git -C "$@" --no-verify -m x; }; g . commit', "Bash"),
+                 ('env "${vars[@]}" git "$@"', "Bash"), ('sudo $SUDO_FLAGS git "$@"', "Bash"),
+                 ('sudo -E timeout 30 git "$@"', "Bash"), ('env "${v[@]}" timeout 30 sudo -u r git "$@"', "Bash"),
+                 ('f() { sudo -E timeout 30 git "$@"; }; f commit --no-verify -m x', "Bash"),
+                 ('env -i timeout 30 git "$@"', "Bash"), ('sudo -n chrt 99 git "$@"', "Bash"),
+                 ('chrt -f 99 timeout 30 git "$@"', "Bash"), ('taskset -c 0 timeout 30 git "$@"', "Bash"),
+                 ('timeout --foreground 30 chrt 99 git "$@"', "Bash"), ('timeout -- 30 chrt 99 git "$@"', "Bash"),
+                 ('timeout -v 30 taskset 0x1 git "$@"', "Bash"), ('taskset $OPTS 0 timeout 30 git "$@"', "Bash"),
+                 ('f() { chrt -f 99 timeout 30 git "$@"; }; f commit --no-verify -m x', "Bash"),
+                 ('sudo "$flag" git "$@"', "Bash"), ('chrt "$policy" 99 git "$@"', "Bash"),
+                 ('nice "$NICE_ARG" git "$@"', "Bash"), ('timeout "$killopt" 30 git "$@"', "Bash"),
+                 ('env "$assign" git "$@"', "Bash"),
+                 ('f() { sudo "$flag" git "$@"; }; f commit --no-verify -m x', "Bash")),
+                lambda command, tool: self.attr(command, tool=tool)):
+            with self.subTest(command=command):
+                self.assert_denied(result, "takes its subcommand from a word built at run time")
+        # A git only named as an argument, or inside a word built at run time, runs nothing.
+        for command, result in self.each(
+                ('git log "$range"', 'git config "$@" user.name x', 'grep git "$file"', "echo git $x",
+                 "apt-get install -y git $EXTRA_PKGS", 'cp -r "$src/.git" "$dst"',
+                 'gh pr create --title "$(git log -1 --format=%s)" --body "$body"',
+                 'git tag "v$(git describe)" "$sha"', 'git -C "$dir" log', "sudo git $OPTS status",
+                 'repos=(a b); for r in "${repos[@]}"; do git -C "$r" status; done', 'command -v git "$x"',
+                 '"$(git rev-parse --show-toplevel)/run.sh" "$1"', "git $OPTS rerere", 'git "$@" .',
+                 'command -pv git "$x"', "git add $f1 $f2 $f3 $f4 $f5 $f6 $f7 $f8 $f9 $f10 $f11",
+                 "apt-get install -y git $p1 $p2 $p3 $p4 $p5 $p6 $p7 $p8 $p9 $p10 $p11",
+                 'timeout 30 git log "$range"', 'git "-C$repo" --no-pager log "$range"',
+                 'git "--git-dir=$d" -c user.name=x commit -m "fix: y"'),
+                lambda command: self.attr(command)):
+            with self.subTest(command=command):
+                self.assert_passes(result)
+
     def test_routes_past_the_hooks_are_refused(self):
         hooks, setting, trailer, reuse, lefthook = ("git hook bypass", "changes which hooks git runs",
                                                     "--trailer is not allowed", "reusing another",
