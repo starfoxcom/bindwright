@@ -254,6 +254,17 @@ def run_update(root, bind_with, version, state_json):
     return out
 
 
+def _record_of(text, what):
+    """See recordOf in update.js: a pristine record with a files object, or refused naming `what`."""
+    try:
+        record = json.loads(text)
+    except ValueError:
+        record = None
+    if not (isinstance(record, dict) and isinstance(record.get("files"), dict)):
+        raise ValueError("%s holds no record of the files setup wrote" % what)
+    return record
+
+
 def keep_base(root, paths, state_json):
     """See keepBase in update.js: each path's base goes back to the last commit's."""
     bad = [p for p in paths if not _safe(p)]
@@ -262,16 +273,20 @@ def keep_base(root, paths, state_json):
     current = _reader(root)(PRISTINE)
     if current is None:
         raise ValueError("%s is missing: this repo was not set up with /bindwright:setup" % PRISTINE)
-    shown = subprocess.run(["git", "-C", root, "show", "HEAD:./" + PRISTINE],
-                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    if shown.returncode != 0:
+    try:
+        shown = subprocess.run(["git", "-C", root, "show", "HEAD:./" + PRISTINE],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        shown = None
+    if shown is None or shown.returncode != 0:
         raise ValueError("The last commit holds no %s to take the old base from" % PRISTINE)
+    what = "the committed " + PRISTINE
     try:
         committed = shown.stdout.decode("utf-8")
     except UnicodeDecodeError:
-        raise ValueError("the committed %s is not UTF-8 text" % PRISTINE)
-    before = json.loads(committed.replace("\r\n", "\n"))["files"]
-    state = json.loads(current)
+        raise ValueError("%s is not UTF-8 text" % what)
+    before = _record_of(committed.replace("\r\n", "\n"), what)["files"]
+    state = _record_of(current, PRISTINE)
     result = {"kept": [], "dropped": []}
     for path in paths:
         if path in before:

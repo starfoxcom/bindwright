@@ -495,9 +495,16 @@ test("a file held back for a later PR keeps its old base, so the next update off
     const kept = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE, "docs/new.md"] }));
     assert.deepEqual(kept, { kept: [RULE], dropped: ["docs/new.md"] }, cmd);
     assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), `${cmd}: the held-back change comes again`);
-    outs.push(kept);
+    // Names an object inherits in JavaScript are plain paths, and a record with no files is refused.
+    const inherited = run(["--keep-base", repo.at("")], JSON.stringify({ paths: ["constructor", "__proto__"] }));
+    const afterInherited = repo.read(PRISTINE);
+    repo.write(PRISTINE, "[]");
+    const broken = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [] }));
+    outs.push({ kept, inherited, afterInherited, broken });
     // Git leaves its object files read-only, which Windows may refuse to delete at the first try.
     rmSync(repo.at(""), { recursive: true, force: true, maxRetries: 3 });
   }
-  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+  assert.deepEqual(outs[0].inherited, { kept: [], dropped: ["constructor", "__proto__"] });
+  assert.match(outs[0].broken.error, /holds no record of the files setup wrote/);
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report and write alike");
 });

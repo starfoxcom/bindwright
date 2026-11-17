@@ -267,6 +267,20 @@ export async function runUpdate(root, { bindWith, version }) {
   return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
 }
 
+// A pristine record parsed from its JSON text, with a files object; anything else is refused,
+// naming `what`.
+function recordOf(text, what) {
+  const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  let record;
+  try {
+    record = JSON.parse(text);
+  } catch {
+    record = null;
+  }
+  if (!isObject(record) || !isObject(record.files)) throw new Error(`${what} holds no record of the files setup wrote`);
+  return record;
+}
+
 // Puts each path's base back to the one in the last commit's pristine.json, for files an update
 // changed that ship in a later PR: a base older than the file reads as unchanged on the next
 // update and moves on, while a base newer than the file would hide the change for good. A path
@@ -283,12 +297,15 @@ export function keepBase(root, paths) {
   } catch {
     throw new Error(`The last commit holds no ${PRISTINE} to take the old base from`);
   }
-  const before = JSON.parse(decode(committed, `the committed ${PRISTINE}`).replace(/\r\n/g, "\n")).files;
-  const state = JSON.parse(current);
+  const what = `the committed ${PRISTINE}`;
+  const before = recordOf(decode(committed, what).replace(/\r\n/g, "\n"), what).files;
+  const state = recordOf(current, PRISTINE);
   const result = { kept: [], dropped: [] };
   for (const path of paths) {
-    if (path in before) {
-      state.files[path] = before[path];
+    if (Object.hasOwn(before, path)) {
+      // A plain assignment to "__proto__" would set the prototype instead of an entry.
+      const field = { value: before[path], enumerable: true, writable: true, configurable: true };
+      Object.defineProperty(state.files, path, field);
       result.kept.push(path);
     } else {
       delete state.files[path];
