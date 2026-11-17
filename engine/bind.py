@@ -21,6 +21,7 @@
 #   python engine/bind.py --propose-merge DIR            -> the merge each staged file suggests, read only
 #   python engine/bind.py --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.py)
 #   python engine/bind.py --releases-since DIR -> the plugin's releases since DIR's bound version (releases.py)
+#   python engine/bind.py --keep-base DIR < {"paths": [...]} -> those files' bases put back to the last commit's
 # A failed bind gives {"error": message} and, alone, exit status 1.
 
 import json
@@ -39,7 +40,7 @@ from model import (
 from render import render_template, fill_placeholders
 from setupcode import decode_setup_code, SetupCodeError, MAX_DEPTH, _depth, _not_json
 from apply import apply_files, ApplyError
-from update import run_update
+from update import keep_base, run_update
 from layers import run_settings
 from audit import run_audit
 from share import export_setup, remember_choices
@@ -338,6 +339,19 @@ def _update(argv, read_file, core_files):
         return {"error": str(e)}
 
 
+def _keep_base(argv):
+    """--keep-base DIR: the bases of the {"paths"} on stdin put back to the last commit's."""
+    try:
+        folder = _option(argv, "--keep-base")
+        request = _choices_from_stdin()
+        paths = request.get("paths") if isinstance(request, dict) else None
+        if not (isinstance(paths, list) and all(isinstance(p, str) for p in paths)):
+            raise ValueError('--keep-base takes {"paths": [file, ...]} on standard input')
+        return keep_base(folder, paths, _state_json)
+    except Exception as e:  # every failure is reported, as the JS engine throws it
+        return {"error": str(e)}
+
+
 def _choices_from_stdin():
     try:
         text = sys.stdin.buffer.read().decode("utf-8")
@@ -491,6 +505,8 @@ def _main(argv):
         result = _propose_merge(argv)
     elif "--releases-since" in argv:
         result = _releases(argv, root)
+    elif "--keep-base" in argv:
+        result = _keep_base(argv)
     elif "--remove-plan" in argv or "--remove-files" in argv:
         result = _remove(argv)
     elif "--local-exclude" in argv:

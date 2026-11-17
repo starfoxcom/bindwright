@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:update` can hold a file back for a later PR without losing its change.** An update that changed the routine review workflow had to ship it in a PR of its own, but the record of what the update wrote already listed the new text, so the next update read the old copy as a local edit and kept it. The engine's new `--keep-base` puts a held-back file's record back to the last commit's, and the update skill runs it for every file left out of the commit.
+
 ### Fixed
 
 - **The layout check stops its browsers on a busy Windows machine too.** The query that finds them gave up after 20 seconds and read as no browsers, so a slow machine could leave a headless browser running; it now waits up to 60 seconds.

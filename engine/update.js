@@ -266,3 +266,36 @@ export async function runUpdate(root, { bindWith, version }) {
   put(root, PRISTINE, stateJson(plan.pristine));
   return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
 }
+
+// Puts each path's base back to the one in the last commit's pristine.json, for files an update
+// changed that ship in a later PR: a base older than the file reads as unchanged on the next
+// update and moves on, while a base newer than the file would hide the change for good. A path
+// the committed record lacks loses its base, so the next update adds it again.
+export function keepBase(root, paths) {
+  const bad = paths.filter((p) => !safe(p));
+  if (bad.length) throw new Error(`Refusing paths outside the repo: ${bad.join(", ")}`);
+  const current = reader(root)(PRISTINE);
+  if (current === null) throw new Error(`${PRISTINE} is missing: this repo was not set up with /bindwright:setup`);
+  let committed;
+  try {
+    const show = ["-C", root, "show", `HEAD:./${PRISTINE}`];
+    committed = execFileSync("git", show, { stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    throw new Error(`The last commit holds no ${PRISTINE} to take the old base from`);
+  }
+  const before = JSON.parse(decode(committed, `the committed ${PRISTINE}`).replace(/\r\n/g, "\n")).files;
+  const state = JSON.parse(current);
+  const result = { kept: [], dropped: [] };
+  for (const path of paths) {
+    if (path in before) {
+      state.files[path] = before[path];
+      result.kept.push(path);
+    } else {
+      delete state.files[path];
+      result.dropped.push(path);
+    }
+  }
+  refuseLinks(root, [PRISTINE]);
+  put(root, PRISTINE, stateJson(state));
+  return result;
+}

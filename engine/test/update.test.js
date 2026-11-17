@@ -472,3 +472,32 @@ test("a move into a path the project owns is not made, and the old file is repor
   }
   if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
 });
+
+test("a file held back for a later PR keeps its old base, so the next update offers it", needsPython, async () => {
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    let today;
+    const repo = await makeRepo((r) => {
+      today = r.read(RULE);
+      r.pristine.files[RULE] = older(today);
+      r.write(RULE, older(today));
+    });
+    const identity = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"];
+    const git = (...a) => spawnSync("git", [...identity, ...a], { cwd: repo.at("") });
+    const run = (flags, input) =>
+      JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
+    git("add", "-A");
+    git("commit", "-q", "--no-verify", "-m", "bind");
+    // An update moved the file's base to today's text, and the file itself was held back.
+    const moved = JSON.parse(repo.read(PRISTINE));
+    moved.files[RULE] = today;
+    repo.write(PRISTINE, JSON.stringify(moved));
+    const kept = run(["--keep-base", repo.at("")], JSON.stringify({ paths: [RULE, "docs/new.md"] }));
+    assert.deepEqual(kept, { kept: [RULE], dropped: ["docs/new.md"] }, cmd);
+    assert.ok(run(["--update", repo.at("")]).updated.includes(RULE), `${cmd}: the held-back change comes again`);
+    outs.push(kept);
+    // Git leaves its object files read-only, which Windows may refuse to delete at the first try.
+    rmSync(repo.at(""), { recursive: true, force: true, maxRetries: 3 });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+});

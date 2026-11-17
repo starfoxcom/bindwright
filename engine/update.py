@@ -252,3 +252,34 @@ def run_update(root, bind_with, version, state_json):
     out["renamed"] = plan["renamed"]
     out["skipped"] = skipped
     return out
+
+
+def keep_base(root, paths, state_json):
+    """See keepBase in update.js: each path's base goes back to the last commit's."""
+    bad = [p for p in paths if not _safe(p)]
+    if bad:
+        raise ValueError("Refusing paths outside the repo: %s" % ", ".join(bad))
+    current = _reader(root)(PRISTINE)
+    if current is None:
+        raise ValueError("%s is missing: this repo was not set up with /bindwright:setup" % PRISTINE)
+    shown = subprocess.run(["git", "-C", root, "show", "HEAD:./" + PRISTINE],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if shown.returncode != 0:
+        raise ValueError("The last commit holds no %s to take the old base from" % PRISTINE)
+    try:
+        committed = shown.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("the committed %s is not UTF-8 text" % PRISTINE)
+    before = json.loads(committed.replace("\r\n", "\n"))["files"]
+    state = json.loads(current)
+    result = {"kept": [], "dropped": []}
+    for path in paths:
+        if path in before:
+            state["files"][path] = before[path]
+            result["kept"].append(path)
+        else:
+            state["files"].pop(path, None)
+            result["dropped"].append(path)
+    refuse_links(root, [PRISTINE])
+    _put(root, PRISTINE, state_json(state))
+    return result

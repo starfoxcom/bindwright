@@ -17,6 +17,7 @@
 //   node engine/cli.js --propose-merge DIR -> the merge each staged file suggests, read only (propose.js)
 //   node engine/cli.js --local-exclude DIR < answers.json [--undo] -> the bind's files kept out of git (exclude.js)
 //   node engine/cli.js --releases-since DIR -> the plugin's releases since DIR's bound version (releases.js)
+//   node engine/cli.js --keep-base DIR < {"paths": [...]} -> their bases put back to the last commit's (update.js)
 // A failure gives {"error": message} and exit status 1.
 
 import { readFileSync } from "node:fs";
@@ -27,7 +28,7 @@ import { bind } from "./bind.js";
 import { MAX_DEPTH, decodeSetupCode, depthOf } from "./setupcode.js";
 import { expandAnswers } from "./model.js";
 import { applyFiles } from "./apply.js";
-import { decode, runUpdate } from "./update.js";
+import { decode, keepBase, runUpdate } from "./update.js";
 import { runSettings } from "./layers.js";
 import { runAudit } from "./audit.js";
 import { exportSetup, rememberChoices } from "./share.js";
@@ -81,6 +82,8 @@ async function run(argv) {
   if (exclude !== undefined) return localExcludeRepo(exclude, argv.includes("--undo"));
   const releases = option(argv, "--releases-since");
   if (releases !== undefined) return releasesForRepo(releases, root);
+  const held = option(argv, "--keep-base");
+  if (held !== undefined) return keepBase(held, pathsFromStdin("--keep-base"));
   if (report !== undefined) return reportRepo(report, config);
   if (doctor !== undefined) return doctorRepo(doctor, config);
   if (update !== undefined) return updateRepo(update);
@@ -132,6 +135,15 @@ function reportRepo(folder, config) {
 function doctorRepo(folder, config) {
   const pluginVersion = readFileSync(join(root, "VERSION"), "utf8").trim().replace(/^v+/, "");
   return runDoctor(folder, config, { pluginVersion, cliVersion: cliVersionFrom(process.env.AI_AGENT) });
+}
+
+// The {"paths": [file, ...]} a command takes on standard input.
+function pathsFromStdin(flag) {
+  const { paths } = choicesFromStdin() ?? {};
+  if (!Array.isArray(paths) || !paths.every((p) => typeof p === "string")) {
+    throw new Error(`${flag} takes {"paths": [file, ...]} on standard input`);
+  }
+  return paths;
 }
 
 // The choices /bindwright:export and /bindwright:join pass on standard input.
