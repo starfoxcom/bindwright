@@ -967,7 +967,10 @@ class GuardHookTest(unittest.TestCase):
                  ("$a = 'commit','-m','x'; git ($a)", "PowerShell"), ('timeout 30 git "$@"', "Bash"),
                  ('timeout -s KILL 30 stdbuf -oL git "$@"', "Bash"),
                  ('f() { timeout 60 git "$@"; }; f commit --no-verify -m x', "Bash"),
-                 ('git "-C$d" "$@"', "Bash")),
+                 ('git "-C$d" "$@"', "Bash"), ('git -C "$@"', "Bash"), ('git -c "$@"', "Bash"),
+                 ('gin() { git -C "$@"; }; gin . commit -m x', "Bash"),
+                 ('g() { git -C "$@" --no-verify -m x; }; g . commit', "Bash"),
+                 ('env "${vars[@]}" git "$@"', "Bash"), ('sudo $SUDO_FLAGS git "$@"', "Bash")),
                 lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "takes its subcommand from a word built at run time")

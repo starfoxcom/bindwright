@@ -89,7 +89,7 @@ at run time and followed right away by a literal word such as a pathspec
 the shell's wrappers and the common runners (`flock f git "$@"`; `sudo`,
 `env`, `timeout`, `stdbuf` and the like are read), a write whose text a
 redirection holding `&` splits
-(`git 2>&1 commit`), and text a program
+(`git 2>&1 commit`, `git 2>&1 "$@"`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
 by hand.

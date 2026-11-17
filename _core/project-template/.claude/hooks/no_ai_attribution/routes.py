@@ -145,11 +145,23 @@ def built_subcommand(words):
     `git "$@" -m x`), so that word may hold any subcommand and its options. A subcommand written
     right after the built words (`git $OPTS commit`) is read as usual; an option there may be one
     the built word's subcommand reads, so it names none. Options are read by their shape, as git
-    receives them (`"-C$repo"` is `-C` with its value)."""
+    receives them (`"-C$repo"` is `-C` with its value). A word before the subcommand place that
+    may expand to several words (`git -C "$@"`) may fill that place too, so it counts as one."""
     i = git_subcommand([shape_of(word) for word in words])[0]
-    if i >= len(words) or isinstance(words[i], str):
-        return False
-    following = next((word for word in words[i + 1:] if isinstance(word, str)), None)
+    places = [k for k in range(1, min(i, len(words))) if may_split(words[k])]
+    if i < len(words) and not isinstance(words[i], str):
+        places.append(i)
+    return any(names_no_subcommand_after(words, k) for k in places)
+
+
+def may_split(word):
+    """Whether a word built at run time may expand to any number of words (`"$@"`, `$X`)."""
+    return not isinstance(word, str) and bool(word["canBeEmpty"])
+
+
+def names_no_subcommand_after(words, k):
+    """Whether the first literal word after words[k] is missing or an option."""
+    following = next((word for word in words[k + 1:] if isinstance(word, str)), None)
     return following is None or following.startswith("-")
 
 
@@ -170,6 +182,8 @@ def runs_program_at(words, i):
             shape = shape_of(words[j])
             if shape.startswith("-") or re.match(r"\w+=", shape):
                 after_option = shape.startswith("-")
+            elif may_split(words[j]):
+                after_option = True  # may hold options, their values, or nothing
             elif after_option:
                 after_option = False
             elif others:
