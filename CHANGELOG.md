@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v6.0.0] — 2026-11-17
+
 ### Breaking
 
 - **Setup needs CLI 2.1.295 or later.** The guard hooks block a command when they crash or run out of time only from that version (`onFailure: block`); on an older CLI a guard that fails lets the command through. Setup now checks the version the session runs before it writes anything, offers the update, and stops on a no, since every setup writes guards. `/bindwright:doctor` names an older CLI wherever guard hooks run, in the repo or in `~/.claude`, not only where mods are installed.
