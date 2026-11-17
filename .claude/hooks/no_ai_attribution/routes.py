@@ -7,6 +7,10 @@ from .files import (ENV_VALUE_OPTIONS, ENV_VALUE_SHORT, abbreviates, git_subcomm
 
 
 LEFTHOOK_OFF_VALUES = {"0", "false"}
+# Programs that run the command after their own words, and how many of those words are not
+# options (`timeout 30 git`): the shell's wrappers and the common process runners.
+RUNNERS = {**{name: 0 for name in WRAPPERS}, "timeout": 1, "chrt": 1, "taskset": 1, "stdbuf": 0,
+           "setsid": 0, "ionice": 0, "noglob": 0, "strace": 0}
 # Each word built at run time doubles the readings of one git call; past this many, it is refused.
 MAX_RUN_TIME_WORDS = 10
 # Subcommands whose --no-verify skips a hook, and the options of each that take a value, so a
@@ -149,14 +153,16 @@ def built_subcommand(words):
 
 
 def runs_program_at(words, i):
-    """Whether words[i] may be the program a command runs: its first word, or one after wrappers
-    (`sudo -u root`, `env A=1`), their options and NAME=value words. A word right after an option
-    may be its value or the program, so both readings count. A word only named as an argument
-    (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not."""
+    """Whether words[i] may be the program a command runs: its first word, or one after RUNNERS
+    (`sudo -u root`, `env A=1`, `timeout 30`), their options, their other words and NAME=value
+    words. A word right after an option may be its value or the program, so both readings count.
+    A word only named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`)
+    is not, and neither is one behind a program outside RUNNERS."""
     j = 0
-    while j < i and program(words[j:]) in WRAPPERS:
+    while j < i and program(words[j:]) in RUNNERS:
         if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
             return False
+        others = RUNNERS[program(words[j:])]
         j += 1
         after_option = False
         while j < i:
@@ -165,6 +171,8 @@ def runs_program_at(words, i):
                 after_option = shape.startswith("-")
             elif after_option:
                 after_option = False
+            elif others:
+                others -= 1
             else:
                 break
             j += 1
@@ -267,17 +275,17 @@ def turns_lefthook_off(commands, assignments):
     return False
 
 
-def hook_route(groups, assignments):
+def hook_route(groups, assignments, only_built=False):
     """The kind of route past git's hooks the commands of `with_nested`'s groups take, or None.
     A git run through a wrapper (`env A=1 git`, `sudo git`) counts, as does a word built at run
-    time that names git (`$GIT`)."""
+    time that names git (`$GIT`). With `only_built`, only a subcommand built at run time counts."""
     commands = [words for group, _, _ in groups for words in group]
-    if turns_lefthook_off(commands, assignments):
+    if not only_built and turns_lefthook_off(commands, assignments):
         return "lefthook"
     for words in commands:
         for i, word in enumerate(words):
             if program(words[i:]) == "git" or is_run_time_git(word):
-                route = git_route(words[i:])
+                route = None if only_built else git_route(words[i:])
                 if route:
                     return route
                 if program(words[i:]) == "git" and runs_program_at(words, i) and built_subcommand(words[i:]):

@@ -85,7 +85,10 @@ written (`$F` holding `-F msg.txt`), a script PowerShell decodes
 (`-EncodedCommand`), a git named at run time whose subcommand is built too
 (`$GIT "$@"`), one inside `bash -c` whose subcommand is built, one built
 at run time and followed right away by a literal word such as a pathspec
-(`git "$@" .`), a write whose text a redirection holding `&` splits
+(`git "$@" .`), one with a built subcommand behind a program other than
+the shell's wrappers and the common runners (`flock f git "$@"`; `sudo`,
+`env`, `timeout`, `stdbuf` and the like are read), a write whose text a
+redirection holding `&` splits
 (`git 2>&1 commit`), and text a program
 started by the command writes on its own. The repo's `attribution` settings
 switch off the harness's own trailers; this hook catches the ones written
@@ -254,6 +257,16 @@ def readers(named):
     return parse, with_nested, parsed_files, hook_route
 
 
+def parse_reason(cmd, shell, named, built):
+    """Why a command goes to the parser: "routes" when its text names a route or it is an
+    escaped bash command, "built" when it only may build git's subcommand, None when it does not.
+    An escaped command is refused only for what the parser's words show, so a parser that cannot
+    read it refuses nothing new; a "built" one is refused only for a built subcommand."""
+    if named or shell == "bash" and SHELL_ESCAPES.search(cmd):
+        return "routes"
+    return "built" if built else None
+
+
 def main():
     try:
         data = json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
@@ -268,9 +281,8 @@ def main():
         cwd = os.getcwd()
     writes, named, built = routes_in(cmd)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
-    # An escaped bash command goes to the parser even when its text names no route, but only
-    # the parser's words can refuse it then: a parser that cannot read it refuses nothing new.
-    if not (named or built or shell == "bash" and SHELL_ESCAPES.search(cmd)):
+    reason = parse_reason(cmd, shell, named, built)
+    if not reason:
         sys.exit(0)
     parse, with_nested, parsed_files, hook_route = readers(named)
 
@@ -297,7 +309,7 @@ def main():
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
         scan_text(text, f"file {path}")
-    route = hook_route(groups, assignments)
+    route = hook_route(groups, assignments, reason == "built")
     if route:
         deny(BYPASS_REASONS[route])
     sys.exit(0)

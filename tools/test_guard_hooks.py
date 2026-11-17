@@ -964,7 +964,9 @@ class GuardHookTest(unittest.TestCase):
                  ('git "$@" -sm "msg"', "Bash"), ('g() { git "$@" --mess x; }; g commit --no-verify', "Bash"),
                  ('sudo --us root git "$@"', "Bash"), ('nice --adj 5 git "$@"', "Bash"),
                  ('/usr/bin/time -o t.log git "$@"', "Bash"), ('command env -v git "$@"', "Bash"),
-                 ("$a = 'commit','-m','x'; git ($a)", "PowerShell")),
+                 ("$a = 'commit','-m','x'; git ($a)", "PowerShell"), ('timeout 30 git "$@"', "Bash"),
+                 ('timeout -s KILL 30 stdbuf -oL git "$@"', "Bash"),
+                 ('f() { timeout 60 git "$@"; }; f commit --no-verify -m x', "Bash")),
                 lambda command, tool: self.attr(command, tool=tool)):
             with self.subTest(command=command):
                 self.assert_denied(result, "takes its subcommand from a word built at run time")
@@ -976,7 +978,9 @@ class GuardHookTest(unittest.TestCase):
                  'git tag "v$(git describe)" "$sha"', 'git -C "$dir" log', "sudo git $OPTS status",
                  'repos=(a b); for r in "${repos[@]}"; do git -C "$r" status; done', 'command -v git "$x"',
                  '"$(git rev-parse --show-toplevel)/run.sh" "$1"', "git $OPTS rerere", 'git "$@" .',
-                 'command -pv git "$x"'),
+                 'command -pv git "$x"', "git add $f1 $f2 $f3 $f4 $f5 $f6 $f7 $f8 $f9 $f10 $f11",
+                 "apt-get install -y git $p1 $p2 $p3 $p4 $p5 $p6 $p7 $p8 $p9 $p10 $p11",
+                 'timeout 30 git log "$range"'),
                 lambda command: self.attr(command)):
             with self.subTest(command=command):
                 self.assert_passes(result)
