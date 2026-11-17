@@ -1375,7 +1375,7 @@ class ToolRulesModeTest(unittest.TestCase):
 
     def test_observe_logs_and_passes_and_enforce_refuses(self):
         watch = self.hook.both(r"\bgh\s+run\s+watch\b")
-        token = "ghp_" + "a1" * 18
+        token = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
         self.hook.RULES = [("watch", watch, "why", self.hook.OBSERVE)]
         self.assertIsNone(self.hook.refusal('git commit -m "gh run watch 1"', "bash"))
         self.assertEqual(self.logged(), [])

@@ -260,8 +260,9 @@ OBSERVE = "observe"
 OBSERVED_LOG = os.path.join(os.path.expanduser("~"), ".bindwright", "tool-rules", "observed.jsonl")
 # Past this many bytes the log moves to a single `.old` copy and starts over, so it never grows unbounded.
 OBSERVED_LOG_LIMIT = 256 * 1024
-# A long run of letters and digits holding a digit reads as a token or key: the log keeps a placeholder.
-TOKEN_LIKE = re.compile(r"(?=[A-Za-z0-9_\-]*\d)[A-Za-z0-9_\-]{24,}")
+# A run of 24 or more letters, digits and _-+/= holding a digit reads as a token or key (base64 included):
+# the log keeps a placeholder.
+TOKEN_LIKE = re.compile(r"(?=[A-Za-z0-9_\-+/=]*\d)[A-Za-z0-9_\-+/=]{24,}")
 
 RULES = [
     ("an inline script holding a backslash", inline_script, WRITE_THE_FILE, ENFORCE),
@@ -299,7 +300,9 @@ def observe(name, text, shell):
 
 
 def refusal(text, shell):
-    """The first enforce rule the command breaks, as (name, why), or None; observe rules it breaks are logged."""
+    """The first enforce rule the command breaks, as (name, why), or None.
+
+    Observe rules it breaks before that one are logged."""
     for name, test, why, mode in RULES:
         if not test(text, shell):
             continue
