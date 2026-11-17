@@ -69,6 +69,9 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
             ("echo hi > /tmp/x", "bash", SCRATCH), ("ls C:/tmp", "powershell", SCRATCH),
             ("ls /var/tmp/x", "bash", None), ("cat > /tmp/claude-1000/-home-x/abc/scratchpad/x", "bash", None),
             ("ls C:/tmpfiles", "powershell", None),
+            # `@'` opens a here-string only where a token starts; glued to a word it is a quote.
+            ("Write-Output me@'\nx'; ls C:/tmp", "powershell", SCRATCH),
+            ("Write-Output @'\nls C:/tmp", "powershell", None),
             ("gh pr list | jq .", "bash", JQ), ("gh pr list --jq .", "bash", None),
             ("gh pr list | jq .", "powershell", None),
             ('git commit -m "gh run rerun 5 --failed; echo > /tmp/x"', "bash", None))

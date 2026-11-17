@@ -72,10 +72,12 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # here-string (`@'` to a line starting `'@`) is one more quoted string in the same scan, so one
 # inside a message or a comment is part of that text.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
+# PowerShell opens a here-string only where a token starts; `me@'` is a word with a quoted part.
+HERE_STRING_START = r"(?:^|(?<=[\s;&|(){=,]))"
 QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(?:'|\Z)"
                              r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(r"@(['\"])\r?\n.*?(?:\r?\n\1@|\Z)|<#.*?(?:#>|\Z)|" + COMMENT
-                                   + r"|`.|'(?:[^']|'')*(?:'|\Z)"
+          "powershell": re.compile(HERE_STRING_START + r"@(['\"])\r?\n.*?(?:\r?\n\1@|\Z)|<#.*?(?:#>|\Z)|"
+                                   + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
                                    r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"

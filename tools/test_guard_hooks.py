@@ -354,12 +354,15 @@ class GuardHookTest(unittest.TestCase):
         with open(os.path.join(self.home, "body.md"), "w", encoding="utf-8") as f:
             f.write("A plain body.")
         bad_cwd = '{"cwd": 5, "tool_input": {"command": "gh pr create --body-file body.md"}}'
-        for payload in ("[]", '{"tool_input": "x"}', '{"tool_input": {"command": 5}}', bad_cwd):
-            with self.subTest(payload=payload):
-                result = subprocess.run(
-                    [SH, "-c", settings_command("no-ai-attribution")], input=payload.encode(),
-                    capture_output=True, env=env, cwd=self.home, timeout=60)
-                self.assert_passes(result)
+        bash_payloads = ('{"tool_name": "Bash", "tool_input": "x"}',
+                         '{"tool_name": "Bash", "tool_input": {"command": 5}}')
+        for guard in ("no-ai-attribution", "push-guard"):
+            for payload in ("[]", '{"tool_input": "x"}', '{"tool_input": {"command": 5}}', bad_cwd, *bash_payloads):
+                with self.subTest(guard=guard, payload=payload):
+                    result = subprocess.run(
+                        [SH, "-c", settings_command(guard)], input=payload.encode(),
+                        capture_output=True, env=env, cwd=self.home, timeout=60)
+                    self.assert_passes(result)
 
     def test_ai_co_author_is_denied(self):
         self.assert_denied(self.attr(f"git commit -m 'docs: x' -m '{AI_TRAILER}'"))
