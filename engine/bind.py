@@ -185,7 +185,8 @@ def plan_files(answers, core_files, precommit_profiles):
         })
     if adv["precommit"] != "none":
         profile = precommit_profiles[adv["precommit"]]
-        plan.append({"src": CORE + profile["template_ref"], "dest": profile["config_filename"]})
+        for file in [profile] + profile.get("extra_files", []):
+            plan.append({"src": CORE + file["template_ref"], "dest": file["config_filename"]})
     return sorted(plan, key=lambda f: _code_units(f["dest"]))
 
 
