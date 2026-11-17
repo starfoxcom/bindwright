@@ -1001,7 +1001,7 @@ class GuardHookTest(unittest.TestCase):
                  'command -pv git "$x"', "git add $f1 $f2 $f3 $f4 $f5 $f6 $f7 $f8 $f9 $f10 $f11",
                  "apt-get install -y git $p1 $p2 $p3 $p4 $p5 $p6 $p7 $p8 $p9 $p10 $p11",
                  'timeout 30 git log "$range"', 'git "-C$repo" --no-pager log "$range"',
-                 "sudo -E " * 40 + 'flock f git "$@"',
+                 "sudo -E " * 40 + 'flock f git "$@"', "sudo -E " * 300 + "flock f" + " git" * 300 + ' "$@"',
                  'git "--git-dir=$d" -c user.name=x commit -m "fix: y"', "git --git-dir=$d log",
                  'git "--namespace=$ns" log'),
                 lambda command: self.attr(command)):
