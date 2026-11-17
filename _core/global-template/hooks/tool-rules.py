@@ -60,11 +60,13 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is plain text
 # (`"C:\"`). A PowerShell block comment runs from `<#` to the first `#>`. Bash's `$'...'` ends
 # only at an unescaped quote. A quote or block comment that never closes, and a double-quoted
-# string holding `$(`, whose own quotes nest, run to the end of the command.
+# string holding `$(`, whose own quotes nest, run to the end of the command. A PowerShell
+# here-string (`@'` to a line starting `'@`) is one more quoted string in the same scan, so one
+# inside a message or a comment is part of that text.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
 QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(?:'|\Z)"
                              r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(r"<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
+          "powershell": re.compile(r"@(['\"])\r?\n.*?\r?\n\1@|<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
                                    r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
@@ -200,8 +202,8 @@ def inline_script(text, shell):
     found = heredoc(text) if shell == "bash" else None
     if found and "\\" in found[1] and first_interpreter_reads(found[0]):
         return True
-    if shell == "powershell" and any("\\" in m.group(2) and first_interpreter_reads(piped_to(m.group(3)))
-                                     for m in HERE_STRING.finditer(text)):
+    if shell == "powershell" and any("\\" in here.group(2) and first_interpreter_reads(piped_to(here.group(3)))
+                                     for here in here_strings(text)):
         return True
     # A `python -c '...'` a message only mentions leaves no call where its quotes are taken out.
     masked, end = masked_calls(text, shell)
@@ -209,14 +211,19 @@ def inline_script(text, shell):
                for m in INLINE.finditer(text))
 
 
+def here_strings(text):
+    """The PowerShell here-strings that stand outside quotes and comments, with the rest of the
+    line each one ends on: the quote scan meets them before anything that would hold them."""
+    return [HERE_STRING.match(text, m.start()) for m in QUOTED["powershell"].finditer(text)
+            if m.group().startswith("@")]
+
+
 def masked_calls(text, shell):
-    """(the command with quoted strings, comments and PowerShell here-string bodies masked to the
-    same length, where a call may stand): a bash command only up to the end of the first line
-    that may open a here-document, as in `bare`."""
+    """(the command with quoted strings, comments and PowerShell here-strings masked to the same
+    length, where a call may stand): a bash command only up to the end of the first line that may
+    open a here-document, as in `bare`."""
     end = len(text)
-    if shell == "powershell":
-        text = HERE_STRING.sub(lambda m: "''" + blanked(m)[2:m.start(3) - m.start()] + m.group(3), text)
-    else:
+    if shell == "bash":
         first = first_opener(text)
         if first:
             end = len("\n".join(text.split("\n")[:first[0] + 1]))
@@ -227,9 +234,7 @@ def bare(text, shell):
     """The command with quoted strings taken out, and PowerShell here-string bodies; a bash
     command only up to the end of the first line that may open a here-document, quoted or not
     (`"$(cat <<'EOF'`), since reading too little only misses a pattern."""
-    if shell == "powershell":
-        text = HERE_STRING.sub(r"''\3", text)
-    else:
+    if shell == "bash":
         first = first_opener(text)
         if first:
             text = "\n".join(text.split("\n")[:first[0] + 1])
