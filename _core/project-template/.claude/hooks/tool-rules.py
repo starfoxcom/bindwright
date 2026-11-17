@@ -30,7 +30,10 @@ INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t
                     re.I | re.S)
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
-QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
+# Quoted strings and escapes as each shell reads them: bash escapes with a backslash, PowerShell
+# with a backtick and by doubling the quote, and a PowerShell backslash is plain text (`"C:\"`).
+QUOTED = {"bash": re.compile(r"\\.|'[^']*'|\"(?:[^\"\\]|\\.)*\"", re.S),
+          "powershell": re.compile(r"`.|'(?:[^']|'')*'|\"(?:[^\"`]|`.|\"\")*\"", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 
@@ -38,30 +41,39 @@ WRITE_THE_FILE = "its backslashes get eaten. Write the script with the Write too
 
 
 def heredoc_bodies(text):
-    """(the command holding the `<<`, body) for each here-document in the text: the part of its
-    line between the separators around the `<<`, pipes included."""
+    """(the command holding the `<<`, body start, body end) for each here-document in the text,
+    the body as a span of the text. The command is the part of its line between the separators
+    around the `<<`, pipes included, with its quoted strings taken out."""
     lines = text.split("\n")
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line) + 1)
     i = 0
     while i < len(lines):
         line = lines[i]
         found = list(HEREDOC.finditer(line))
         i += 1
         for match in found:
-            command = (LIST_SEPARATOR.split(line[:match.start()])[-1]
-                       + LIST_SEPARATOR.split(line[match.end():])[0])
-            body = []
-            while i < len(lines):
-                body_line = lines[i].rstrip("\r")
+            command = QUOTED["bash"].sub("''", LIST_SEPARATOR.split(line[:match.start()])[-1]
+                                         + LIST_SEPARATOR.split(line[match.end():])[0])
+            first = i
+            while i < len(lines) and not ends_heredoc(lines[i], match):
                 i += 1
-                if (body_line.lstrip("\t") if match.group(1) else body_line) == match.group(3):
-                    break
-                body.append(body_line)
-            yield command, "\n".join(body)
+            start, end = min(starts[first], len(text)), min(starts[i] - 1, len(text))
+            i += 1
+            yield command, start, max(start, end)
+
+
+def ends_heredoc(line, match):
+    """Whether a line is the terminator of the here-document `match` opened."""
+    line = line.rstrip("\r")
+    return (line.lstrip("\t") if match.group(1) else line) == match.group(3)
 
 
 def inline_script(text, shell):
     """Whether an interpreter is handed a script holding a backslash."""
-    if any(INTERPRETER_WORD.search(command) and "\\" in body for command, body in heredoc_bodies(text)):
+    if any(INTERPRETER_WORD.search(command) and "\\" in text[start:end]
+           for command, start, end in heredoc_bodies(text)):
         return True
     if shell == "powershell" and any("\\" in m.group(2) and INTERPRETER_WORD.search(m.group(3))
                                      for m in HERE_STRING.finditer(text)):
@@ -69,19 +81,19 @@ def inline_script(text, shell):
     return any("\\" in (m.group(2) or m.group(4) or "") for m in INLINE.finditer(text))
 
 
-def bare(text):
+def bare(text, shell):
     """The command with here-string bodies, here-document bodies and quoted strings taken out."""
-    text = HERE_STRING.sub(r"''\3", text)
-    for _, body in heredoc_bodies(text):
-        if body:
-            text = text.replace(body, "")
-    return QUOTED.sub("''", text)
+    if shell == "powershell":
+        text = HERE_STRING.sub(r"''\3", text)
+    for _, start, end in reversed(list(heredoc_bodies(text))):
+        text = text[:start] + text[end:]
+    return QUOTED[shell].sub("''", text)
 
 
 def both(*patterns):
     """A test that holds when every pattern is found in the bare command."""
     compiled = [re.compile(p, re.I) for p in patterns]
-    return lambda text, shell: all(p.search(bare(text)) for p in compiled)
+    return lambda text, shell: all(p.search(bare(text, shell)) for p in compiled)
 
 
 RULES = [
@@ -98,7 +110,7 @@ RULES = [
     ("`gh pr merge --admin`", both(r"\bgh\s+pr\s+merge\b.*\s--admin\b"),
      "it skips the required checks. Fix what blocks the merge."),
     ("`<rev>:.<path>` in Git Bash",
-     lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text)),
+     lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
      "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root."),
 ]
 

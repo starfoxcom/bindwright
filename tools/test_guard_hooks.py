@@ -171,7 +171,12 @@ class GuardHookTest(unittest.TestCase):
                    ("git checkout -q -b feature/x", "Bash"), ("git checkout -- file.txt", "Bash"),
                    ("gh pr merge 5 --merge", "Bash"), ("node script.mjs C:\\\\x", "Bash"),
                    ("git show origin/develop:./.claude/settings.json", "Bash"),
-                   ('git commit -m "read it with git show HEAD:.claude/x"', "Bash"))
+                   ('git commit -m "read it with git show HEAD:.claude/x"', "Bash"),
+                   ('gh pr create --title "Bump Node to 22" --body "$(cat <<\'EOF\'\nC:\\\\Users\nEOF\n)"', "Bash"),
+                   ("git commit -F - <<'EOF'\r\ndocs: stop using gh run watch\r\n\r\nWhy: x\r\nEOF", "Bash"),
+                   ("git commit -m 'docs: don'\\''t chain git push and gh pr create'", "Bash"),
+                   ('git commit -m "docs: never `"gh run watch`" here"', "PowerShell"),
+                   ('Copy-Item a "dist\\"; git commit -m "docs: never gh run watch"', "PowerShell"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()
