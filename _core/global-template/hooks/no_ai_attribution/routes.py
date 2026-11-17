@@ -144,8 +144,9 @@ def built_subcommand(words):
     """Whether git's subcommand comes from a word built at run time (`git "${args[@]}"`,
     `git "$@" -m x`), so that word may hold any subcommand and its options. A subcommand written
     right after the built words (`git $OPTS commit`) is read as usual; an option there may be one
-    the built word's subcommand reads, so it names none."""
-    i = git_subcommand(words)[0]
+    the built word's subcommand reads, so it names none. Options are read by their shape, as git
+    receives them (`"-C$repo"` is `-C` with its value)."""
+    i = git_subcommand([shape_of(word) for word in words])[0]
     if i >= len(words) or isinstance(words[i], str):
         return False
     following = next((word for word in words[i + 1:] if isinstance(word, str)), None)
