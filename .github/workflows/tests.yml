@@ -116,7 +116,7 @@ jobs:
           GO_ARCHIVE: go1.27.4.linux-amd64.tar.gz
           GO_SHA256: 7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
         run: |
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$GO_ARCHIVE" "https://go.dev/dl/$GO_ARCHIVE"
+          curl -q -fsSL --retry 3 -o "$RUNNER_TEMP/$GO_ARCHIVE" "https://go.dev/dl/$GO_ARCHIVE"
           echo "$GO_SHA256  $RUNNER_TEMP/$GO_ARCHIVE" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$GO_ARCHIVE" -C "$RUNNER_TEMP"
           PATH="$RUNNER_TEMP/go/bin:$PATH" python3 tools/shell-words-bash/check_build.py
