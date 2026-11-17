@@ -136,8 +136,9 @@ ATTRIBUTION = re.compile(
     "|".join([
         # Co-Authored-By naming an AI; a human co-author passes.
         # No two separator runs touch: `-` is one of them, and two in a row make a long run of
-        # separators take time that grows with its length squared.
-        r"co" + _Z + r"authored" + _Z + r"by\s*:?[^\n]*?\b" + AI + r"\b",
+        # separators take time that grows with its length squared. For the same reason the
+        # blank lines after `by` and the rest of its line are two runs that share no character.
+        r"co" + _Z + r"authored" + _Z + r"by(?:\s*\n)?[^\n]*?\b" + AI + r"\b",
         r"noreply@" + ANTHROPIC,
         r"\b(?:generated|written|created|made|authored|produced|assisted|co-?written)" + _Z
         + r"(?:with|by|using|via)" + _Z + r"(?::" + _Z + r")?" + AN + AI + r"\b",
