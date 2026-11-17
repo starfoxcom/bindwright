@@ -48,6 +48,8 @@ LIST_SEPARATOR = re.compile(r"&&|\|\||;|(?<![>&|])&(?![>&])")
 INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c[ \t]+(['\"])(.*?)\1"
                     r"|(?:^|[\s;&|(])node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print)[ \t]+(['\"])(.*?)\3",
                     re.I | re.S)
+INLINE_CALL = re.compile(r"(?:^|[\s;&|(])(?:(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c"
+                         r"|node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print))[ \t]+''", re.I)
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
 # Comments, quoted strings and escapes as each shell reads them, in one pass across lines, so
@@ -71,6 +73,12 @@ def blanked(match):
     return re.sub(r"[^\n]", " ", match.group())
 
 
+def as_word(match):
+    """A quoted string as one placeholder word the length of the original, line ends kept, so a
+    quoted argument (`python3 "$HOOK"`) still counts as a word."""
+    return re.sub(r"^[^\n]", "Q", blanked(match))
+
+
 def first_opener(text):
     """(line number, match) of the first line that may open a here-document, quoted or not, or
     None: a `<<` that is not part of a here-string (`<<<`) followed by a word."""
@@ -91,7 +99,7 @@ def heredoc(text):
     if not first:
         return None
     number, match = first
-    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, text)).split("\n")[number]
+    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(as_word, text)).split("\n")[number]
     if not HEREDOC_OPERATOR.match(masked, match.start()):
         return None
     before = LIST_SEPARATOR.split(masked[:match.start()])[-1].split("|")[-1]
@@ -181,7 +189,10 @@ def inline_script(text, shell):
     if shell == "powershell" and any("\\" in m.group(2) and first_interpreter_reads(piped_to(m.group(3)))
                                      for m in HERE_STRING.finditer(text)):
         return True
-    return any("\\" in (m.group(2) or m.group(4) or "") for m in INLINE.finditer(text))
+    # A `python -c '...'` a message only mentions leaves no call once quotes are taken out.
+    is_called = INLINE_CALL.search(bare(text, shell))
+    scripts = (m.group(2) or m.group(4) or "" for m in INLINE.finditer(text))
+    return bool(is_called) and any("\\" in script for script in scripts)
 
 
 def bare(text, shell):
@@ -208,7 +219,8 @@ RULES = [
     ("`gh run watch`", both(r"\bgh\s+run\s+watch\b"),
      "it blocks the session. ci-watch (or a bounded watcher, token-efficiency.md) watches checks."),
     ("the size check chained with a commit or push",
-     both(r"\b(?:python3?|py)(?:\.exe)?\s+(?:-\S+\s+)*\S*size_check\.py", r"\bgit\s+(?:commit|push)\b"),
+     both(r"(?:^|(?<=[\s;&|(]))(?:python3?|py)(?:\.exe)?\s+(?:-\S+\s+)*\S*size_check\.py",
+          r"\bgit\s+(?:commit|push)\b"),
      "the commit runs past its breaches. Run size_check.py in its own call first."),
     ("`git push` and `gh pr create` in one command", both(r"\bgit\s+push\b", r"\bgh\s+pr\s+create\b"),
      "the chain gets refused. Push, then open the PR in a separate call."),

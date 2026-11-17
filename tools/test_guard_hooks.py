@@ -218,7 +218,11 @@ class GuardHookTest(unittest.TestCase):
                    ("bash -sc 'cat' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
                    ("php -r 'echo 1;' <<'EOF'\nC:\\\\x\nEOF", "Bash"),
                    ("python3 gen.py <<'EOF' | sh\nC:\\\\x\nEOF", "Bash"),
-                   ("cat <<'EOF' | python3 tool.py | bash\nC:\\\\x\nEOF", "Bash"))
+                   ("cat <<'EOF' | python3 tool.py | bash\nC:\\\\x\nEOF", "Bash"),
+                   ("git commit -m \"docs: python -c 'print(\\\\x)' eats it\"", "Bash"),
+                   ("git commit -F - <<'EOF'\nfix: python -c 'print(\\\\x)' ate it\nEOF", "Bash"),
+                   ("git add engine/bind.py .github/scripts/size_check.py && git commit -m x", "Bash"),
+                   ("python3 \"$HOOK\" <<'EOF'\n{\"p\": \"C:\\\\x\"}\nEOF", "Bash"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()
