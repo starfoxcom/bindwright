@@ -25,6 +25,8 @@ HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
 INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c[ \t]+(['\"])(.*?)\1"
                     r"|(?:^|[\s;&|(])node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print)[ \t]+(['\"])(.*?)\3",
                     re.I | re.S)
+# `origin/develop:.claude/x`: a git object path that starts with a dot.
+REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?[\s\"'][\w./@~^-]+:\.[^/\s.]", re.I)
 QUOTED = re.compile(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"")
 
 WRITE_THE_FILE = "its backslashes get eaten. Write the script with the Write tool, then run the file."
@@ -84,6 +86,8 @@ RULES = [
      "it overwrites and stages those files. Peek with `git show <rev>:./<path>`; restore with `git restore`."),
     ("`gh pr merge --admin`", both(r"\bgh\s+pr\s+merge\b.*\s--admin\b"),
      "it skips the required checks. Fix what blocks the merge."),
+    ("`<rev>:.<path>` in Git Bash", lambda text, shell: shell == "bash" and REV_DOT_PATH.search(text),
+     "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>`."),
 ]
 
 

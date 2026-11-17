@@ -159,12 +159,13 @@ class GuardHookTest(unittest.TestCase):
                    ("@'\nprint('C:\\\\x')\n'@ | python -", "PowerShell"), ("gh run watch 123", "Bash"),
                    ("python .github/scripts/size_check.py && git commit -qm x", "Bash"),
                    ("git push -u origin x && gh pr create --base develop", "Bash"),
-                   ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"))
+                   ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"),
+                   ("git show origin/develop:.claude/settings.json", "Bash"))
         passing = ("python - <<'EOF'\nprint('hi')\nEOF", "git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF",
                    "cat <<'EOF' > notes.md\nC:\\\\x\nEOF", 'python -c "print(1)"',
                    'git commit -m "never use gh run watch"', 'git commit -m "size_check.py before git push"',
                    "git checkout -q -b feature/x", "git checkout -- file.txt", "gh pr merge 5 --merge",
-                   "node script.mjs C:\\\\x")
+                   "node script.mjs C:\\\\x", "git show origin/develop:./.claude/settings.json")
         for command, tool in refused:
             with self.subTest(command=command):
                 result = self.run_hook("tool-rules", command, tool=tool)
