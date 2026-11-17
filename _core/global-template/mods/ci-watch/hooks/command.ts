@@ -63,6 +63,27 @@ function maskedCommand(command: string, isPowerShell: boolean): string {
     .replace(quotedSpans(isPowerShell), span => span[0] + '_'.repeat(span.length - 2) + span[span.length - 1])
 }
 
+// A step of a plain command: a `cd <dir>`, or a `git commit` / `git push` with at most `-C <dir>` before it,
+// and no redirect, pipe, subshell, group or expansion in it.
+const PLAIN_WORD = String.raw`[^\s(){}<>|&]+`
+const PLAIN_STEP = new RegExp(
+  String.raw`^\s*(?:cd\s+${PLAIN_WORD}|git(?:\s+-C\s+${PLAIN_WORD})?\s+(?:commit|push)(?:\s+[^(){}<>|&]*)?)\s*$`,
+)
+const BRANCH_MOVES = /\b(?:checkout|switch|worktree)\b/
+
+/**
+ * Whether a commit or push is one whose folders `namedFolders` reads in full: steps joined by `&&`, `;` or
+ * newlines, each a `cd` or a plain `git commit` / `git push`. Anything else (an expansion, a subshell, an
+ * `env` or `GIT_DIR` prefix, other git options, a branch switch) may act on a branch the reader cannot see.
+ */
+export function isPlainCommitOrPush(command: string, isPowerShell = false): boolean {
+  // `$` and backticks expand inside double quotes too, so they count wherever they are.
+  if (/[$`]/.test(command)) return false
+  const masked = maskedCommand(command, isPowerShell)
+  if (BRANCH_MOVES.test(masked)) return false
+  return masked.split(/&&|;|\n/).every(step => !step.trim() || PLAIN_STEP.test(step))
+}
+
 export function isPushOrPr(command: string, isPowerShell = false): boolean {
   return PUSH_OR_PR.test(commandWords(command, isPowerShell))
 }
@@ -84,7 +105,7 @@ export function mergedNumber(command: string, isPowerShell = false): number | un
 // The folder a push or `gh pr create` ran in: `git -C <dir>` or the `cd <dir>` / `Set-Location <dir>`
 // steps before it, on the same line or the lines above. Undefined means the session's folder.
 const GIT_C = /\bgit\s+-C\s+("[^"]+"|'[^']+'|\S+)/
-const CD = /(?:^|[;&|\n]\s*)(?:cd|Set-Location|Push-Location|pushd)\s+(?:-Path\s+)?("[^"]+"|'[^']+'|[^\s;&|]+)/g
+const CD = /(?:^|[;&|\n])\s*(?:cd|Set-Location|Push-Location|pushd)\s+(?:-Path\s+)?("[^"]+"|'[^']+'|[^\s;&|]+)/g
 const PUSH_AT = /\bgit\b[^;&|\n]*\bpush\b|\bgh\s+pr\s+create\b/
 const ABSOLUTE = /^(?:[a-zA-Z]:|[/\\~])/
 

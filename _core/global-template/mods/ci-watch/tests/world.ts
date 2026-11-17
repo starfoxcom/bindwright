@@ -29,8 +29,11 @@ export type Seen = {
   prState: string
   /** The PR of the branch a push names (7 by default), and PRs GitHub reports merged whatever `prState` says. */
   branchPr?: number
-  // The branch `git branch --show-current` names per folder ('' for the session's own); feature/x without one.
+  // The shell's folder (C:/session by default); per folder, the branch checked out (feature/x without one)
+  // and the branch it pushes to (none without one).
+  cwd?: string
   checkedOut?: Record<string, string>
+  upstream?: Record<string, string>
   isGitDown?: boolean
   mergedPrs?: number[]
   /** The head commit `gh pr view` reports (default `a1`). */
@@ -76,6 +79,7 @@ export function world(on: On) {
   const clock = mock.clock(on, { now: 1_000 })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   on('session.id', () => ({ value: seen.session }))
+  on('session.cwd', () => ({ value: seen.cwd ?? 'C:/session' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.end', ($, e) => ({ sessionId: e.sessionId }))
   on('tool.register', ($, e) => ({ value: { tool: `mcp__ci-watch__${e.name}` } }))
@@ -112,10 +116,11 @@ export function world(on: On) {
       const stdout = seen.status ?? ''
       return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    if (e.argv[0] === 'git' && args.endsWith('branch --show-current')) {
-      const folder = e.argv[1] === '-C' ? (e.argv[2] ?? '') : ''
-      const stdout = seen.isGitDown ? '' : `${seen.checkedOut?.[folder] ?? 'feature/x'}\n`
-      const exitCode = seen.isGitDown ? 128 : 0
+    if (e.argv[0] === 'git' && e.argv[1] === '-C') {
+      const folder = e.argv[2] ?? ''
+      const named = args.endsWith('@{u}') ? seen.upstream?.[folder] : (seen.checkedOut?.[folder] ?? 'feature/x')
+      const stdout = seen.isGitDown || named === undefined ? '' : `${named}\n`
+      const exitCode = stdout ? 0 : 128
       return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     if (e.argv[0] === 'gh') seen.ghCalls.push(args)

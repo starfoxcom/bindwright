@@ -1,19 +1,26 @@
 import type { EngineInterface } from 'claude-code'
 
-import { namedFolders } from './command'
+import { isPlainCommitOrPush, namedFolders } from './command'
 
 // Which branch a piece of work is on, so a step back holds only the red PR's work.
 
-// The branch checked out in `folder` (the session's folder without one); undefined outside a repo or on a
-// detached head.
-async function checkedOut($: EngineInterface, folder?: string): Promise<string | undefined> {
+async function git($: EngineInterface, cwd: string, folder: string, args: readonly string[]) {
   try {
-    const args = ['git', ...(folder ? ['-C', folder] : []), 'branch', '--show-current']
-    const { stdout, exitCode } = await $.process.run(args, { timeoutMs: 10_000 })
-    return exitCode === 0 && stdout.trim() ? stdout.trim() : undefined
+    const { stdout, exitCode } = await $.process.run(['git', '-C', folder, ...args], { cwd, timeoutMs: 10_000 })
+    return exitCode === 0 ? stdout.trim() : ''
   } catch {
-    return undefined
+    return ''
   }
+}
+
+// The branch checked out in `folder` (relative to the shell's folder, which is the folder itself when
+// undefined) and the branch it pushes to, or undefined when no branch is checked out there.
+async function checkedOut($: EngineInterface, folder?: string) {
+  const cwd = await $.session.cwd()
+  const name = await git($, cwd, folder ?? cwd, ['branch', '--show-current'])
+  if (!name) return undefined
+  const upstream = await git($, cwd, folder ?? cwd, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
+  return { name, upstream }
 }
 
 /** The folder holding the file an edit names, or undefined without a path. */
@@ -24,29 +31,33 @@ export function folderOf(e: unknown): string | undefined {
   return path.replace(/[\\/][^\\/]*$/, '') || undefined
 }
 
-/** The folders a commit or push may act in: the session's own (undefined) and each one it moves git to. */
+/**
+ * The folders a commit or push acts in: the shell's own (undefined) and each one it moves git to, or null
+ * for a command whose folders cannot be read in full, which may then act anywhere.
+ */
 export async function commandFolders(
   $: EngineInterface,
   command: string,
   isPowerShell: boolean,
-): Promise<(string | undefined)[]> {
+): Promise<(string | undefined)[] | null> {
+  if (!isPlainCommitOrPush(command, isPowerShell)) return null
   return [undefined, ...namedFolders(command, (await $.env.get('OS')) === 'Windows_NT', isPowerShell)]
 }
 
 /**
- * Whether the work may be on `branch`: it is checked out in any of `folders`, or the command names it.
- * A branch that cannot be read counts as yes, so a hold never lifts on a failed lookup.
+ * Whether the work may be on `branch`: it is checked out, or pushes to it, in any of `folders`, or the
+ * command names it. An unread branch or folder list counts as yes, so a hold never lifts on a guess.
  */
 export async function mayBeOn(
   $: EngineInterface,
   branch: string | undefined,
-  folders: readonly (string | undefined)[],
+  folders: readonly (string | undefined)[] | null,
   command = '',
 ): Promise<boolean> {
-  if (!branch || command.includes(branch)) return true
+  if (!branch || !folders || command.includes(branch)) return true
   for (const folder of folders) {
     const here = await checkedOut($, folder)
-    if (!here || here === branch) return true
+    if (!here || here.name === branch || here.upstream.endsWith(`/${branch}`)) return true
   }
   return false
 }

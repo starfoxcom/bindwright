@@ -154,13 +154,28 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   const call = (input: Record<string, unknown>) => $.tool.call(input as never)
   const bash = (command: string) => call({ tool: 'Bash', command })
   await redRound($, w, 5)
-  w.seen.checkedOut = { '': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
-  expect(await bash('git commit -m "fix the other PR"')).not.toHaveProperty('deny')
+  // The shell sits on another PR's branch; the red PR's branch is checked out in C:/repo.
+  w.seen.checkedOut = { 'C:/session': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
+  const passes = ['git commit -m "fix the other PR"', 'cd C:/other && git commit -m b && git push']
+  const refusal = expect.objectContaining({ deny: expect.any(String) })
+  const denied = (command: string) => expect.arrayContaining([command, refusal])
+  for (const command of passes) expect([command, await bash(command)]).not.toEqual(denied(command))
   expect(await call({ ...editInput, file_path: 'C:/other/b.ts' })).not.toHaveProperty('deny')
-  expect(await bash('git push origin feature/x')).toHaveProperty('deny')
   expect(await call(editInput)).toHaveProperty('deny')
-  expect(await bash('git -C C:/repo commit -m "fix it"')).toHaveProperty('deny')
-  expect(await bash('git -C C:/other commit -m "b"; cd C:/repo && git push')).toHaveProperty('deny')
+  // Every shape whose branch the reader cannot see in full waits, as it did before the hold was narrowed.
+  const waits = [
+    'git push origin feature/x', 'git -C C:/repo commit -m "fix it"', '  cd C:/repo && git commit -m x',
+    'git -C C:/other commit -m "b"; cd C:/repo && git push', '(cd C:/repo && git commit -m x)',
+    '{ cd C:/repo; git commit -m x; }', 'if true; then cd C:/repo; git commit -m x; fi',
+    'git -c user.name=a -C C:/repo commit -m x', 'GIT_DIR=C:/repo/.git git commit -m x',
+    'env -C C:/repo git commit -m x', 'gh pr checkout 7 && git commit -am fix', 'git switch - && git commit -am fix',
+    'git commit -m "$(git switch feature/x)"', 'git commit -m x | tee log',
+  ]
+  for (const command of waits) expect([command, await bash(command)]).toEqual(denied(command))
+  // A local branch pushed to the red PR's branch under another name is the red PR's too.
+  w.seen.checkedOut['C:/session'] = 'try-fix'
+  w.seen.upstream = { 'C:/session': 'origin/feature/x' }
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.isGitDown = true
   expect(await bash('git commit -m "fix the other PR"')).toHaveProperty('deny')
 })

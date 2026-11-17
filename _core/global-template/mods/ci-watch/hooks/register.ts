@@ -251,7 +251,7 @@ async function branchOf($: EngineInterface, w: Watch): Promise<string | undefine
 // undefined. A closed PR owes nothing, and work on another branch goes on.
 async function owedResearch(
   $: EngineInterface,
-  folders: readonly (string | undefined)[],
+  folders: readonly (string | undefined)[] | null,
   command?: string,
 ): Promise<string | undefined> {
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
