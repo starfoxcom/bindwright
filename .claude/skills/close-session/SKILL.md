@@ -43,7 +43,7 @@ On a yes, list the candidates, each with one line on why:
 - Tests that are skipped for good, or that fail for the same reason as another test in their file (`.claude/rules/testing.md`, rule 2).
 - Memory entries in `~/.claude/projects/<project-slug>/memory/` that name a file or function that no longer exists, repeat another entry, or say what the repo's rules already say.
 
-Propose each removal one at a time and make it only on a yes; a removal from the repo goes into this session's commit. Then set today's date.
+Ask about each candidate one at a time. Remove nothing in this session, whose commits hold its own work: the candidates the user says yes to go into one new work item in the project's tracker, so a later session removes them as a change of its own. Then set today's date.
 
 ## Project steps
 
