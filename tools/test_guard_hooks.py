@@ -160,7 +160,9 @@ class GuardHookTest(unittest.TestCase):
                    ("python .github/scripts/size_check.py && git commit -qm x", "Bash"),
                    ("git push -u origin x && gh pr create --base develop", "Bash"),
                    ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"),
-                   ("# it's fine\ngh run watch 1", "Bash"))
+                   ("# it's fine\ngh run watch 1", "Bash"), ("<# note #> gh run watch 1", "PowerShell"),
+                   ("sleep 1 & python - <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("python - 2>&1 <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"))
         passing = (("python - <<'EOF'\nprint('hi')\nEOF", "Bash"),
                    ("git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
                    ("python3 tools/x.py && git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
@@ -195,7 +197,10 @@ class GuardHookTest(unittest.TestCase):
                    ("gh pr create --body \"$(cat <<'EOF'\nfed with \"node <<JS\" it breaks\n"
                     "C:\\\\x\nEOF\n)\"", "Bash"),
                    ("# Commit the fix; it can't wait\ngit commit -m \"docs: don't use gh run watch\"", "Bash"),
-                   ("# don't amend\ngit commit -m \"docs: it's why python <<EOF eats\nC:\\\\x paths\"", "Bash"))
+                   ("# don't amend\ngit commit -m \"docs: it's why python <<EOF eats\nC:\\\\x paths\"", "Bash"),
+                   ("<# Don't chain these #>\ngit commit -m 'docs: never use gh run watch'", "PowerShell"),
+                   ("<#\nNever use gh run watch here.\n#>\nls", "PowerShell"),
+                   ("python3 -m http.server 8000 & cat <<'EOF' > notes.md\nC:\\\\x\nEOF", "Bash"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()

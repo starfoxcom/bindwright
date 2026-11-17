@@ -31,8 +31,9 @@ HEREDOC = re.compile(r"<<(-?)[ \t]*\\?(['\"]?)([A-Za-z_][\w-]*)\2")
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)")
 NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)")
 HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
-# The separators between the commands of one line; a pipe joins two parts of one command.
-LIST_SEPARATOR = re.compile(r"&&|\|\||;")
+# The separators between the commands of one line, a lone `&` (run in the background) among them
+# but not a redirection (`2>&1`, `&>f`) or `|&`; a pipe joins two parts of one command.
+LIST_SEPARATOR = re.compile(r"&&|\|\||;|(?<![>&|])&(?![>&])")
 # `python -c '...'`, `node -e "..."`: the script text, as far as its closing quote.
 INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c[ \t]+(['\"])(.*?)\1"
                     r"|(?:^|[\s;&|(])node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print)[ \t]+(['\"])(.*?)\3",
@@ -43,11 +44,12 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # whichever starts first wins: a `#` that starts a word outside quotes comments out the rest of
 # its line, and a quote character in a comment opens nothing. Bash escapes with a backslash,
 # PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is plain text
-# (`"C:\"`). A quote that never closes runs to the end of the command.
+# (`"C:\"`). A PowerShell block comment runs from `<#` to the first `#>`. A quote or block
+# comment that never closes runs to the end of the command.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
 QUOTED = {"bash": re.compile(COMMENT + r"|\\.|'[^']*(?:'|\Z)|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)",
-                                   re.S)}
+          "powershell": re.compile(r"<#.*?(?:#>|\Z)|" + COMMENT
+                                   + r"|`.|'(?:[^']|'')*(?:'|\Z)|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 
