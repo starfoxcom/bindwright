@@ -89,10 +89,11 @@ jobs:
           grep -qx "# skipped 0" node-tests.txt || { echo "::error::Engine tests were skipped"; exit 1; }
           grep -qE "^# pass [1-9]" node-tests.txt || { echo "::error::No engine tests ran"; exit 1; }
 
+      # A file pattern, so a new guard test file runs without a workflow change.
       - name: Guard hook and receipts tests
         if: steps.engine.outputs.present == 'true'
         run: |
-          python3 -m unittest -v tools/test_guard_hooks.py tools/test_receipts.py 2>&1 | tee python-tests.txt
+          python3 -m unittest -v tools/test_guard*.py tools/test_receipts.py 2>&1 | tee python-tests.txt
           if grep -q "skipped=" python-tests.txt; then echo "::error::Python tests were skipped"; exit 1; fi
           grep -qE "^Ran [1-9][0-9]* tests? in" python-tests.txt || { echo "::error::No Python tests ran"; exit 1; }
 
@@ -172,7 +173,7 @@ jobs:
       - name: Guard hook tests
         if: steps.engine.outputs.present == 'true'
         run: |
-          python -m unittest -v tools/test_guard_hooks.py 2>&1 | tee guard-tests.txt
+          python -m unittest -v tools/test_guard*.py 2>&1 | tee guard-tests.txt
           grep -qE "^OK" guard-tests.txt || { echo "::error::Guard hook tests failed"; exit 1; }
           grep -qE "^Ran [1-9][0-9]* tests? in" guard-tests.txt || { echo "::error::No guard hook tests ran"; exit 1; }
 
