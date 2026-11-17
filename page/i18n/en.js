@@ -110,9 +110,11 @@ export default {
     + "saved data, and also got a deeper review.",
   "evidence.note": {
     one: "Bindwright puts an AI reviewer on every pull request. "
-      + "These are its results so far in {count} project whose owner chose to share anonymous counts.",
+      + "These are its results so far in {count} project whose owner chose to share anonymous counts. "
+      + "It's early, so there aren't enough of them yet to say it works everywhere the way it's meant to.",
     other: "Bindwright puts an AI reviewer on every pull request. "
-      + "These are its results so far in {count} projects whose owners chose to share anonymous counts.",
+      + "These are its results so far in {count} projects whose owners chose to share anonymous counts. "
+      + "It's early, so there aren't enough of them yet to say it works everywhere the way it's meant to.",
   },
   "evidence.kind.game": "Game project",
   "evidence.kind.business-app": "Business app",
