@@ -72,8 +72,9 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # here-string (`@'` to a line starting `'@`) is one more quoted string in the same scan, so one
 # inside a message or a comment is part of that text.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
-# PowerShell opens a here-string only where a token starts; `me@'` is a word with a quoted part.
-HERE_STRING_START = r"(?:^|(?<=[\s;&|(){=,]))"
+# PowerShell opens a here-string where a token starts, after a cast (`[xml]@'`) or an operator
+# too; glued to a word (`me@'`), the `@` is part of that word and the quote a quoted part of it.
+HERE_STRING_START = r"(?<!\w)"
 QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(?:'|\Z)"
                              r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
           "powershell": re.compile(HERE_STRING_START + r"@(['\"])\r?\n.*?(?:\r?\n\1@|\Z)|<#.*?(?:#>|\Z)|"
