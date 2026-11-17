@@ -12,23 +12,24 @@ export default {
   "nav.github": "GitHub",
   "nav.language": "Idioma",
   "hero.title": "Claude recuerda cómo te gusta trabajar.",
-  "hero.lede": "Responde unas preguntas una vez, y cada sesión de Claude en tu proyecto empieza sabiendo "
-    + "tus reglas, recibe una segunda revisión en cada cambio y frena todo lo riesgoso antes de que pase. "
-    + "Un solo comando, sin saber programar.",
+  "hero.lede": "Se acabó apuntar cada proyecto nuevo a uno viejo y pedirle a Claude que copie sus reglas y hooks. "
+    + "Responde unas preguntas una vez, y cada sesión aquí empieza con tus reglas ya puestas, mientras cada "
+    + "cambio se revisa antes de integrarse. Un solo comando, sin saber programar.",
   "hero.go": "Instalar Bindwright",
   "hero.source": "Ver en GitHub",
   "changes.title": "Qué cambia",
   "changes.1.was": "Claude olvida cómo trabajas en cada sesión",
   "changes.1.title": "Claude deja de repetir errores",
-  "changes.1.text": "Lee tus reglas al inicio de cada sesión, así las funciones pequeñas y las pruebas "
-    + "reales dejan de ser algo que tienes que pedir cada vez.",
+  "changes.1.text": "Lee tus reglas al inicio de cada sesión, y los hooks sostienen las que no se pueden "
+    + "doblar, así los descuidos de Claude en sesiones largas, tras una o tres compactaciones, se frenan "
+    + "en lugar de publicarse.",
   "changes.2.was": "Los cambios se integran sin que nadie los revise",
   "changes.2.title": "Cada pull request se revisa",
   "changes.2.text": "Una IA revisa cada cambio antes de integrarlo, y si la revisión no pasa, nada entra.",
   "changes.3.was": "Cada sesión empieza desde cero",
   "changes.3.title": "Las sesiones siguen donde se quedaron",
-  "changes.3.text": "Cada sesión empieza con un plan y termina con una nota para la siguiente, así el "
-    + "trabajo sigue justo donde se quedó.",
+  "changes.3.text": "Cada sesión termina con una nota de lo que sigue y la siguiente empieza leyéndola, así "
+    + "nunca vuelves a explicarle el proyecto ni la próxima tarea a una sesión nueva.",
   "changes.4.was": "Un comando equivocado puede borrar tu rama principal",
   "changes.4.title": "Los comandos peligrosos se bloquean",
   "changes.4.text": "Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un "
@@ -117,7 +118,7 @@ export default {
   "scene.handoff.next.item": "#14 códigos de descuento",
   "scene.handoff.watch": "Vigilar",
   "scene.handoff.watch.item": "redondeo de impuestos",
-  "scene.caption.1": "Arranca sin complicaciones desde donde lo dejaste",
+  "scene.caption.1": "Una sesión nueva ya sabe qué sigue",
   "scene.caption.2": "Completa el trabajo y las tareas pendientes",
   "scene.caption.3": "Ejecuta pruebas y frena aquello que es riesgoso",
   "scene.caption.4": "Todo PR recibe una revisión con IA",
@@ -242,9 +243,11 @@ export default {
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {
     one: "Bindwright pone un revisor de IA en cada pull request. "
-      + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos.",
+      + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos. "
+      + "Todavía es pronto, así que aún no hay suficientes para decir que funciona en todos lados como debe.",
     other: "Bindwright pone un revisor de IA en cada pull request. "
-      + "Estos son sus resultados hasta ahora en {count} proyectos cuyos dueños eligieron compartir conteos anónimos.",
+      + "Estos son sus resultados hasta ahora en {count} proyectos cuyos dueños eligieron compartir conteos anónimos. "
+      + "Todavía es pronto, así que aún no hay suficientes para decir que funciona en todos lados como debe.",
   },
   "evidence.kind.game": "Juego",
   "evidence.kind.business-app": "App de negocio",
