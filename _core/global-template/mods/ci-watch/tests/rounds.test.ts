@@ -146,6 +146,105 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
 })
 
+// The step back is about the red PR, so work on another branch goes on; an unreadable branch still waits.
+test("a step back holds only work on the red PR's branch", async ($, on) => {
+  const w = world(on)
+  on('tool.call', { tool: ['Edit', 'Write'] }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const call = (input: Record<string, unknown>) => $.tool.call(input as never)
+  const bash = (command: string) => call({ tool: 'Bash', command })
+  await redRound($, w, 5)
+  // The shell sits on another PR's branch; the red PR's branch is checked out in C:/repo.
+  w.seen.checkedOut = { 'C:/session': 'feature/y', 'C:/other': 'feature/y', 'C:/repo': 'feature/x' }
+  w.seen.checkedOut['C:\\other'] = 'feature/y'
+  // Neither the shell's folder nor C:/other holds any of the red PR's commits, on any local branch.
+  w.seen.history = { 'C:/session': [], 'C:/other': [], 'C:\\other': [] }
+  w.seen.redRefs = { 'C:/session': '' }
+  const passes = [
+    'git commit -m "fix the other PR"', 'git commit -m b && git push',
+    'git commit -m "fix #12, don\'t hold" ; git push -u origin feature/y',
+  ]
+  const refusal = expect.objectContaining({ deny: expect.any(String) })
+  const denied = (command: string) => expect.arrayContaining([command, refusal])
+  for (const command of passes) expect([command, await bash(command)]).not.toEqual(denied(command))
+  expect(await call({ ...editInput, file_path: 'C:/other/b.ts' })).not.toHaveProperty('deny')
+  expect(await call({ ...editInput, file_path: 'C:\\other\\b.ts' })).not.toHaveProperty('deny')
+  expect(await call(editInput)).toHaveProperty('deny')
+  expect(await call({ ...editInput, file_path: 'C:\\repo\\a.ts' })).toHaveProperty('deny')
+  // The PowerShell tool keeps its own folder, so its commits wait.
+  expect(await call({ tool: 'PowerShell', command: 'git commit -m x' })).toHaveProperty('deny')
+  // Every shape whose branch the reader cannot see in full waits.
+  const waits = [
+    'git push origin feature/x', 'git -C C:/repo commit -m "fix it"', '  cd C:/repo && git commit -m x',
+    'git -C C:/other commit -m "b"; cd C:/repo && git push', '(cd C:/repo && git commit -m x)',
+    '{ cd C:/repo; git commit -m x; }', 'if true; then cd C:/repo; git commit -m x; fi',
+    'git -c user.name=a -C C:/repo commit -m x', 'GIT_DIR=C:/repo/.git git commit -m x',
+    'env -C C:/repo git commit -m x', 'gh pr checkout 7 && git commit -am fix', 'git switch - && git commit -am fix',
+    'git commit -m "$(git switch feature/x)"', 'git commit -m x | tee log',
+    // Quotes and comments the shell reads differently from a pattern, and a path glued to a quote.
+    "git commit -m a\\'b ; cd C:/repo ; git commit -m c\\'d", 'git commit -m a\\"b ; cd C:/repo ; git commit -m "c"',
+    "git commit -m x # don't\ncd C:/repo; git commit -m y # isn't",
+    "git commit -m 'msg\nsee <<EOF'\ncd C:/repo\ngit commit -m y",
+    'cd "C:/other"/../repo && git commit -m x', 'cd C:/other && git -C ../repo commit -m x',
+    // A folder move or a carriage return, which leave the shell where its text does not say.
+    'cd C:/other && git commit -m b && git push', 'git -C C:/other commit -m b', 'git commit -m x\r\ngit push',
+    // Pushes that may send the red branch without naming it plainly.
+    'git push origin HEAD:feat"ure"/x', 'git push --all', 'git push origin :',
+    "git push origin 'refs/heads/*:refs/heads/*'",
+  ]
+  for (const command of waits) expect([command, await bash(command)]).toEqual(denied(command))
+  // Only a config that sends each pushed name to itself lifts a push; a valueless key counts as set.
+  w.seen.gitConfig = { 'C:/session': 'push.default\nsimple\0remote.origin.url\nu\0' }
+  expect(await bash('git push')).not.toHaveProperty('deny')
+  // Output cut at the engine's limit may hide a key past the cut, so it is no answer.
+  w.seen.isGitCut = true
+  expect(await bash('git push')).toHaveProperty('deny')
+  w.seen.isGitCut = false
+  const configs = [
+    'remote.origin.mirror\ntrue\0', 'remote.origin.mirror\0', 'push.default\nupstream\0',
+    'push.recursesubmodules\non-demand\0', 'submodule.recurse\ntrue\0',
+  ]
+  for (const config of configs) {
+    w.seen.gitConfig = { 'C:/session': config }
+    expect([config, await bash('git push origin try-fix')]).toEqual(denied(config))
+  }
+  // A file at a drive root is in that root, not in the drive's current folder.
+  w.seen.checkedOut['C:'] = 'feature/y'
+  w.seen.history['C:'] = []
+  expect(await call({ ...editInput, file_path: 'C:\\a.ts' })).toHaveProperty('deny')
+  // A shell moved to the red branch's folder.
+  w.seen.cwd = 'C:/repo'
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  w.seen.cwd = undefined
+  // Refs ignore case on Windows and macOS, so a branch that differs only in case is the red PR's.
+  w.seen.checkedOut['C:/session'] = 'Feature/X'
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  // A push of a local branch that holds the red PR's work, whatever the branch it sits on.
+  w.seen.checkedOut['C:/session'] = 'feature/y'
+  w.seen.redRefs['C:/session'] = 'refs/heads/try-fix'
+  expect(await bash('git push origin try-fix')).toHaveProperty('deny')
+  // Work under another name, a fork's checkout or a renamed branch, whose history holds the PR's commits.
+  w.seen.checkedOut['C:/session'] = 'alice/main'
+  w.seen.history['C:/session'] = ['c0ffee0']
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  // After a rewrite (amend, rebase, force-push) the PR's commits are new, and work holding them waits.
+  w.seen.prCommits = ['d00d000']
+  w.seen.history['C:/session'] = ['d00d000']
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  // Work holding none of the PR's current commits goes on.
+  w.seen.history['C:/session'] = []
+  expect(await bash('git commit -m x')).not.toHaveProperty('deny')
+  // A shallow clone's commit test may answer a false no, so it is no answer.
+  w.seen.shallow = ['C:/session']
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  w.seen.shallow = []
+  // A list as long as `gh` lists may be cut, so the PR's commits count as unread.
+  w.seen.prCommits = Array.from({ length: 100 }, (_, i) => `abc${String(i).padStart(4, '0')}`)
+  expect(await bash('git commit -m x')).toHaveProperty('deny')
+  w.seen.isGitDown = true
+  expect(await bash('git commit -m "fix the other PR"')).toHaveProperty('deny')
+})
+
 // A red wake at a count that is not due latches nothing; a new watch of the PR keeps a latched step back,
 // and only a green round or the user's /ci-watch stop lifts it without lookups.
 test('only a due red wake latches a step back, and only lookups, green or a stop lift it', async ($, on) => {
