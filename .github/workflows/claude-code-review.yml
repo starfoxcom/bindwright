@@ -640,14 +640,23 @@ jobs:
       checks: read
       statuses: read
     steps:
-      # A file of the job's own: npm refuses /dev/null as both its user and
+      # Files of the job's own: npm refuses /dev/null as both its user and
       # its global config, a path under /dev/null is a real folder path in
       # Git Bash on Windows, and job-level env cannot name the temp folder.
-      - name: Keep npm off the runner's global config
+      # The review action installs its packages with Bun, which reads a
+      # global .bunfig.toml from XDG_CONFIG_HOME when that is set and reuses
+      # a cached package without checking its hash again, so both start
+      # empty here.
+      - name: Keep npm and Bun off the runner's own config
         shell: bash
         run: |
           : > "$RUNNER_TEMP/empty-npmrc"
-          echo "NPM_CONFIG_GLOBALCONFIG=$RUNNER_TEMP/empty-npmrc" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/config" "$RUNNER_TEMP/bun-cache"
+          {
+            echo "NPM_CONFIG_GLOBALCONFIG=$RUNNER_TEMP/empty-npmrc"
+            echo "XDG_CONFIG_HOME=$RUNNER_TEMP/config"
+            echo "BUN_INSTALL_CACHE_DIR=$RUNNER_TEMP/bun-cache"
+          } >> "$GITHUB_ENV"
 
       # As in Project triggers: a full checkout starts from a fresh clone.
       - name: Drop a partial clone left by an earlier job
