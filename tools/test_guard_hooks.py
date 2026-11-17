@@ -156,6 +156,8 @@ class GuardHookTest(unittest.TestCase):
         refused = (("python - <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
                    ("cat <<EOF | python -\nre.compile('\\\\d')\nEOF", "Bash"),
                    ("python -c \"print('a\\\\b')\"", "Bash"), ("node -e \"console.log('a\\\\b')\"", "Bash"),
+                   ("python3 -c \"\nimport re\nprint(re.sub(r'\\\\s', '', x))\n\"", "Bash"),
+                   ("node -e \"\nconsole.log('a\\\\b')\n\"", "Bash"),
                    ("@'\nprint('C:\\\\x')\n'@ | python -", "PowerShell"), ("gh run watch 123", "Bash"),
                    ("python .github/scripts/size_check.py && git commit -qm x", "Bash"),
                    ("git push -u origin x && gh pr create --base develop", "Bash"),

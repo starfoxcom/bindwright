@@ -51,7 +51,7 @@ INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t
                     r"|(?:^|[\s;&|(])node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print)[ \t]+(['\"])(.*?)\3",
                     re.I | re.S)
 INLINE_CALL = re.compile(r"(?:^|[\s;&|(])(?:(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t]+-c"
-                         r"|node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print))[ \t]+''", re.I)
+                         r"|node(?:\.exe)?(?:[ \t]+-\S+)*?[ \t]+(?:-e|-p|--eval|--print))[ \t]+['\"]", re.I)
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
 # Comments, quoted strings and escapes as each shell reads them, in one pass across lines, so
@@ -78,11 +78,12 @@ def blanked(match):
 
 
 def as_quote(match):
-    """A quoted string as `''` and spaces, a comment or an escape as spaces, line ends kept, so
-    the text keeps its length and a call's position in it matches the original's."""
+    """A quoted string as its opening quote and spaces, a comment or an escape as spaces, line
+    ends kept, so the text keeps its length, a call's position in it matches the original's, and
+    the quote a script starts with stays where it is, whatever follows it."""
     spaces = blanked(match)
-    if match.group()[:1] in "'\"$" and spaces[:2] == "  ":
-        return "''" + spaces[2:]
+    if match.group()[:1] in "'\"":
+        return match.group()[0] + spaces[1:]
     return spaces
 
 
