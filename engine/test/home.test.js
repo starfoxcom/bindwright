@@ -366,6 +366,21 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
       assert.equal(after, replaced ? NEW : installed, label);
     });
   }
+  withHome((dir) => {
+    const file = styleFile(dir, NEW);
+    writeFileSync(join(dirname(file), "straight-talk.retired.json"), JSON.stringify({ sha256: [fingerprint(OLD)] }));
+    const kept = join(dir, "dotfiles-straight-talk.md");
+    writeFileSync(kept, OLD);
+    const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+    mkdirSync(dirname(target), { recursive: true });
+    try {
+      symlinkSync(kept, target, "file");
+    } catch {
+      return; // This machine cannot make file links (Windows without developer mode).
+    }
+    assert.deepEqual(home(dir, "update-style", file).out, { installed: target, state: "linked", replaced: false });
+    assert.equal(readFileSync(kept, "utf8"), OLD, "the file a link points to stays as it was");
+  });
   for (const sidecar of ["{", "[]", '{"sha256": "abc"}']) {
     withHome((dir) => {
       const file = styleFile(dir, NEW);

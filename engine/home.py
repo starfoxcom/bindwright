@@ -490,13 +490,16 @@ def _retired_fingerprints(file):
 
 
 def style_status(home, file):
-    """Whether the installed copy of the style `file` is missing, current, an earlier shipped copy, or edited."""
+    """Whether the installed copy of the style `file` is missing, current, an earlier shipped copy, edited,
+    or a link, which stays the user's: replacing it would cut it off from the file it points to."""
     name = os.path.basename(file)
     if not (name.endswith(".md") and os.path.isfile(file)):
         raise HomeError("Not an output style file (an existing .md file): " + file)
     target = os.path.normpath(os.path.join(_claude(home), "output-styles", name))
     if not os.path.exists(target):
         return {"installed": target, "state": "missing"}
+    if os.path.islink(target):
+        return {"installed": target, "state": "linked"}
     installed = _style_fingerprint(_read_style(target))
     if installed == _style_fingerprint(_read_style(file)):
         state = "current"
