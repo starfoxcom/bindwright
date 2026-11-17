@@ -40,13 +40,11 @@ SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids t
 # code is skipped. A check can miss a slip, but never report one made in code.
 # A run of three or more backticks or tildes, anywhere on a line.
 FENCE_RUN = re.compile(r"`{3,}|~{3,}")
-# A line that may be indented code: after any quote marks and a list marker, four spaces or a tab.
-MAY_BE_CODE = re.compile(r"(?: {0,3}> ?)*(?:(?:[-*+]|\d+[.)]) ?)?(?: {4}|[ ]*\t)")
-# A blank line, quote marks aside: it ends a paragraph, which no code span crosses.
+# What a line opens with before its text: spaces, tabs, quote marks and list markers, in any mix. Four
+# spaces or a tab in it may make the line indented code.
+LINE_PREFIX = re.compile(r"[ \t>*+\-\d.)]*")
+# A blank line, quote marks aside, ends a paragraph.
 PARAGRAPH_BREAK = re.compile(r"\n[ \t>]*\n")
-# An inline span closes on a backtick run of the same length as the one that opened it, anywhere in
-# its paragraph.
-INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.S)
 # (what the reminder names, pattern): each counts its matches in a reply, code taken out first.
 CHECKS = (
     # A label, not emphasis: a colon or a dash right after the bold.
@@ -198,8 +196,9 @@ def reset_count(session):
 
 
 def prose_of(reply):
-    """The reply's paragraphs that are surely prose: those before its first fence mark, with inline
-    spans taken out, less any with a line that may be indented code or a backtick the spans left."""
+    """The reply's paragraphs that are surely prose: those before its first fence mark that hold no
+    backtick at all and no line indented like code. A false slip costs more than a missed one, so
+    nothing that might be code is measured."""
     before_fence = []
     for line in reply.split("\n"):
         if FENCE_RUN.search(line):
@@ -207,11 +206,9 @@ def prose_of(reply):
         before_fence.append(line)
     kept = []
     for paragraph in PARAGRAPH_BREAK.split("\n".join(before_fence)):
-        if any(MAY_BE_CODE.match(line) for line in paragraph.split("\n")):
-            continue
-        prose = INLINE_CODE.sub("", paragraph)
-        if "`" not in prose:
-            kept.append(prose)
+        prefixes = [LINE_PREFIX.match(line).group() for line in paragraph.split("\n")]
+        if "`" not in paragraph and not any("    " in p or "\t" in p for p in prefixes):
+            kept.append(paragraph)
     return "\n\n".join(kept)
 
 

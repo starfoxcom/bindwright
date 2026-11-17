@@ -128,16 +128,19 @@ test("a subagent's tool calls are not counted", { skip }, () => withLayout((layo
 }));
 
 const SLIPPED = [
-  "## Done", "", "**Outcome:** it works — mostly — and basically holds.", "- **Next:** ship it",
-  // Inline code, emphasis, bold that ends a sentence, names an option or sits in a hyphenated word, two
-  // clauses, and code indented under a quote or on its own: none of it is a slip.
-  "Run `## x —` here, and ``a ` — b`` too.", "**Do not** run it yet.", "**Don't merge until CI is green.**",
-  "- **Merge now**", "Is that not just a typo? I checked but found nothing.", "**Ctrl**-C stops it.",
-  "- **Pre**-release builds come first.", "", "    echo \"a — b\"  # basically", ">     code — basically", "",
-  // Inline code wrapped over three lines, two wrapped spans meeting on a line, and code indented by a
-  // tab after spaces, after quote marks or after a list marker.
-  "Run `git log", "--format=%s — %an", "--no-merges` to see it.", "", "Use `a", "b — c` then `d", "e` ok.", "",
-  "  \ta — b", "", ">   \ta — b", "", "-     a — b", "", "Then it holds, essentially.",
+  "## Done", "", "**Outcome:** it works — mostly — and basically holds.", "- **Next:** ship it", "",
+  // Emphasis, bold that ends a sentence, names an option or sits in a hyphenated word, and two clauses:
+  // none of it is a slip.
+  "**Do not** run it yet.", "**Don't merge until CI is green.**", "- **Merge now**",
+  "Is that not just a typo? I checked but found nothing.", "**Ctrl**-C stops it.",
+  "- **Pre**-release builds come first.", "",
+  // A paragraph with any backtick, wrapped, escaped or stray, or with a line indented like code after
+  // any mix of spaces, tabs, quote marks and list markers, is not measured at all.
+  "Run `## x —` here, and ``a ` — b`` too.", "", "Run `git log", "--format=%s — %an", "--no-merges` to see it.", "",
+  "Wrap it in \\` like `a — b` with a closing \\`.", "", "- use ` to quote", "- run `a — b`", "- and ` again", "",
+  "    echo \"a — b\"  # basically", "", ">     code — basically", "", "  \ta — b", "", "-     a — b", "",
+  "  -     a — b", "", " 1.     basically", "", "- >     a — b", "", "- -     a — b", "",
+  "Then it holds, essentially.",
   // From the first fence mark on, nothing is measured, whatever the fences hold or wherever they end.
   "A fence opens with ``` on its own line.", "Prose — basically, **Note:** essentially.", "```md", "> ```",
   "> code — basically", "> ```", "```", "- **Note:** then — basically.",
