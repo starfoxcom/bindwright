@@ -69,9 +69,10 @@ test("the sweep removes only stale profiles", () => {
 });
 
 test("the process list reads a profile path with accents as written", async () => {
-  // A sleeping Node process stands in for a browser: only its command line matters.
+  // A Node process that runs until killed stands in for a browser: only its command line
+  // matters, and it outlives however long the process query takes.
   const folder = join(tmpdir(), "José Müller", `layout-check-${Date.now()}-Ab3dE9`);
-  const code = "setTimeout(() => {}, 20000)";
+  const code = "setInterval(() => {}, 1000)";
   const sleeper = spawn(process.execPath, ["-e", code, "--", `--user-data-dir=${folder}`], { stdio: "ignore" });
   try {
     await new Promise((done) => setTimeout(done, 500));
