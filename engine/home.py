@@ -14,6 +14,8 @@ Standard library, Python 3.8+.
     python engine/home.py add-mod DIR
     python engine/home.py add-agent FILE
     python engine/home.py add-style FILE      (copies the output style, turns it on)
+    python engine/home.py style-status FILE   (missing, current, older or edited)
+    python engine/home.py update-style FILE   (replaces an unedited earlier copy)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
     python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
@@ -37,6 +39,7 @@ a file that is not valid JSON, and writes through a temporary file, so a
 failed write never leaves half a settings file.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -461,6 +464,51 @@ def add_style(home, file):
     return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
 
 
+def _style_fingerprint(text):
+    return hashlib.sha256(text.lstrip("﻿").replace("\r\n", "\n").encode("utf-8")).hexdigest()
+
+
+def _read_style(file):
+    with open(file, encoding="utf-8-sig") as fh:
+        return fh.read()
+
+
+def _retired_fingerprints(file):
+    """The SHA-256 of each earlier shipped copy of the style `file`, kept beside it in <name>.retired.json."""
+    sidecar = os.path.splitext(file)[0] + ".retired.json"
+    if not os.path.isfile(sidecar):
+        return set()
+    with open(sidecar, encoding="utf-8") as fh:
+        return set(json.load(fh).get("sha256", []))
+
+
+def style_status(home, file):
+    """Whether the installed copy of the style `file` is missing, current, an earlier shipped copy, or edited."""
+    name = os.path.basename(file)
+    if not (name.endswith(".md") and os.path.isfile(file)):
+        raise HomeError("Not an output style file (an existing .md file): " + file)
+    target = os.path.normpath(os.path.join(_claude(home), "output-styles", name))
+    if not os.path.exists(target):
+        return {"installed": target, "state": "missing"}
+    installed = _style_fingerprint(_read_style(target))
+    if installed == _style_fingerprint(_read_style(file)):
+        state = "current"
+    elif installed in _retired_fingerprints(file):
+        state = "older"
+    else:
+        state = "edited"
+    return {"installed": target, "state": state}
+
+
+def update_style(home, file):
+    """Replaces an earlier shipped copy of the style `file` with it; a copy with the user's edits stays."""
+    status = style_status(home, file)
+    replaced = status["state"] == "older"
+    if replaced:
+        _atomic_write(status["installed"], _read_style(file))
+    return dict(status, replaced=replaced)
+
+
 def _plain_name(name, kind):
     """`name` when it is one file or folder name, never a path; refused otherwise."""
     if not name or name in (".", "..") or "/" in name or "\\" in name or ":" in name:
@@ -623,6 +671,8 @@ NAMED_COMMANDS = {
     "add-mod": add_mod,
     "add-agent": add_agent,
     "add-style": add_style,
+    "style-status": style_status,
+    "update-style": update_style,
     "remove-mod": remove_mod,
     "remove-agent": remove_agent,
     "remove-style": remove_style,

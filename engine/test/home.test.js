@@ -7,6 +7,7 @@ import {
   chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { delimiter, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -335,6 +336,51 @@ test("add-style refuses a missing, non-markdown or unnamed file, and writes noth
     }
     assert.ok(!existsSync(join(dir, ".claude")));
   });
+});
+
+const fingerprint = (text) => createHash("sha256").update(text.replaceAll("\r\n", "\n")).digest("hex");
+
+test("update-style replaces only an unedited earlier shipped copy", { skip }, () => {
+  const OLD = "---\nname: Straight Talk\n---\nBe short.\n";
+  const NEW = "---\nname: Straight Talk\n---\nBe short and sound like a person.\n";
+  const cases = [
+    ["nothing installed", null, "missing", false],
+    ["the current text", NEW, "current", false],
+    ["the current text with CRLF line endings", NEW.replaceAll("\n", "\r\n"), "current", false],
+    ["an earlier shipped copy", OLD, "older", true],
+    ["an earlier shipped copy with CRLF line endings", OLD.replaceAll("\n", "\r\n"), "older", true],
+    ["a copy with the user's edits", "---\nname: Straight Talk\n---\nBe short. Mine.\n", "edited", false],
+  ];
+  for (const [label, installed, state, replaced] of cases) {
+    withHome((dir) => {
+      const file = styleFile(dir, NEW);
+      writeFileSync(join(dirname(file), "straight-talk.retired.json"), JSON.stringify({ sha256: [fingerprint(OLD)] }));
+      const target = join(dir, ".claude", "output-styles", "straight-talk.md");
+      if (installed !== null) {
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, installed);
+      }
+      assert.deepEqual(home(dir, "style-status", file).out, { installed: target, state }, label);
+      assert.deepEqual(home(dir, "update-style", file).out, { installed: target, state, replaced }, label);
+      const after = installed === null ? null : readFileSync(target, "utf8");
+      assert.equal(after, replaced ? NEW : installed, label);
+    });
+  }
+});
+
+test("every earlier version of the shipped reply style is listed as retired", {
+  skip: spawnSync("git", ["rev-parse", "--is-shallow-repository"], { encoding: "utf8" }).stdout.trim() !== "false"
+    && "needs the repo's full history",
+}, () => {
+  const path = "_core/global-template/output-styles/straight-talk.md";
+  const root = join(engine, "..");
+  const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" }).stdout;
+  const current = fingerprint(readFileSync(join(root, path), "utf8"));
+  const earlier = git("log", "--format=%H", "--", path).trim().split("\n")
+    .map((rev) => fingerprint(git("show", `${rev}:./${path}`)))
+    .filter((print) => print !== current);
+  const retired = JSON.parse(readFileSync(join(root, path.replace(/\.md$/, ".retired.json")), "utf8")).sha256;
+  assert.deepEqual(earlier.filter((print) => !retired.includes(print)), []);
 });
 
 test("a settings file that is not valid JSON is never written", { skip }, () => {
