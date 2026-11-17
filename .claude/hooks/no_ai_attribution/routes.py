@@ -1,4 +1,5 @@
 """The attribution guard's hook routes: commands that skip or change the hooks git runs."""
+import functools
 import itertools
 import re
 from .shell import WRAPPERS, program, shape_of, text_of
@@ -185,18 +186,22 @@ def names_no_subcommand_after(words, k):
     return following is None or following.startswith("-")
 
 
-def runs_program_at(words, i, j=0):
-    """Whether words[i] may be the program the command at words[j] runs, in any reading: itself,
-    or one after RUNNERS (`sudo -u root`, `env A=1`, `timeout 30`), each read the same way. A word
-    only named as an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not,
-    and neither is one behind a program outside RUNNERS."""
-    if j == i:
-        return True
-    if program(words[j:]) not in RUNNERS:
-        return False
-    if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
-        return False
-    return any(runs_program_at(words, i, k) for k in program_starts(words, j, i))
+def runs_program_at(words, i):
+    """Whether words[i] may be the program the command runs, in any reading: itself, or one after
+    RUNNERS (`sudo -u root`, `env A=1`, `timeout 30`), each read the same way. A word only named as
+    an argument (`grep git "$f"`, `cp "$src/.git" "$dst"`, `command -v git`) is not, and neither
+    is one behind a program outside RUNNERS. Each place a program may start is walked once, so a
+    long chain of runners (`sudo -E sudo -E ...`) stays fast."""
+    @functools.cache
+    def reaches(j):
+        if j == i:
+            return True
+        if program(words[j:]) not in RUNNERS:
+            return False
+        if program(words[j:]) == "command" and only_looks_up(words[j + 1:i]):
+            return False
+        return any(reaches(k) for k in program_starts(words, j, i))
+    return reaches(0)
 
 
 def program_starts(words, j, i):
