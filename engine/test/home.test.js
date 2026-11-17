@@ -350,6 +350,8 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
     ["an earlier shipped copy", OLD, "older", true],
     ["an earlier shipped copy with CRLF line endings", OLD.replaceAll("\n", "\r\n"), "older", true],
     ["a copy with the user's edits", "---\nname: Straight Talk\n---\nBe short. Mine.\n", "edited", false],
+    ["an edited copy saved as Windows-1252",
+      Buffer.from("---\nname: Straight Talk\n---\nBe short, se\xf1or.\n", "latin1"), "edited", false],
   ];
   for (const [label, installed, state, replaced] of cases) {
     withHome((dir) => {
@@ -362,8 +364,8 @@ test("update-style replaces only an unedited earlier shipped copy", { skip }, ()
       }
       assert.deepEqual(home(dir, "style-status", file).out, { installed: target, state }, label);
       assert.deepEqual(home(dir, "update-style", file).out, { installed: target, state, replaced }, label);
-      const after = installed === null ? null : readFileSync(target, "utf8");
-      assert.equal(after, replaced ? NEW : installed, label);
+      const after = installed === null ? null : readFileSync(target);
+      assert.deepEqual(after, installed === null ? null : Buffer.from(replaced ? NEW : installed), label);
     });
   }
   withHome((dir) => {

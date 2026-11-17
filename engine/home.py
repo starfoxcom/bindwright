@@ -464,8 +464,14 @@ def add_style(home, file):
     return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
 
 
-def _style_fingerprint(text):
-    return hashlib.sha256(text.lstrip("﻿").replace("\r\n", "\n").encode("utf-8")).hexdigest()
+def _style_fingerprint(file):
+    """The SHA-256 of a style file's bytes with a UTF-8 BOM and CRLF line endings taken out. The bytes are
+    never decoded, so a copy in any other encoding reads as edited instead of failing."""
+    with open(file, "rb") as fh:
+        data = fh.read()
+    if data.startswith(b"\xef\xbb\xbf"):
+        data = data[3:]
+    return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _read_style(file):
@@ -500,8 +506,8 @@ def style_status(home, file):
         return {"installed": target, "state": "missing"}
     if os.path.islink(target):
         return {"installed": target, "state": "linked"}
-    installed = _style_fingerprint(_read_style(target))
-    if installed == _style_fingerprint(_read_style(file)):
+    installed = _style_fingerprint(target)
+    if installed == _style_fingerprint(file):
         state = "current"
     elif installed in _retired_fingerprints(file):
         state = "older"
