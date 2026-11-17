@@ -33,6 +33,7 @@ class LongInputTest(unittest.TestCase):
         folder = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         self.rules.OBSERVED_LOG = os.path.join(folder, "observed.jsonl")
+        self.rules.GIT_BASH = True
         self.attribution = load("no_ai_attribution_hook", os.path.join(HOOKS, "no-ai-attribution.py"))
         self.version = load("version_check", os.path.join(PROJECT_HOOKS, "version-check.py"))
 
@@ -43,6 +44,11 @@ class LongInputTest(unittest.TestCase):
              "gh pr create --body " + "x" * 40000),
             ("tool rules: PowerShell here-strings that never close", lambda t: self.rules.refusal(t, "powershell"),
              "@'\n" * 6000),
+            ("tool rules: a here-document full of `(`", lambda t: self.rules.refusal(t, "bash"),
+             "cat <<EOF\n" + "(" * 100000 + "\nEOF"),
+            *[(f"tool rules: one line of repeated `{word}`", lambda t: self.rules.refusal(t, "bash"),
+               (word + " ") * (100000 // len(word)))
+              for word in ("gh pr merge", "gh run rerun", "git stash", "gh pr create", "git show")],
             ("attribution: one line of repeated `gh pr`", self.attribution.routes_in, "gh pr " * 3000),
             ("attribution: one line of repeated `git config`", self.attribution.routes_in, "git config " * 2000),
             ("attribution: a long separator run after `made by`", scan, "made by" + " " * 20000 + "x"),
