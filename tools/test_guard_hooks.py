@@ -1288,12 +1288,14 @@ class RunnerChainSweepTest(unittest.TestCase):
         return [self.rng.choice(self.GITS), self.rng.choice(self.GIT_OPTIONS)]
 
     def routes(self, commands):
-        """The guard's route for each command, all read in one parser call."""
+        """The guard's route for each command, all read in one parser call. The input goes as bytes,
+        as the guard sends it: a text pipe on Windows would turn each LF into CR LF."""
         if not shutil.which("node"):
             self.skipTest("the parser needs Node")
         result = subprocess.run(["node", os.path.join(HELPER, "hooks", "shell-words.mjs"), "bash"],
-                                input="\n".join(commands), capture_output=True, text=True, timeout=60)
+                                input="\n".join(commands).encode("utf-8"), capture_output=True, timeout=60)
         parsed = json.loads(result.stdout)
+        self.assertFalse(parsed["error"], f"seed {self.seed}")
         self.assertEqual(len(parsed["commands"]), len(commands), f"seed {self.seed}")
         return [self.hook_route([([words], None, None)], [], only_built=True) for words in parsed["commands"]]
 
