@@ -205,10 +205,10 @@ Code with no remaining caller is deleted in the same PR that orphaned it. Check 
 ## Definition of done
 
 <!-- TOGGLE:ci_checks:off START -->
-A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient.
+A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient. When `.claude/skills/verify/SKILL.md` exists, run `/verify` before each commit of a change people can see or use.
 <!-- TOGGLE:ci_checks:off END -->
 <!-- TOGGLE:ci_checks START -->
-A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient.
+A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient. When `.claude/skills/verify/SKILL.md` exists, run `/verify` before each commit of a change people can see or use.
 <!-- TOGGLE:ci_checks END -->
 
 <!-- TOGGLE:precommit_hooks_scaffold START -->
