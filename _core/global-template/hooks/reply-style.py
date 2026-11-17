@@ -35,13 +35,18 @@ INTRO = ("The reply style in use, {name}, restated here so it is the last thing 
 # The style the checks below measure: the one Bindwright ships. Other styles get no checks.
 CHECKED_STYLE = "straight talk"
 SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids them: "
-FENCE = re.compile(r"^\s*(```|~~~).*?^\s*\1", re.M | re.S)
-INLINE_CODE = re.compile(r"`[^`\n]*`")
+# A fence opens with three or more backticks or tildes; only a line of the same mark, at least as long,
+# closes it, as in CommonMark.
+FENCE_LINE = re.compile(r"[ \t]{0,3}(`{3,}|~{3,})")
+# An inline span closes on a backtick run of the same length as the one that opened it.
+INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)[^\n]+?(?<!`)\1(?!`)")
 # (what the reminder names, pattern): each counts its matches in a reply, code taken out first.
 CHECKS = (
     ("a heading", re.compile(r"^#{1,6}\s", re.M)),
+    # A label, not emphasis: a colon or dash right after it, or the bold alone on its line.
     ("a bold label at the start of a line or list item",
-     re.compile(r"^[ \t]*(?:[-*+][ \t]+|\d+[.)][ \t]+)?\*\*[^*\n]+\*\*", re.M)),
+     re.compile("^[ \\t]*(?:[-*+][ \\t]+|\\d+[.)][ \\t]+)?\\*\\*[^*\\n]+"
+                "(?::\\*\\*|\\*\\*[ \\t]*(?:[:\u2014\u2013-]|$))", re.M)),
     ("an em dash", re.compile("—")),
     ('"essentially"', re.compile(r"\bessentially\b", re.I)),
     ('"basically"', re.compile(r"\bbasically\b", re.I)),
@@ -185,9 +190,24 @@ def reset_count(session):
             pass
 
 
+def prose_of(reply):
+    """The reply without its code: fenced blocks (an unclosed one runs to the end) and inline spans."""
+    kept, fence = [], None
+    for line in reply.split("\n"):
+        opener = FENCE_LINE.match(line)
+        if fence is None and opener:
+            fence = opener.group(1)
+        elif fence is None:
+            kept.append(line)
+        elif opener and opener.group(1)[0] == fence[0] and len(opener.group(1)) >= len(fence) \
+                and not line[opener.end():].strip():
+            fence = None
+    return INLINE_CODE.sub("", "\n".join(kept))
+
+
 def slips_in(reply):
     """What the reply broke of the checked style's measurable rules, each with its count."""
-    prose = INLINE_CODE.sub("", FENCE.sub("", reply))
+    prose = prose_of(reply)
     found = [(label, len(pattern.findall(prose))) for label, pattern in CHECKS]
     return ["{} ({})".format(label, count) if count > 1 else label for label, count in found if count]
 
@@ -252,7 +272,10 @@ def main():
         if name.lower() == CHECKED_STYLE and isinstance(reply, str):
             record_slips(session, reply)
         return
-    context = INTRO.format(name=name) + body + (SLIPS_INTRO + slips if slips else "")
+    # Slips are named only under the style they were measured against: another style may allow them.
+    if slips and name.lower() == CHECKED_STYLE:
+        body += SLIPS_INTRO + slips
+    context = INTRO.format(name=name) + body
     print(json.dumps({"hookSpecificOutput": {"hookEventName": kind, "additionalContext": context}}))
 
 

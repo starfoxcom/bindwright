@@ -129,7 +129,9 @@ test("a subagent's tool calls are not counted", { skip }, () => withLayout((layo
 
 const SLIPPED = [
   "## Done", "", "**Outcome:** it works — mostly — and basically holds.", "- **Next:** ship it",
-  "```", "## code, — basically", "```", "Run `## x —` here.",
+  "```", "## code, — basically", "```", "Run `## x —` here, and ``a ` — b`` too.", "**Do not** run it yet.",
+  // A fence shown inside a longer one, then a reply cut off inside a fence: all of it code.
+  "````md", "```py", "# x —", "```", "````", "~~~", "# cut off —",
 ].join("\n");
 const finished = (reply) => ({ hook_event_name: "Stop", session_id: "s-1", last_assistant_message: reply });
 
@@ -147,8 +149,14 @@ test("what a finished reply broke comes with the next prompt, once", { skip }, (
   assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
 }));
 
-test("replies under another style are not measured", { skip }, () => withLayout((layout) => {
+test("replies under another style are not measured, nor named after a switch", { skip }, () => withLayout((layout) => {
   run(layout, finished(SLIPPED));
+  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+  const straight = join(layout.home, ".claude", "output-styles", "straight.md");
+  writeFileSync(straight, "---\nname: Straight Talk\n---\nPlain.\n");
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Straight Talk" }));
+  run(layout, finished(SLIPPED));
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Plain Speech" }));
   assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
 }));
 
