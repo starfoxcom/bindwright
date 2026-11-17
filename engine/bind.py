@@ -65,6 +65,8 @@ OWN = ".bindwright/"
 # each one only with consent; the zip fallback leaves them to the reader.
 GLOBAL = ".bindwright/global/"
 GLOBAL_CORE = "_core/global-template/"
+# The attribution guard's modules, which ship beside its hook file.
+GUARD_PACKAGE = [f"hooks/no_ai_attribution/{m}.py" for m in ("__init__", "files", "routes", "shell")]
 
 # Setup's own state, which the repo keeps for /bindwright:update: the answers
 # as given, and the render they produced (the base of a three-way merge, so
@@ -96,6 +98,9 @@ def _included(path, a, flags):
         return False
     if path.startswith(".claude/rules/architecture/"):
         return False
+    # The attribution guard's package ships with its hook file.
+    if path.startswith(".claude/hooks/no_ai_attribution/"):
+        path = ".claude/hooks/no-ai-attribution.py"
     # Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
     # `.template` sources match too; the scripts and the size-check folder run anywhere.
     if not flags["code_host_github"] and path.startswith(GITHUB_ONLY):
@@ -133,7 +138,10 @@ def _included(path, a, flags):
         ".github/review-guide.md.template": gate,
         ".claude/hooks/run-hook.sh": flags["guard_hooks_repo"],
         ".claude/hooks/push-guard.py": flags["guard_hooks_repo"],
+        ".claude/hooks/tool-rules.py": flags["guard_hooks_repo"],
         ".claude/hooks/no-ai-attribution.py": flags["guard_hooks_repo"] and flags["attribution_guard"],
+        ".github/scripts/version_check.py": flags["version_check"],
+        ".claude/hooks/version-check.py": flags["guard_hooks_repo"] and flags["version_check"],
         ".gitattributes": flags["guard_hooks_repo"],
     }
     return by_file.get(path, True)
@@ -178,7 +186,8 @@ def plan_files(answers, core_files, precommit_profiles):
         })
     if adv["precommit"] != "none":
         profile = precommit_profiles[adv["precommit"]]
-        plan.append({"src": CORE + profile["template_ref"], "dest": profile["config_filename"]})
+        for file in [profile] + profile.get("extra_files", []):
+            plan.append({"src": CORE + file["template_ref"], "dest": file["config_filename"]})
     return sorted(plan, key=lambda f: _code_units(f["dest"]))
 
 
@@ -197,12 +206,14 @@ def _global_files(a, ctx, read_file):
         ["CLAUDE.md.additions", render("CLAUDE.md.additions")],
         ["memory/MEMORY.md", render("memory-template/MEMORY.md")],
         ["hooks/push-guard.py", verbatim("hooks/push-guard.py")],
+        ["hooks/tool-rules.py", verbatim("hooks/tool-rules.py")],
         ["hooks/session-title.py", verbatim("hooks/session-title.py")],
+        ["hooks/reply-style.py", verbatim("hooks/reply-style.py")],
         ["agents/builder.md", verbatim("agents/builder.md")],
         ["output-styles/straight-talk.md", verbatim("output-styles/straight-talk.md")],
     ]
     if not ctx["flags"]["guard_hooks_repo"] and ctx["flags"]["attribution_guard"]:
-        out.append(["hooks/no-ai-attribution.py", verbatim("hooks/no-ai-attribution.py")])
+        out += [[p, verbatim(p)] for p in ["hooks/no-ai-attribution.py"] + GUARD_PACKAGE]
     profiles = json.loads(read_file(GLOBAL_CORE + "hooks/code-research-profiles.json"))
     hook = profiles[a["advanced"]["codeResearch"]]["hook"]
     if hook["source"] == "bindwright" and not brings_own_hook(a["advanced"]):

@@ -1,0 +1,3 @@
+# Husky pre-push hook: the tests run before each push, so commits stay fast.
+# https://typicode.github.io/husky
+{{TEST_COMMAND}}

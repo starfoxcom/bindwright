@@ -1,5 +1,10 @@
 {
+<!-- TOGGLE:code_size_check START -->
+  "pre-commit": "{{LINT_COMMAND}} && {{TYPECHECK_COMMAND}} && { for py in python3 python py; do \"$py\" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null && exec \"$py\" .github/scripts/size_check.py; done; echo 'size check: no Python 3.8 or later found' >&2; exit 1; }",
+<!-- TOGGLE:code_size_check END -->
+<!-- TOGGLE:code_size_check:off START -->
   "pre-commit": "{{LINT_COMMAND}} && {{TYPECHECK_COMMAND}}",
-  "commit-msg": "grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\\([a-z0-9_-]+\\))?: .{1,72}$' \"$1\" || { echo 'Commit message must follow: <type>(<scope>): <imperative description> - see .claude/rules/git.md'; exit 1; }",
+<!-- TOGGLE:code_size_check:off END -->
+  "commit-msg": "grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\\([a-z0-9_-]+\\))?!?: .{1,72}$' \"$1\" || { echo 'Commit message must follow: <type>(<scope>): <imperative description> - see .claude/rules/git.md'; exit 1; }",
   "pre-push": "{{TEST_COMMAND}}"
 }

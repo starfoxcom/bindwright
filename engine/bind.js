@@ -31,6 +31,8 @@ const OWN = ".bindwright/";
 // each one only with consent; the zip fallback leaves them to the reader.
 export const GLOBAL = ".bindwright/global/";
 const GLOBAL_CORE = "_core/global-template/";
+// The attribution guard's modules, which ship beside its hook file.
+export const GUARD_PACKAGE = ["__init__", "files", "routes", "shell"].map((m) => `hooks/no_ai_attribution/${m}.py`);
 
 // Setup's own state, which the repo keeps for /bindwright:update: the answers
 // as given, and the render they produced (the base of a three-way merge, so
@@ -52,6 +54,8 @@ function included(path, a, flags) {
   const github = adv.tracker === "github";
   if (path.startsWith("precommit/")) return false;
   if (path.startsWith(".claude/rules/architecture/")) return false;
+  // The attribution guard's package ships with its hook file.
+  if (path.startsWith(".claude/hooks/no_ai_attribution/")) path = ".claude/hooks/no-ai-attribution.py";
   // Without GitHub, nothing GitHub-hosted ships. Prefixes, so the review gate's
   // `.template` sources match too; the scripts and the size-check folder run anywhere.
   if (!flags.code_host_github && GITHUB_ONLY.some((p) => path.startsWith(p))) return false;
@@ -87,7 +91,10 @@ function included(path, a, flags) {
     ".github/review-guide.md.template": gate,
     ".claude/hooks/run-hook.sh": flags.guard_hooks_repo,
     ".claude/hooks/push-guard.py": flags.guard_hooks_repo,
+    ".claude/hooks/tool-rules.py": flags.guard_hooks_repo,
     ".claude/hooks/no-ai-attribution.py": flags.guard_hooks_repo && flags.attribution_guard,
+    ".github/scripts/version_check.py": flags.version_check,
+    ".claude/hooks/version-check.py": flags.guard_hooks_repo && flags.version_check,
     ".gitattributes": flags.guard_hooks_repo,
   };
   return path in byFile ? byFile[path] : true;
@@ -126,7 +133,9 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
   }
   if (a.advanced.precommit !== "none") {
     const profile = precommitProfiles[a.advanced.precommit];
-    plan.push({ src: CORE + profile.template_ref, dest: profile.config_filename });
+    for (const file of [profile, ...(profile.extra_files ?? [])]) {
+      plan.push({ src: CORE + file.template_ref, dest: file.config_filename });
+    }
   }
   // Plain code-unit order: localeCompare depends on the browser's locale,
   // and the Python twin sorts the same way.
@@ -144,12 +153,14 @@ async function globalFiles(a, ctx, readFile) {
     ["CLAUDE.md.additions", await render("CLAUDE.md.additions")],
     ["memory/MEMORY.md", await render("memory-template/MEMORY.md")],
     ["hooks/push-guard.py", await verbatim("hooks/push-guard.py")],
+    ["hooks/tool-rules.py", await verbatim("hooks/tool-rules.py")],
     ["hooks/session-title.py", await verbatim("hooks/session-title.py")],
+    ["hooks/reply-style.py", await verbatim("hooks/reply-style.py")],
     ["agents/builder.md", await verbatim("agents/builder.md")],
     ["output-styles/straight-talk.md", await verbatim("output-styles/straight-talk.md")],
   ];
   if (!ctx.flags.guard_hooks_repo && ctx.flags.attribution_guard) {
-    out.push(["hooks/no-ai-attribution.py", await verbatim("hooks/no-ai-attribution.py")]);
+    for (const p of ["hooks/no-ai-attribution.py", ...GUARD_PACKAGE]) out.push([p, await verbatim(p)]);
   }
   const profiles = JSON.parse(await readFile(`${GLOBAL_CORE}hooks/code-research-profiles.json`));
   const hook = profiles[a.advanced.codeResearch].hook;

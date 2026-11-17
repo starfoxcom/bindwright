@@ -94,8 +94,42 @@ test("every pre-commit manager lands its config file", async () => {
     a.advanced.precommit = pc;
     const files = await run(a);
     assertClean(files);
-    const config = profiles[pc].config_filename;
-    assert.ok(files.has(config), `${pc} config ${config} missing`);
+    for (const { config_filename: config } of [profiles[pc], ...(profiles[pc].extra_files ?? [])]) {
+      assert.ok(files.has(config), `${pc} config ${config} missing`);
+    }
+  }
+});
+
+// Every file a manager's profile writes, joined: husky keeps one git hook per file.
+function managerConfig(files, profile) {
+  return [profile, ...(profile.extra_files ?? [])].map((f) => files.get(f.config_filename)).join("\n");
+}
+
+// The commit-message rule each manager's config carries, unescaped from its JSON or YAML string.
+function commitMessageRule(config) {
+  const start = config.indexOf("^(feat|");
+  const end = config.indexOf(".{1,72}$", start) + ".{1,72}$".length;
+  return new RegExp(config.slice(start, end).replace(/\\\\/g, "\\"));
+}
+
+test("every manager's commit check takes the breaking marker, and runs the size check with it on", async () => {
+  const profiles = JSON.parse(await readFile("_core/project-template/precommit/precommit-profiles.json"));
+  for (const pc of PRECOMMIT_MANAGERS) {
+    for (const codeSizeCheck of [true, false]) {
+      const a = defaults({ team: true });
+      Object.assign(a.advanced, { precommit: pc, codeSizeCheck });
+      const config = managerConfig(await run(a), profiles[pc]);
+      const rule = commitMessageRule(config);
+      for (const message of ["feat!: drop the flag", "fix(api)!: rename it", "fix: keep the queue"]) {
+        assert.ok(rule.test(message), `${pc}: ${message} refused`);
+      }
+      for (const message of ["wip: stuff", "feat!!: x", "feat(api): "]) {
+        assert.ok(!rule.test(message), `${pc}: ${message} accepted`);
+      }
+      assert.equal(config.includes(".github/scripts/size_check.py"), codeSizeCheck, `${pc}: size check`);
+      // Stock macOS and Debian have no `python`, only `python3`.
+      assert.ok(!config.includes("python .github/"), `${pc}: the size check needs a Python lookup`);
+    }
   }
 });
 
@@ -971,11 +1005,12 @@ test("guard hooks and settings follow the hook location and the attribution guar
       if (repoHooks) {
         const commands = settings.hooks.PreToolUse.flatMap((e) => e.hooks.map((h) => h.command));
         assert.deepEqual(commands.map((c) => c.match(/exec sh "\$0" ([\w-]+)'/)[1]),
-          attributionGuard ? ["no-ai-attribution", "push-guard"] : ["push-guard"], label);
+          attributionGuard ? ["no-ai-attribution", "push-guard", "tool-rules"] : ["push-guard", "tool-rules"], label);
         for (const c of commands) assert.ok(c.includes("${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh"), label);
       }
       assert.equal(files.has(".claude/hooks/run-hook.sh"), repoHooks, `${label}: launcher`);
       assert.equal(files.has(".claude/hooks/push-guard.py"), repoHooks, `${label}: push guard`);
+      assert.equal(files.has(".claude/hooks/tool-rules.py"), repoHooks, `${label}: tool rules`);
       assert.equal(files.has(".claude/hooks/no-ai-attribution.py"), repoHooks && attributionGuard, `${label}: attribution guard`);
       assert.equal(files.has(`${STAGING}.gitattributes`), repoHooks, `${label}: .gitattributes`);
       if (repoHooks) assert.match(files.get(`${STAGING}.gitattributes`), /^\*\.sh text eol=lf$/m, label);
@@ -989,11 +1024,11 @@ test("guard hooks and settings follow the hook location and the attribution guar
 
 test("shipped guard hooks match this repo's live copies byte for byte", () => {
   const read = (p) => readFileSync(join(repo, p));
-  for (const name of ["run-hook.sh", "push-guard.py", "no-ai-attribution.py"]) {
+  for (const name of ["run-hook.sh", "push-guard.py", "tool-rules.py", "no-ai-attribution.py"]) {
     assert.ok(read(`_core/project-template/.claude/hooks/${name}`).equals(read(`.claude/hooks/${name}`)),
       `_core/project-template/.claude/hooks/${name} differs from .claude/hooks/${name}`);
   }
-  for (const name of ["push-guard.py", "no-ai-attribution.py"]) {
+  for (const name of ["push-guard.py", "tool-rules.py", "no-ai-attribution.py"]) {
     assert.ok(read(`_core/global-template/hooks/${name}`).equals(read(`.claude/hooks/${name}`)),
       `_core/global-template/hooks/${name} differs from .claude/hooks/${name}`);
   }

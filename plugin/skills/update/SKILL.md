@@ -21,6 +21,8 @@ Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROO
 
 First say what the releases changed: run the engine with `--releases-since <repo root>`. It reads only the plugin's own changelog, never the repo's `CHANGELOG.md`, and prints `{"from": "<bound version>", "to": "<plugin version>", "releases": [{"version", "date", "text"}, ...]}`, newest first. When `releases` holds any, open with a plain summary of each release in the range, newest first and a few short lines each: what is new, what changed and what was fixed, then anything the user may want to act on, such as a new setup answer to consider or a behaviour that now works differently. When it holds an `unavailable` reason, say in one line that the summary is not available and why, and go on.
 
+When `.bindwright/project.json` holds no `versioning` under `advanced`, the repo was set up before setup asked how releases are numbered. Ask it now, as setup's "How releases are numbered" step says (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3): find the numbering the project uses, then offer to enforce it, or recommend one by what the project is. Write the answer into `advanced` in `.bindwright/project.json` (`"versioning"`, and `"versionFormat"` for calendar versions, `null` otherwise) before the update runs, so it writes the check; a no saves `"versioning": "none"`, so later updates do not ask again.
+
 When `advanced.localOnly` is true in `.bindwright/project.json`, first refresh the exclude list: run the engine with `--local-exclude <repo root>`, passing that file on standard input, so a file the new version adds for the assistant stays out of commits from its first write. Name any `tracked` path it prints, as setup does.
 
 Run it with `--update <repo root>`. It prints one line of JSON:
@@ -70,11 +72,15 @@ Then check that `.claude/settings.local.json`, the personal file that holds the 
 
 Then, when `~/.claude/settings.json` lists the tasks mod in `env.CLAUDE_CODE_PLUGIN_DIRS` and its `env` does not set `CLAUDE_CODE_ENABLE_TODO_TOOLS` to `"1"`, a setup before 5.2.1 installed it: say that the mod answers Claude Code's task tools, which current models hide without that line, so it does nothing until `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` is added to that `env` block, and that it takes effect at the next start of Claude Code. Do not edit the file.
 
-## 6. Review counts
+## 6. Skill contracts
+
+When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, build this project's contracts from the example file the way setup's "Mods in this project" says, and compare them with this repo folder's key in `~/.claude/skill-contracts.json`. When the key is missing or its steps differ, show what changes and write it on a yes, keeping every other key.
+
+## 7. Review counts
 
 When Node is there and `node "<helper>/hooks/counts.mjs" status` shows `"share": true` with no entry for this repo root, this repo was set up before sharing was turned on. Ask setup's "What kind of project is this?" question (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`, step 3) with its "leave this project out" option, and its batch question when the history check calls for it, and save the answers the same way.
 
-## 7. Finish
+## 8. Finish
 
 Tell the user, in plain words and grouped by kind (rules, skills, hooks, workflows, docs) rather than file by file: what was updated, what merged, what they settled, what was added or removed, and anything left unsettled in `.bindwright/incoming/`.
 

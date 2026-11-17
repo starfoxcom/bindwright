@@ -4,3 +4,5 @@
 *.sh text eol=lf
 # Vendored parser files are kept byte for byte: helper/parsers/SOURCE.md records their SHA-256.
 helper/parsers/** -text
+# Husky hooks are shell scripts too.
+_core/project-template/precommit/husky-*.template text eol=lf

@@ -75,7 +75,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       </li>
       <li class="setting" id="s-push-guard">
         <h3 data-t="settings.push-guard.title">Push guard</h3>
-        <p data-t="settings.push-guard.text">Blocks force pushes in every repo on your computer.</p>
+        <p data-t="settings.push-guard.text">Blocks force pushes and banned shell commands in every repo on your computer.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.push-guard.value">Yes</b></span>
       </li>
       <li class="setting" id="s-session-title">
@@ -243,6 +243,16 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <p data-t="settings.board-visibility.text">The board holds every engineering detail. A clean public copy is optional.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.board-visibility.value">Private</b></span>
       </li>
+      <li class="setting" id="s-version-check">
+        <h3 data-t="settings.version-check.title">Version check</h3>
+        <p data-t="settings.version-check.text">Before a release is tagged, checks its version against the commits since the last one, as semver, alpha, beta and rc builds included, or calver numbers it. none adds no check.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.version-check.value">The repo's own, or one that fits</b></span>
+      </li>
+      <li class="setting" id="s-pre-commit">
+        <h3 data-t="settings.pre-commit.title">Pre-commit hook</h3>
+        <p data-t="settings.pre-commit.text"><a href="https://github.com/evilmartians/lefthook">lefthook</a> runs the lint, the type check and the size check before each commit, and the tests before each push. Strongly recommended where no CI runs.</p>
+        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.pre-commit.value">Recommended on</b></span>
+      </li>
     </ul>
     <!-- /settings:project -->
   </section>
@@ -271,11 +281,6 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <h3 data-t="settings.merge-style.title">Merge style</h3>
         <p data-t="settings.merge-style.text">Each branch stays visible in the history.</p>
         <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.merge-style.value">Merge commits</b></span>
-      </li>
-      <li class="setting" id="s-pre-commit">
-        <h3 data-t="settings.pre-commit.title">Pre-commit hook</h3>
-        <p data-t="settings.pre-commit.text">A team gets <a href="https://github.com/evilmartians/lefthook">lefthook</a>, which runs checks before each commit.</p>
-        <span class="setting-value"><span class="setting-label" data-t="settings.default">Default</span> <b data-t="settings.pre-commit.value">Team only</b></span>
       </li>
       <li class="setting" id="s-guard-location">
         <h3 data-t="settings.guard-location.title">Where the guards live</h3>

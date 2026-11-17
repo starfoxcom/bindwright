@@ -2,11 +2,11 @@
 // and this machine. Each check says what it found and, when something is
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
-import { accessSync, constants, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { delimiter, isAbsolute, join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
-import { MODS, readLayerFile, runSettings } from "./layers.js";
+import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
 import { decode } from "./update.js";
 
 // What to do about each finding, in plain words.
@@ -30,6 +30,9 @@ const FIX = {
 
 // The first CLI with mods; older ones load none of them.
 export const MODS_SINCE = [2, 1, 287];
+// The first CLI that honours a hook's `onFailure: block`; on older ones a guard that crashes or
+// runs out of time lets the command through.
+export const GUARDS_SINCE = [2, 1, 295];
 
 // "claude-code_2-1-286_agent", the variable the CLI sets for what it runs,
 // as [2, 1, 286]; null when unknown. Read from the session, not from PATH,
@@ -65,8 +68,6 @@ function staged(root) {
 const check = (id, ok, say, fix = null) => ({ id, ok, say, fix });
 
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
-const asObject = (v) => (isObject(v) ? v : {});
-const asList = (v) => (Array.isArray(v) ? v : []);
 
 // The state files: present, readable, and the answers valid.
 function stateChecks(root) {
@@ -138,15 +139,22 @@ function settingsChecks(root, config) {
   return { checks: out, installed: settings.installed };
 }
 
-function cliCheck(installed, cliVersion) {
-  // Only mods need the newer CLI; the guards are plain hooks.
+// Whether guard hooks run here: the repo's own, or the push or attribution guard in <config>.
+function hasGuards(answers, pristine, installed) {
+  const inRepo = answers.advanced.hookLocation === "repo"
+    && Object.hasOwn(pristine.files, ".claude/hooks/run-hook.sh");
+  return inRepo || Boolean(installed["push-guard"] || installed["attribution-guard"]);
+}
+
+function cliCheck(installed, cliVersion, guards) {
   const mods = Object.entries(installed ?? {}).some(([name, has]) => has && MODS.includes(name));
-  if (!mods || !cliVersion || !before(cliVersion, MODS_SINCE)) {
-    return check("cli", true, "The CLI runs the installed mods.");
-  }
-  const [running, needed] = [cliVersion.join("."), MODS_SINCE.join(".")];
-  const say = `This session runs CLI ${running}, older than the ${needed} the mods need, so none of them load.`;
-  return check("cli", false, say,
+  const oldForMods = mods && before(cliVersion ?? MODS_SINCE, MODS_SINCE);
+  const oldForGuards = guards && before(cliVersion ?? GUARDS_SINCE, GUARDS_SINCE);
+  if (!oldForMods && !oldForGuards) return check("cli", true, "The CLI runs the guard hooks and the installed mods.");
+  const needs = [oldForGuards && `the ${GUARDS_SINCE.join(".")} the guard hooks need, so a guard that crashes `
+    + "or runs out of time lets the command through", oldForMods && `the ${MODS_SINCE.join(".")} the mods need, `
+    + "so none of them load"].filter(Boolean);
+  return check("cli", false, `This session runs CLI ${cliVersion.join(".")}, older than ${needs.join(", and ")}.`,
     FIX.cli);
 }
 
@@ -207,68 +215,6 @@ function roadmapCheck(root) {
     : check("roadmap", true, "ROADMAP.md is in shape.");
 }
 
-// The command hooks under every event of a settings file, in file order.
-function commandHooks(settings) {
-  const hooks = [];
-  for (const entries of Object.values(asObject(asObject(settings).hooks))) {
-    for (const entry of asList(entries)) {
-      for (const hook of asList(asObject(entry).hooks)) {
-        if (isObject(hook) && hook.type === "command") hooks.push(hook);
-      }
-    }
-  }
-  return hooks;
-}
-
-function firstWord(command) {
-  const text = command.trim();
-  if (text.startsWith('"') || text.startsWith("'")) return text.slice(1).split(text[0], 1)[0];
-  return text.split(" ", 1)[0];
-}
-
-// The program a command hook starts, or null when it is not judged.
-function programOf(hook) {
-  if (typeof hook.command !== "string") return null;
-  let program = hook.command;
-  if (!("args" in hook)) {
-    // A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
-    program = firstWord(program);
-    if (!isAbsolute(program)) return null;
-  }
-  return program && !program.includes("$") && !program.includes("%") ? program : null;
-}
-
-// Windows runs a name with a PATHEXT suffix, unless the name already has one.
-function withPathext(name) {
-  const exts = (process.env.PATHEXT ?? "").split(";");
-  if (exts.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()))) return [name];
-  return exts.map((ext) => name + ext);
-}
-
-// A file, and executable on POSIX: what the shell would run.
-function isRunnable(file) {
-  try {
-    if (!statSync(file).isFile()) return false;
-    if (process.platform !== "win32") accessSync(file, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function onPath(name) {
-  const names = process.platform === "win32" ? withPathext(name) : [name];
-  const dirs = (process.env.PATH ?? "").split(delimiter);
-  return dirs.some((dir) => names.some((n) => isRunnable(join(dir, n))));
-}
-
-// A path must exist and a bare name must be on PATH; any other program is not judged.
-function isMissing(program) {
-  if (isAbsolute(program)) return !existsSync(program);
-  if (program.includes("/") || program.includes("\\")) return false;
-  return !onPath(program);
-}
-
 // Every program a command hook in the config folder's settings.json starts.
 function hooksCheck(config) {
   let settings;
@@ -298,7 +244,8 @@ export function runDoctor(root, config, { pluginVersion, cliVersion }) {
     checks.push(stagedCheck(root));
     if (state.answers.advanced.tracker === "file") checks.push(roadmapCheck(root));
     const settings = settingsChecks(root, config);
-    checks.push(...settings.checks, cliCheck(settings.installed, cliVersion));
+    const guards = hasGuards(state.answers, state.pristine, settings.installed);
+    checks.push(...settings.checks, cliCheck(settings.installed, cliVersion, guards));
   }
   return { problems: checks.filter((c) => !c.ok).length, checks };
 }

@@ -1,22 +1,25 @@
 import { atom, update, type EngineInterface, type Hook, type Register } from 'claude-code'
 
 import type { Watch } from '../types'
+import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './branch'
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
-import { actionsIncident, incidentText, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
+import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  isResearchDue, lookupTopic, redStreak, researchRefusal, researchText, roundsToResearch, SOURCES_NEEDED, withTopic,
+  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsToResearch, stepBackOf, withTopic,
 } from './rounds'
 import { applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
   dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
 } from './store'
-import { FAILED, isSameRun, PENDING, reconcile, settle } from './settle'
+import { isSameRun, PENDING, reconcile, settle } from './settle'
+import { wakeText } from './wake'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
 import { HELP, HINT } from './help'
 export { HELP } from './help'
 export { MKDIR_SCRIPT } from './store'
+export { wakeText } from './wake'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
@@ -46,47 +49,6 @@ const live = {
   generation: 0,
   /** Saved with the watches: a reload mid-turn loads it, since that turn started in the old module. */
   isTurnRunning: false,
-}
-
-// How long ago the checks finished, so a late wake shows its delay.
-function finishedAgo(watch: Watch, now?: number): string {
-  if (now === undefined || watch.settledAt === undefined) return ''
-  const minutes = Math.max(0, Math.round((now - watch.settledAt) / 60_000))
-  return minutes === 0 ? ' Checks finished just now.' : ` Checks finished ${minutes} min ago.`
-}
-
-export function wakeText(watch: Watch, now?: number, red = 0): string {
-  const pr = `${watch.repo}#${watch.number}`
-  const research = watch.outcome === 'failed' && isResearchDue(red) ? researchText(pr, red) : ''
-  return `${outcomeText(watch, now)}${research}${finishedAgo(watch, now)}`
-}
-
-function outcomeText(watch: Watch, now?: number): string {
-  const entries = Object.entries(watch.checks)
-  const pr = `PR ${watch.repo}#${watch.number}`
-  // Not settled: the wake names GitHub's incident while the checks wait.
-  if (!watch.outcome && watch.incident) {
-    const minutes = Math.round(((now ?? watch.startedAt) - watch.startedAt) / 60_000)
-    return incidentText(pr, minutes, watch.incident)
-  }
-  const failed = entries.filter(([, bucket]) => FAILED.has(bucket)).map(([name]) => name)
-  if (watch.outcome === 'failed') {
-    return (
-      `[ci-watch] ${pr}: all checks settled; failed: ${failed.join(', ')}. Fetch the failing logs (gh run ` +
-      `view --log-failed) or the review comment, fix and push; the watch restarts on the new commit.`
-    )
-  }
-  if (watch.outcome === 'timeout') {
-    const pending = entries.filter(([, bucket]) => PENDING.has(bucket)).map(([name]) => name)
-    return (
-      `[ci-watch] ${pr}: still pending after the time limit: ${pending.join(', ') || 'no checks reported'}. ` +
-      `Look at why before waiting longer.`
-    )
-  }
-  return (
-    `[ci-watch] ${pr}: all ${entries.length} checks settled with no failure. Verify it is mergeable and ` +
-    `finish it per the project rules.`
-  )
 }
 
 // Every session leaves a state file and an owner file behind. Once per load, those of other sessions
@@ -269,13 +231,49 @@ async function headOf($: EngineInterface, repo: string, number: number): Promise
   }
 }
 
-// The refusal for an edit, commit or push while a watch of this session has a step back latched, or
-// undefined. A closed PR owes nothing.
-async function owedResearch($: EngineInterface): Promise<string | undefined> {
+// `gh` lists at most this many of a PR's commits, so a list this long may be cut and counts as unread.
+const LISTED_COMMITS = 100
+const COMMIT_ID = /^[0-9a-f]{7,64}$/i
+
+// A watched PR's head branch and commits, read on every call: an amend, rebase or force-push replaces the
+// commits. Undefined when unread, so the caller holds the work.
+async function redPrOf($: EngineInterface, w: Watch): Promise<RedPr | undefined> {
+  try {
+    const args = ['pr', 'view', String(w.number), '--repo', w.repo, '--json', 'headRefName,commits']
+    const view = JSON.parse(await gh($, args))
+    const commits: unknown[] = Array.isArray(view.commits) ? view.commits.map((c: { oid?: unknown }) => c?.oid) : []
+    const isListed = commits.length > 0 && commits.length < LISTED_COMMITS
+    if (!isListed || !commits.every(c => typeof c === 'string' && COMMIT_ID.test(c))) return undefined
+    return typeof view.headRefName === 'string' && view.headRefName
+      ? { branch: view.headRefName, commits: commits as string[] }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// The refusal for an edit, commit or push on a PR of this session with a step back latched, or
+// undefined. A closed PR owes nothing, and work on another branch goes on.
+async function owedResearch(
+  $: EngineInterface,
+  steps: readonly WorkStep[] | null,
+  command?: string,
+): Promise<string | undefined> {
   for (const w of live.watches.filter(w => w.stepBackTopics)) {
     if (await isClosed($, w.repo, w.number)) continue
-    const owed = SOURCES_NEEDED - (w.stepBackTopics?.length ?? 0)
-    return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), owed)
+    if (!(await mayBeOn($, await redPrOf($, w), steps, command))) continue
+    return researchRefusal(`${w.repo}#${w.number}`, await redRoundsOf($, w), w.stepBackNeeded, w.stepBackTopics)
+  }
+  return undefined
+}
+
+// The refusal for a commit or push while a PR this session watches is still open at the hard stop, or
+// undefined: the rebuild starts once the PR is closed.
+async function owedRebuild($: EngineInterface): Promise<string | undefined> {
+  for (const w of live.watches) {
+    const red = await redRoundsOf($, w)
+    if (!isHardStop(red) || (await isClosed($, w.repo, w.number))) continue
+    return hardStopRefusal(`${w.repo}#${w.number}`, red)
   }
   return undefined
 }
@@ -316,9 +314,9 @@ async function roundsCommand($: EngineInterface, args: string): Promise<string> 
   if (!pr && number) return repo ? `No PR ${repo}#${number}.` : `No PR #${number} in this folder's repo.`
   if (!pr) return "This folder's branch has no PR."
   const red = await redRoundsOf($, pr)
-  const next = roundsToResearch(red)
-  const count = `${red} fix round(s) in a row without every check green`
-  return `${pr.repo}#${pr.number}: ${count}; the next step back is due in ${next}.`
+  const count = `${pr.repo}#${pr.number}: ${red} fix round(s) in a row without every check green`
+  if (isHardStop(red)) return `${count}; that is the hard stop: close it and rebuild it in a new PR.`
+  return `${count}; the next step back is due in ${roundsToResearch(red)}.`
 }
 
 // A push that moves no commit (tags, "Everything up-to-date") keeps the watch on that head, settled or
@@ -346,7 +344,7 @@ async function startWatch(
   // A step back stays latched on the PR across a new watch of it: only lookups or a stop lift it.
   const latched = live.watches.find(w => w.repo === repo && w.number === number && w.stepBackTopics)
   const fresh: Watch = {
-    ...(latched ? { stepBackTopics: latched.stepBackTopics } : {}),
+    ...(latched ? stepBackOf(latched) : {}),
     ...{ repo, number, headSha, startedAt, checks: {}, stablePolls: 0, id, pushedAt: startedAt },
   }
   live.watches = [...live.watches.filter(w => !(w.repo === repo && w.number === number)), fresh]
@@ -380,7 +378,7 @@ async function recheckSettled($: EngineInterface, watch: Watch, now: number): Pr
   const { repo, number } = watch
   const fresh: Watch = { repo, number, headSha: head, startedAt: now, checks: {}, stablePolls: 0, id }
   // A latched step back stays on the PR when its head moves: only lookups or a stop lift it.
-  const stepBack = watch.stepBackTopics ? { stepBackTopics: watch.stepBackTopics } : {}
+  const stepBack = watch.stepBackTopics ? stepBackOf(watch) : {}
   return { ...fresh, ...stepBack, pushedAt: watch.pushedAt ?? watch.startedAt, ...(isOwn ? {} : { isSilent: true }) }
 }
 
@@ -486,7 +484,8 @@ async function poll($: EngineInterface): Promise<void> {
   const toWake = live.watches.filter(w => w.outcome && !w.isSilent && settled.some(s => isSameRun(s, w)))
   // A green round ends the step back latched on its watch: the problem it asked about is fixed.
   const isGreen = (w: Watch) => w.outcome === 'passed' && w.stepBackTopics && settled.some(s => isSameRun(s, w))
-  live.watches = live.watches.map(w => (isGreen(w) ? { ...w, stepBackTopics: undefined } : w))
+  const ended = (w: Watch): Watch => ({ ...w, stepBackTopics: undefined, stepBackNeeded: undefined })
+  live.watches = live.watches.map(w => (isGreen(w) ? ended(w) : w))
   // GitHub's status is read before the retirement check: the read can take seconds, and a load retired
   // meanwhile must not save over the newer one's file afterwards.
   const isIncidentNoted = await noteIncidents($, now)
@@ -503,7 +502,8 @@ async function poll($: EngineInterface): Promise<void> {
   const isDue = (w: Watch) => due.some(d => isSameRun(d, w))
   // A red wake that asks for a step back latches it in the same save.
   const isStepBack = (w: Watch) => w.outcome === 'failed' && stepBacks.has(`${w.repo}#${w.number}`)
-  const marked = (w: Watch): Watch => ({ ...w, wakePending: true, ...(isStepBack(w) ? { stepBackTopics: [] } : {}) })
+  const latch = (w: Watch) => ({ stepBackTopics: [], stepBackNeeded: stepBacks.get(`${w.repo}#${w.number}`) })
+  const marked = (w: Watch): Watch => ({ ...w, wakePending: true, ...(isStepBack(w) ? latch(w) : {}) })
   if (due.length > 0) live.watches = live.watches.map(w => (isDue(w) ? marked(w) : w))
   if (changed || isIncidentNoted || live.isUnsaved) await save($)
   if (!live.isTurnRunning) await sendHeld($)
@@ -603,7 +603,9 @@ function startPolling($: EngineInterface): Promise<void> {
 async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
   const topic = lookupTopic(e)
   if (topic === undefined || (await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
-  const counted = (w: Watch): Watch => ({ ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic) })
+  const counted = (w: Watch): Watch => ({
+    ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic, w.stepBackNeeded),
+  })
   live.watches = live.watches.map(w => (w.stepBackTopics ? counted(w) : w))
   live.generation++
   await save($)
@@ -719,7 +721,7 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isEdit = ['Edit', 'Write', 'NotebookEdit'].includes(String((e as { tool?: unknown }).tool))
-    const refusal = e.agentId === undefined && isEdit ? await owedResearch($) : undefined
+    const refusal = e.agentId === undefined && isEdit ? await owedResearch($, [{ folder: folderOf(e) }]) : undefined
     if (refusal) return { deny: refusal }
     const result = await next(e)
     if (e.agentId !== undefined || 'deny' in result) return result
@@ -733,7 +735,8 @@ export const register: Register = (on, options) => {
     await startPolling($)
     if (await isRetired($)) return next(e)
     const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
-    const refusal = isHeld ? await owedResearch($) : undefined
+    const steps = isHeld ? commandSteps(command, isPowerShell) : []
+    const refusal = isHeld ? (await owedResearch($, steps, command)) ?? (await owedRebuild($)) : undefined
     if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.

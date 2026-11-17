@@ -1,0 +1,8 @@
+# Husky commit-msg hook: the commit message follows .claude/rules/git.md.
+# https://typicode.github.io/husky
+grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\([a-z0-9_-]+\))?!?: .{1,72}$' "$1" || {
+  echo "Commit message must follow: <type>(<scope>): <imperative description>"
+  echo "  Types: feat, fix, refactor, perf, test, docs, chore, style, data"
+  echo "  See .claude/rules/git.md for details."
+  exit 1
+}

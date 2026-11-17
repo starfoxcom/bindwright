@@ -8,8 +8,10 @@
 // order, nested ones (inside $( ... ) or a pipeline) included. A word is a string, or
 // {"dynamic": <source text>, "prefix": <literal text before its first expansion>, "shape": <its
 // text with a NUL for each expansion>,
-// "canBeEmpty": <it can leave no word>} when the shell builds it at run time (a variable, a
-// substitution, a glob), so its value cannot be known before it runs.
+// "canBeEmpty": <it can leave no word>, "canBeMany": <it can become several words>} when the
+// shell builds it at run time (a variable, a
+// substitution, a glob), so its value cannot be known before it runs. A bash command word whose
+// braces hold only plain text also carries "braces": [<each word bash's brace expansion makes>].
 // The attribution guard reads body files from these words. Exits 1 when the parser fails.
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
@@ -20,9 +22,10 @@ const SHELLS = new Set(["bash", "powershell"]);
 
 // A word built at run time: its source, the literal text before its first expansion, its text with
 // a NUL for each expansion, and whether it can leave no word at all (PowerShell passes no
-// argument for $null or an empty array).
+// argument for $null or an empty array). A PowerShell argument becomes several only where it can
+// be empty: a whole variable holding an array.
 function dynamic(node, prefix = "", canBeEmpty = true, shape = "\0") {
-  return { dynamic: node.text, prefix, shape, canBeEmpty };
+  return { dynamic: node.text, prefix, shape, canBeEmpty, canBeMany: canBeEmpty };
 }
 
 // PowerShell text with a NUL for each variable, `${...}` or `$(...)` in it. An automatic variable

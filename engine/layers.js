@@ -7,8 +7,8 @@
 // Keys are read in sorted order, so both twins list them alike.
 // Node only; layers.py is the Python twin.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
+import { delimiter, isAbsolute, join } from "node:path";
 import { CODE_RESEARCH_TOOLS, TRACKERS, mapRemovedTool } from "./model.js";
 import { MAX_DEPTH, depthOf } from "./setupcode.js";
 import { ANSWERS } from "./bind.js";
@@ -45,6 +45,8 @@ export const LANGUAGES = ["english", "spanish"];
 
 const own = (obj, key) => typeof key === "string" && Object.prototype.hasOwnProperty.call(obj, key);
 const isObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
+const asObject = (v) => (isObject(v) ? v : {});
+const asList = (v) => (Array.isArray(v) ? v : []);
 
 // The settings a layer may hold, each with its test for a valid value.
 export const SETTINGS = {
@@ -196,12 +198,104 @@ function hasMarker(path, marker) {
   return text.split("\n").some((line) => line.replace(/^[ \t\r]+|[ \t\r]+$/g, "") === marker);
 }
 
+// The command hooks under every event of a settings file, in file order.
+export function commandHooks(settings) {
+  const hooks = [];
+  for (const entries of Object.values(asObject(asObject(settings).hooks))) {
+    for (const entry of asList(entries)) {
+      for (const hook of asList(asObject(entry).hooks)) {
+        if (isObject(hook) && hook.type === "command") hooks.push(hook);
+      }
+    }
+  }
+  return hooks;
+}
+
+function firstWord(command) {
+  const text = command.trim();
+  if (text.startsWith('"') || text.startsWith("'")) return text.slice(1).split(text[0], 1)[0];
+  return text.split(" ", 1)[0];
+}
+
+// The program a command hook starts, or null when it is not judged.
+export function programOf(hook) {
+  if (typeof hook.command !== "string") return null;
+  let program = hook.command;
+  if (!("args" in hook)) {
+    // A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
+    program = firstWord(program);
+    if (!isAbsolute(program)) return null;
+  }
+  return program && !program.includes("$") && !program.includes("%") ? program : null;
+}
+
+// Windows runs a name with a PATHEXT suffix, unless the name already has one.
+// Empty entries are skipped and an unset PATHEXT takes Windows' default list; layers.py runs the same lookup.
+function withPathext(name) {
+  const exts = (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC").split(";").filter(Boolean);
+  if (exts.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()))) return [name];
+  return exts.map((ext) => name + ext);
+}
+
+// A file, and executable on POSIX: what the shell would run.
+function isRunnable(file) {
+  try {
+    if (!statSync(file).isFile()) return false;
+    if (process.platform !== "win32") accessSync(file, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function onPath(name) {
+  const names = process.platform === "win32" ? withPathext(name) : [name];
+  const dirs = (process.env.PATH ?? "").split(delimiter);
+  return dirs.some((dir) => names.some((n) => isRunnable(join(dir, n))));
+}
+
+// A path must exist and a bare name must be on PATH; any other program is not judged.
+export function isMissing(program) {
+  if (isAbsolute(program)) return !existsSync(program);
+  if (program.includes("/") || program.includes("\\")) return false;
+  return !onPath(program);
+}
+
+// The .py file names a hook's command or args run, read as home.py's list-hooks reads them.
+function hookFiles(hook) {
+  return [hook.command, ...asList(hook.args)]
+    .filter((word) => typeof word === "string")
+    .map((word) => word.replace(/\\/g, "/").replace(/^["']+|["']+$/g, ""))
+    .filter((word) => word.endsWith(".py"))
+    .map((word) => word.split("/").pop());
+}
+
+// Whether a command hook in the config folder's settings.json runs the named file with a
+// program this computer has, or one that cannot be judged (a `$VAR` in it).
+function hookRuns(config, name) {
+  let settings;
+  try {
+    settings = readLayerFile(join(config, "settings.json"), "settings.json");
+  } catch {
+    return false;
+  }
+  return commandHooks(settings).some((hook) => {
+    if (!hookFiles(hook).includes(name)) return false;
+    const program = programOf(hook);
+    return program === null || !isMissing(program);
+  });
+}
+
 // The extras present under the config folder (~/.claude), by name.
 export function installedExtras(config) {
   const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
   const present = (extra) => {
-    const path = join(config, ...at(extra).split("/"));
-    return own(MARKERS, extra) ? hasMarker(path, MARKERS[extra]) : existsSync(path);
+    const file = at(extra);
+    const path = join(config, ...file.split("/"));
+    if (own(MARKERS, extra)) return hasMarker(path, MARKERS[extra]);
+    // A guard whose entry was deleted, or whose program is gone, counts as missing so setup installs it again.
+    if (/^hooks\/[^/]+\.py$/.test(file)) return existsSync(path) && hookRuns(config, file.slice("hooks/".length));
+    return existsSync(path);
   };
   return Object.fromEntries(EXTRAS.map((extra) => [extra, present(extra)]));
 }

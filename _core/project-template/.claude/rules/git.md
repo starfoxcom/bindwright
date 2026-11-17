@@ -188,6 +188,10 @@ Size each release by what its users must do:
 - **Patch:** fixes only.
 
 When a release tool sets the version and the tag, feed it the way its configuration reads and never bump or tag by hand. Otherwise bump every file that carries the version together, and tag the release commit in the style the existing tags use. With a changelog, each change a user must act on goes under `### Breaking`. A project that does not version its releases skips this section.
+<!-- TOGGLE:version_check START -->
+
+`.github/scripts/version_check.py <version>` reads the commits since the last release and refuses a version smaller than they need, or a changelog section that does not match it. Run it before each `git tag <version>`, `gh release create <version>` and `gh pr create` from a `release/<version>` branch; where the guard hooks live in the repo, a hook runs it on those commands by itself. Pick the version and the sections it names; never tag around it.
+<!-- TOGGLE:version_check END -->
 
 ## Dead code does not ship
 
@@ -201,10 +205,10 @@ Code with no remaining caller is deleted in the same PR that orphaned it. Check 
 ## Definition of done
 
 <!-- TOGGLE:ci_checks:off START -->
-A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient.
+A feature is done when it works end to end in the running app, not when it compiles. Passing tests are necessary, not sufficient. When `.claude/skills/verify/SKILL.md` exists, run `/verify` before each commit of a change people can see or use.
 <!-- TOGGLE:ci_checks:off END -->
 <!-- TOGGLE:ci_checks START -->
-A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient.
+A feature is done when it works end to end in the running app, not when it compiles. CI green is necessary, not sufficient. When `.claude/skills/verify/SKILL.md` exists, run `/verify` before each commit of a change people can see or use.
 <!-- TOGGLE:ci_checks END -->
 
 <!-- TOGGLE:precommit_hooks_scaffold START -->
@@ -216,7 +220,7 @@ A feature is done when it works end to end in the running app, not when it compi
 Gate: **lefthook**, config `lefthook.yml`. Activate with `lefthook install`. If `git config core.hooksPath` prints a folder, ask the user to run `git config --local core.hooksPath "$(cd "$(git rev-parse --git-common-dir)" && pwd -P)/hooks"` first (POSIX shell), then activate with `lefthook install --force`: lefthook writes its hooks into whatever folder that setting names, even on `lefthook run`, so a global one would replace the hooks of every repo that shares it. Lefthook 2 refuses a plain install while any such setting exists; `--force` installs into the local folder, while `--reset-hooks-path` would remove the global setting for every repo. With its own folder the repo no longer runs the global folder's hooks, so copy any it still needs (an indexer's sync, say) into its own `post-commit` or `post-checkout`.
 <!-- TOGGLE:precommit:lefthook END -->
 <!-- TOGGLE:precommit:husky START -->
-Gate: **husky**, config `.husky/pre-commit`. Activate with `npm install --save-dev husky && npm pkg set scripts.prepare=husky && npm run prepare`. A `core.hooksPath` that `git config core.hooksPath` prints needs no step: husky sets this repo's own (`.husky/_`), which overrides a global one.
+Gate: **husky**, config `.husky/pre-commit`, `.husky/commit-msg` and `.husky/pre-push`, one file per git hook. Activate with `npm install --save-dev husky && npm pkg set scripts.prepare=husky && npm run prepare`. A `core.hooksPath` that `git config core.hooksPath` prints needs no step: husky sets this repo's own (`.husky/_`), which overrides a global one.
 <!-- TOGGLE:precommit:husky END -->
 <!-- TOGGLE:precommit:pre-commit START -->
 Gate: **pre-commit**, config `.pre-commit-config.yaml`. Activate with `pre-commit install`. It refuses to install while `git config core.hooksPath` prints anything, at any level; removing a global value changes every repo on the machine, so that is the user's call.
@@ -225,7 +229,7 @@ Gate: **pre-commit**, config `.pre-commit-config.yaml`. Activate with `pre-commi
 Gate: **simple-git-hooks**, config `.simple-git-hooks.json`. Activate with `npx simple-git-hooks`. It installs into `.git/hooks` whatever `core.hooksPath` says, so if `git config core.hooksPath` prints a folder, ask the user to run `git config --local core.hooksPath "$(cd "$(git rev-parse --git-common-dir)" && pwd -P)/hooks"` (POSIX shell) so git looks there.
 <!-- TOGGLE:precommit:simple-git-hooks END -->
 
-The hook runs lint, type check and tests before each commit. Do not bypass it with `--no-verify`; fix the failure.
+Before each commit the hook runs the lint, the type check and, when it is on, the size check, and it checks the commit message; before each push it runs the tests. Do not bypass it with `--no-verify` or the manager's off switch; fix the failure.
 
 After activating, make a commit the hook must refuse and confirm it is refused: a gate git never runs reports nothing.
 <!-- TOGGLE:precommit_hooks_scaffold END -->

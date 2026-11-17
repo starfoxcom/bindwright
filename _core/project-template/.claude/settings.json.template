@@ -20,9 +20,23 @@
             "onFailure": "block"
           },
 <!-- TOGGLE:attribution_guard END -->
+<!-- TOGGLE:version_check START -->
+          {
+            "type": "command",
+            "command": "sh -c 'test -f \"$0\" || exit 0; exec sh \"$0\" version-check' \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
+          },
+<!-- TOGGLE:version_check END -->
           {
             "type": "command",
             "command": "sh -c 'test -f \"$0\" || exit 0; exec sh \"$0\" push-guard' \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh\"",
+            "timeout": 10,
+            "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "command": "sh -c 'test -f \"$0\" || exit 0; exec sh \"$0\" tool-rules' \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh\"",
             "timeout": 10,
             "onFailure": "block"
           }
@@ -70,6 +84,18 @@
       "Bash(git rebase * -i*)",
       "Bash(git rebase --interactive*)",
       "Bash(git rebase * --interactive*)",
+<!-- TOGGLE:precommit_hooks_scaffold START -->
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit * --no-verify*)",
+      "Bash(git push --no-verify*)",
+      "Bash(git push * --no-verify*)",
+      "Bash(LEFTHOOK=0 *)",
+      "Bash(LEFTHOOK=false *)",
+      "Bash(LEFTHOOK_EXCLUDE=*)",
+      "Bash(HUSKY=0 *)",
+      "Bash(SKIP=*)",
+      "Bash(SKIP_SIMPLE_GIT_HOOKS=*)",
+<!-- TOGGLE:precommit_hooks_scaffold END -->
 <!-- TOGGLE:deny_list_strict START -->
       "Bash(git reset --hard:*)",
       "Bash(git reset * --hard*)",

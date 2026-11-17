@@ -12,23 +12,24 @@ export default {
   "nav.github": "GitHub",
   "nav.language": "Idioma",
   "hero.title": "Claude recuerda cómo te gusta trabajar.",
-  "hero.lede": "Responde unas preguntas una vez, y cada sesión de Claude en tu proyecto empieza sabiendo "
-    + "tus reglas, recibe una segunda revisión en cada cambio y frena todo lo riesgoso antes de que pase. "
-    + "Un solo comando, sin saber programar.",
+  "hero.lede": "Se acabó apuntar cada proyecto nuevo a uno viejo y pedirle a Claude que copie sus reglas y hooks. "
+    + "Responde unas preguntas una vez, y cada sesión aquí empieza con tus reglas ya puestas, mientras cada "
+    + "cambio se revisa antes de integrarse. Un solo comando, sin saber programar.",
   "hero.go": "Instalar Bindwright",
   "hero.source": "Ver en GitHub",
   "changes.title": "Qué cambia",
   "changes.1.was": "Claude olvida cómo trabajas en cada sesión",
   "changes.1.title": "Claude deja de repetir errores",
-  "changes.1.text": "Lee tus reglas al inicio de cada sesión, así las funciones pequeñas y las pruebas "
-    + "reales dejan de ser algo que tienes que pedir cada vez.",
+  "changes.1.text": "Lee tus reglas al inicio de cada sesión, y los hooks sostienen las que no se pueden "
+    + "doblar, así los descuidos de Claude en sesiones largas, tras una o tres compactaciones, se frenan "
+    + "en lugar de publicarse.",
   "changes.2.was": "Los cambios se integran sin que nadie los revise",
   "changes.2.title": "Cada pull request se revisa",
   "changes.2.text": "Una IA revisa cada cambio antes de integrarlo, y si la revisión no pasa, nada entra.",
   "changes.3.was": "Cada sesión empieza desde cero",
   "changes.3.title": "Las sesiones siguen donde se quedaron",
-  "changes.3.text": "Cada sesión empieza con un plan y termina con una nota para la siguiente, así el "
-    + "trabajo sigue justo donde se quedó.",
+  "changes.3.text": "Cada sesión termina con una nota de lo que sigue y la siguiente empieza leyéndola, así "
+    + "nunca vuelves a explicarle el proyecto ni la próxima tarea a una sesión nueva.",
   "changes.4.was": "Un comando equivocado puede borrar tu rama principal",
   "changes.4.title": "Los comandos peligrosos se bloquean",
   "changes.4.text": "Los push forzados a tu rama principal se detienen antes de ejecutarse, ya que un "
@@ -117,7 +118,7 @@ export default {
   "scene.handoff.next.item": "#14 códigos de descuento",
   "scene.handoff.watch": "Vigilar",
   "scene.handoff.watch.item": "redondeo de impuestos",
-  "scene.caption.1": "Arranca sin complicaciones desde donde lo dejaste",
+  "scene.caption.1": "Una sesión nueva ya sabe qué sigue",
   "scene.caption.2": "Completa el trabajo y las tareas pendientes",
   "scene.caption.3": "Ejecuta pruebas y frena aquello que es riesgoso",
   "scene.caption.4": "Todo PR recibe una revisión con IA",
@@ -210,6 +211,10 @@ export default {
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
   "evidence.fixed.label": "se detuvieron 1 o 2 rondas hasta corregir el problema",
   "evidence.stalled.label": "tomaron 3 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
+  "evidence.rebuilt.label": "se reconstruyeron desde cero tras 10 rondas en rojo y pasaron sin otra investigación",
+  "evidence.rebuiltStalled.label": "se reconstruyeron, necesitaron investigar de nuevo y aun así se integraron",
+  "evidence.dropped.label": "se descartaron porque no se encontró arreglo",
+  "evidence.retired.label": "se descartaron porque ya no hacían falta",
   "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión "
     + "y cuántas rondas tomó cada uno en pasar",
   "evidence.stories": "Errores que se volvieron reglas",
@@ -221,18 +226,28 @@ export default {
   "evidence.part.passed": "a la primera",
   "evidence.part.fixed": "corregidos en 1 o 2 rondas",
   "evidence.part.stalled": "corregidos tras investigar más a fondo",
+  "evidence.part.rebuilt": "reconstruidos",
+  "evidence.part.rebuiltStalled": "reconstruidos, otra investigación",
+  "evidence.part.dropped": "descartados",
+  "evidence.part.retired": "ya no hacían falta",
   "evidence.legend.skipped": "no necesitaron revisión",
   "evidence.legend.passed": "pasaron la primera revisión",
   "evidence.legend.fixed": "corregidos en 1 o 2 rondas",
   "evidence.legend.stalled": "tomaron 3 rondas o más",
-  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos, en amarillo y rojo, tomaron "
+  "evidence.legend.rebuilt": "reconstruidos tras 10 rondas en rojo",
+  "evidence.legend.rebuiltStalled": "reconstruidos, con otra investigación",
+  "evidence.legend.dropped": "descartados, sin arreglo",
+  "evidence.legend.retired": "descartados, ya no hacían falta",
+  "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos al menos una vez tomaron "
     + "{rounds} rondas de corrección en promedio. {deep} de los {checked} tocaban código riesgoso, como "
     + "seguridad o datos guardados, y también recibieron una revisión más a fondo.",
   "evidence.note": {
     one: "Bindwright pone un revisor de IA en cada pull request. "
-      + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos.",
+      + "Estos son sus resultados hasta ahora en {count} proyecto cuyo dueño eligió compartir conteos anónimos. "
+      + "Todavía es pronto, así que aún no hay suficientes para decir que funciona en todos lados como debe.",
     other: "Bindwright pone un revisor de IA en cada pull request. "
-      + "Estos son sus resultados hasta ahora en {count} proyectos cuyos dueños eligieron compartir conteos anónimos.",
+      + "Estos son sus resultados hasta ahora en {count} proyectos cuyos dueños eligieron compartir conteos anónimos. "
+      + "Todavía es pronto, así que aún no hay suficientes para decir que funciona en todos lados como debe.",
   },
   "evidence.kind.game": "Juego",
   "evidence.kind.business-app": "App de negocio",
@@ -293,7 +308,7 @@ export default {
   "settings.global-instructions.text": "Reglas de trabajo que lee cada proyecto de tu computadora.",
   "settings.global-instructions.value": "Sí",
   "settings.push-guard.title": "Guardia de push",
-  "settings.push-guard.text": "Bloquea los force push en cada repo de tu computadora.",
+  "settings.push-guard.text": "Bloquea los force push y los comandos vetados en cada repo de tu computadora.",
   "settings.push-guard.value": "Sí",
   "settings.session-title.title": "Títulos de sesión",
   "settings.session-title.text": "Nombra cada sesión según su proyecto y en qué está trabajando.",
@@ -381,15 +396,21 @@ export default {
   "settings.merge-style.text": "Cada rama sigue visible en el historial.",
   "settings.merge-style.value": "Commits de merge",
   "settings.pre-commit.title": "Hook de pre-commit",
-  "settings.pre-commit.text": "Un equipo recibe <a href=\"https://github.com/evilmartians/lefthook\">lefthook</a>, "
-    + "que corre revisiones antes de cada commit.",
-  "settings.pre-commit.value": "Solo en equipo",
+  "settings.pre-commit.text": "<a href=\"https://github.com/evilmartians/lefthook\">lefthook</a> "
+    + "corre el lint, la revisión de tipos y la de tamaño antes de cada commit, "
+    + "y las pruebas antes de cada push. Muy recomendado donde no corre CI.",
+  "settings.pre-commit.value": "Recomendado activado",
   "settings.guard-location.title": "Dónde viven las guardias",
   "settings.guard-location.text": "En el repo, así todo el que lo clone las recibe.",
   "settings.guard-location.value": "En el repo",
   "settings.blocked-commands.title": "Comandos bloqueados",
   "settings.blocked-commands.text": "Comandos que el asistente nunca puede correr.",
   "settings.blocked-commands.value": "Estándar",
+  "settings.version-check.title": "Revisión de versión",
+  "settings.version-check.text": "Antes de etiquetar una versión, compara su número con los commits "
+    + "desde la anterior, como lo numera semver, con builds alpha, beta y rc, o calver. "
+    + "none no agrega la revisión.",
+  "settings.version-check.value": "La del repo, o una que le quede",
   "settings.architecture.title": "Regla de arquitectura",
   "settings.architecture.text": "Una estructura de carpetas a seguir: clean, ddd, ecs, feature-based, "
     + "hexagonal, layered o mvc.",

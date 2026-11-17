@@ -39,11 +39,18 @@ failed write never leaves half a settings file.
 
 import json
 import os
+import re
+import runpy
 import shutil
 import subprocess
 import sys
 
 from apply import _is_link
+
+# Its front-matter reader names an output style here too, so both find the same style.
+_REPLY_STYLE_HOOK = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), os.pardir, "_core", "global-template", "hooks", "reply-style.py"
+)
 
 # Runs the hook file by path, and exits 0 when the file is gone, so a
 # registration whose file was removed lets calls through. A hook that fails
@@ -268,6 +275,12 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
     target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
     with open(file, encoding="utf-8") as fh:
         _atomic_write(target, fh.read())
+    package = os.path.join(os.path.dirname(os.path.abspath(file)), _package_name(name))
+    if os.path.isdir(package):
+        for module in sorted(os.listdir(package)):
+            if module.endswith(".py"):
+                with open(os.path.join(package, module), encoding="utf-8") as fh:
+                    _atomic_write(os.path.join(os.path.dirname(target), _package_name(name), module), fh.read())
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
@@ -278,6 +291,8 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
 
 
 def remove_hook(home, name):
+    if not re.fullmatch(r"[A-Za-z0-9][\w-]*\.py", name):
+        raise HomeError("remove-hook takes a hook's file name, such as push-guard.py: " + name)
     path, data = _load(home)
     removed = sum(_drop(entries, name) for entries in _event_lists(data, path))
     if removed:
@@ -286,7 +301,15 @@ def remove_hook(home, name):
     deleted = os.path.isfile(target)
     if deleted:
         os.remove(target)
+    package = os.path.join(_claude(home), "hooks", _package_name(name))
+    if os.path.isdir(package) and not _is_link(os.lstat(package)):
+        shutil.rmtree(package)
     return {"removed_hooks": removed, "deleted_file": deleted}
+
+
+def _package_name(hook):
+    """The folder of modules a hook file loads beside it: `no-ai-attribution.py` → `no_ai_attribution`."""
+    return hook[:-3].replace("-", "_")
 
 
 def _hook_files(hook):
@@ -404,21 +427,12 @@ def add_agent(home, file):
 
 
 def _style_name(text):
-    """The `name:` of an output style's front matter, or None without one."""
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return None
-    for line in lines[1:]:
-        if line.strip() == "---":
-            return None
-        key, sep, value = line.partition(":")
-        value = value.strip()
-        # YAML may quote the value: one matching pair of quotes is not part of the name.
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1].strip()
-        if sep and key.strip() == "name" and value:
-            return value
-    return None
+    """The `name:` of an output style's front matter, or None without one.
+
+    Read with the reply-style hook's own reader, so the style turned on here is the one it restates.
+    """
+    front_matter = runpy.run_path(_REPLY_STYLE_HOOK)["front_matter"]
+    return front_matter(text.lstrip("﻿").replace("\r\n", "\n"))[0]
 
 
 def add_style(home, file):

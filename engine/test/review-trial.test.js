@@ -217,6 +217,30 @@ test("an arm whose reviews went missing ranks after an arm with all of them", as
   assert.deepEqual(result.leaderboard.map((row) => row.model), [WEAK, GOOD]);
 });
 
+// A judge costs the most of any call, so none runs where no review exists to score.
+test("a state whose every review failed gets no judge", async () => {
+  const stub = stubAgent();
+  const judges = [];
+  const agent = async (prompt, options) => {
+    if (options.label.startsWith("judge-")) judges.push(options.label);
+    else if (options.label.endsWith("dirty-state")) return null;
+    return stub.agent(prompt, options);
+  };
+  const result = await run({ plan: "max", arms: ARMS, tasks: TASKS, preset: "full" }, agent);
+  assert.deepEqual(judges.sort(), ["judge-1-clean-state", "judge-2-clean-state"]);
+  assert.equal(result.per_state[0].winner, "tie");
+});
+
+test("a run whose every review failed stops before judging", async () => {
+  const judges = [];
+  const agent = async (prompt, options) => {
+    if (options.label.startsWith("judge-")) judges.push(options.label);
+    return null;
+  };
+  await assert.rejects(run({ plan: "max", arms: ARMS, tasks: TASKS }, agent), /Every review failed/);
+  assert.deepEqual(judges, []);
+});
+
 // Recorded text (the author's input, the truth, an arm's comment or finding) enters a prompt only
 // inside one JSON line: whatever line break it holds, it starts no line of any prompt, and the
 // judge reads it back unchanged.

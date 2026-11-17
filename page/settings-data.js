@@ -42,7 +42,7 @@ export const COMPUTER = [
   {
     id: "push-guard",
     title: "Push guard",
-    text: "Blocks force pushes in every repo on your computer.",
+    text: "Blocks force pushes and banned shell commands in every repo on your computer.",
     value: "Yes",
     keys: ["extra:push-guard"],
   },
@@ -211,6 +211,29 @@ export const PROJECT = [
     keys: ["advanced.publicRoadmap"],
     engine: [{ flags: {}, key: "advanced.publicRoadmap", value: null }],
   },
+  {
+    id: "version-check",
+    title: "Version check",
+    text: "Before a release is tagged, checks its version against the commits since the last one, "
+      + "as semver, alpha, beta and rc builds included, or calver numbers it. none adds no check.",
+    value: "The repo's own, or one that fits",
+    keys: ["advanced.versioning", "advanced.versionFormat"],
+    options: ["semver", "calver", "none"],
+    engine: [{ flags: {}, key: "advanced.versioning", value: "none" }],
+  },
+  {
+    id: "pre-commit",
+    title: "Pre-commit hook",
+    text: "lefthook runs the lint, the type check and the size check before each commit, "
+      + "and the tests before each push. Strongly recommended where no CI runs.",
+    value: "Recommended on",
+    links: { lefthook: "https://github.com/evilmartians/lefthook" },
+    keys: ["advanced.precommit"],
+    engine: [
+      { flags: {}, key: "advanced.precommit", value: "none" },
+      { flags: { team: true }, key: "advanced.precommit", value: "lefthook" },
+    ],
+  },
 ];
 
 export const FIXED = [
@@ -251,18 +274,7 @@ export const FIXED = [
     keys: ["advanced.mergeStyle"],
     engine: [{ flags: {}, key: "advanced.mergeStyle", value: "merge" }],
   },
-  {
-    id: "pre-commit",
-    title: "Pre-commit hook",
-    text: "A team gets lefthook, which runs checks before each commit.",
-    value: "Team only",
-    links: { lefthook: "https://github.com/evilmartians/lefthook" },
-    keys: ["advanced.precommit"],
-    engine: [
-      { flags: {}, key: "advanced.precommit", value: "none" },
-      { flags: { team: true }, key: "advanced.precommit", value: "lefthook" },
-    ],
-  },
+
   {
     id: "guard-location",
     title: "Where the guards live",

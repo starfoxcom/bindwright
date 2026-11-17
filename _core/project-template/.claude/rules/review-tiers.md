@@ -42,7 +42,7 @@ Skip escalation for docs, CI or settings tweaks, version bumps, mechanical refac
 
 ## After a 🔴
 
-Fix on the same PR branch and push; the review re-runs. Then search the codebase for the same mistake elsewhere and fix every copy in that commit, because the reviewer only sees the diff.
+Fix on the same PR branch and push; the review re-runs. Then search the codebase for the same mistake elsewhere and fix every copy in that commit, because the reviewer only sees the diff. When the same finding already came up on an earlier PR, add it to the checklist in `.github/review-guide.md` in the same PR: a trigger the diff shows, the check, and both PRs. A PR that must hold only its own files (§ PRs that edit the review workflow, § If the gate itself breaks) leaves the item to the next PR. Every later review then checks it whenever the trigger matches.
 
 ## What a finding blocks on
 
@@ -50,7 +50,9 @@ A finding belongs to the PR when the PR causes it: a regression from the base br
 
 - Write this bar into every reviewer prompt from the first round, local or CI, before any finding arrives.
 - When a review reports, sort each finding against the bar before touching code. Fix only what passes it, plus the other copies of that same mistake (§ After a 🔴), with the smallest change, and add no features while fixing.
-- After 3 red rounds in a row, stop patching: look up at least three ways others solved the same problem, compare them against each other, take the simplest one that removes the whole class, then continue. One search is a guess. Each step back that leaves the PR red leaves one round fewer before the next: research again after 2 more red rounds, then after every red round from the 6th on.
+- After 3 red rounds in a row, stop patching: look up at least three ways others solved the same problem, compare them against each other, take the simplest one that removes the whole class, then continue. One search is a guess. Each step back that leaves the PR red leaves one round fewer before the next: research again after 2 more red rounds, then after every red round from the 6th on. From the 8th red round on, close to the hard stop, a step back looks up at least five ways instead of three.
+- The 10th red round in a row is the hard stop: close the PR without merging, then rebuild the change from its base branch in a new PR, with that round's findings fixed in the rebuild and a `Rebuilds #<old number>` line in its body. The new PR starts its own count.
+- A PR closed unmerged for good carries a label that says why: `dropped: no fix` when no fix was found, `dropped: not needed` when it has no reason left to exist. Create each label once with `gh label create`. The review counts read the line and the labels.
 
 Without the bar, each fix adds surface for the next round to find, and the rounds never converge.
 

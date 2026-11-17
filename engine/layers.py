@@ -5,7 +5,7 @@ import json
 import os
 import re
 
-from model import CODE_RESEARCH_TOOLS, TRACKERS, map_removed_tool
+from model import CODE_RESEARCH_TOOLS, JS_WHITESPACE, TRACKERS, map_removed_tool
 from setupcode import MAX_DEPTH, _depth, _not_json
 from update import ANSWERS, _code_units, read_state
 
@@ -203,14 +203,117 @@ def _has_marker(path, marker):
     return any(line.strip(" \t\r") == marker for line in text.split("\n"))
 
 
+def _as(value, kind):
+    """The value when it is of the kind, else an empty one, so a malformed entry is skipped."""
+    return value if isinstance(value, kind) else kind()
+
+
+def _command_hooks(settings):
+    """The command hooks under every event of a settings file, in file order."""
+    hooks = []
+    for entries in _as(_as(settings, dict).get("hooks"), dict).values():
+        for entry in _as(entries, list):
+            for hook in _as(_as(entry, dict).get("hooks"), list):
+                if isinstance(hook, dict) and hook.get("type") == "command":
+                    hooks.append(hook)
+    return hooks
+
+
+def _first_word(command):
+    text = command.strip(JS_WHITESPACE)
+    if text[:1] in ('"', "'"):
+        return text[1:].split(text[0], 1)[0]
+    return text.split(" ", 1)[0]
+
+
+def _program(hook):
+    """The program a command hook starts, or None when it is not judged."""
+    command = hook.get("command")
+    if not isinstance(command, str):
+        return None
+    if "args" in hook:
+        program = command
+    else:
+        # A shell line may open with a builtin or an assignment (`cd dir && tool`), so only a path is judged.
+        program = _first_word(command)
+        if not _is_absolute(program):
+            return None
+    if not program or "$" in program or "%" in program:
+        return None
+    return program
+
+
+def _is_absolute(program):
+    # Node counts a rooted path as absolute on Windows too, as Python 3.13 no longer does.
+    return os.path.isabs(program) or (os.name == "nt" and program[:1] in ("/", "\\"))
+
+
+_DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC"
+
+
+def _with_pathext(name):
+    """The file names Windows runs for `name`, as layers.js reads PATHEXT: empty entries skipped, an
+    unset PATHEXT taking the default list. shutil.which is not used: before Python 3.12 it has no
+    default list, and it looks in the current folder first."""
+    exts = [ext for ext in (os.environ.get("PATHEXT") or _DEFAULT_PATHEXT).split(";") if ext]
+    if any(name.lower().endswith(ext.lower()) for ext in exts):
+        return [name]
+    return [name + ext for ext in exts]
+
+
+def _is_runnable(path):
+    """A file, and executable on POSIX: what the shell would run."""
+    return os.path.isfile(path) and (os.name == "nt" or os.access(path, os.X_OK))
+
+
+def _on_path(name):
+    names = _with_pathext(name) if os.name == "nt" else [name]
+    folders = os.environ.get("PATH", "").split(os.pathsep)
+    return any(_is_runnable(os.path.join(folder, each)) for folder in folders for each in names)
+
+
+def _is_missing(program):
+    if _is_absolute(program):
+        return not os.path.exists(program)
+    if "/" in program or "\\" in program:
+        return False
+    return not _on_path(program)
+
+
+def _hook_files(hook):
+    """The .py file names a hook's command or args run, read as home.py's list-hooks reads them."""
+    words = [hook.get("command")] + _as(hook.get("args"), list)
+    return [os.path.basename(w.replace("\\", "/").strip("\"'")) for w in words
+            if isinstance(w, str) and w.strip("\"'").endswith(".py")]
+
+
+def _hook_runs(config, name):
+    """Whether a command hook in the config folder's settings.json runs the named file with a
+    program this computer has, or one that cannot be judged (a `$VAR` in it)."""
+    try:
+        settings = _read_layer_file(os.path.join(config, "settings.json"), "settings.json")
+    except Exception:
+        return False
+    for hook in _command_hooks(settings):
+        if name in _hook_files(hook):
+            program = _program(hook)
+            if program is None or not _is_missing(program):
+                return True
+    return False
+
+
 def installed_extras(config):
     def at(extra):
         return EXTRA_FILES.get(extra, "mods/" + extra)
 
     def present(extra):
-        path = os.path.join(config, *at(extra).split("/"))
+        file = at(extra)
+        path = os.path.join(config, *file.split("/"))
         if extra in MARKERS:
             return _has_marker(path, MARKERS[extra])
+        # A guard whose entry was deleted, or whose program is gone, counts as missing so setup installs it again.
+        if re.fullmatch(r"hooks/[^/]+\.py", file):
+            return os.path.exists(path) and _hook_runs(config, file[len("hooks/"):])
         return os.path.exists(path)
     return {extra: present(extra) for extra in EXTRAS}
 

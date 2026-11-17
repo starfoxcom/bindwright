@@ -24,25 +24,19 @@ fi
 
 # Project-wide type check.
 {{TYPECHECK_COMMAND}}
+<!-- TOGGLE:code_size_check START -->
+
+# The code-size limits in .claude/rules/code-size.md, with the first Python 3.8+ found.
+for py in python3 python py; do
+  "$py" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null && exec "$py" .github/scripts/size_check.py
+done
+echo "size check: no Python 3.8 or later found" >&2
+exit 1
+<!-- TOGGLE:code_size_check END -->
 #   Examples ({{TYPECHECK_COMMAND}}):
 #     ts:        npx tsc --noEmit
 #     python:    mypy .
 #     rust:      cargo check --all-targets
-
-# ---------------------------------------------------------------------------
-# Husky uses one file per git hook. To enforce conventional commit messages and
-# run tests before push, add these sibling hooks:
 #
-#   .husky/commit-msg
-#   -----------------
-#   grep -qE '^(feat|fix|refactor|perf|test|docs|chore|style|data)(\([a-z0-9_-]+\))?: .{1,72}$' "$1" || {
-#     echo "❌ Commit message must follow: <type>(<scope>): <imperative description>"
-#     echo "   Types: feat, fix, refactor, perf, test, docs, chore, style, data"
-#     echo "   See .claude/rules/git.md for details."
-#     exit 1
-#   }
-#
-#   .husky/pre-push
-#   ---------------
-#   {{TEST_COMMAND}}   # comment out if the suite is too slow for pre-push; rely on CI instead
-# ---------------------------------------------------------------------------
+# Husky reads one file per git hook: the commit-message check is in
+# .husky/commit-msg and the tests before each push in .husky/pre-push.

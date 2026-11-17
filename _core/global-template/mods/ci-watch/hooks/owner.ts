@@ -1,4 +1,5 @@
 import type { Watch } from '../types'
+import { stepBackOf } from './rounds'
 import type { EngineInterface } from 'claude-code'
 
 // A hot reload loads the mod again but leaves the earlier instance's timer (and old code) running beside
@@ -69,7 +70,8 @@ export async function followId($: EngineInterface, folder: string, memory: Memor
     const there = savedByPr.get(prOf(w))
     if (!there || there.headSha !== w.headSha || !there.outcome || w.outcome) return w
     // A step back latched in memory stays unless the saved copy went green, which ends it.
-    return there.outcome === 'passed' ? there : { ...there, stepBackTopics: w.stepBackTopics ?? there.stepBackTopics }
+    if (there.outcome === 'passed') return there
+    return w.stepBackTopics ? { ...there, ...stepBackOf(w) } : there
   })
   const ownPrs = new Set(own.map(prOf))
   memory.watches = [...saved.filter(w => !ownPrs.has(prOf(w))), ...own]

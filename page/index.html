@@ -76,7 +76,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
   <section class="hero">
     <div class="pitch">
       <h1 data-t="hero.title">Claude remembers how you like to work.</h1>
-      <p class="lede" data-t="hero.lede">Answer a few questions once, and every Claude session in your project starts knowing your rules, gets a second check on every change, and stops anything risky before it runs. One command, no coding knowledge needed.</p>
+      <p class="lede" data-t="hero.lede">No more pointing each new project at an old one and asking Claude to copy its rules and hooks over. Answer a few questions once, and every session here starts with your rules already in place, while every change gets checked before it merges. One command, no coding knowledge needed.</p>
       <div class="actions">
         <a class="go" href="#install" data-t="hero.go">Install Bindwright</a>
         <a class="source" href="https://github.com/starfoxcom/bindwright"
@@ -84,7 +84,7 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
       </div>
     </div>
     <div class="stage" id="scene-stage">
-      <h2 class="caption" id="scene-caption"><span><b>1.</b><span data-t="scene.caption.1">Starts right where you left off, no hassle</span></span></h2>
+      <h2 class="caption" id="scene-caption"><span><b>1.</b><span data-t="scene.caption.1">A fresh session already knows what's next</span></span></h2>
 
       <div class="term" data-desk="desk.session.hero" role="img" aria-label="A coding session in Claude Code with Bindwright set up"
         data-t-attr="aria-label:scene.aria">
@@ -120,13 +120,13 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
     <ul>
       <li><span class="was" data-t="changes.1.was">Claude forgets how you work every session</span>
         <b data-t="changes.1.title">Claude stops repeating mistakes</b>
-        <span data-t="changes.1.text">It reads your rules at the start of every session, so small functions and real tests stop being something you have to ask for every time.</span></li>
+        <span data-t="changes.1.text">It reads your rules at the start of every session, and hooks hold the ones that can't bend, so the slips Claude makes in long sessions, after a compaction or three, get stopped instead of shipped.</span></li>
       <li><span class="was" data-t="changes.2.was">Changes merge without anyone checking them</span>
         <b data-t="changes.2.title">Every pull request gets reviewed</b>
         <span data-t="changes.2.text">An AI reviews every change before it merges, and if the review doesn't pass, nothing goes in.</span></li>
       <li><span class="was" data-t="changes.3.was">Each session starts from scratch</span>
         <b data-t="changes.3.title">Sessions pick up where they stopped</b>
-        <span data-t="changes.3.text">Each session starts with a plan and ends with a note for the next one, so the work picks up right where it stopped.</span></li>
+        <span data-t="changes.3.text">Each session ends with a note on what's next and the next one starts by reading it, so you never explain the project or the next task to a fresh session again.</span></li>
       <li><span class="was" data-t="changes.4.was">One wrong command can wipe your main branch</span>
         <b data-t="changes.4.title">Risky commands get blocked</b>
         <span data-t="changes.4.text">Force pushes to your main branch get stopped before they run, since one wrong command there can cost you days of work.</span></li>
@@ -209,8 +209,24 @@ href="https://fonts.googleapis.com/css2?family=Hubot+Sans:wdth,wght@75..125,200.
         <p class="stat-label" data-t="evidence.fixed.label">were held back 1 or 2 rounds until the problem was fixed</p>
       </div>
       <div class="stat">
-        <span class="stat-num stat-red" data-total="stalled" data-count="0">0</span>
+        <span class="stat-num stat-orange" data-total="stalled" data-count="0">0</span>
         <p class="stat-label" data-t="evidence.stalled.label">took 3 rounds or more, where the session stops to research a simpler fix</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-purple" data-total="rebuilt" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.rebuilt.label">were rebuilt from scratch after 10 red rounds, then passed without another research step</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-indigo" data-total="rebuiltStalled" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.rebuiltStalled.label">were rebuilt, needed research again, and still merged</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-red" data-total="dropped" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.dropped.label">were dropped because no fix was found</p>
+      </div>
+      <div class="stat">
+        <span class="stat-num stat-gray" data-total="retired" data-count="0">0</span>
+        <p class="stat-label" data-t="evidence.retired.label">were dropped because they were no longer needed</p>
       </div>
     </div>
     <p class="evidence-detail" id="evidence-detail"></p>

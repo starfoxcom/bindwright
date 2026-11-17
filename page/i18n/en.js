@@ -93,18 +93,28 @@ export default {
   "evidence.part.passed": "first try",
   "evidence.part.fixed": "fixed in 1 or 2 rounds",
   "evidence.part.stalled": "fixed after deeper research",
+  "evidence.part.rebuilt": "rebuilt",
+  "evidence.part.rebuiltStalled": "rebuilt, researched again",
+  "evidence.part.dropped": "dropped",
+  "evidence.part.retired": "not needed",
   "evidence.legend.skipped": "skipped the review",
   "evidence.legend.passed": "passed the first review",
   "evidence.legend.fixed": "fixed in 1 or 2 rounds",
   "evidence.legend.stalled": "took 3 rounds or more",
-  "evidence.detail": "The AI reviewed {checked} of them. The {held} held back, yellow and red, took "
+  "evidence.legend.rebuilt": "rebuilt after 10 red rounds",
+  "evidence.legend.rebuiltStalled": "rebuilt, then researched again",
+  "evidence.legend.dropped": "dropped, no fix found",
+  "evidence.legend.retired": "dropped, no longer needed",
+  "evidence.detail": "The AI reviewed {checked} of them. The {held} held back at least once took "
     + "{rounds} fix rounds on average. {deep} of the {checked} touched risky code, like security or "
     + "saved data, and also got a deeper review.",
   "evidence.note": {
     one: "Bindwright puts an AI reviewer on every pull request. "
-      + "These are its results so far in {count} project whose owner chose to share anonymous counts.",
+      + "These are its results so far in {count} project whose owner chose to share anonymous counts. "
+      + "It's early, so there aren't enough of them yet to say it works everywhere the way it's meant to.",
     other: "Bindwright puts an AI reviewer on every pull request. "
-      + "These are its results so far in {count} projects whose owners chose to share anonymous counts.",
+      + "These are its results so far in {count} projects whose owners chose to share anonymous counts. "
+      + "It's early, so there aren't enough of them yet to say it works everywhere the way it's meant to.",
   },
   "evidence.kind.game": "Game project",
   "evidence.kind.business-app": "Business app",
