@@ -9,7 +9,9 @@ Rules other than the inline-script one read the command with quoted strings
 and PowerShell here-string bodies taken out, and a bash command only as far as
 its first here-document, so a commit message or a PR body that only mentions a
 pattern passes. The inline-script rule reads only a bash command's first
-here-document, and only when its `<<` stands outside quotes. Where the reading
+here-document, and only when its `<<` stands outside quotes, and it refuses one
+only where an interpreter reads its script from standard input (`python -`,
+`cat <<EOF | node`): fed to a script file, the text is data. Where the reading
 is unsure (a quote that never closes, a `<<` inside `"$(...)"`), the text is
 left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
@@ -24,7 +26,11 @@ import re
 import sys
 
 INTERPRETER = r"(?:python3?|py|node|deno|bun|perl|ruby|php|bash|sh|zsh|pwsh|powershell)(?:\.exe)?"
-INTERPRETER_WORD = re.compile(r"(?:^|[\s;&|(])" + INTERPRETER + r"(?=[\s;&|)]|$)", re.I)
+PROGRAM = re.compile(r"(?:.*[/\\])?" + INTERPRETER, re.I)
+# Options that hand the interpreter its script some other way, so standard input is data.
+SCRIPT_GIVEN = {"-c", "-e", "-p", "-m", "--eval", "--print"}
+SHELLS = ("bash", "sh", "zsh")
+REDIRECTION = re.compile(r"\d*(?:&>|[<>]&?)")
 # A here-document opener, its word quoted (`<<'EOF'`, `<<"EOF"`), escaped (`<<\EOF`) or bare.
 HEREDOC = re.compile(r"<<(-?)[ \t]*\\?(['\"]?)([A-Za-z_][\w-]*)\2")
 # A `<<` that is not part of a here-string (`<<<`), and arithmetic, where a `<<` opens nothing.
@@ -73,10 +79,10 @@ def first_opener(text):
 
 
 def heredoc(text):
-    """(command, body) of a bash command's first here-document, or None when it has none or its
+    """(receivers, body) of a bash command's first here-document, or None when it has none or its
     `<<` stands inside quotes, a comment or arithmetic, where the reading is unsure
-    (`"$(cat <<'EOF'`). The command is the part of its line between the separators around the
-    `<<`, pipes included, with quoted strings blanked."""
+    (`"$(cat <<'EOF'`). The receivers are the commands of its pipeline from the one the `<<` feeds
+    on (`cat <<EOF | python3`), with quoted strings blanked."""
     first = first_opener(text)
     if not first:
         return None
@@ -84,14 +90,14 @@ def heredoc(text):
     masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, text)).split("\n")[number]
     if not HEREDOC_OPERATOR.match(masked, match.start()):
         return None
-    command = (LIST_SEPARATOR.split(masked[:match.start()])[-1]
-               + LIST_SEPARATOR.split(masked[match.end():])[0])
+    before = LIST_SEPARATOR.split(masked[:match.start()])[-1].split("|")[-1]
+    after = LIST_SEPARATOR.split(masked[match.end():])[0].split("|")
     body = []
     for line in text.split("\n")[number + 1:]:
         if ends_heredoc(line, match):
             break
         body.append(line)
-    return command, "\n".join(body)
+    return [before + after[0]] + after[1:], "\n".join(body)
 
 
 def ends_heredoc(line, match):
@@ -100,12 +106,38 @@ def ends_heredoc(line, match):
     return (line.lstrip("\t") if match.group(1) else line) == match.group(3)
 
 
+def reads_script(command):
+    """Whether this command is an interpreter that reads its script from standard input: nothing
+    but options after it (`python`, `node`), `-`, or `-s` for a shell. A script file, a module or
+    an inline script (`python3 x.py`, `python -m pkg`, `bash -c "..."`) reads standard input as
+    data, and so does an option whose value is unknown (`python -W x`)."""
+    words = [word for word in command.split() if not re.fullmatch(r"\w+=\S*", word)]
+    if not words or not PROGRAM.fullmatch(words[0]):
+        return False
+    is_shell = re.sub(r"(?i)\.exe$", "", re.split(r"[/\\]", words[0])[-1]).lower() in SHELLS
+    rest = iter(words[1:])
+    for word in rest:
+        if REDIRECTION.match(word):
+            if REDIRECTION.fullmatch(word):
+                next(rest, None)
+        elif word == "-" or (is_shell and re.fullmatch(r"-[a-z]*s[a-z]*", word)):
+            return True
+        elif word in SCRIPT_GIVEN or not word.startswith("-"):
+            return False
+    return True
+
+
+def piped_to(rest_of_line):
+    """The commands a PowerShell here-string is piped into: the pipeline after its closing line."""
+    return re.split(r";|&&|\|\|", rest_of_line)[0].split("|")[1:]
+
+
 def inline_script(text, shell):
     """Whether an interpreter is handed a script holding a backslash."""
     found = heredoc(text) if shell == "bash" else None
-    if found and INTERPRETER_WORD.search(found[0]) and "\\" in found[1]:
+    if found and "\\" in found[1] and any(reads_script(command) for command in found[0]):
         return True
-    if shell == "powershell" and any("\\" in m.group(2) and INTERPRETER_WORD.search(m.group(3))
+    if shell == "powershell" and any("\\" in m.group(2) and any(map(reads_script, piped_to(m.group(3))))
                                      for m in HERE_STRING.finditer(text)):
         return True
     return any("\\" in (m.group(2) or m.group(4) or "") for m in INLINE.finditer(text))

@@ -162,7 +162,10 @@ class GuardHookTest(unittest.TestCase):
                    ("git checkout develop -- .", "Bash"), ("gh pr merge 5 --merge --admin", "Bash"),
                    ("# it's fine\ngh run watch 1", "Bash"), ("<# note #> gh run watch 1", "PowerShell"),
                    ("sleep 1 & python - <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
-                   ("python - 2>&1 <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"))
+                   ("python - 2>&1 <<'EOF'\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("cat <<'EOF' | python3\nprint('C:\\\\x')\nEOF", "Bash"),
+                   ("bash -s arg <<'EOF'\necho C:\\\\x\nEOF", "Bash"),
+                   ("@'\nprint('C:\\\\x')\n'@ | node", "PowerShell"))
         passing = (("python - <<'EOF'\nprint('hi')\nEOF", "Bash"),
                    ("git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
                    ("python3 tools/x.py && git commit -F - <<'EOF'\nfix: C:\\\\path\nEOF", "Bash"),
@@ -200,7 +203,12 @@ class GuardHookTest(unittest.TestCase):
                    ("# don't amend\ngit commit -m \"docs: it's why python <<EOF eats\nC:\\\\x paths\"", "Bash"),
                    ("<# Don't chain these #>\ngit commit -m 'docs: never use gh run watch'", "PowerShell"),
                    ("<#\nNever use gh run watch here.\n#>\nls", "PowerShell"),
-                   ("python3 -m http.server 8000 & cat <<'EOF' > notes.md\nC:\\\\x\nEOF", "Bash"))
+                   ("python3 -m http.server 8000 & cat <<'EOF' > notes.md\nC:\\\\x\nEOF", "Bash"),
+                   ("python3 tools/check.py <<'EOF'\n{\"path\": \"C:\\\\x\"}\nEOF", "Bash"),
+                   ("cat <<'EOF' | node x.mjs\nC:\\\\x\nEOF", "Bash"),
+                   ("cat <<'EOF' | grep -c node\nC:\\\\x\nEOF", "Bash"),
+                   ("@'\nC:\\\\x\n'@ | node x.mjs", "PowerShell"),
+                   ("@'\nC:\\\\x\n'@ | Set-Content run.txt; python x.py", "PowerShell"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()
