@@ -181,7 +181,14 @@ class GuardHookTest(unittest.TestCase):
                    ('python3 tools/confirm.py <<<"yes"\nprintf \'done\\n\'', "Bash"),
                    ('python3 x.py "$((1 << n))"\nprintf \'a\\n\'', "Bash"),
                    ('python3 x.py "a << b"\nprintf \'a\\n\'', "Bash"),
-                   ("python3 x.py # feeds << EOF\nprintf 'a\\n'", "Bash"))
+                   ("python3 x.py # feeds << EOF\nprintf 'a\\n'", "Bash"),
+                   ('python3 -c "\nmask = 1 << bit | 1 << other\nprint(mask)\n"', "Bash"),
+                   ("echo x\nprintf a << b << c", "Bash"),
+                   ('git commit -m "docs: never use gh run watch\n\nfeed cat <<EOF lines to it\nmore\n"', "Bash"),
+                   ("git commit -m \"docs: x\nA script fed to python <<EOF loses them:\nprint('C:\\\\x')\n\"", "Bash"),
+                   ("git commit -F - <<\\EOF\ndocs: never use gh run watch\nEOF", "Bash"),
+                   ('git commit -m "$(cat <<\'EOF\'\nfix: never "gh run watch" here\nEOF\n)"', "Bash"),
+                   ('git commit -m "docs: a << b\nnever gh run watch\n"', "PowerShell"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()

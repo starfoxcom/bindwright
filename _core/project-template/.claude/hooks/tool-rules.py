@@ -5,10 +5,13 @@ Each rule in RULES names a pattern that keeps failing, why, and what to use
 instead. A correction of the kind "never use X, use Y" lands here as a new rule,
 so the session cannot drift back to X: a note in memory alone does not hold.
 
-Rules other than the inline-script one read the command with quoted strings,
-here-document bodies and PowerShell here-string bodies taken out, so a commit
-message or a PR body that only mentions a pattern passes. It is a safety net
-for the ordinary spelling, not a sandbox against a command built to slip past it.
+Rules other than the inline-script one read the command with quoted strings
+and PowerShell here-string bodies taken out, and a bash command only as far as
+its first here-document, so a commit message or a PR body that only mentions a
+pattern passes. Where the reading is unsure (a quote that never closes), the
+text is left unread: a missed pattern costs less than a refused command. It is
+a safety net for the ordinary spelling, not a sandbox against a command built
+to slip past it.
 
 Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
@@ -20,11 +23,12 @@ import sys
 
 INTERPRETER = r"(?:python3?|py|node|deno|bun|perl|ruby|php|bash|sh|zsh|pwsh|powershell)(?:\.exe)?"
 INTERPRETER_WORD = re.compile(r"(?:^|[\s;&|(])" + INTERPRETER + r"(?=[\s;&|)]|$)", re.I)
-HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][\w-]*)\2")
+# A here-document opener, its word quoted (`<<'EOF'`, `<<"EOF"`), escaped (`<<\EOF`) or bare.
+HEREDOC = re.compile(r"<<(-?)[ \t]*\\?(['\"]?)([A-Za-z_][\w-]*)\2")
 # A `<<` that is not part of a here-string (`<<<`), and the spans where a `<<` opens nothing:
 # arithmetic (`$((1 << n))`) and a comment.
 HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)")
-NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)|(?:^|(?<=\s))#.*")
+NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)|(?:^|(?<=\s))#[^\n]*")
 HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
 # The separators between the commands of one line; a pipe joins two parts of one command.
 LIST_SEPARATOR = re.compile(r"&&|\|\||;")
@@ -34,50 +38,50 @@ INLINE = re.compile(r"(?:^|[\s;&|(])(?:python3?|py)(?:\.exe)?(?:[ \t]+-\w+)*[ \t
                     re.I | re.S)
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s[\w./@~^-]+:\.[^/\s.]", re.I)
-# Quoted strings and escapes as each shell reads them: bash escapes with a backslash, PowerShell
-# with a backtick and by doubling the quote, and a PowerShell backslash is plain text (`"C:\"`).
-QUOTED = {"bash": re.compile(r"\\.|'[^']*'|\"(?:[^\"\\]|\\.)*\"", re.S),
-          "powershell": re.compile(r"`.|'(?:[^']|'')*'|\"(?:[^\"`]|`.|\"\")*\"", re.S)}
+# Quoted strings and escapes as each shell reads them, across lines: bash escapes with a
+# backslash, PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is
+# plain text (`"C:\"`). A quote that never closes runs to the end of the command.
+QUOTED = {"bash": re.compile(r"\\.|'[^']*(?:'|\Z)|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
+          "powershell": re.compile(r"`.|'(?:[^']|'')*(?:'|\Z)|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 
 WRITE_THE_FILE = "its backslashes get eaten. Write the script with the Write tool, then run the file."
 
 
-def heredoc_bodies(text):
-    """(the command holding the `<<`, body start, body end) for each here-document in the text,
-    the body as a span of the text. The command is the part of its line between the separators
-    around the `<<`, pipes included, with its quoted strings taken out."""
-    lines = text.split("\n")
-    starts = [0]
-    for line in lines:
-        starts.append(starts[-1] + len(line) + 1)
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        found = heredoc_openers(line)
-        i += 1
-        for match in found:
-            command = QUOTED["bash"].sub("''", LIST_SEPARATOR.split(line[:match.start()])[-1]
-                                         + LIST_SEPARATOR.split(line[match.end():])[0])
-            first = i
-            while i < len(lines) and not ends_heredoc(lines[i], match):
-                i += 1
-            start, end = min(starts[first], len(text)), min(starts[i] - 1, len(text))
-            i += 1
-            yield command, start, max(start, end)
-
-
-def heredoc_openers(line):
-    """The here-document openers of a line: each `<<` outside quotes, comments and arithmetic."""
-    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, line))
-    found = (HEREDOC.match(line, m.start()) for m in HEREDOC_OPERATOR.finditer(masked))
-    return [match for match in found if match]
-
-
 def blanked(match):
-    """The matched text as spaces, so the positions around it stay put."""
-    return " " * len(match.group())
+    """The matched text as spaces, line ends kept, so the positions around it stay put."""
+    return re.sub(r"[^\n]", " ", match.group())
+
+
+def openers(text):
+    """(line number, the line's text outside quotes, match) for each here-document opener of a
+    bash command, in order: each `<<` outside quotes, comments and arithmetic."""
+    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, text)).split("\n")
+    for number, line in enumerate(text.split("\n")):
+        for operator in HEREDOC_OPERATOR.finditer(masked[number]):
+            match = HEREDOC.match(line, operator.start())
+            if match:
+                yield number, masked[number], match
+
+
+def heredocs(text):
+    """(command, body) for each here-document of a bash command. The command is the part of its
+    line between the separators around the `<<`, pipes included, with quoted strings blanked."""
+    lines = text.split("\n")
+    after = 0  # the first line no earlier here-document's body holds
+    for number, masked, match in openers(text):
+        if number < after:
+            continue
+        command = (LIST_SEPARATOR.split(masked[:match.start()])[-1]
+                   + LIST_SEPARATOR.split(masked[match.end():])[0])
+        body = []
+        after = max(after, number + 1)
+        while after < len(lines) and not ends_heredoc(lines[after], match):
+            body.append(lines[after])
+            after += 1
+        after += 1
+        yield command, "\n".join(body)
 
 
 def ends_heredoc(line, match):
@@ -88,8 +92,8 @@ def ends_heredoc(line, match):
 
 def inline_script(text, shell):
     """Whether an interpreter is handed a script holding a backslash."""
-    if any(INTERPRETER_WORD.search(command) and "\\" in text[start:end]
-           for command, start, end in heredoc_bodies(text)):
+    if shell == "bash" and any(INTERPRETER_WORD.search(command) and "\\" in body
+                               for command, body in heredocs(text)):
         return True
     if shell == "powershell" and any("\\" in m.group(2) and INTERPRETER_WORD.search(m.group(3))
                                      for m in HERE_STRING.finditer(text)):
@@ -98,11 +102,17 @@ def inline_script(text, shell):
 
 
 def bare(text, shell):
-    """The command with here-string bodies, here-document bodies and quoted strings taken out."""
+    """The command with quoted strings taken out, and PowerShell here-string bodies; a bash
+    command only up to the end of the first line that may open a here-document, quoted or not
+    (`"$(cat <<'EOF'`), since reading too little only misses a pattern."""
     if shell == "powershell":
         text = HERE_STRING.sub(r"''\3", text)
-    for _, start, end in reversed(list(heredoc_bodies(text))):
-        text = text[:start] + text[end:]
+    else:
+        lines = text.split("\n")
+        first = next((n for n, line in enumerate(lines) if any(
+            HEREDOC.match(line, m.start()) for m in HEREDOC_OPERATOR.finditer(line))), None)
+        if first is not None:
+            text = "\n".join(lines[:first + 1])
     return QUOTED[shell].sub("''", text)
 
 
