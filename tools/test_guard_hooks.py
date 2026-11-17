@@ -176,7 +176,12 @@ class GuardHookTest(unittest.TestCase):
                    ("git commit -F - <<'EOF'\r\ndocs: stop using gh run watch\r\n\r\nWhy: x\r\nEOF", "Bash"),
                    ("git commit -m 'docs: don'\\''t chain git push and gh pr create'", "Bash"),
                    ('git commit -m "docs: never `"gh run watch`" here"', "PowerShell"),
-                   ('Copy-Item a "dist\\"; git commit -m "docs: never gh run watch"', "PowerShell"))
+                   ('Copy-Item a "dist\\"; git commit -m "docs: never gh run watch"', "PowerShell"),
+                   ("python3 tools/confirm.py <<< yes\nprintf 'done\\n'", "Bash"),
+                   ('python3 tools/confirm.py <<<"yes"\nprintf \'done\\n\'', "Bash"),
+                   ('python3 x.py "$((1 << n))"\nprintf \'a\\n\'', "Bash"),
+                   ('python3 x.py "a << b"\nprintf \'a\\n\'', "Bash"),
+                   ("python3 x.py # feeds << EOF\nprintf 'a\\n'", "Bash"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()

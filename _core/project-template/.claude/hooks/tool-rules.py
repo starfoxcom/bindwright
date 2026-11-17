@@ -21,6 +21,10 @@ import sys
 INTERPRETER = r"(?:python3?|py|node|deno|bun|perl|ruby|php|bash|sh|zsh|pwsh|powershell)(?:\.exe)?"
 INTERPRETER_WORD = re.compile(r"(?:^|[\s;&|(])" + INTERPRETER + r"(?=[\s;&|)]|$)", re.I)
 HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][\w-]*)\2")
+# A `<<` that is not part of a here-string (`<<<`), and the spans where a `<<` opens nothing:
+# arithmetic (`$((1 << n))`) and a comment.
+HEREDOC_OPERATOR = re.compile(r"(?<!<)<<(?!<)")
+NOT_AN_OPENER = re.compile(r"\$?\(\([^)]*\)\)|(?:^|(?<=\s))#.*")
 HERE_STRING = re.compile(r"@(['\"])\r?\n(.*?)\r?\n\1@([^\n]*)", re.S)
 # The separators between the commands of one line; a pipe joins two parts of one command.
 LIST_SEPARATOR = re.compile(r"&&|\|\||;")
@@ -51,7 +55,7 @@ def heredoc_bodies(text):
     i = 0
     while i < len(lines):
         line = lines[i]
-        found = list(HEREDOC.finditer(line))
+        found = heredoc_openers(line)
         i += 1
         for match in found:
             command = QUOTED["bash"].sub("''", LIST_SEPARATOR.split(line[:match.start()])[-1]
@@ -62,6 +66,18 @@ def heredoc_bodies(text):
             start, end = min(starts[first], len(text)), min(starts[i] - 1, len(text))
             i += 1
             yield command, start, max(start, end)
+
+
+def heredoc_openers(line):
+    """The here-document openers of a line: each `<<` outside quotes, comments and arithmetic."""
+    masked = NOT_AN_OPENER.sub(blanked, QUOTED["bash"].sub(blanked, line))
+    found = (HEREDOC.match(line, m.start()) for m in HEREDOC_OPERATOR.finditer(masked))
+    return [match for match in found if match]
+
+
+def blanked(match):
+    """The matched text as spaces, so the positions around it stay put."""
+    return " " * len(match.group())
 
 
 def ends_heredoc(line, match):
