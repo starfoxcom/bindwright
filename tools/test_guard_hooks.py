@@ -138,7 +138,8 @@ class GuardHookTest(unittest.TestCase):
 
     def assert_passes(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), b"")
+        # The whole answer, since a refusal's reason comes after the cut of a long bytes diff.
+        self.assertEqual(result.stdout.strip(), b"", result.stdout.decode("utf-8", "replace"))
 
     def test_force_push_is_blocked(self):
         self.assert_blocked(self.run_hook("push-guard", FORCE_PUSH))
