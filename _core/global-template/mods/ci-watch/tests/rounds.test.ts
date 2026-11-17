@@ -231,13 +231,14 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   w.seen.prCommits = ['d00d000']
   w.seen.history['C:/session'] = ['d00d000']
   expect(await bash('git commit -m x')).toHaveProperty('deny')
-  // A list as long as `gh` lists may be cut, so the PR's commits count as unread.
+  // Work holding none of the PR's current commits goes on.
   w.seen.history['C:/session'] = []
   expect(await bash('git commit -m x')).not.toHaveProperty('deny')
   // A shallow clone's commit test may answer a false no, so it is no answer.
   w.seen.shallow = ['C:/session']
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.shallow = []
+  // A list as long as `gh` lists may be cut, so the PR's commits count as unread.
   w.seen.prCommits = Array.from({ length: 100 }, (_, i) => `abc${String(i).padStart(4, '0')}`)
   expect(await bash('git commit -m x')).toHaveProperty('deny')
   w.seen.isGitDown = true
