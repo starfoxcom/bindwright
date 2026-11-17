@@ -8,12 +8,14 @@ so the session cannot drift back to X: a note in memory alone does not hold.
 Rules other than the inline-script one read the command with quoted strings
 and PowerShell here-string bodies taken out, and a bash command only as far as
 its first here-document, so a commit message or a PR body that only mentions a
-pattern passes. The inline-script rule reads only a bash command's first
-here-document, and only when its `<<` stands outside quotes, and it refuses one
-only where an interpreter reads its script from standard input (`python -`,
-`cat <<EOF | node`): fed to a script file, the text is data. Where the reading
-is unsure (a quote that never closes, a `<<` inside `"$(...)"`), the text is
-left unread: a missed pattern costs less than a refused command. It is
+pattern passes. The inline-script rule reads a bash command's first
+here-document, only when its `<<` stands outside quotes, and PowerShell
+here-strings, and refuses one only where an interpreter reads its script from
+standard input (`python -`, `cat <<EOF | node`): fed to a script file, the text
+is data. It also reads the script of a `python -c` or `node -e` call that
+stands outside quotes and comments. Where the reading is unsure (a quote that
+never closes, a double-quoted string holding `$(`, a `<<` inside one), the
+text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
 to slip past it.
 
@@ -56,12 +58,14 @@ REV_DOT_PATH = re.compile(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b[^\n|;&]*?\s
 # whichever starts first wins: a `#` that starts a word outside quotes comments out the rest of
 # its line, and a quote character in a comment opens nothing. Bash escapes with a backslash,
 # PowerShell with a backtick and by doubling the quote, and a PowerShell backslash is plain text
-# (`"C:\"`). A PowerShell block comment runs from `<#` to the first `#>`. A quote or block
-# comment that never closes runs to the end of the command.
+# (`"C:\"`). A PowerShell block comment runs from `<#` to the first `#>`. Bash's `$'...'` ends
+# only at an unescaped quote. A quote or block comment that never closes, and a double-quoted
+# string holding `$(`, whose own quotes nest, run to the end of the command.
 COMMENT = r"(?:^|(?<=[\s;&|(]))#[^\n]*"
-QUOTED = {"bash": re.compile(COMMENT + r"|\\.|'[^']*(?:'|\Z)|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
-          "powershell": re.compile(r"<#.*?(?:#>|\Z)|" + COMMENT
-                                   + r"|`.|'(?:[^']|'')*(?:'|\Z)|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
+QUOTED = {"bash": re.compile(COMMENT + r"|\\.|\$'(?:[^'\\]|\\.)*(?:'|\Z)|'[^']*(?:'|\Z)"
+                             r"|\"(?:[^\"\\$]|\\.|\$(?!\())*\$\(.*|\"(?:[^\"\\]|\\.)*(?:\"|\Z)", re.S),
+          "powershell": re.compile(r"<#.*?(?:#>|\Z)|" + COMMENT + r"|`.|'(?:[^']|'')*(?:'|\Z)"
+                                   r"|\"(?:[^\"`$]|`.|\"\"|\$(?!\())*\$\(.*|\"(?:[^\"`]|`.|\"\")*(?:\"|\Z)", re.S)}
 # Git Bash's path conversion is what mangles a dot-led rev path; other shells pass it as written.
 GIT_BASH = os.name == "nt"
 
@@ -71,6 +75,15 @@ WRITE_THE_FILE = "its backslashes get eaten. Write the script with the Write too
 def blanked(match):
     """The matched text as spaces, line ends kept, so the positions around it stay put."""
     return re.sub(r"[^\n]", " ", match.group())
+
+
+def as_quote(match):
+    """A quoted string as `''` and spaces, a comment or an escape as spaces, line ends kept, so
+    the text keeps its length and a call's position in it matches the original's."""
+    spaces = blanked(match)
+    if match.group()[:1] in "'\"$" and spaces[:2] == "  ":
+        return "''" + spaces[2:]
+    return spaces
 
 
 def as_word(match):
@@ -189,10 +202,24 @@ def inline_script(text, shell):
     if shell == "powershell" and any("\\" in m.group(2) and first_interpreter_reads(piped_to(m.group(3)))
                                      for m in HERE_STRING.finditer(text)):
         return True
-    # A `python -c '...'` a message only mentions leaves no call once quotes are taken out.
-    is_called = INLINE_CALL.search(bare(text, shell))
-    scripts = (m.group(2) or m.group(4) or "" for m in INLINE.finditer(text))
-    return bool(is_called) and any("\\" in script for script in scripts)
+    # A `python -c '...'` a message only mentions leaves no call where its quotes are taken out.
+    masked, end = masked_calls(text, shell)
+    return any("\\" in (m.group(2) or m.group(4) or "") and m.start() < end and INLINE_CALL.match(masked, m.start())
+               for m in INLINE.finditer(text))
+
+
+def masked_calls(text, shell):
+    """(the command with quoted strings, comments and PowerShell here-string bodies masked to the
+    same length, where a call may stand): a bash command only up to the end of the first line
+    that may open a here-document, as in `bare`."""
+    end = len(text)
+    if shell == "powershell":
+        text = HERE_STRING.sub(lambda m: "''" + blanked(m)[2:m.start(3) - m.start()] + m.group(3), text)
+    else:
+        first = first_opener(text)
+        if first:
+            end = len("\n".join(text.split("\n")[:first[0] + 1]))
+    return QUOTED[shell].sub(as_quote, text), end
 
 
 def bare(text, shell):

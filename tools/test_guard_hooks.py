@@ -222,7 +222,13 @@ class GuardHookTest(unittest.TestCase):
                    ("git commit -m \"docs: python -c 'print(\\\\x)' eats it\"", "Bash"),
                    ("git commit -F - <<'EOF'\nfix: python -c 'print(\\\\x)' ate it\nEOF", "Bash"),
                    ("git add engine/bind.py .github/scripts/size_check.py && git commit -m x", "Bash"),
-                   ("python3 \"$HOOK\" <<'EOF'\n{\"p\": \"C:\\\\x\"}\nEOF", "Bash"))
+                   ("python3 \"$HOOK\" <<'EOF'\n{\"p\": \"C:\\\\x\"}\nEOF", "Bash"),
+                   ("python3 -c \"import sys\" && git commit -m \"docs: python -c 'print(\\\\x)' eats it\"", "Bash"),
+                   ("python3 -c 'print(1)'; git commit -F - <<'EOF'\n"
+                    "fix: python -c 'print(\\\\x)' ate it\nEOF", "Bash"),
+                   ("python3 -c \"print(1)\"  # unlike python -c 'C:\\\\x'", "Bash"),
+                   ("git commit -m $'docs: don\\'t use gh run watch'", "Bash"),
+                   ('git commit -m "$(printf "never gh run watch")"', "Bash"))
         # Only Git Bash rewrites a dot-led rev path; elsewhere it is read as written.
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()
