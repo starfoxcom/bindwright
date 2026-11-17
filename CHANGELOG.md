@@ -13,6 +13,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The layout check stops its browsers on a busy Windows machine too.** The query that finds them gave up after 20 seconds and read as no browsers, so a slow machine could leave a headless browser running; it now waits up to 60 seconds.
+- **The review workflows install the attribution guard's parser offline.** The helper the CI review jobs install came with its pinned checksum, but npm could still fetch its dependencies from the registry unpinned, in a job that holds the review token; both workflows now install it with `--offline` from an empty cache of their own, and a missing package stops the step.
+- **The review workflows ignore the runner's own curl and npm settings.** On a self-hosted runner reused between jobs, a `~/.curlrc` or `~/.npmrc` an earlier job left could change the downloads, the bot-token exchange or the CLI install; every curl now starts with `-q` and npm reads no user config.
 
 ## [v7.0.0] — 2026-11-17
 
