@@ -1,7 +1,8 @@
 // Bindwright's start-session notice, run from the helper by the repo's
 // /start-session skill from the repo root, with `--plugin <plugin folder>`. First
 // it brings the helper up to the plugin's pin when the plugin moved ahead (follow.mjs),
-// saying so in one line, or once a day per pin why it could not. Then, at
+// saying so in one line, or once a day per pin why it could not, and names the hook copies
+// in ~/.claude/hooks that follow refreshed to the new helper's text or kept. Then, at
 // most once a day per repo, it says when the repo's Bindwright files are older
 // than the plugin (/bindwright:update brings them up), when the helper is not
 // at the plugin's version, or when a newer plugin is out. That check asks the network
@@ -13,7 +14,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { follow } from "./follow.mjs";
+import { follow, hookSources } from "./follow.mjs";
 import { writeFileAtomic } from "./write-file.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readState, repoKey, stateFileIn } from "./counts.mjs";
@@ -163,6 +164,25 @@ function startCountsSend(repo, config) {
   child.unref();
 }
 
+// What the follow did to the hook copies: the hooks it refreshed, the edited ones it kept, and an
+// error (the next session start tries again). Only a move or a pending refresh carries `hooks`.
+function hookLines(followed, helperHome) {
+  const hooks = followed.hooks ?? { refreshed: [], kept: [] };
+  let text = "";
+  if (hooks.refreshed.length) {
+    text += `Bindwright's hook copies took the helper's new text: ${hooks.refreshed.join(", ")}.\n`;
+  }
+  if (followed.hooksError) {
+    text += `Bindwright could not refresh all its hook copies in ~/.claude/hooks (${followed.hooksError}): `
+      + "the next session start tries again.\n";
+  }
+  if (hooks.kept.length) {
+    text += `Hook copies you edited stay as they are (${hooks.kept.join(", ")}); `
+      + `the new text is in ${hookSources(helperHome)}, to compare by hand.\n`;
+  }
+  return text;
+}
+
 async function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -201,6 +221,7 @@ async function main() {
     process.stdout.write(`Bindwright's helper could not follow the plugin (${followed.error}): `
       + "/bindwright:update installs it.\n");
   }
+  process.stdout.write(hookLines(followed, join(root, "..", "..")));
   const helperVersion = readIn(root, "VERSION")?.trim() ?? null;
   const pluginVersion = pluginFolder ? manifestVersion(pluginFolder) : helperVersion;
   if (!parse(pluginVersion)) return;

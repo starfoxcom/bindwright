@@ -796,3 +796,24 @@ test("a computer-wide mod cannot be turned off for one project", { skip }, () =>
     assert.match(missing.out.error, /Not a folder/);
   });
 });
+
+test("install-hook records each copy it writes, so the helper's follow can tell an edited one", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py", "print('guard')\r\n");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const recorded = () => JSON.parse(readFileSync(join(dir, ".bindwright", "hooks.json"), "utf8")).files;
+    const written = readFileSync(join(dir, ".claude", "hooks", "push-guard.py"));
+    assert.equal(recorded()["push-guard.py"], createHash("sha256").update(written).digest("hex"));
+    // A reinstall replaces the hook's whole set, so a module the new copy dropped is no longer recorded.
+    const modules = join(dirname(file), "push_guard");
+    mkdirSync(modules);
+    writeFileSync(join(modules, "a.py"), "a\n");
+    writeFileSync(join(modules, "b.py"), "b\n");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    rmSync(join(modules, "b.py"));
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    assert.deepEqual(Object.keys(recorded()).sort(), ["push-guard.py", "push_guard/a.py"]);
+    assert.equal(home(dir, "remove-hook", "push-guard.py").status, 0);
+    assert.deepEqual(recorded(), {}, "a removed hook is forgotten");
+  });
+});
