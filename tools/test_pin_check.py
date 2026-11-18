@@ -128,9 +128,11 @@ class Main(unittest.TestCase):
 
 
 def action_yml(bun):
-    """A contents-API reply for an action.yml that names `bun` as its bun-version."""
+    """A contents-API reply for an action.yml that names `bun` as its bun-version.
+
+    The API wraps its base64 into lines, so the fixture does too."""
     text = "runs:\n  steps:\n    - uses: oven-sh/setup-bun@x\n      with:\n        bun-version: %s\n" % bun
-    return {"content": base64.b64encode(text.encode()).decode()}
+    return {"content": base64.encodebytes(text.encode()).decode()}
 
 
 BUN_WORKFLOW = WORKFLOW + '      - env:\n          BUN_VERSION: "1.4.4"\n'
@@ -154,9 +156,13 @@ class BunPin(unittest.TestCase):
             ("same version", action_yml("1.4.4"), ""),
             ("other version", action_yml("1.4.5"),
              "- Bun `1.4.4` at `%s` is not the `bun-version` 1.4.5 that action `v1 (v1.0.213)` names\n" % place),
-            ("action names none", {"content": base64.b64encode(b"runs: {}\n").decode()},
+            ("action names none", {"content": base64.encodebytes(b"runs: {}\n").decode()},
              "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
             ("lookup fails", LookupError,
+             "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
+            ("not found", None,
+             "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
+            ("undecodable", {"content": base64.encodebytes(b"\xff").decode()},
              "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
         ]:
             with self.subTest(name):
