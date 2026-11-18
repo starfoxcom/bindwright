@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { writeFileAtomic } from "./write-file.mjs";
+import { swapIn, writeFileAtomic, writeTemp } from "./write-file.mjs";
 
 // Where every release's helper is downloaded from; a pin naming any other place is refused.
 const RELEASES = "https://github.com/starfoxcom/bindwright/releases/download/";
@@ -154,6 +154,31 @@ function shippedUnit(sources, hook) {
   return rels.map((rel) => [rel, readFileSync(join(sources, ...rel.split("/")), "utf8").replace(/\r\n/g, "\n")]);
 }
 
+// Writes a hook's files, [path, text] pairs, so it never runs beside modules of another version:
+// every new text goes to a temporary file first, then each is swapped in, and when a swap fails
+// the files already swapped get their old text back (or go, when they are new) before it throws.
+function writeUnit(pairs) {
+  const old = pairs.map(([path]) => (existsSync(path) ? readFileSync(path) : null));
+  const temps = [];
+  try {
+    for (const [path, text] of pairs) temps.push(writeTemp(path, text));
+  } catch (error) {
+    for (const temp of temps) rmSync(temp, { force: true });
+    throw error;
+  }
+  let swapped = 0;
+  try {
+    for (; swapped < pairs.length; swapped++) swapIn(temps[swapped], pairs[swapped][0]);
+  } catch (error) {
+    for (const temp of temps.slice(swapped + 1)) rmSync(temp, { force: true });
+    for (let i = 0; i < swapped; i++) {
+      if (old[i] === null) rmSync(pairs[i][0], { force: true });
+      else writeFileAtomic(pairs[i][0], old[i]);
+    }
+    throw error;
+  }
+}
+
 /**
  * Brings each hook that home.py's install-hook recorded in ~/.bindwright/hooks.json to the
  * helper's copy, the hook and its package folder together, when every recorded file of it still
@@ -181,11 +206,9 @@ export function refreshHooks(helperHome) {
         continue;
       }
       if (shipped.every(([rel, text]) => files[rel] === sha256(text))) continue;
-      for (const [rel, text] of shipped) {
-        writeFileAtomic(copyOf(rel), text);
-        files[rel] = sha256(text);
-        changed = true;
-      }
+      writeUnit(shipped.map(([rel, text]) => [copyOf(rel), text]));
+      for (const [rel, text] of shipped) files[rel] = sha256(text);
+      changed = true;
       out.refreshed.push(hook);
     }
   } finally {

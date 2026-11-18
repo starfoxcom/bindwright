@@ -20,6 +20,11 @@ const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
  * `rename` is the swap itself, replaced only by tests.
  */
 export function writeFileAtomic(file, text, { rename = renameSync } = {}) {
+  swapIn(writeTemp(file, text), file, rename);
+}
+
+/** Writes `text` to a temporary file of its own beside `file` and returns its path; removes it on failure. */
+export function writeTemp(file, text) {
   mkdirSync(dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   try {
@@ -28,6 +33,11 @@ export function writeFileAtomic(file, text, { rename = renameSync } = {}) {
     rmSync(temp, { force: true });
     throw error;
   }
+  return temp;
+}
+
+/** Swaps the temporary file `temp` in as `file`, as writeFileAtomic does; removes `temp` when it fails. */
+export function swapIn(temp, file, rename = renameSync) {
   for (let attempt = 1; ; attempt++) {
     try {
       rename(temp, file);

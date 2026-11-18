@@ -151,6 +151,19 @@ test("an unedited hook takes the helper's text with its whole package; one edite
     assert.equal(record["guard/added.py"], hash("new\n"), "a module the new release adds is recorded");
     const again = refreshHooks(helperHome);
     assert.deepEqual(again, { refreshed: [], kept: ["edited-guard.py"] }, "a second run changes nothing");
+
+    // A swap that fails partway puts back what was already swapped, so the hook never runs beside
+    // modules of another version, and leaves the record as it was.
+    put(sources, "guard.py", "newer\n");
+    put(sources, "guard/rules.py", "newer\n");
+    put(sources, "guard/blocked.py", "newer\n");
+    mkdirSync(join(hooks, "guard", "blocked.py"));
+    const before = readFileSync(join(home, ".bindwright", "hooks.json"), "utf8");
+    assert.throws(() => refreshHooks(helperHome));
+    for (const rel of ["guard.py", "guard/rules.py"]) assert.equal(read(rel), "new\n", rel);
+    assert.equal(readFileSync(join(home, ".bindwright", "hooks.json"), "utf8"), before);
+    assert.deepEqual(readdirSync(join(hooks, "guard")).sort(), ["added.py", "blocked.py", "rules.py"],
+      "no temporary file is left");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

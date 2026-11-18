@@ -264,10 +264,10 @@ def _launcher_hook(python, target, block_on_failure=False):
     return hook
 
 
-def _record_hooks(home, written):
-    """Records each written hook file's SHA-256 in ~/.bindwright/hooks.json, by its path under
-    ~/.claude/hooks, so the helper's follow can tell a copy still as installed from one the
-    user edited, and refresh only the first kind."""
+def _record_hooks(home, name, written):
+    """Replaces hook `name`'s entries in ~/.bindwright/hooks.json with the SHA-256 of each file in
+    `written`, by its path under ~/.claude/hooks, so the helper can tell a copy still as installed
+    from one the user edited, and refresh only the first kind. An empty `written` forgets the hook."""
     path = os.path.join(home, ".bindwright", "hooks.json")
     try:
         with open(path, encoding="utf-8") as fh:
@@ -275,9 +275,13 @@ def _record_hooks(home, written):
     except (OSError, ValueError):
         record = {}
     files = record.get("files") if isinstance(record, dict) and isinstance(record.get("files"), dict) else {}
+    package = _package_name(name) + "/"
+    kept = {rel: sha for rel, sha in files.items() if rel != name and not rel.startswith(package)}
+    if kept == files and not written:
+        return
     for rel, text in written.items():
-        files[rel] = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    _atomic_write(path, json.dumps({"schema": 1, "files": files}, indent=2, sort_keys=True) + "\n")
+        kept[rel] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    _atomic_write(path, json.dumps({"schema": 1, "files": kept}, indent=2, sort_keys=True) + "\n")
 
 
 def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
@@ -304,7 +308,7 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
                     written[_package_name(name) + "/" + module] = fh.read()
     for rel, text in written.items():
         _atomic_write(os.path.join(os.path.dirname(target), *rel.split("/")), text)
-    _record_hooks(home, written)
+    _record_hooks(home, name, written)
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
@@ -328,6 +332,7 @@ def remove_hook(home, name):
     package = os.path.join(_claude(home), "hooks", _package_name(name))
     if os.path.isdir(package) and not _is_link(os.lstat(package)):
         shutil.rmtree(package)
+    _record_hooks(home, name, {})
     return {"removed_hooks": removed, "deleted_file": deleted}
 
 
