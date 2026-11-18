@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two sessions installing the helper at once no longer collide.** Setup's helper install, which `/bindwright:update` and the other commands run too, now takes the same install lock as the helper's own update at session start, so a second session waits for the first install and uses it instead of writing the same folder at the same time, which could leave npm with a broken helper. A lock left by a run that died is taken over after 5 minutes.
+
 ## [v7.3.0] — 2026-11-18
 
 ### Added
