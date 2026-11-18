@@ -341,10 +341,17 @@ def as_project(repo, versioning, fmt=None):
     shutil.copy(SCRIPT, os.path.join(repo, ".github", "scripts"))
 
 
-def run_hook(repo, command, tool="Bash", helper=HELPER):
+def local_env(**extra):
+    """A local session's environment, also when the suite itself runs in GitHub Actions."""
+    env = {key: value for key, value in os.environ.items() if key != "GITHUB_ACTIONS"}
+    env.update(extra)
+    return env
+
+
+def run_hook(repo, command, tool="Bash", helper=HELPER, **extra_env):
     event = json.dumps({"tool_name": tool, "tool_input": {"command": command}, "cwd": repo})
     # The hook reads commands with the helper's shell parser; here, the repo's own copy.
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=repo, BINDWRIGHT_HELPER=helper)
+    env = local_env(CLAUDE_PROJECT_DIR=repo, BINDWRIGHT_HELPER=helper, **extra_env)
     done = subprocess.run([sys.executable, "-I", HOOK], input=event, capture_output=True,
                           text=True, encoding="utf-8", env=env)
     return done.returncode, done.stderr
@@ -488,14 +495,14 @@ class Hook(unittest.TestCase):
                     self.assertEqual(run_hook(repo, "git tag v5.2.2"), (0, ""))
             event = json.dumps({"tool_name": "Bash", "tool_input": ["git tag v5.2.2"], "cwd": repo})
             done = subprocess.run([sys.executable, "-I", HOOK], input=event, capture_output=True,
-                                  text=True, encoding="utf-8")
+                                  text=True, encoding="utf-8", env=local_env())
             self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_a_cwd_that_is_not_text_falls_back_to_the_working_folder(self):
         with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
             as_project(repo, "semver")
-            env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
-            env["BINDWRIGHT_HELPER"] = HELPER
+            env = local_env(BINDWRIGHT_HELPER=HELPER)
+            env.pop("CLAUDE_PROJECT_DIR", None)
             for command, code in (("git log --oneline", 0), ("git tag v5.2.2", 2)):
                 event = json.dumps({"tool_name": "Bash", "tool_input": {"command": command},
                                     "cwd": 5})
@@ -514,6 +521,17 @@ class Hook(unittest.TestCase):
             as_project(repo, "semver")
             os.remove(os.path.join(repo, ".github", "scripts", "version_check.py"))
             self.assertEqual(run_hook(repo, "git tag v5.2.2", helper=repo), (0, ""))
+
+    def test_a_ci_run_never_runs_the_checkouts_own_script(self):
+        # In a CI review the checkout is the pull request's, so its script is untrusted.
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            marker = os.path.join(repo, "ran")
+            with open(os.path.join(repo, ".github", "scripts", "version_check.py"), "w",
+                      encoding="utf-8") as fh:
+                fh.write(f"open({marker!r}, 'w').close()\nraise SystemExit(2)\n")
+            self.assertEqual(run_hook(repo, "git tag v5.2.2", GITHUB_ACTIONS="true"), (0, ""))
+            self.assertFalse(os.path.exists(marker))
 
     def test_a_parser_reply_of_another_shape_is_unread(self):
         replies = {"an entry that is not a list": '{"commands": [null]}',

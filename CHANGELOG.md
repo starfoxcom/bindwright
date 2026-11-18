@@ -6,6 +6,23 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.3.0] — 2026-11-18
+
+### Added
+
+- **Setup shows the whole plan before it changes anything.** After the questions, `/bindwright:setup` lists every project file it will add or merge, each GitHub board or repo it will create, and every change to the computer (hooks, `settings.json` entries, mods, reply style, agent, code-search tool), then writes it on one "Apply all of this?"; the few steps that need something more from you, such as the verify skill or the code-style profile, still ask on their own. A no leaves the repo, `~/.claude` and GitHub as they were; until then setup saves no answer and changes nothing but what every run needs: the helper, which running the command installs, and, each on its own yes, the programs, the Git identity, `git init`, the removal of an older Bindwright's FindWright copy and finishing an earlier setup's merges. Lizard and the commit-check manager install after that yes, with no question of their own, since picking the check is the yes to them.
+- **Setup offers the recommended answers in one go.** A first or project run starts with one question: the recommended answer for everything, or each choice. The recommended path still asks what has no safe default (who works on the project and whose it is, a public repo's work items, the review counts, replacing an existing reply style, named reviewers for pull requests, and any question that recommends no answer for the repo) and goes straight to the plan, which shows each answer it took with the warning its question would have given.
+- **The weekly pin check holds the hand-pinned Bun to the review action's own.** The review workflows bring the Bun the action uses, with its version and checksums set by hand, so an action bump could keep handing it an older Bun unnoticed. `pin_check.py` now reads the `bun-version` of the action pinned in the same workflow, on GitHub at that commit, and lists a Bun that differs from it, or one it could not check.
+
+### Changed
+
+- **Setup sets FindWright up in the same run.** With FindWright as the code-search tool, `/bindwright:setup` installs its plugin and then follows FindWright's own setup from its install path, as `/bindwright:update` already does with FindWright's update, so its helper, model, registration, guidance, search hook and the project's fit are in place when setup ends, and only its tools wait for the next session. It used to end with a restart and `/findwright:setup` for the user to remember.
+- **Running a Bindwright command is the yes to install its helper.** `/bindwright:setup`, `/bindwright:update` and the other commands that need the helper install or update the one the plugin pins without asking first, and say in one line what they installed, the way FindWright's setup already does. The helper is a requirement, so a no could only stop the run. The SHA-256 check and the stop on a failed install stay. `/bindwright:report` is now a command only you start, like the rest, so the assistant cannot run it, and the install, on its own.
+
+### Fixed
+
+- **The release version check no longer runs a pull request's own script in a CI review.** The hook ran `.github/scripts/version_check.py` from the checked-out repo, which in a CI review is the pull request's, so a reviewer command naming a release could run that pull request's code with the review's token. It now does nothing in a GitHub Actions run, where no release is made through the assistant. `/bindwright:update` brings the fixed hook into each project.
+
 ## [v7.2.0] — 2026-11-18
 
 ### Added

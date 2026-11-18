@@ -16,13 +16,13 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 
 ## Install
 
-From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen.
-
-Or from the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in Claude Code, once per computer:
+From the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in Claude Code, once per computer:
 
 ```
 /plugin install bindwright --marketplace starfoxcom/wrights
 ```
+
+Bindwright is also on its way to the plugin directory (`/plugin`, then Discover); until its listing is approved, the marketplace line above is the way in.
 
 In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 
@@ -35,7 +35,7 @@ In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 
 3. Start another new session in the same folder, so the plugin loads, and run `/bindwright:setup`. If it is not there yet, give it a minute and start one more.
 
-Installing needs nothing else. Setup needs Claude Code 2.1.295 or later, Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. The first time, it also asks to install Bindwright's helper, the part that runs on your computer (the setup engine, the templates and the scripts), from the files attached to the plugin's GitHub release, checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Then, in each project, open Claude Code in the project's folder and run:
+Installing needs nothing else. Setup needs Claude Code 2.1.295 or later, Git, and Node 18 or Python 3.8 or later; it says what is missing and offers to install it. The first time, it also installs Bindwright's helper, the part that runs on your computer (the setup engine, the templates and the scripts), from the files attached to the plugin's GitHub release, checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Then, in each project, open Claude Code in the project's folder and run:
 
 ```
 /bindwright:setup
