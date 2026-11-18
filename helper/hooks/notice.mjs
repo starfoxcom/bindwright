@@ -1,5 +1,6 @@
 // Bindwright's start-session notice, run from the helper by the repo's
-// /start-session skill from the repo root, with `--plugin <plugin folder>`. At
+// /start-session skill from the repo root, with `--plugin <plugin folder>`. First
+// it brings the helper to the plugin's pin when the plugin moved (follow.mjs). At
 // most once a day per repo it says when the repo's Bindwright files are older
 // than the plugin (/bindwright:update brings them up), when the helper is not
 // at the plugin's version, or when a newer plugin is out. It asks the network at most once a day, with
@@ -11,6 +12,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
+import { follow } from "./follow.mjs";
 import { writeFileAtomic } from "./write-file.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readState, repoKey, stateFileIn } from "./counts.mjs";
@@ -187,9 +189,18 @@ async function main() {
     return readIn(folder, "VERSION")?.trim() ?? null;
   };
   const flag = process.argv.indexOf("--plugin");
-  const helperVersion = readIn(root, "VERSION")?.trim() ?? null;
   // Without --plugin, the helper's version stands in for the plugin's.
   const pluginFolder = flag !== -1 ? process.argv[flag + 1] : undefined;
+  // The helper lives at <helper home>/node_modules/bindwright, two folders above root.
+  const followed = pluginFolder
+    ? await follow({ pluginFolder, helperHome: join(root, "..", "..") })
+    : { skipped: "no plugin folder" };
+  if (followed.moved) process.stdout.write(`Bindwright's helper moved to ${followed.moved} by itself.\n`);
+  if (followed.error) {
+    process.stdout.write(`Bindwright's helper could not follow the plugin (${followed.error}): `
+      + "/bindwright:update installs it.\n");
+  }
+  const helperVersion = readIn(root, "VERSION")?.trim() ?? null;
   const pluginVersion = pluginFolder ? manifestVersion(pluginFolder) : helperVersion;
   if (!parse(pluginVersion)) return;
   const url = process.env.BINDWRIGHT_LATEST_URL || LATEST_URL;
