@@ -57,6 +57,7 @@ Run the engine with `--settings <repo root or any folder>`: `installed` lists th
 - **Builder agent:** `home.py remove-agent builder.md`.
 - **Reply style:** `home.py remove-style straight-talk.md`, which also turns it off when it is the style in use, then `home.py remove-hook reply-style.py`, the hook that restates it before each reply, whenever `home.py list-hooks` shows it, even with the style file gone; then offer to delete `$HOME/.bindwright/reply-style/`, its tool-call counts and the last replies' slips.
 - **Code-style profile:** delete `~/.claude/rules/code-style.md`, after showing it, since the user may want to keep it.
+- **Plugin auto-update:** `home.py plugin-auto-update off`, which writes the wrights marketplace's `autoUpdate` as false, so Claude Code stops fetching new versions of any wrights plugin by itself, FindWright included; say so, since FindWright may stay.
 - **Work language:** `home.py set-language english` removes the language setting and the commit-language rule setup added.
 - **Global instructions:** in `~/.claude/CLAUDE.md`, take out the sections that match `<helper>/_core/global-template/CLAUDE.md.additions` and the `<!-- bindwright:global-instructions -->` line, keeping everything else. Show the result and save it only on a yes.
 - **Anonymous review counts:** `node "<helper>/hooks/counts.mjs" share off` stops every send.
