@@ -389,5 +389,6 @@ Tell the user, in plain words, in two parts.
 - Where they live and how to change them: `/bindwright:setup global` asks them again, or edit `<config>/bindwright/settings.json` (name the real path). The counts answer and each project's kind live in `<config>/bindwright/counts.json`; `node "<helper>/hooks/counts.mjs" share off` stops every send at once. The next project on this computer will not ask them: `/bindwright:setup project` (or a plain `/bindwright:setup`) there asks only its own questions.
 - When the code-search tool is `findwright` and this run installed its plugin: that FindWright works only once they restart Claude Code and run `/findwright:setup`.
 - That `~/.claude/settings.json.bak` holds the settings from before the last change, when one was made.
+- How updates arrive: `/bindwright:update` brings the wrights plugins and their helpers, FindWright's included, up to date in one run. When `claude plugin list --json` shows `bindwright@wrights`, add that auto-update for the wrights marketplace, off by default for marketplaces outside Anthropic's, can be turned on in `/plugin` (Marketplaces), so Claude Code checks for new versions at each start.
 
 Do not commit or push. Outside the repo, change only what the user said yes to.
