@@ -9,7 +9,7 @@ The lookup sequence for this project's code-research tool, **FindWright** (https
 
 ## Sequence
 
-Follow `/findwright:find`, which the FindWright plugin ships: it holds FindWright's lookup sequence and the cases where Grep and Glob are allowed.
+Follow `/findwright:find`, which the FindWright plugin ships: it holds FindWright's lookup sequence and the cases where Grep and Glob are allowed. When `/findwright:find` is not available, since FindWright is not installed on this computer, use Grep, Glob and Read.
 
 ## Citing
 
