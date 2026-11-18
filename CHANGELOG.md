@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.1.0] — 2026-11-17
+
 ### Added
 
 - **`/bindwright:update` can hold a file back for a later PR without losing its change.** An update that changed the routine review workflow had to ship it in a PR of its own, but the record of what the update wrote already listed the new text, so the next update read the old copy as a local edit and kept it. The engine's new `--keep-base` puts a held-back file's record back to the one the update replaced, and the update skill runs it for every file left out of the commit, the workflows whose new action pins wait for a second PR included.
