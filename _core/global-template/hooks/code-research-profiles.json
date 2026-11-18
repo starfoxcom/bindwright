@@ -24,7 +24,7 @@
     "hook": {
       "source": "tool"
     },
-    "notes": "FindWright is a Claude Code plugin of its own (starfoxcom/findwright), listed in the wrights marketplace (starfoxcom/wrights). The agent step installs the plugin; then setup follows FindWright's own setup skill in the same run, which sets FindWright up, the guidance the agent follows and its search hook included. Needs Node 22.16 or later on the 22 line, or 24 or later."
+    "notes": "FindWright is a Claude Code plugin of its own (starfoxcom/findwright), listed in the wrights marketplace (starfoxcom/wrights). The agent step installs the plugin; then FindWright's own setup runs, in the same run under /bindwright:setup and through /findwright:setup otherwise, and sets FindWright up, the guidance the agent follows and its search hook included. Needs Node 22.16 or later on the 22 line, or 24 or later."
   },
   "none": {
     "license": null,
