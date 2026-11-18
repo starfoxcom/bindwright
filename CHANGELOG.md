@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Setup sets FindWright up in the same run.** With FindWright as the code-search tool, `/bindwright:setup` installs its plugin and then follows FindWright's own setup from its install path, as `/bindwright:update` already does with FindWright's update, so its helper, model, registration, guidance, search hook and the project's fit are in place when setup ends, and only its tools wait for the next session. It used to end with a restart and `/findwright:setup` for the user to remember.
+
 ## [v7.2.0] — 2026-11-18
 
 ### Added
