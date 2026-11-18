@@ -1,5 +1,6 @@
 """Tests for .github/scripts/pin_check.py, the weekly pin check's report."""
 
+import base64
 import io
 import os
 import subprocess
@@ -124,6 +125,55 @@ class Main(unittest.TestCase):
                 code, out, err = run(*argv)
                 self.assertEqual((code, out), (1, ""))
                 self.assertTrue(err.startswith("pin_check: "), err)
+
+
+def action_yml(bun):
+    """A contents-API reply for an action.yml that names `bun` as its bun-version.
+
+    The API wraps its base64 into lines, so the fixture does too."""
+    text = "runs:\n  steps:\n    - uses: oven-sh/setup-bun@x\n      with:\n        bun-version: %s\n" % bun
+    return {"content": base64.encodebytes(text.encode()).decode()}
+
+
+BUN_WORKFLOW = WORKFLOW + '      - env:\n          BUN_VERSION: "1.4.4"\n'
+
+
+class BunPin(unittest.TestCase):
+    def check(self, files, replies):
+        calls = []
+
+        def fetch(path):
+            calls.append(path)
+            reply = replies[path.rsplit("=", 1)[1]]
+            if reply is LookupError:
+                raise LookupError(path)
+            return reply
+        return pin_check.bun_mismatches(files, fetch), calls
+
+    def test_a_hand_pinned_bun_is_held_to_the_actions_own(self):
+        place = "w.yml:12"
+        for name, reply, expected in [
+            ("same version", action_yml("1.4.4"), ""),
+            ("other version", action_yml("1.4.5"),
+             "- Bun `1.4.4` at `%s` is not the `bun-version` 1.4.5 that action `v1 (v1.0.213)` names\n" % place),
+            ("action names none", {"content": base64.encodebytes(b"runs: {}\n").decode()},
+             "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
+            ("lookup fails", LookupError,
+             "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
+            ("not found", None,
+             "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
+            ("undecodable", {"content": base64.encodebytes(b"\xff").decode()},
+             "- Bun `1.4.4` at `%s`: could not read the `bun-version` of action `v1 (v1.0.213)`\n" % place),
+        ]:
+            with self.subTest(name):
+                out, _ = self.check([("w.yml", BUN_WORKFLOW)], {OLD_SHA: reply})
+                self.assertEqual(out, expected)
+
+    def test_looks_each_action_up_once_and_only_for_files_with_a_bun(self):
+        no_bun = WORKFLOW.replace(OLD_SHA, NEW_SHA)
+        out, calls = self.check([("a.yml", BUN_WORKFLOW), ("b.yml", BUN_WORKFLOW), ("c.yml", no_bun)],
+                                {OLD_SHA: action_yml("1.4.4")})
+        self.assertEqual((out, len(calls)), ("", 1))
 
 
 TAG_SHA = "abcdefabcdefabcdefabcdefabcdefabcdefabcd"
