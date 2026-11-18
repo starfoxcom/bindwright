@@ -18,6 +18,7 @@ Standard library, Python 3.8+.
     python engine/home.py update-style FILE   (replaces an unedited earlier copy)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
+    python engine/home.py plugin-auto-update on|off   (the wrights marketplace's auto-update)
     python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
     python engine/home.py project-mod ROOT NAME on|off
 
@@ -352,6 +353,40 @@ def attribution_off(home):
     data["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     _save(path, data)
     return {"settings": path}
+
+
+# The marketplace Bindwright and FindWright install from, as `/plugin marketplace add` names it.
+WRIGHTS = "wrights"
+WRIGHTS_SOURCE = {"source": "github", "repo": "starfoxcom/wrights"}
+# Each turns Claude Code's whole plugin auto-update pass off, unless FORCE_AUTOUPDATE_PLUGINS is set.
+UPDATE_BLOCKERS = ("DISABLE_UPDATES", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
+
+
+def _update_blockers(env):
+    if env.get("FORCE_AUTOUPDATE_PLUGINS"):
+        return []
+    return [name for name in UPDATE_BLOCKERS if env.get(name)]
+
+
+def set_plugin_auto_update(home, state):
+    """Turns Claude Code's auto-update for the wrights marketplace on or off. A settings
+    entry outranks the /plugin toggle, so off is written as false, not left out."""
+    if state not in ("on", "off"):
+        raise HomeError("Use on or off, not " + state)
+    path, data = _load(home)
+    marketplaces = _section(data, "extraKnownMarketplaces", dict, path)
+    entry = marketplaces.get(WRIGHTS)
+    if entry is None:
+        entry = marketplaces[WRIGHTS] = {"source": dict(WRIGHTS_SOURCE)}
+    elif not isinstance(entry, dict):
+        raise HomeError("%s: extraKnownMarketplaces.%s is not an object; fix it by hand first" % (path, WRIGHTS))
+    changed = entry.get("autoUpdate") is not (state == "on")
+    if changed:
+        entry["autoUpdate"] = state == "on"
+        _save(path, data)
+    settings_env = data.get("env") if isinstance(data.get("env"), dict) else {}
+    blocked = sorted(set(_update_blockers(settings_env) + _update_blockers(os.environ)))
+    return {"settings": path, "on": state == "on", "changed": changed, "blocked_by": blocked}
 
 
 # The CLI draws the mods' rows above the prompt top-down in folder-list order, so the
@@ -693,6 +728,7 @@ NAMED_COMMANDS = {
     "remove-agent": remove_agent,
     "remove-style": remove_style,
     "set-language": set_language,
+    "plugin-auto-update": set_plugin_auto_update,
 }
 
 

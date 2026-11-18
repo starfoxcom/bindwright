@@ -34,11 +34,18 @@ const EXTRA_FILES = {
 export const MARKERS = {
   "global-instructions": "<!-- bindwright:global-instructions -->",
 };
+// The extras that are a value in the config folder's settings.json, not a file.
+const SETTING_EXTRAS = {
+  "plugin-auto-update": (settings) => {
+    const entry = settings.extraKnownMarketplaces?.wrights;
+    return entry !== null && typeof entry === "object" && entry.autoUpdate === true;
+  },
+};
 export const MODS = [
   "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
   "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ];
-export const EXTRAS = [...Object.keys(EXTRA_FILES), ...MODS].sort();
+export const EXTRAS = [...Object.keys(EXTRA_FILES), ...Object.keys(SETTING_EXTRAS), ...MODS].sort();
 const LEVELS = ["required", "recommended"];
 // The work languages a personal layer may pick; home.py keeps the same list.
 export const LANGUAGES = ["english", "spanish"];
@@ -287,9 +294,20 @@ function hookRuns(config, name) {
 }
 
 // The extras present under the config folder (~/.claude), by name.
+function settingHolds(config, extra) {
+  let settings;
+  try {
+    settings = readLayerFile(join(config, "settings.json"), "settings.json");
+  } catch {
+    return false;
+  }
+  return settings !== null && typeof settings === "object" && SETTING_EXTRAS[extra](settings);
+}
+
 export function installedExtras(config) {
   const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
   const present = (extra) => {
+    if (own(SETTING_EXTRAS, extra)) return settingHolds(config, extra);
     const file = at(extra);
     const path = join(config, ...file.split("/"));
     if (own(MARKERS, extra)) return hasMarker(path, MARKERS[extra]);

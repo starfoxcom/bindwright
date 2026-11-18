@@ -324,6 +324,10 @@ export default {
     + "primero la respuesta, y una pregunta de seguimiento cuando la necesita. "
     + "/output-style default lo apaga.",
   "settings.reply-style.value": "Sí",
+  "settings.plugin-auto-update.title": "Actualización automática de plugins",
+  "settings.plugin-auto-update.text": "Claude Code baja solo las versiones nuevas de Bindwright y FindWright, "
+    + "unos minutos después de empezar una sesión. Solo se pregunta cuando vienen del marketplace wrights.",
+  "settings.plugin-auto-update.value": "Sí",
 
   "settings.who-works.title": "Quién trabaja en él",
   "settings.who-works.text": "Un equipo recibe reglas de colaboración y un hook de pre-commit.",

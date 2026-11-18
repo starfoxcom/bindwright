@@ -515,6 +515,50 @@ test("set-language sets the work language, its rule file and the settings key", 
   for (const row of rows) checkLanguageRow(row);
 });
 
+test("plugin-auto-update writes the wrights marketplace's autoUpdate and keeps the rest", { skip }, () => {
+  const source = { source: "github", repo: "starfoxcom/wrights" };
+  const rows = [
+    ["on with no settings file adds the entry", "on", undefined,
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } }, true],
+    ["on keeps the entry's own source and the other marketplaces", "on",
+      { model: "opus", extraKnownMarketplaces: { other: { source: {} }, wrights: { source: { source: "git" } } } },
+      { model: "opus", extraKnownMarketplaces: { other: { source: {} },
+        wrights: { source: { source: "git" }, autoUpdate: true } } }, true],
+    ["on again changes nothing", "on", { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } }, false],
+    ["off writes false, which outranks the /plugin toggle", "off",
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: false } } }, true],
+  ];
+  for (const [label, state, before, after, changed] of rows) {
+    withHome((dir) => {
+      if (before !== undefined) writeSettings(dir, before);
+      const r = home(dir, "plugin-auto-update", state);
+      assert.equal(r.status, 0, label);
+      assert.equal(r.out.changed, changed, label);
+      assert.deepEqual(settings(dir), after, label);
+    });
+  }
+  const refused = [
+    ["a state other than on or off", "maybe", { model: "opus" }, /Use on or off, not maybe/],
+    ["a wrights entry that is not an object", "on", { extraKnownMarketplaces: { wrights: true } }, /is not an object/],
+    ["a settings file that is not valid JSON", "on", "{ broken", /not valid JSON/],
+  ];
+  for (const [label, state, before, error] of refused) {
+    withHome((dir) => {
+      writeSettings(dir, before);
+      const r = home(dir, "plugin-auto-update", state);
+      assert.equal(r.status, 1, label);
+      assert.match(r.out.error, error, label);
+      assert.equal(readFileSync(settingsPath(dir), "utf8"), asText(before), label);
+    });
+  }
+  withHome((dir) => {
+    writeSettings(dir, { env: { DISABLE_AUTOUPDATER: "1" } });
+    assert.ok(home(dir, "plugin-auto-update", "on").out.blocked_by.includes("DISABLE_AUTOUPDATER"));
+  });
+});
+
 test("find-python names a system interpreter", { skip }, () => {
   const r = spawnSync(python, [join(engine, "home.py"), "find-python"], { encoding: "utf8" });
   const out = JSON.parse(r.stdout);

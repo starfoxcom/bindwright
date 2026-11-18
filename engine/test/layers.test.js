@@ -79,11 +79,12 @@ test("a file from a newer Bindwright, or with a broken schema, is refused", () =
   assert.doesNotThrow(() => resolveLayers({ personal: { schema: 1 }, local: {} }));
 });
 
-test("the extras list matches the mods setup ships, plus the seven file extras", () => {
+test("the extras list matches the mods setup ships, plus the file and setting extras", () => {
   const mods = readdirSync(join(engine, "..", "_core", "global-template", "mods"), { withFileTypes: true })
     .filter((d) => d.isDirectory()).map((d) => d.name);
   const files = [
-    "attribution-guard", "builder", "code-style", "global-instructions", "push-guard", "reply-style", "session-title",
+    "attribution-guard", "builder", "code-style", "global-instructions", "plugin-auto-update", "push-guard",
+    "reply-style", "session-title",
   ];
   assert.deepEqual(EXTRAS, [...mods, ...files].sort());
 });
@@ -227,6 +228,23 @@ test("a guard counts as installed only while an entry runs its file with a progr
   const PATHEXT = `${process.env.PATHEXT ?? ".EXE"};`;
   assert.equal(both({ configFiles: bare }, { PATHEXT }).installed["push-guard"], true, "a PATHEXT ending in ;");
   assert.equal(both({ configFiles: bare }, { PATHEXT: undefined }).installed["push-guard"], true, "no PATHEXT");
+});
+
+test("plugin auto-update counts as installed only while the wrights entry turns it on", needsPython, () => {
+  const wrights = (entry) => ({ "settings.json": { extraKnownMarketplaces: { wrights: entry } } });
+  const rows = [
+    ["no settings file", {}, false],
+    ["no marketplace entry", { "settings.json": { extraKnownMarketplaces: {} } }, false],
+    ["an entry without autoUpdate", wrights({ source: { source: "github" } }), false],
+    ["autoUpdate false", wrights({ autoUpdate: false }), false],
+    ["autoUpdate as a string", wrights({ autoUpdate: "true" }), false],
+    ["an entry that is not an object", wrights(true), false],
+    ["a settings file that is not JSON", { "settings.json": "{" }, false],
+    ["autoUpdate true", wrights({ autoUpdate: true }), true],
+  ];
+  for (const [name, configFiles, want] of rows) {
+    assert.equal(both({ configFiles }).installed["plugin-auto-update"], want, name);
+  }
 });
 
 // Seeded, so a failure names a case that replays.

@@ -29,11 +29,23 @@ EXTRA_FILES = {
 MARKERS = {
     "global-instructions": "<!-- bindwright:global-instructions -->",
 }
+
+
+def _wrights_auto_update(settings):
+    marketplaces = settings.get("extraKnownMarketplaces")
+    entry = marketplaces.get("wrights") if isinstance(marketplaces, dict) else None
+    return isinstance(entry, dict) and entry.get("autoUpdate") is True
+
+
+# The extras that are a value in the config folder's settings.json, not a file.
+SETTING_EXTRAS = {
+    "plugin-auto-update": _wrights_auto_update,
+}
 MODS = [
     "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
     "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ]
-EXTRAS = sorted(list(EXTRA_FILES) + MODS, key=_code_units)
+EXTRAS = sorted(list(EXTRA_FILES) + list(SETTING_EXTRAS) + MODS, key=_code_units)
 LEVELS = ["required", "recommended"]
 # The work languages a personal layer may pick; home.py keeps the same list.
 LANGUAGES = ["english", "spanish"]
@@ -302,11 +314,21 @@ def _hook_runs(config, name):
     return False
 
 
+def _setting_holds(config, extra):
+    try:
+        settings = _read_layer_file(os.path.join(config, "settings.json"), "settings.json")
+    except Exception:
+        return False
+    return isinstance(settings, dict) and SETTING_EXTRAS[extra](settings)
+
+
 def installed_extras(config):
     def at(extra):
         return EXTRA_FILES.get(extra, "mods/" + extra)
 
     def present(extra):
+        if extra in SETTING_EXTRAS:
+            return _setting_holds(config, extra)
         file = at(extra)
         path = os.path.join(config, *file.split("/"))
         if extra in MARKERS:
