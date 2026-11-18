@@ -298,7 +298,7 @@ function hookRuns(config, name) {
   });
 }
 
-// The extras present under the config folder (~/.claude), by name.
+// Whether a setting extra's value holds in the config folder's settings.json.
 function settingHolds(config, extra) {
   let settings;
   try {
@@ -309,6 +309,7 @@ function settingHolds(config, extra) {
   return settings !== null && typeof settings === "object" && SETTING_EXTRAS[extra](settings);
 }
 
+// The extras present under the config folder (~/.claude), by name.
 export function installedExtras(config) {
   const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
   const present = (extra) => {
