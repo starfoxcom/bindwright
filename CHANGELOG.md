@@ -12,6 +12,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
+- **Setup sets FindWright up in the same run.** With FindWright as the code-search tool, `/bindwright:setup` installs its plugin and then follows FindWright's own setup from its install path, as `/bindwright:update` already does with FindWright's update, so its helper, model, registration, guidance, search hook and the project's fit are in place when setup ends, and only its tools wait for the next session. It used to end with a restart and `/findwright:setup` for the user to remember.
 - **Running a Bindwright command is the yes to install its helper.** `/bindwright:setup`, `/bindwright:update` and the other commands that need the helper install or update the one the plugin pins without asking first, and say in one line what they installed, the way FindWright's setup already does. The helper is a requirement, so a no could only stop the run. The SHA-256 check and the stop on a failed install stay. `/bindwright:report` is now a command only you start, like the rest, so the assistant cannot run it, and the install, on its own.
 
 ### Fixed
