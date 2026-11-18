@@ -196,7 +196,14 @@ async function main() {
   const followed = pluginFolder
     ? await follow({ pluginFolder, helperHome: join(root, "..", "..") })
     : { skipped: "no plugin folder" };
-  if (followed.moved) process.stdout.write(`Bindwright's helper moved to ${followed.moved} by itself.\n`);
+  if (followed.moved) {
+    const hooks = followed.refreshed?.length ? `, with its hook copies (${followed.refreshed.join(", ")})` : "";
+    const kept = followed.kept?.length
+      ? ` Edited hook copies stay as they are (${followed.kept.join(", ")}): `
+        + "/bindwright:setup global offers the new ones."
+      : "";
+    process.stdout.write(`Bindwright's helper moved to ${followed.moved} by itself${hooks}.${kept}\n`);
+  }
   if (followed.error) {
     process.stdout.write(`Bindwright's helper could not follow the plugin (${followed.error}): `
       + "/bindwright:update installs it.\n");

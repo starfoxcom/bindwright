@@ -264,6 +264,22 @@ def _launcher_hook(python, target, block_on_failure=False):
     return hook
 
 
+def _record_hooks(home, written):
+    """Records each written hook file's SHA-256 in ~/.bindwright/hooks.json, by its path under
+    ~/.claude/hooks, so the helper's follow can tell a copy still as installed from one the
+    user edited, and refresh only the first kind."""
+    path = os.path.join(home, ".bindwright", "hooks.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            record = json.load(fh)
+    except (OSError, ValueError):
+        record = {}
+    files = record.get("files") if isinstance(record, dict) and isinstance(record.get("files"), dict) else {}
+    for rel, text in written.items():
+        files[rel] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    _atomic_write(path, json.dumps({"schema": 1, "files": files}, indent=2, sort_keys=True) + "\n")
+
+
 def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
     name = os.path.basename(file)
     if not name.endswith(".py"):
@@ -277,14 +293,18 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
     path, data = _load(home)
     sections = [(_event_entries(data, event, path), where) for event, where in placements]
     target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
+    written = {}
     with open(file, encoding="utf-8") as fh:
-        _atomic_write(target, fh.read())
+        written[name] = fh.read()
     package = os.path.join(os.path.dirname(os.path.abspath(file)), _package_name(name))
     if os.path.isdir(package):
         for module in sorted(os.listdir(package)):
             if module.endswith(".py"):
                 with open(os.path.join(package, module), encoding="utf-8") as fh:
-                    _atomic_write(os.path.join(os.path.dirname(target), _package_name(name), module), fh.read())
+                    written[_package_name(name) + "/" + module] = fh.read()
+    for rel, text in written.items():
+        _atomic_write(os.path.join(os.path.dirname(target), *rel.split("/")), text)
+    _record_hooks(home, written)
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}

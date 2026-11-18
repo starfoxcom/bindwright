@@ -796,3 +796,13 @@ test("a computer-wide mod cannot be turned off for one project", { skip }, () =>
     assert.match(missing.out.error, /Not a folder/);
   });
 });
+
+test("install-hook records each copy it writes, so the helper's follow can tell an edited one", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py", "print('guard')\r\n");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const record = JSON.parse(readFileSync(join(dir, ".bindwright", "hooks.json"), "utf8"));
+    const written = readFileSync(join(dir, ".claude", "hooks", "push-guard.py"));
+    assert.equal(record.files["push-guard.py"], createHash("sha256").update(written).digest("hex"));
+  });
+});

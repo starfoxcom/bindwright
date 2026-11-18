@@ -124,7 +124,41 @@ async function install(pin, helperHome, fetchFile, runInstall) {
     rmSync(file, { force: true });
   }
   const now = helperVersion(helperHome);
-  return now === pin.version ? { moved: now } : { error: `the helper still reads ${now}` };
+  if (now !== pin.version) return { error: `the helper still reads ${now}` };
+  return { moved: now, ...refreshHooks(helperHome) };
+}
+
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+/**
+ * Brings each hook copy in ~/.claude/hooks that home.py's install-hook recorded, and that still
+ * holds exactly the recorded bytes, to the new helper's copy. A copy the user edited, or one the
+ * helper no longer ships, stays as it is. Returns the paths it refreshed and those it kept.
+ */
+export function refreshHooks(helperHome) {
+  const bindwrightHome = dirname(helperHome);
+  const hooksDir = join(dirname(bindwrightHome), ".claude", "hooks");
+  const sources = join(helperHome, "node_modules", "bindwright", "_core", "global-template", "hooks");
+  const recordFile = join(bindwrightHome, "hooks.json");
+  const files = readJson(recordFile)?.files;
+  const out = { refreshed: [], kept: [] };
+  if (!files || typeof files !== "object") return out;
+  for (const [rel, recorded] of Object.entries(files)) {
+    const installed = join(hooksDir, ...rel.split("/"));
+    const source = join(sources, ...rel.split("/"));
+    if (!/^[\w.-]+(\/[\w.-]+)?\.py$/.test(rel) || !existsSync(installed) || !existsSync(source)) continue;
+    if (sha256(readFileSync(installed)) !== recorded) {
+      out.kept.push(rel);
+      continue;
+    }
+    const text = readFileSync(source, "utf8").replace(/\r\n/g, "\n");
+    if (sha256(Buffer.from(text, "utf8")) === recorded) continue;
+    writeFileSync(installed, text);
+    files[rel] = sha256(Buffer.from(text, "utf8"));
+    out.refreshed.push(rel);
+  }
+  if (out.refreshed.length) writeFileSync(recordFile, `${JSON.stringify({ schema: 1, files }, null, 2)}\n`);
+  return out;
 }
 
 // Why the helper stays as it is, or null when it should move to the pin.

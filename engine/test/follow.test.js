@@ -4,15 +4,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { follow, readPin } from "../../helper/hooks/follow.mjs";
+import { follow, readPin, refreshHooks } from "../../helper/hooks/follow.mjs";
 
 const BYTES = Buffer.from("the 7.2.0 helper");
 const SHA = createHash("sha256").update(BYTES).digest("hex");
 const RELEASE = "https://github.com/starfoxcom/bindwright/releases/download/v7.2.0/bindwright-7.2.0.tgz";
 const PIN = { version: "7.2.0", node: { file: "bindwright-7.2.0.tgz", url: RELEASE, sha256: SHA } };
+const MOVED = { moved: "7.2.0", refreshed: [], kept: [] };
 
 // A plugin folder pinning `pin` and a helper home holding `have`, given to `fn` with `run`,
 // which calls follow with stand-ins that record each download and install.
@@ -47,7 +50,7 @@ function scene({ pin = PIN, have = "7.1.0", lockAgeMs = null }, fn) {
 
 test("the helper moves to the plugin's pin and leaves no download or lock behind", () =>
   scene({}, async ({ helperHome, calls, run }) => {
-    assert.deepEqual(await run(), { moved: "7.2.0" });
+    assert.deepEqual(await run(), MOVED);
     assert.deepEqual(calls.fetched, [RELEASE]);
     assert.deepEqual(readdirSync(helperHome), ["node_modules"]);
   }));
@@ -69,7 +72,7 @@ test("nothing is downloaded when there is nothing to follow", async () => {
 
 test("a lock left by a session that died long ago does not stop the move", () =>
   scene({ lockAgeMs: 60 * 60 * 1000 }, async ({ run }) => {
-    assert.deepEqual(await run(), { moved: "7.2.0" });
+    assert.deepEqual(await run(), MOVED);
   }));
 
 test("a pin naming anything but the release's own file is refused", () => {
@@ -108,7 +111,7 @@ test("after a failure the same pin is tried again the next day, not at every ses
     };
     assert.deepEqual(await run({ fetchFile, today: "2026-11-17" }), { error: "offline" });
     assert.deepEqual(await run({ fetchFile, today: "2026-11-17" }), { skipped: "it failed today already" });
-    assert.deepEqual(await run({ today: "2026-11-18" }), { moved: "7.2.0" });
+    assert.deepEqual(await run({ today: "2026-11-18" }), MOVED);
     assert.equal(calls.fetched.length, 2);
   }));
 
@@ -117,3 +120,33 @@ test("the helper only moves forward: an older plugin pin leaves a newer helper a
     assert.deepEqual(await run(), { skipped: "the helper is newer than this plugin" });
     assert.deepEqual(calls.fetched, []);
   }));
+
+test("hook copies still as installed take the new helper's text; edited ones stay", () => {
+  const home = mkdtempSync(join(tmpdir(), "bw-hooks-"));
+  try {
+    const helperHome = join(home, ".bindwright", "helper");
+    const sources = join(helperHome, "node_modules", "bindwright", "_core", "global-template", "hooks");
+    const hooks = join(home, ".claude", "hooks");
+    const put = (dir, rel, text) => {
+      mkdirSync(join(dir, rel, ".."), { recursive: true });
+      writeFileSync(join(dir, rel), text);
+    };
+    const hash = (text) => createHash("sha256").update(text).digest("hex");
+    for (const rel of ["guard.py", "guard_pkg/rules.py", "edited.py", "dropped.py"]) put(hooks, rel, "old\n");
+    put(hooks, "edited.py", "mine\n");
+    for (const rel of ["guard.py", "guard_pkg/rules.py", "edited.py"]) put(sources, rel, "new\r\n");
+    const files = Object.fromEntries(["guard.py", "guard_pkg/rules.py", "edited.py", "dropped.py"]
+      .map((rel) => [rel, hash("old\n")]));
+    put(join(home, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files }));
+    const out = refreshHooks(helperHome);
+    assert.deepEqual(out, { refreshed: ["guard.py", "guard_pkg/rules.py"], kept: ["edited.py"] });
+    assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "new\n");
+    assert.equal(readFileSync(join(hooks, "edited.py"), "utf8"), "mine\n");
+    assert.equal(readFileSync(join(hooks, "dropped.py"), "utf8"), "old\n");
+    const record = JSON.parse(readFileSync(join(home, ".bindwright", "hooks.json"), "utf8")).files;
+    assert.equal(record["guard.py"], hash("new\n"));
+    assert.deepEqual(refreshHooks(helperHome), { refreshed: [], kept: ["edited.py"] }, "a second run changes nothing");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
