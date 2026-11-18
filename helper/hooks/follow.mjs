@@ -319,7 +319,11 @@ export async function follow({
     let result;
     try {
       result = reason ? {} : await install(pin, helperHome, fetchFile, runInstall);
-      if (!result.error) Object.assign(result, refreshUnderLock(helperHome, rename));
+      if (!result.error) {
+        // Marked before the refresh starts, so a session cut off partway leaves it for the next start.
+        saveState(stateFile, { failed: reason ? failedBefore : {}, hooksPending: true });
+        Object.assign(result, refreshUnderLock(helperHome, rename));
+      }
     } finally {
       rmSync(lockFile, { force: true });
     }

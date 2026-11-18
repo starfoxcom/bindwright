@@ -242,3 +242,18 @@ test("the hook refresh runs under the install lock after a move; when it fails, 
     assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "new\n");
     assert.deepEqual(await run(day), { skipped: "it failed today already" }, "the failed pin still waits a day");
   }));
+
+test("the refresh is marked pending before its first swap, so a session cut off partway is finished next start", () =>
+  scene({}, async ({ root, helperHome, run }) => {
+    put(join(root, ".claude", "hooks"), "guard.py", "old\n");
+    put(hookSourcesIn(helperHome), "guard.py", "new\n");
+    put(join(root, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files: { "guard.py": sha("old\n") } }));
+    const marks = [];
+    const watching = (from, to) => {
+      marks.push(JSON.parse(readFileSync(join(helperHome, "follow.json"), "utf8")));
+      renameSync(from, to);
+    };
+    assert.deepEqual((await run({ rename: watching })).hooks, { refreshed: ["guard.py"], kept: [] });
+    assert.deepEqual(marks, [{ hooksPending: true }]);
+    assert.ok(!existsSync(join(helperHome, "follow.json")), "a finished refresh clears the mark");
+  }));
