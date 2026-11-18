@@ -2,17 +2,29 @@
 // tool calls count as a search through the code-research tool, which as a plain search of
 // the repo's code, and which not at all. Each case runs the script's own classify().
 
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { python } from "./python.js";
+import { researchTool } from "../model.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const script = join(repo, ".claude", "scripts", "research-adherence.py");
+// The script ships only for a custom tool, so the test fills the template for one named FindWright,
+// whose calls and bypass marker the cases below use.
+const custom = { name: "FindWright", url: "https://example.com/fw" };
+const tool = researchTool({ codeResearch: "custom", codeResearchCustom: custom });
+const template = join(repo, "_core", "project-template", ".claude", "scripts", "research-adherence.py");
+const scriptDir = mkdtempSync(join(tmpdir(), "adherence-script-"));
+const script = join(scriptDir, "research-adherence.py");
+writeFileSync(script, readFileSync(template, "utf8")
+  .replaceAll("{{TOOLS_CODE_RESEARCH_NAME}}", tool.name)
+  .replaceAll("{{TOOLS_CODE_RESEARCH_MATCH}}", tool.match)
+  .replaceAll("{{TOOLS_CODE_RESEARCH_BYPASS_MARKER}}", tool.bypass));
+after(() => rmSync(scriptDir, { recursive: true, force: true }));
 
 // Loads the script as a module (its name has a hyphen) and classifies each call from the
 // repo root given, printing the results as one JSON list.

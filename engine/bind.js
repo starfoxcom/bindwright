@@ -75,7 +75,7 @@ function included(path, a, flags) {
     ".claude/rules/review-tiers.md": adv.aiReview,
     ".claude/rules/tracker.md": github,
     ".github/ISSUE_TEMPLATE/work-item.md": github,
-    ".claude/scripts/research-adherence.py": flags.code_research_first,
+    ".claude/scripts/research-adherence.py": flags.code_research_count,
     ".github/scripts/size_check.py": flags.code_size_check,
     ".github/workflows/size-check.yml": flags.code_size_check,
     ".github/size-check/exceptions.txt": flags.code_size_check,

@@ -515,6 +515,61 @@ test("set-language sets the work language, its rule file and the settings key", 
   for (const row of rows) checkLanguageRow(row);
 });
 
+test("plugin-auto-update writes the wrights marketplace's autoUpdate and keeps the rest", { skip }, () => {
+  const source = { source: "github", repo: "a-fork/wrights" };
+  const repo = ["--repo", "a-fork/wrights"];
+  const rows = [
+    ["on with no settings file adds the entry from the repo given", ["on", ...repo], undefined,
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } }, true],
+    ["on keeps the entry's own source, over any repo given, and the other marketplaces", ["on", ...repo],
+      { model: "opus", extraKnownMarketplaces: { other: { source: {} }, wrights: { source: { source: "git" } } } },
+      { model: "opus", extraKnownMarketplaces: { other: { source: {} },
+        wrights: { source: { source: "git" }, autoUpdate: true } } }, true],
+    ["on again changes nothing", ["on"], { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } }, false],
+    ["off writes false, which outranks the /plugin toggle", ["off"],
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
+      { extraKnownMarketplaces: { wrights: { source, autoUpdate: false } } }, true],
+    ["off with no entry has nothing to turn off", ["off"], { model: "opus" }, { model: "opus" }, false],
+  ];
+  for (const [label, args, before, after, changed] of rows) {
+    withHome((dir) => {
+      if (before !== undefined) writeSettings(dir, before);
+      const r = home(dir, "plugin-auto-update", ...args);
+      assert.equal(r.status, 0, label);
+      assert.equal(r.out.changed, changed, label);
+      assert.deepEqual(settings(dir), after, label);
+    });
+  }
+  const refused = [
+    ["a state other than on or off", ["maybe"], { model: "opus" }, /Use on or off, not maybe/],
+    ["on with no entry and no repo", ["on"], { model: "opus" }, /pass --repo/],
+    ["a repo that is not owner/name", ["on", "--repo", "a b"], { model: "opus" }, /owner\/name/],
+    ["a wrights entry that is not an object", ["on"], { extraKnownMarketplaces: { wrights: true } },
+      /is not an object/],
+    ["a settings file that is not valid JSON", ["on"], "{ broken", /not valid JSON/],
+  ];
+  for (const [label, args, before, error] of refused) {
+    withHome((dir) => {
+      writeSettings(dir, before);
+      const r = home(dir, "plugin-auto-update", ...args);
+      assert.equal(r.status, 1, label);
+      assert.match(r.out.error, error, label);
+      assert.equal(readFileSync(settingsPath(dir), "utf8"), asText(before), label);
+    });
+  }
+  withHome((dir) => {
+    writeSettings(dir, { env: { DISABLE_AUTOUPDATER: "1" } });
+    const r = home(dir, "plugin-auto-update", "on", "--repo", "starfoxcom/wrights");
+    assert.ok(r.out.blocked_by.includes("DISABLE_AUTOUPDATER"));
+    // The force in the shell outweighs a blocker in settings, as Claude Code reads them together.
+    const args = [join(engine, "home.py"), "plugin-auto-update", "on", "--home", dir];
+    const env = { ...process.env, FORCE_AUTOUPDATE_PLUGINS: "1" };
+    const forced = JSON.parse(spawnSync(python, args, { encoding: "utf8", env }).stdout);
+    assert.deepEqual(forced.blocked_by, []);
+  });
+});
+
 test("find-python names a system interpreter", { skip }, () => {
   const r = spawnSync(python, [join(engine, "home.py"), "find-python"], { encoding: "utf8" });
   const out = JSON.parse(r.stdout);
@@ -739,5 +794,26 @@ test("a computer-wide mod cannot be turned off for one project", { skip }, () =>
     const missing = home(dir, "project-mods", join(dir, "no-such-repo"));
     assert.equal(missing.status, 1, missing.stderr);
     assert.match(missing.out.error, /Not a folder/);
+  });
+});
+
+test("install-hook records each copy it writes, so the helper's follow can tell an edited one", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "push-guard.py", "print('guard')\r\n");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const recorded = () => JSON.parse(readFileSync(join(dir, ".bindwright", "hooks.json"), "utf8")).files;
+    const written = readFileSync(join(dir, ".claude", "hooks", "push-guard.py"));
+    assert.equal(recorded()["push-guard.py"], createHash("sha256").update(written).digest("hex"));
+    // A reinstall replaces the hook's whole set, so a module the new copy dropped is no longer recorded.
+    const modules = join(dirname(file), "push_guard");
+    mkdirSync(modules);
+    writeFileSync(join(modules, "a.py"), "a\n");
+    writeFileSync(join(modules, "b.py"), "b\n");
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    rmSync(join(modules, "b.py"));
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    assert.deepEqual(Object.keys(recorded()).sort(), ["push-guard.py", "push_guard/a.py"]);
+    assert.equal(home(dir, "remove-hook", "push-guard.py").status, 0);
+    assert.deepEqual(recorded(), {}, "a removed hook is forgotten");
   });
 });

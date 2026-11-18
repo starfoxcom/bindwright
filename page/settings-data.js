@@ -4,7 +4,7 @@
 //
 // Each entry: id (kebab-case), title, text (what it changes, one short line), value (the
 // default setup picks), keys (the engine answers it covers: "team", "project.name",
-// "extra:<name>" for a file setup adds, "setting:<name>" for a computer setting the answers do
+// "extra:<name>" for a file or setting setup adds, "setting:<name>" for a computer setting the answers do
 // not hold, and "mods" for the mods entry).
 // An optional engine list holds { flags, key, value } checks against defaults(flags).
 // An optional links map turns each named tool in the text into a link to its project.
@@ -74,6 +74,14 @@ export const COMPUTER = [
       "and a follow-up question when it needs one. /output-style default turns it off.",
     value: "Yes",
     keys: ["extra:reply-style"],
+  },
+  {
+    id: "plugin-auto-update",
+    title: "Plugin auto-update",
+    text: "Claude Code fetches new Bindwright and FindWright versions by itself, a few minutes "
+      + "into a session. On without asking when they come from the wrights marketplace.",
+    value: "Yes",
+    keys: ["extra:plugin-auto-update"],
   },
   {
     id: "mods-group",

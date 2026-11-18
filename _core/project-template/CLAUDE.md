@@ -41,7 +41,7 @@ Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id
 <!-- TOGGLE:code_research_first START -->
 ## Code research
 
-Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RESEARCH_NAME}}**; `/find` has the lookup sequence and the only cases where Grep and Glob are allowed. `/close-session` reports how often each was used.
+Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RESEARCH_NAME}}**; `/find` has the lookup sequence and the only cases where Grep and Glob are allowed.
 
 <!-- TOGGLE:code_research_first END -->
 ## Sessions

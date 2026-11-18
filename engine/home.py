@@ -18,6 +18,7 @@ Standard library, Python 3.8+.
     python engine/home.py update-style FILE   (replaces an unedited earlier copy)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
+    python engine/home.py plugin-auto-update on|off [--repo OWNER/NAME]   (the wrights marketplace's auto-update)
     python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
     python engine/home.py project-mod ROOT NAME on|off
 
@@ -263,6 +264,26 @@ def _launcher_hook(python, target, block_on_failure=False):
     return hook
 
 
+def _record_hooks(home, name, written):
+    """Replaces hook `name`'s entries in ~/.bindwright/hooks.json with the SHA-256 of each file in
+    `written`, by its path under ~/.claude/hooks, so the helper can tell a copy still as installed
+    from one the user edited, and refresh only the first kind. An empty `written` forgets the hook."""
+    path = os.path.join(home, ".bindwright", "hooks.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            record = json.load(fh)
+    except (OSError, ValueError):
+        record = {}
+    files = record.get("files") if isinstance(record, dict) and isinstance(record.get("files"), dict) else {}
+    package = _package_name(name) + "/"
+    kept = {rel: sha for rel, sha in files.items() if rel != name and not rel.startswith(package)}
+    if kept == files and not written:
+        return
+    for rel, text in written.items():
+        kept[rel] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    _atomic_write(path, json.dumps({"schema": 1, "files": kept}, indent=2, sort_keys=True) + "\n")
+
+
 def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
     name = os.path.basename(file)
     if not name.endswith(".py"):
@@ -276,14 +297,18 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
     path, data = _load(home)
     sections = [(_event_entries(data, event, path), where) for event, where in placements]
     target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
+    written = {}
     with open(file, encoding="utf-8") as fh:
-        _atomic_write(target, fh.read())
+        written[name] = fh.read()
     package = os.path.join(os.path.dirname(os.path.abspath(file)), _package_name(name))
     if os.path.isdir(package):
         for module in sorted(os.listdir(package)):
             if module.endswith(".py"):
                 with open(os.path.join(package, module), encoding="utf-8") as fh:
-                    _atomic_write(os.path.join(os.path.dirname(target), _package_name(name), module), fh.read())
+                    written[_package_name(name) + "/" + module] = fh.read()
+    for rel, text in written.items():
+        _atomic_write(os.path.join(os.path.dirname(target), *rel.split("/")), text)
+    _record_hooks(home, name, written)
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
@@ -307,6 +332,7 @@ def remove_hook(home, name):
     package = os.path.join(_claude(home), "hooks", _package_name(name))
     if os.path.isdir(package) and not _is_link(os.lstat(package)):
         shutil.rmtree(package)
+    _record_hooks(home, name, {})
     return {"removed_hooks": removed, "deleted_file": deleted}
 
 
@@ -352,6 +378,49 @@ def attribution_off(home):
     data["attribution"] = {"commit": "", "pr": "", "sessionUrl": False}
     _save(path, data)
     return {"settings": path}
+
+
+# The marketplace Bindwright and FindWright install from, as `/plugin marketplace add` names it.
+WRIGHTS = "wrights"
+# Each turns Claude Code's whole plugin auto-update pass off, unless FORCE_AUTOUPDATE_PLUGINS is set.
+UPDATE_BLOCKERS = ("DISABLE_UPDATES", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
+
+
+def _update_blockers(env):
+    if env.get("FORCE_AUTOUPDATE_PLUGINS"):
+        return []
+    return [name for name in UPDATE_BLOCKERS if env.get(name)]
+
+
+def set_plugin_auto_update(home, state, repo=None):
+    """Turns Claude Code's auto-update for the wrights marketplace on or off. A settings
+    entry outranks the /plugin toggle, so off is written as false, not left out. With no
+    entry yet, on needs the GitHub repo the marketplace was added from (`claude plugin
+    marketplace list --json`), so the entry never points it anywhere else; off has nothing
+    to turn off, since auto-update is off by default for that marketplace."""
+    if state not in ("on", "off"):
+        raise HomeError("Use on or off, not " + state)
+    if repo is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise HomeError("--repo takes owner/name, not " + repo)
+    path, data = _load(home)
+    marketplaces = _section(data, "extraKnownMarketplaces", dict, path)
+    entry = marketplaces.get(WRIGHTS)
+    if entry is None and state == "off":
+        return {"settings": path, "on": False, "changed": False, "blocked_by": []}
+    if entry is None and repo is None:
+        raise HomeError("No wrights entry in %s yet: pass --repo with the repo the marketplace comes from" % path)
+    if entry is None:
+        entry = marketplaces[WRIGHTS] = {"source": {"source": "github", "repo": repo}}
+    elif not isinstance(entry, dict):
+        raise HomeError("%s: extraKnownMarketplaces.%s is not an object; fix it by hand first" % (path, WRIGHTS))
+    changed = entry.get("autoUpdate") is not (state == "on")
+    if changed:
+        entry["autoUpdate"] = state == "on"
+        _save(path, data)
+    settings_env = data.get("env") if isinstance(data.get("env"), dict) else {}
+    # Claude Code sees both sources at once, the settings env over the process's, so judge them merged.
+    blocked = _update_blockers({**os.environ, **settings_env})
+    return {"settings": path, "on": state == "on", "changed": changed, "blocked_by": blocked}
 
 
 # The CLI draws the mods' rows above the prompt top-down in folder-list order, so the
@@ -700,7 +769,7 @@ def run(argv):
     argv = list(argv)
     home = _option(argv, "--home") or os.path.expanduser("~")
     python, matcher = _option(argv, "--python"), _option(argv, "--matcher")
-    events = _option(argv, "--events")
+    events, repo = _option(argv, "--events"), _option(argv, "--repo")
     block_on_failure = _flag(argv, "--block-on-failure")
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     one = args[0] if len(args) == 1 else None
@@ -712,6 +781,8 @@ def run(argv):
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
+    if cmd == "plugin-auto-update" and one:
+        return set_plugin_auto_update(home, one, repo)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
     if cmd == "project-mods" and one:

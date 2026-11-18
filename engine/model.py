@@ -13,13 +13,10 @@ REVIEW_MODELS = {"routine": "claude-fable-5-2", "deep": "claude-fable-5-2", "bac
 REVIEW_EFFORTS = {"routine": "low", "deep": "medium", "backup": "high"}
 
 CODE_RESEARCH_TOOLS = {
-    # match: regex over tool-call names, used by the close-session adherence count.
-    "findwright": {
-        "name": "FindWright",
-        "url": "https://github.com/starfoxcom/findwright",
-        "bypass": "FINDWRIGHT_BYPASS:",
-        "match": "findwright",
-    },
+    # match: regex over tool-call names, for the audit and the adherence count (a custom tool's only);
+    # bypass: that count's marker. FindWright installs its own guidance, fallback marker and search report.
+    "findwright": {"name": "FindWright", "url": "https://github.com/starfoxcom/findwright",
+                   "bypass": None, "match": "findwright"},
     "none": {"name": "none", "url": "(no homepage)", "bypass": None, "match": None},
     # A tool the person names: values_for fills all four from codeResearchCustom.
     "custom": {"name": None, "url": None, "bypass": None, "match": None},
@@ -447,6 +444,8 @@ def flags_for(a):
         "github_actions_deep_review_auto_fire": adv["aiReview"] and adv["deepEscalation"],
         "github_actions_paths_ignore_auto_merge": adv["aiReview"] and solo_own,
         "code_research_first": adv["codeResearch"] != "none",
+        # The grep-versus-tool count: a tool with a plugin of its own, FindWright, measures its own searches.
+        "code_research_count": adv["codeResearch"] == "custom",
         "precommit_hooks_scaffold": adv["precommit"] != "none",
         "branching_model_gitflow": adv["branching"] == "gitflow",
         "branching_model_trunk": adv["branching"] == "trunk",

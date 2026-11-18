@@ -29,11 +29,23 @@ EXTRA_FILES = {
 MARKERS = {
     "global-instructions": "<!-- bindwright:global-instructions -->",
 }
+
+
+def _wrights_auto_update(settings):
+    marketplaces = settings.get("extraKnownMarketplaces")
+    entry = marketplaces.get("wrights") if isinstance(marketplaces, dict) else None
+    return isinstance(entry, dict) and entry.get("autoUpdate") is True
+
+
+# The extras that are a value in the config folder's settings.json, not a file.
+SETTING_EXTRAS = {
+    "plugin-auto-update": _wrights_auto_update,
+}
 MODS = [
     "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
     "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ]
-EXTRAS = sorted(list(EXTRA_FILES) + MODS, key=_code_units)
+EXTRAS = sorted(list(EXTRA_FILES) + list(SETTING_EXTRAS) + MODS, key=_code_units)
 LEVELS = ["required", "recommended"]
 # The work languages a personal layer may pick; home.py keeps the same list.
 LANGUAGES = ["english", "spanish"]
@@ -68,13 +80,17 @@ def _check_schema(schema, file):
         raise ValueError("%s was written by a newer Bindwright: update the plugin" % file)
 
 
-def _read_extras(extras, name, is_valid, ignored):
+# A setting extra applies only on some computers (a wrights install), so a project cannot rate it.
+RATEABLE = [extra for extra in EXTRAS if extra not in SETTING_EXTRAS]
+
+
+def _read_extras(extras, name, is_valid, ignored, names=EXTRAS):
     out = {}
     if not isinstance(extras, dict):
         ignored.append("%s: extras" % name)
         return out
     for extra in _sorted_keys(extras):
-        if extra in EXTRAS and is_valid(extras[extra]):
+        if extra in names and is_valid(extras[extra]):
             out[extra] = extras[extra]
         else:
             ignored.append("%s: extras.%s" % (name, extra))
@@ -131,7 +147,8 @@ def _read_project(answers):
         if key == "schema":
             continue
         if key == "extras":
-            layer["extras"] = _read_extras(value, "project", lambda v: _text(v) and v in LEVELS, layer["ignored"])
+            layer["extras"] = _read_extras(
+                value, "project", lambda v: _text(v) and v in LEVELS, layer["ignored"], RATEABLE)
         elif key == "required" and isinstance(value, list):
             for item in value:
                 if _text(item) and item in SETTINGS and item in layer["settings"]:
@@ -302,11 +319,21 @@ def _hook_runs(config, name):
     return False
 
 
+def _setting_holds(config, extra):
+    try:
+        settings = _read_layer_file(os.path.join(config, "settings.json"), "settings.json")
+    except Exception:
+        return False
+    return isinstance(settings, dict) and SETTING_EXTRAS[extra](settings)
+
+
 def installed_extras(config):
     def at(extra):
         return EXTRA_FILES.get(extra, "mods/" + extra)
 
     def present(extra):
+        if extra in SETTING_EXTRAS:
+            return _setting_holds(config, extra)
         file = at(extra)
         path = os.path.join(config, *file.split("/"))
         if extra in MARKERS:

@@ -260,10 +260,11 @@ test("every code-research tool gets exactly one lookup sequence and no retired t
   }
 });
 
-test("the adherence script ships only with a code-research tool", async () => {
+test("the adherence script ships only with a custom code-research tool", async () => {
   const script = ".claude/scripts/research-adherence.py";
   assert.ok(!(await run(defaults())).has(script));
-  for (const tool of Object.keys(CODE_RESEARCH_TOOLS).filter((t) => t !== "none")) {
+  assert.ok(!(await run(withTool(defaults(), "findwright"))).has(script), "FindWright measures its own searches");
+  for (const tool of ["custom"]) {
     const text = (await run(withTool(defaults(), tool))).get(script);
     const pattern = text.match(/TOOL = re\.compile\(r"(.*)"\)/)[1];
     assert.doesNotThrow(() => new RegExp(pattern), `${tool}: bad match pattern`);
@@ -411,11 +412,12 @@ const python = spawnSync(process.execPath, ["-e", `
 
 test("the adherence script counts only code searches", { skip: !python && "needs Python 3.8+" }, async () => {
   const a = defaults();
-  a.advanced.codeResearch = "findwright";
+  a.advanced.codeResearch = "custom";
+  a.advanced.codeResearchCustom = { name: "Code Index", url: "https://example.com/code-index" };
   const text = (await run(a)).get(".claude/scripts/research-adherence.py");
   const marker = text.match(/BYPASS = "(.*)"/)[1];
   const cases = [
-    ["mcp__findwright__find", { query: "x" }, "research"],
+    ["mcp__code-index__find", { query: "x" }, "research"],
     ["Grep", { pattern: "foo", path: "src" }, "fallback"],
     ["Grep", { pattern: "foo", glob: "*.md" }, null],
     ["Grep", { pattern: "foo", type: "md" }, null],

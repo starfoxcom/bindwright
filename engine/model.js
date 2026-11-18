@@ -9,12 +9,10 @@ export const REVIEW_MODELS = { routine: "claude-fable-5-2", deep: "claude-fable-
 export const REVIEW_EFFORTS = { routine: "low", deep: "medium", backup: "high" };
 
 export const CODE_RESEARCH_TOOLS = {
-  // match: regex over tool-call names, used by the close-session adherence count.
+  // match: regex over tool-call names, for the audit and the adherence count (a custom tool's only);
+  // bypass: that count's marker. FindWright installs its own guidance, fallback marker and search report.
   findwright: {
-    name: "FindWright",
-    url: "https://github.com/starfoxcom/findwright",
-    bypass: "FINDWRIGHT_BYPASS:",
-    match: "findwright",
+    name: "FindWright", url: "https://github.com/starfoxcom/findwright", bypass: null, match: "findwright",
   },
   none: { name: "none", url: "(no homepage)", bypass: null, match: null },
   // A tool the person names: valuesFor fills all four from codeResearchCustom.
@@ -352,6 +350,8 @@ export function flagsFor(a) {
     github_actions_deep_review_auto_fire: adv.aiReview && adv.deepEscalation,
     github_actions_paths_ignore_auto_merge: adv.aiReview && soloOwn,
     code_research_first: adv.codeResearch !== "none",
+    // The grep-versus-tool count: a tool with a plugin of its own, FindWright, measures its own searches.
+    code_research_count: adv.codeResearch === "custom",
     precommit_hooks_scaffold: adv.precommit !== "none",
     branching_model_gitflow: adv.branching === "gitflow",
     branching_model_trunk: adv.branching === "trunk",
