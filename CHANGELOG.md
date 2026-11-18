@@ -11,6 +11,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 - **Setup shows the whole plan before it changes anything.** After the questions, `/bindwright:setup` lists every project file it will add or merge, each GitHub board or repo it will create, and every change to the computer (hooks, `settings.json` entries, mods, reply style, agent, code-search tool), then writes it on one "Apply all of this?"; the few steps that need something more from you, such as the verify skill or the code-style profile, still ask on their own. A no leaves the repo, `~/.claude` and GitHub as they were; until then setup saves no answer and changes nothing but what every run needs, each on its own yes: the programs, the helper, the Git identity, `git init` and the removal of an older Bindwright's FindWright copy. Lizard and the commit-check manager install after that yes, with no question of their own, since picking the check is the yes to them.
 - **Setup offers the recommended answers in one go.** A first or project run starts with one question: the recommended answer for everything, or each choice. The recommended path still asks what has no safe default (who works on the project and whose it is, a public repo's work items, the review counts, replacing an existing reply style) and goes straight to the plan.
 
+### Changed
+
+- **Running a Bindwright command is the yes to install its helper.** `/bindwright:setup`, `/bindwright:update` and the other commands that need the helper install or update the one the plugin pins without asking first, and say in one line what they installed, the way FindWright's setup already does. The helper is a requirement, so a no could only stop the run. The SHA-256 check and the stop on a failed install stay. `/bindwright:report` is now a command only you start, like the rest, so the assistant cannot run it, and the install, on its own.
+
 ## [v7.2.0] — 2026-11-18
 
 ### Added

@@ -15,7 +15,7 @@ This skill writes the team's half of the setup into `.bindwright/project.json`, 
 
 ## 2. Read the current setup
 
-Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin. With neither, say the export needs Node 18 or later, or Python 3.8 or later, and stop.
+Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper when it is missing or holds another version than the plugin. With neither, say the export needs Node 18 or later, or Python 3.8 or later, and stop.
 
 Run it with `--settings <repo root>`. It prints one line of JSON: `settings` (each with its `value`, the layer it came `from`, and whether the project `required` it), `extras` (each with the project's rating and this person's choice), `installed` (which extras this machine has), `drift` and `ignored`. On `{"error": "..."}`, show the message and stop.
 
