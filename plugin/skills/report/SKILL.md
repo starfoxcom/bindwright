@@ -1,6 +1,7 @@
 ---
 name: report
 description: Report a bug in Bindwright itself. Drafts the report from what failed and the doctor's findings, takes out paths, names, emails and tokens, shows it in full, and files it only on a yes.
+disable-model-invocation: true
 ---
 
 # /bindwright:report
