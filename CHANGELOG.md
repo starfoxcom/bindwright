@@ -16,6 +16,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **Running a Bindwright command is the yes to install its helper.** `/bindwright:setup`, `/bindwright:update` and the other commands that need the helper install or update the one the plugin pins without asking first, and say in one line what they installed, the way FindWright's setup already does. The helper is a requirement, so a no could only stop the run. The SHA-256 check and the stop on a failed install stay. `/bindwright:report` is now a command only you start, like the rest, so the assistant cannot run it, and the install, on its own.
 
+### Fixed
+
+- **The release version check no longer runs a pull request's own script in a CI review.** The hook ran `.github/scripts/version_check.py` from the checked-out repo, which in a CI review is the pull request's, so a reviewer command naming a release could run that pull request's code with the review's token. It now does nothing in a GitHub Actions run, where no release is made through the assistant. `/bindwright:update` brings the fixed hook into each project.
+
 ## [v7.2.0] — 2026-11-18
 
 ### Added
