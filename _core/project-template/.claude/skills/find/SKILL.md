@@ -10,18 +10,8 @@ The lookup sequence for this project's code-research tool, **{{TOOLS_CODE_RESEAR
 <!-- TOGGLE:code_research:findwright START -->
 ## Sequence
 
-1. `find` with a plain-English question, a name, or both: the files that answer it, best first.
-2. `search` with one or more regexes, optional `globs` and `context`: every matching line, with the symbol around it. It covers every file the project tracks, Markdown, config and templates included.
-3. `symbols` to look a name up by kind (function, class, heading, key).
-4. `outline` with a path: its symbols and line ranges, to read only the part you need.
-5. `coverage` when a file seems missing: what the index reads and which files yield no symbol.
-
-The index updates itself on every call. Its symbols come from the rules in `.findwright/config.json`: when `coverage` shows files the work searches with no symbol, run `/findwright:fit`, which writes the rules that name them.
+Follow `/findwright:find`, which the FindWright plugin ships: it holds FindWright's lookup sequence and the cases where Grep and Glob are allowed.
 <!-- TOGGLE:code_research:findwright END -->
-
-
-
-
 
 <!-- TOGGLE:code_research:custom START -->
 ## Sequence
@@ -42,7 +32,7 @@ The tool's documentation ({{TOOLS_CODE_RESEARCH_URL}}) names the exact commands 
 4. For "what calls X", Grep for the name and read each caller's range. There is no call graph without an indexer.
 <!-- TOGGLE:code_research:none END -->
 
-<!-- TOGGLE:code_research_first START -->
+<!-- TOGGLE:code_research:custom START -->
 ## Falling back to Grep and Glob
 
 Allowed only when:
@@ -52,7 +42,7 @@ Allowed only when:
 - {{TOOLS_CODE_RESEARCH_NAME}} is unavailable for this scope.
 
 Say which condition applies. For a shell `grep` or `rg`, add the comment `# {{TOOLS_CODE_RESEARCH_BYPASS_MARKER}} <reason>` to the command so the close-session count treats it as a deliberate fallback.
-<!-- TOGGLE:code_research_first END -->
+<!-- TOGGLE:code_research:custom END -->
 
 ## Citing
 

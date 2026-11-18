@@ -12,12 +12,7 @@ These are project-agnostic instructions that apply to every Claude Code session 
 The project's chosen tool is set by `tools.code_research` in the bound configuration. The per-project `CLAUDE.md` and `.claude/skills/find/SKILL.md` document the canonical command sequence; this global rule is the meta-rule about preferring that tool to agents.
 
 <!-- TOGGLE:code_research:findwright START -->
-- Before ANY code research task, use a FindWright MCP tool:
-  - **"Where is X / how does Y work":** `find` with a plain-English question, a name, or both; it returns the files that answer it, best first.
-  - **Exact text or a pattern:** `search` with one or more regexes, `globs` and `context` lines, over every tracked file (code, Markdown, config, templates).
-  - **A name by kind, or a file's parts:** `symbols`, then `outline` to read only the range you need.
-- All FindWright tools are read-only; call them concurrently. The index updates itself on every call, so it never needs a sync.
-- Only fall back to Grep, Glob or agents when FindWright is unavailable or returned nothing usable for two differently worded queries.
+- Before ANY code research task, use FindWright, the way its own plugin says: `/findwright:setup` installs FindWright's guidance for the agent, and `/findwright:find` holds its lookup sequence.
 <!-- TOGGLE:code_research:findwright END -->
 <!-- TOGGLE:code_research:none START -->
 - This project has `tools.code_research: "none"` — no indexer is configured. The `/find` skill resolves to a Grep → Glob → Read sequence; follow it disciplined even without enforcement.
