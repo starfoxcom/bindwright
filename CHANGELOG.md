@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The weekly pin check holds the hand-pinned Bun to the review action's own.** The review workflows bring the Bun the action uses, with its version and checksums set by hand, so an action bump could keep handing it an older Bun unnoticed. `pin_check.py` now reads the `bun-version` of the action pinned in the same workflow, on GitHub at that commit, and lists a Bun that differs from it, or one it could not check.
+
 ### Changed
 
 - **Setup sets FindWright up in the same run.** With FindWright as the code-search tool, `/bindwright:setup` installs its plugin and then follows FindWright's own setup from its install path, as `/bindwright:update` already does with FindWright's update, so its helper, model, registration, guidance, search hook and the project's fit are in place when setup ends, and only its tools wait for the next session. It used to end with a restart and `/findwright:setup` for the user to remember.
