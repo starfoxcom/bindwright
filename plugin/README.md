@@ -27,9 +27,10 @@ When a session starts with `/start-session`, a notice says at most once a day wh
 
 ## Privacy
 
-The plugin sends nothing about you or your code. It makes four kinds of network call of its own:
+The plugin sends nothing about you or your code. It makes five kinds of network call of its own:
 
 - **The helper install**, after your yes, downloads the helper file the plugin pins from the plugin's release at `github.com/starfoxcom/bindwright/releases`.
+- **The helper follow** (the helper's `hooks/follow.mjs`), at `/start-session` once the plugin has moved ahead of its helper, downloads the file the new plugin pins from the same place and installs it without asking, checked against its SHA-256; after a failure it tries again at most once a day.
 - **The version check** (the helper's `hooks/notice.mjs`) reads one version number a day from `https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION`.
 - **The tool release check** (the helper's `hooks/tool-versions.mjs`), when setup or `/bindwright:doctor` runs, reads the newest release numbers of the tools this computer has: Node from `nodejs.org` and its release schedule from `raw.githubusercontent.com`, Git for Windows, the GitHub CLI and uv from GitHub's API, and the Claude Code CLI from the npm registry.
 - **Review counts** (the helper's `hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, eleven numbers (review counts, red review rounds, rebuilds and dropped pull requests) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests, and those closed without merging that carry a `dropped:` label, with the GitHub CLI already on your computer; nothing else leaves your computer, your code included.
@@ -38,7 +39,7 @@ Setup itself may run the install commands you approve (Git, Node or Python) and 
 
 ## Needs
 
-Claude Code 2.1.295 or later, Git, and Node 18 or Python 3.8 or later to run the helper; setup says what is missing and how to install it on your system. The optional extras (global instructions, a push guard for every project, session titles, the builder agent, a code-style profile, a plain reply style and mods for `~/.claude`) are each asked once with a yes or no, and the work language (English or Spanish) once too, all saved in `~/.claude/bindwright/settings.json`; nothing outside the repo changes without a yes.
+Claude Code 2.1.295 or later, Git, and Node 18 or Python 3.8 or later to run the helper; setup says what is missing and how to install it on your system. The optional extras (global instructions, a push guard for every project, session titles, the builder agent, a code-style profile, a plain reply style and mods for `~/.claude`) are each asked once with a yes or no, and the work language (English or Spanish) once too, all saved in `~/.claude/bindwright/settings.json`. Outside the repo, nothing changes without a yes except two things that keep Bindwright current: setup turns on Claude Code's auto-update for the wrights marketplace (`/bindwright:setup global` turns it off), and the helper follows the plugin to each new version.
 
 ## License
 

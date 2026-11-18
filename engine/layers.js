@@ -34,11 +34,18 @@ const EXTRA_FILES = {
 export const MARKERS = {
   "global-instructions": "<!-- bindwright:global-instructions -->",
 };
+// The extras that are a value in the config folder's settings.json, not a file.
+const SETTING_EXTRAS = {
+  "plugin-auto-update": (settings) => {
+    const entry = settings.extraKnownMarketplaces?.wrights;
+    return entry !== null && typeof entry === "object" && entry.autoUpdate === true;
+  },
+};
 export const MODS = [
   "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
   "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ];
-export const EXTRAS = [...Object.keys(EXTRA_FILES), ...MODS].sort();
+export const EXTRAS = [...Object.keys(EXTRA_FILES), ...Object.keys(SETTING_EXTRAS), ...MODS].sort();
 const LEVELS = ["required", "recommended"];
 // The work languages a personal layer may pick; home.py keeps the same list.
 export const LANGUAGES = ["english", "spanish"];
@@ -66,7 +73,10 @@ function checkSchema(schema, file) {
   if (schema > SCHEMA) throw new Error(`${file} was written by a newer Bindwright: update the plugin`);
 }
 
-function readExtras(extras, name, isValid, ignored) {
+// A setting extra applies only on some computers (a wrights install), so a project cannot rate it.
+const RATEABLE = EXTRAS.filter((extra) => !own(SETTING_EXTRAS, extra));
+
+function readExtras(extras, name, isValid, ignored, names = EXTRAS) {
   const out = {};
   if (extras === undefined) return out;
   if (!isObject(extras)) {
@@ -75,7 +85,7 @@ function readExtras(extras, name, isValid, ignored) {
   }
   for (const extra of Object.keys(extras).sort()) {
     const value = extras[extra];
-    if (EXTRAS.includes(extra) && isValid(value)) out[extra] = value;
+    if (names.includes(extra) && isValid(value)) out[extra] = value;
     else ignored.push(`${name}: extras.${extra}`);
   }
   return out;
@@ -119,7 +129,9 @@ function readProject(answers) {
   for (const key of Object.keys(setup).sort()) {
     const value = setup[key];
     if (key === "schema") continue;
-    if (key === "extras") layer.extras = readExtras(value, "project", (v) => LEVELS.includes(v), layer.ignored);
+    if (key === "extras") {
+      layer.extras = readExtras(value, "project", (v) => LEVELS.includes(v), layer.ignored, RATEABLE);
+    }
     else if (key === "required" && Array.isArray(value)) {
       for (const item of value) {
         if (own(SETTINGS, item) && own(layer.settings, item)) layer.required.push(item);
@@ -286,10 +298,22 @@ function hookRuns(config, name) {
   });
 }
 
+// Whether a setting extra's value holds in the config folder's settings.json.
+function settingHolds(config, extra) {
+  let settings;
+  try {
+    settings = readLayerFile(join(config, "settings.json"), "settings.json");
+  } catch {
+    return false;
+  }
+  return settings !== null && typeof settings === "object" && SETTING_EXTRAS[extra](settings);
+}
+
 // The extras present under the config folder (~/.claude), by name.
 export function installedExtras(config) {
   const at = (extra) => (own(EXTRA_FILES, extra) ? EXTRA_FILES[extra] : `mods/${extra}`);
   const present = (extra) => {
+    if (own(SETTING_EXTRAS, extra)) return settingHolds(config, extra);
     const file = at(extra);
     const path = join(config, ...file.split("/"));
     if (own(MARKERS, extra)) return hasMarker(path, MARKERS[extra]);
