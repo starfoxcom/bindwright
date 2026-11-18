@@ -562,6 +562,11 @@ test("plugin-auto-update writes the wrights marketplace's autoUpdate and keeps t
     writeSettings(dir, { env: { DISABLE_AUTOUPDATER: "1" } });
     const r = home(dir, "plugin-auto-update", "on", "--repo", "starfoxcom/wrights");
     assert.ok(r.out.blocked_by.includes("DISABLE_AUTOUPDATER"));
+    // The force in the shell outweighs a blocker in settings, as Claude Code reads them together.
+    const args = [join(engine, "home.py"), "plugin-auto-update", "on", "--home", dir];
+    const env = { ...process.env, FORCE_AUTOUPDATE_PLUGINS: "1" };
+    const forced = JSON.parse(spawnSync(python, args, { encoding: "utf8", env }).stdout);
+    assert.deepEqual(forced.blocked_by, []);
   });
 });
 

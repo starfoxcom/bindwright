@@ -393,7 +393,8 @@ def set_plugin_auto_update(home, state, repo=None):
         entry["autoUpdate"] = state == "on"
         _save(path, data)
     settings_env = data.get("env") if isinstance(data.get("env"), dict) else {}
-    blocked = sorted(set(_update_blockers(settings_env) + _update_blockers(os.environ)))
+    # Claude Code sees both sources at once, the settings env over the process's, so judge them merged.
+    blocked = _update_blockers({**os.environ, **settings_env})
     return {"settings": path, "on": state == "on", "changed": changed, "blocked_by": blocked}
 
 
