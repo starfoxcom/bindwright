@@ -5,7 +5,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, utimesSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -168,6 +169,22 @@ test("an unedited hook takes the helper's text with its whole package; one edite
   });
 });
 
+test("a file the user put where the helper now ships one, or a linked package folder, keeps the hook", () => {
+  const installed = ["added-to.py", "linked.py"];
+  const shipped = Object.fromEntries(
+    ["added-to.py", "added_to/extra.py", "linked.py", "linked/a.py"].map((rel) => [rel, "new\n"]));
+  hookScene({ installed, shipped }, ({ helperHome, hooks, read }) => {
+    put(hooks, "added_to/extra.py", "mine\n");
+    const elsewhere = join(hooks, "..", "elsewhere");
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(hooks, "linked"), "junction");
+    assert.deepEqual(refreshHooks(helperHome), { refreshed: [], kept: ["added-to.py"] });
+    assert.equal(read("added_to/extra.py"), "mine\n");
+    assert.equal(read("linked.py"), "old\n", "a hook whose package folder is a link is left alone");
+    assert.deepEqual(readdirSync(elsewhere), [], "nothing is written through the link");
+  });
+});
+
 test("a swap that fails partway puts the swapped files back; a refresh cut short is finished next time", () => {
   const shipped = { "guard.py": "new\n", "guard/rules.py": "new\n" };
   hookScene({ installed: ["guard.py", "guard/rules.py"], shipped }, ({ helperHome, hooks, read, recorded }) => {
@@ -178,7 +195,8 @@ test("a swap that fails partway puts the swapped files back; a refresh cut short
       if (swaps === 2) throw diskFull();
       renameSync(from, to);
     };
-    assert.throws(() => refreshHooks(helperHome, { rename: failSecond }), /disk full/);
+    const failed = refreshHooks(helperHome, { rename: failSecond });
+    assert.deepEqual(failed, { refreshed: [], kept: [], error: "disk full" });
     for (const rel of ["guard.py", "guard/rules.py"]) assert.equal(read(rel), "old\n", rel);
     assert.deepEqual(recorded(), before);
     const left = [...readdirSync(hooks), ...readdirSync(join(hooks, "guard"))];
@@ -194,18 +212,33 @@ test("a swap that fails partway puts the swapped files back; a refresh cut short
 });
 
 test("the hook refresh runs under the install lock after a move; when it fails, the next start finishes it", () =>
-  scene({}, async ({ root, helperHome, run }) => {
+  scene({}, async ({ root, plugin, helperHome, run }) => {
     const hooks = join(root, ".claude", "hooks");
-    put(hooks, "guard.py", "old\n");
-    put(hookSourcesIn(helperHome), "guard.py", "new\n");
-    put(join(root, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files: { "guard.py": sha("old\n") } }));
+    for (const rel of ["guard.py", "edited.py"]) {
+      put(hooks, rel, "old\n");
+      put(hookSourcesIn(helperHome), rel, "new\n");
+    }
+    put(hooks, "edited.py", "mine\n");
+    const files = { "guard.py": sha("old\n"), "edited.py": sha("old\n") };
+    put(join(root, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files }));
     const failing = () => {
       throw diskFull();
     };
     const first = await run({ rename: failing });
-    assert.deepEqual(first, { moved: "7.2.0", hooksError: "disk full" }, "the move stands; the hooks wait");
+    assert.deepEqual(first, { moved: "7.2.0", hooks: { refreshed: [], kept: ["edited.py"] }, hooksError: "disk full" },
+      "the move stands, the edited hook is named, and the refresh waits");
     assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "old\n");
-    assert.deepEqual(await run(), { hooks: { refreshed: ["guard.py"], kept: [] } });
+
+    // A newer pin that cannot be installed keeps the refresh pending; it runs on the helper already there.
+    const next = "https://github.com/starfoxcom/bindwright/releases/download/v7.3.0/bindwright-7.3.0.tgz";
+    const pin = { version: "7.3.0", node: { file: "bindwright-7.3.0.tgz", url: next, sha256: SHA } };
+    writeFileSync(join(plugin, "helper.json"), JSON.stringify(pin));
+    const offline = async () => {
+      throw new Error("offline");
+    };
+    const day = { fetchFile: offline, today: "2026-11-18" };
+    assert.deepEqual(await run(day), { error: "offline" });
+    assert.deepEqual(await run(day), { hooks: { refreshed: ["guard.py"], kept: ["edited.py"] } });
     assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "new\n");
-    assert.deepEqual(await run(), { skipped: "the helper is current" }, "nothing is left pending");
+    assert.deepEqual(await run(day), { skipped: "it failed today already" }, "the failed pin still waits a day");
   }));

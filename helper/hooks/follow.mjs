@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
 import {
-  closeSync, existsSync, linkSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
+  closeSync, existsSync, linkSync, lstatSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -156,10 +156,12 @@ function shippedUnit(sources, hook) {
   return rels.map((rel) => [rel, readFileSync(join(sources, ...rel.split("/")), "utf8").replace(/\r\n/g, "\n")]);
 }
 
-// Writes a hook's files, [path, text] pairs, so it never runs beside modules of another version:
-// every new text goes to a temporary file first, then each is swapped in, and when a swap fails
-// every file already swapped is given its old text back (or removed, when it is new) before the
-// swap's error is thrown. `rename` is the swap itself, replaced only by tests.
+// Writes a hook's files, [path, text] pairs: every new text goes to a temporary file first, then
+// each is swapped in. When a swap fails, every file already swapped is given its old text back (or
+// removed, when it is new) before the swap's error is thrown, so the hook is left on its old set; a
+// restore that fails too leaves the new text, which the next refresh counts as ours and finishes.
+// A session that starts the hook in the moment between two swaps can still load the two versions
+// mixed, for that one run. `rename` is the swap itself, replaced only by tests.
 function writeUnit(pairs, rename) {
   const old = pairs.map(([path]) => (existsSync(path) ? readFileSync(path) : null));
   const temps = [];
@@ -179,20 +181,57 @@ function writeUnit(pairs, rename) {
         if (old[i] === null) rmSync(pairs[i][0], { force: true });
         else writeFileAtomic(pairs[i][0], old[i]);
       } catch {
-        // That file keeps the new text, which the next refresh counts as installed and finishes.
+        // Kept new: the next refresh finishes this hook.
       }
     }
     throw error;
   }
 }
 
+const firstLine = (e) => String(e?.message ?? e).split("\n")[0];
+const isLink = (path) => {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
+// One recorded hook's refresh. It returns { kept: true } when a file of it is not ours,
+// { refreshed: true } after a swap, and `changed` when the record moved; a hook the helper no
+// longer ships, or one whose file or package folder is a link, is left alone ({}).
+function refreshUnit(hook, { files, recorded, copyOf, sources, rename }) {
+  const shipped = shippedUnit(sources, hook);
+  const pkg = packageOf(hook);
+  if (!shipped || [hook, pkg, ...shipped.map(([rel]) => rel)].some((rel) => isLink(copyOf(rel)))) return {};
+  const target = Object.fromEntries(shipped.map(([rel, text]) => [rel, sha256(text)]));
+  const unit = recorded.filter((rel) => rel === hook || rel.startsWith(`${pkg}/`));
+  const onDisk = (rel) => (existsSync(copyOf(rel)) ? sha256(readFileSync(copyOf(rel))) : null);
+  // A recorded file is ours while it holds the recorded text or already the helper's; a file the
+  // helper ships that the record lacks, only while it is missing or already holds the helper's.
+  const isOurs = (rel) => (unit.includes(rel) ? [files[rel], target[rel]] : [null, target[rel]]).includes(onDisk(rel));
+  if (![...new Set([...unit, ...Object.keys(target)])].every(isOurs)) return { kept: true };
+  const stale = shipped.filter(([rel]) => onDisk(rel) !== target[rel]);
+  if (stale.length) writeUnit(stale.map(([rel, text]) => [copyOf(rel), text]), rename);
+  let changed = false;
+  for (const rel of unit.filter((rel) => !(rel in target))) {
+    delete files[rel];
+    changed = true;
+  }
+  for (const [rel, sha] of Object.entries(target).filter(([rel, sha]) => files[rel] !== sha)) {
+    files[rel] = sha;
+    changed = true;
+  }
+  return { refreshed: stale.length > 0, changed };
+}
+
 /**
  * Brings each hook that home.py's install-hook recorded in ~/.bindwright/hooks.json to the
- * helper's copy, the hook and its package folder together. A hook moves only when each recorded
- * file of it holds the recorded text or already the helper's, so a refresh cut short is finished
- * by the next one; a hook with any file the user edited stays whole and is listed in `kept`, and
- * one whose copy was removed, or that the helper no longer ships, is left alone. Callers hold the
- * install lock, so the helper's files are never read while npm writes them.
+ * helper's copy, the hook and its package folder together, only when every file of it is ours
+ * (refreshUnit): a hook with any file the user edited or added stays whole and is listed in
+ * `kept`. A hook that fails is reported in `error` and the others still run; the record keeps
+ * every hook that moved. Callers hold the install lock, so npm is never writing the helper's
+ * files while they are read.
  */
 export function refreshHooks(helperHome, { rename } = {}) {
   const bindwrightHome = dirname(helperHome);
@@ -201,99 +240,94 @@ export function refreshHooks(helperHome, { rename } = {}) {
   const files = readJson(recordFile)?.files;
   const out = { refreshed: [], kept: [] };
   if (!files || typeof files !== "object") return out;
-  const copyOf = (rel) => join(hooksDir, ...rel.split("/"));
-  const onDisk = (rel) => (existsSync(copyOf(rel)) ? sha256(readFileSync(copyOf(rel))) : null);
-  const recorded = Object.keys(files).filter((rel) => HOOK_PATH.test(rel));
+  const context = {
+    files, recorded: Object.keys(files).filter((rel) => HOOK_PATH.test(rel)),
+    copyOf: (rel) => join(hooksDir, ...rel.split("/")), sources: hookSources(helperHome), rename,
+  };
   let changed = false;
-  try {
-    for (const hook of recorded.filter((rel) => !rel.includes("/") && existsSync(copyOf(rel)))) {
-      const shipped = shippedUnit(hookSources(helperHome), hook);
-      if (!shipped) continue;
-      const target = Object.fromEntries(shipped.map(([rel, text]) => [rel, sha256(text)]));
-      const unit = recorded.filter((rel) => rel === hook || rel.startsWith(`${packageOf(hook)}/`));
-      const isOurs = (rel) => [files[rel], target[rel]].includes(onDisk(rel));
-      if (!unit.every(isOurs)) {
-        out.kept.push(hook);
-        continue;
-      }
-      const stale = shipped.filter(([rel]) => onDisk(rel) !== target[rel]);
-      if (stale.length) {
-        writeUnit(stale.map(([rel, text]) => [copyOf(rel), text]), rename);
-        out.refreshed.push(hook);
-      }
-      for (const rel of unit.filter((rel) => !(rel in target))) {
-        delete files[rel];
-        changed = true;
-      }
-      for (const [rel, sha] of Object.entries(target).filter(([rel, sha]) => files[rel] !== sha)) {
-        files[rel] = sha;
-        changed = true;
-      }
+  for (const hook of context.recorded.filter((rel) => !rel.includes("/") && existsSync(context.copyOf(rel)))) {
+    try {
+      const outcome = refreshUnit(hook, context);
+      if (outcome.kept) out.kept.push(hook);
+      if (outcome.refreshed) out.refreshed.push(hook);
+      changed ||= Boolean(outcome.changed);
+    } catch (e) {
+      out.error ??= firstLine(e);
     }
-  } finally {
+  }
+  try {
     if (changed) writeFileAtomic(recordFile, `${JSON.stringify({ schema: 1, files }, null, 2)}\n`);
+  } catch (e) {
+    out.error ??= firstLine(e);
   }
   return out;
 }
 
-// The hook refresh after an install, still under the install lock: what it did, or its error.
-function refreshAfterInstall(helperHome, rename) {
-  try {
-    return { hooks: refreshHooks(helperHome, { rename }) };
-  } catch (e) {
-    return { hooksError: String(e?.message ?? e).split("\n")[0] };
-  }
+// The hook refresh, under the install lock: what it did, and its error when one hook failed.
+function refreshUnderLock(helperHome, rename) {
+  const { error, ...hooks } = refreshHooks(helperHome, { rename });
+  return error ? { hooks, hooksError: error } : { hooks };
 }
 
 // Why the helper stays as it is, or null when it should move to the pin.
-function reasonToStay(pin, helperHome, stateFile, today) {
+function reasonToStay(pin, helperHome, last, today) {
   if (!pin) return "the plugin pins no helper";
   if (!existsSync(join(helperHome, "node_modules", "bindwright", "VERSION"))) return "no helper is installed";
   const have = helperVersion(helperHome);
   if (have === pin.version) return "the helper is current";
   if (!older(have, pin.version)) return "the helper is newer than this plugin";
-  const last = readJson(stateFile);
   if (last?.pin === pin.version && last?.failedOn === today) return "it failed today already";
   return null;
 }
 
+// Saves what the next start needs, or removes the file when nothing waits: the pin that failed
+// and on which day, and whether a hook refresh is still to finish.
+function saveState(stateFile, { failed, hooksPending }) {
+  try {
+    const state = { ...failed, ...(hooksPending ? { hooksPending: true } : {}) };
+    if (Object.keys(state).length) writeFileSync(stateFile, JSON.stringify(state));
+    else rmSync(stateFile, { force: true });
+  } catch {
+    // The outcome is still reported; the next session simply tries again.
+  }
+}
+
 /**
  * Moves the helper when it lags the plugin, then refreshes the hook copies under the same lock.
- * Returns { moved: version, hooks } or { moved, hooksError } after a move, { hooks } when it
- * finished a hook refresh an earlier move left pending, { skipped: reason } or { error: message },
- * and never throws. `fetchFile`, `runInstall` and `rename` stand in for the network, npm and the
- * file swap in tests.
+ * A refresh that failed is tried again at a later start, on the helper already installed, also
+ * while a newer pin cannot be installed. Returns { moved: version, hooks } after a move,
+ * { hooks } after only a pending refresh, with `hooksError` when a hook failed, { skipped: reason }
+ * or { error: message }, and never throws. `fetchFile`, `runInstall` and `rename` stand in for the
+ * network, npm and the file swap in tests.
  */
 export async function follow({
   pluginFolder, helperHome, today = new Date().toLocaleDateString("en-CA"),
   fetchFile = download, runInstall = npmInstall, rename,
 }) {
   const stateFile = join(helperHome, "follow.json");
+  const last = readJson(stateFile) ?? {};
+  const failedBefore = last.pin ? { pin: last.pin, failedOn: last.failedOn } : {};
   let pin = null;
+  let pending = false;
   try {
     pin = readPin(pluginFolder);
-    const reason = reasonToStay(pin, helperHome, stateFile, today);
-    const hooksPending = reason === "the helper is current" && readJson(stateFile)?.hooksPending === true;
-    if (reason && !hooksPending) return { skipped: reason };
+    const reason = reasonToStay(pin, helperHome, last, today);
+    pending = last.hooksPending === true && reason !== "no helper is installed";
+    if (reason && !pending) return { skipped: reason };
     const lockFile = join(helperHome, "follow.lock");
     if (!lock(lockFile)) return { skipped: "another session is installing it" };
     let result;
     try {
-      result = hooksPending ? {} : await install(pin, helperHome, fetchFile, runInstall);
-      if (!result.error) Object.assign(result, refreshAfterInstall(helperHome, rename));
+      result = reason ? {} : await install(pin, helperHome, fetchFile, runInstall);
+      if (!result.error) Object.assign(result, refreshUnderLock(helperHome, rename));
     } finally {
       rmSync(lockFile, { force: true });
     }
-    if (result.error) writeFileSync(stateFile, JSON.stringify({ pin: pin.version, failedOn: today }));
-    else if (result.hooksError) writeFileSync(stateFile, JSON.stringify({ hooksPending: true }));
-    else rmSync(stateFile, { force: true });
+    const failed = result.error ? { pin: pin.version, failedOn: today } : reason ? failedBefore : {};
+    saveState(stateFile, { failed, hooksPending: result.error ? pending : Boolean(result.hooksError) });
     return result;
   } catch (e) {
-    try {
-      if (pin) writeFileSync(stateFile, JSON.stringify({ pin: pin.version, failedOn: today }));
-    } catch {
-      // The failure is still reported; the next session simply tries again.
-    }
-    return { error: String(e?.message ?? e).split("\n")[0] };
+    saveState(stateFile, { failed: pin ? { pin: pin.version, failedOn: today } : failedBefore, hooksPending: pending });
+    return { error: firstLine(e) };
   }
 }

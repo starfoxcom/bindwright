@@ -164,19 +164,19 @@ function startCountsSend(repo, config) {
   child.unref();
 }
 
-// What the follow did to the hook copies: the hooks it refreshed, an error (the next session
-// start tries again), and, after a helper move, the edited copies it kept.
+// What the follow did to the hook copies: the hooks it refreshed, the edited ones it kept, and an
+// error (the next session start tries again). Only a move or a pending refresh carries `hooks`.
 function hookLines(followed, helperHome) {
-  if (followed.hooksError) {
-    return `Bindwright could not refresh its hook copies in ~/.claude/hooks (${followed.hooksError}): `
-      + "the next session start tries again.\n";
-  }
   const hooks = followed.hooks ?? { refreshed: [], kept: [] };
   let text = "";
   if (hooks.refreshed.length) {
     text += `Bindwright's hook copies took the helper's new text: ${hooks.refreshed.join(", ")}.\n`;
   }
-  if (followed.moved && hooks.kept.length) {
+  if (followed.hooksError) {
+    text += `Bindwright could not refresh all its hook copies in ~/.claude/hooks (${followed.hooksError}): `
+      + "the next session start tries again.\n";
+  }
+  if (hooks.kept.length) {
     text += `Hook copies you edited stay as they are (${hooks.kept.join(", ")}); `
       + `the new text is in ${hookSources(helperHome)}, to compare by hand.\n`;
   }
