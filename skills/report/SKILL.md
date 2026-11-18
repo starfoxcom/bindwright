@@ -1,6 +1,7 @@
 ---
 name: report
 description: Report a bug in Bindwright itself. Drafts the report from what failed and the doctor's findings, takes out paths, names, emails and tokens, shows it in full, and files it only on a yes.
+disable-model-invocation: true
 ---
 
 # /bindwright:report
@@ -14,7 +15,7 @@ Files a bug against Bindwright, the way the CLI's own feedback command does: not
 
 ## 2. Draft
 
-Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin. Write `{"title": "<one line>", "command": "...", "error": "...", "expected": "..."}` with your file-writing tool to a new file in the system temp folder, outside the repo, then run `--report "<repo root>" < "<that file>"` and delete the file. Never build the JSON in a shell command (`echo`, a heredoc): error text can hold `$(...)`, backticks and Windows backslashes, which the shell would run or mangle. It prints `{"title", "body", "url"}`: the body adds the doctor's findings and the versions, and the engine has already replaced the repo path, the home folder, the user name, email addresses and tokens with placeholders.
+Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper when it is missing or holds another version than the plugin. Write `{"title": "<one line>", "command": "...", "error": "...", "expected": "..."}` with your file-writing tool to a new file in the system temp folder, outside the repo, then run `--report "<repo root>" < "<that file>"` and delete the file. Never build the JSON in a shell command (`echo`, a heredoc): error text can hold `$(...)`, backticks and Windows backslashes, which the shell would run or mangle. It prints `{"title", "body", "url"}`: the body adds the doctor's findings and the versions, and the engine has already replaced the repo path, the home folder, the user name, email addresses and tokens with placeholders.
 
 Read the draft yourself before showing it: if anything personal is still there (a company name, a private repo name, file contents), replace it with a placeholder and tell the user what you changed.
 
