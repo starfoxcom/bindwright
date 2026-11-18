@@ -4,15 +4,18 @@
 // file the plugin's helper.json names, checked against its SHA-256, with setup's own npm line,
 // only ever forward, and after a failure tries that pin again the next day. After a move it
 // brings the hook copies setup installed into ~/.claude/hooks to the new helper's text, leaving
-// any the user edited; a refresh that fails is tried again at the next session start. Node 18+.
+// any the user edited; a refresh that fails is tried again at the next session start. Setup runs
+// `node follow.mjs install <plugin folder>` for its own install over an installed helper: the
+// exact pin, in either direction, under the same lock. Node 18+.
 
 import { createHash } from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
 import {
-  closeSync, existsSync, linkSync, lstatSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
-  writeFileSync,
+  closeSync, existsSync, linkSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync,
+  statSync, writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { swapIn, writeFileAtomic, writeTemp } from "./write-file.mjs";
 
@@ -269,12 +272,14 @@ function refreshUnderLock(helperHome, rename) {
   return error ? { hooks, hooksError: error } : { hooks };
 }
 
-// Why the helper stays as it is, or null when it should move to the pin.
-function reasonToStay(pin, helperHome, last, today) {
+// Why the helper stays as it is, or null when it should move to the pin. With `exact`, any other
+// version moves, back included, also after a failure today.
+function reasonToStay(pin, helperHome, last, today, exact) {
   if (!pin) return "the plugin pins no helper";
   if (!existsSync(join(helperHome, "node_modules", "bindwright", "VERSION"))) return "no helper is installed";
   const have = helperVersion(helperHome);
   if (have === pin.version) return "the helper is current";
+  if (exact) return null;
   if (!older(have, pin.version)) return "the helper is newer than this plugin";
   if (last?.pin === pin.version && last?.failedOn === today) return "it failed today already";
   return null;
@@ -302,7 +307,7 @@ function saveState(stateFile, { failed, hooksPending }) {
  */
 export async function follow({
   pluginFolder, helperHome, today = new Date().toLocaleDateString("en-CA"),
-  fetchFile = download, runInstall = npmInstall, rename,
+  fetchFile = download, runInstall = npmInstall, rename, exact = false,
 }) {
   const stateFile = join(helperHome, "follow.json");
   const last = readJson(stateFile) ?? {};
@@ -311,7 +316,7 @@ export async function follow({
   let pending = false;
   try {
     pin = readPin(pluginFolder);
-    const reason = reasonToStay(pin, helperHome, last, today);
+    const reason = reasonToStay(pin, helperHome, last, today, exact);
     pending = last.hooksPending === true && reason !== "no helper is installed";
     if (reason && !pending) return { skipped: reason };
     const lockFile = join(helperHome, "follow.lock");
@@ -334,4 +339,21 @@ export async function follow({
     saveState(stateFile, { failed: pin ? { pin: pin.version, failedOn: today } : failedBefore, hooksPending: pending });
     return { error: firstLine(e) };
   }
+}
+
+// Run as a script, not when a test imports it. The loader names this module
+// by its real path, so the command's path is compared after following links.
+function isEntry() {
+  try {
+    return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] && process.argv[2] === "install" && process.argv[3] && isEntry()) {
+  // The helper home is three folders above this file: <home>/node_modules/bindwright/hooks.
+  const helperHome = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const result = await follow({ pluginFolder: resolve(process.argv[3]), helperHome, exact: true });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
 }

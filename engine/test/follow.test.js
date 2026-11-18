@@ -3,13 +3,15 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, utimesSync,
-  writeFileSync,
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync,
+  utimesSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { follow, readPin, refreshHooks } from "../../helper/hooks/follow.mjs";
 
 const BYTES = Buffer.from("the 7.2.0 helper");
@@ -130,6 +132,28 @@ test("the helper only moves forward: an older plugin pin leaves a newer helper a
   scene({ have: "7.10.0" }, async ({ calls, run }) => {
     assert.deepEqual(await run(), { skipped: "the helper is newer than this plugin" });
     assert.deepEqual(calls.fetched, []);
+  }));
+
+test("setup's exact install moves to the pin back from a newer helper and after a failure today", async () => {
+  await scene({ have: "7.10.0" }, async ({ run }) => {
+    assert.deepEqual(await run({ exact: true }), MOVED, "a newer helper");
+  });
+  await scene({}, async ({ helperHome, run }) => {
+    writeFileSync(join(helperHome, "follow.json"), JSON.stringify({ pin: "7.2.0", failedOn: "2026-11-17" }));
+    assert.deepEqual(await run({ exact: true, today: "2026-11-17" }), MOVED, "a failure today");
+  });
+});
+
+test("the install command runs follow from its helper home and prints the result", () =>
+  scene({ have: "7.2.0" }, async ({ plugin, helperHome }) => {
+    const hooks = join(helperHome, "node_modules", "bindwright", "hooks");
+    mkdirSync(hooks, { recursive: true });
+    for (const name of ["follow.mjs", "write-file.mjs"]) {
+      copyFileSync(fileURLToPath(new URL(`../../helper/hooks/${name}`, import.meta.url)), join(hooks, name));
+    }
+    const args = [join(hooks, "follow.mjs"), "install", plugin];
+    const out = execFileSync(process.execPath, args, { encoding: "utf8" });
+    assert.deepEqual(JSON.parse(out), { skipped: "the helper is current" });
   }));
 
 // A home folder with hook copies as install-hook wrote them (`installed`, all "old\n" and
