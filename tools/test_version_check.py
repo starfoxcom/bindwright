@@ -341,10 +341,13 @@ def as_project(repo, versioning, fmt=None):
     shutil.copy(SCRIPT, os.path.join(repo, ".github", "scripts"))
 
 
-def run_hook(repo, command, tool="Bash", helper=HELPER):
+def run_hook(repo, command, tool="Bash", helper=HELPER, **extra_env):
+    # A local session's run, also when the suite itself runs in GitHub Actions.
+    extra_env.setdefault("GITHUB_ACTIONS", None)
     event = json.dumps({"tool_name": tool, "tool_input": {"command": command}, "cwd": repo})
     # The hook reads commands with the helper's shell parser; here, the repo's own copy.
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=repo, BINDWRIGHT_HELPER=helper)
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=repo, BINDWRIGHT_HELPER=helper, **extra_env)
+    env = {key: value for key, value in env.items() if value is not None}
     done = subprocess.run([sys.executable, "-I", HOOK], input=event, capture_output=True,
                           text=True, encoding="utf-8", env=env)
     return done.returncode, done.stderr
@@ -514,6 +517,17 @@ class Hook(unittest.TestCase):
             as_project(repo, "semver")
             os.remove(os.path.join(repo, ".github", "scripts", "version_check.py"))
             self.assertEqual(run_hook(repo, "git tag v5.2.2", helper=repo), (0, ""))
+
+    def test_a_ci_run_never_runs_the_checkouts_own_script(self):
+        # In a CI review the checkout is the pull request's, so its script is untrusted.
+        with make_repo("v5.2.1", self.COMMITS, self.CHANGELOG) as repo:
+            as_project(repo, "semver")
+            marker = os.path.join(repo, "ran")
+            with open(os.path.join(repo, ".github", "scripts", "version_check.py"), "w",
+                      encoding="utf-8") as fh:
+                fh.write(f"open({marker!r}, 'w').close()\nraise SystemExit(2)\n")
+            self.assertEqual(run_hook(repo, "git tag v5.2.2", GITHUB_ACTIONS="true"), (0, ""))
+            self.assertFalse(os.path.exists(marker))
 
     def test_a_parser_reply_of_another_shape_is_unread(self):
         replies = {"an entry that is not a list": '{"commands": [null]}',
