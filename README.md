@@ -16,13 +16,13 @@ Each rule here came from a real cost in a real project: the page's "What it caug
 
 ## Install
 
-From the plugin directory: in Claude Code, run `/plugin`, open Discover and install Bindwright; in the Claude desktop app, install it from the plugins screen.
-
-Or from the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in Claude Code, once per computer:
+From the wrights marketplace (`starfoxcom/wrights`), which lists Bindwright and FindWright, in Claude Code, once per computer:
 
 ```
 /plugin install bindwright --marketplace starfoxcom/wrights
 ```
+
+Bindwright is also on its way to the plugin directory (`/plugin`, then Discover); until its listing is approved, the marketplace line above is the way in.
 
 In the Claude desktop app, from the marketplace, where `/plugin` does not run:
 
