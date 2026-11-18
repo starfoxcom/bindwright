@@ -12,7 +12,7 @@ The review gate runs one model at one effort for each review tier, set in `.gith
 
 - Find the repo root with `git rev-parse --show-toplevel`. Outside a git repo, say the trial needs one, and stop.
 - It needs the CI reviews' history: `.github/review-gate.yml` and merged pull requests that the review gate commented on. Without the file, say the trial compares the CI review tiers this repo does not run (a local review has no saved history to replay), and stop.
-- Find the helper as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing it on a yes when it is missing or holds another version than the plugin.
+- Find the helper as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing it when it is missing or holds another version than the plugin.
 - Run `git fetch origin`, so the commits the old reviews read are on this computer.
 
 ## 2. Ask what to compare

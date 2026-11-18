@@ -10,7 +10,7 @@ From the plugin directory: in Claude Code, run `/plugin`, open Discover and inst
 /plugin install bindwright --marketplace starfoxcom/wrights
 ```
 
-Then open a session in your project's folder and run `/bindwright:setup`. The first time, it asks to install Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the files attached to the plugin's GitHub release (one for Node, one for a computer with Python and no Node), checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only. Say yes and setup goes on; `/bindwright:update` keeps the helper at the plugin's version.
+Then open a session in your project's folder and run `/bindwright:setup`. The first time, it installs Bindwright's helper, the part that runs on your computer (its setup engine, templates and scripts): the files attached to the plugin's GitHub release (one for Node, one for a computer with Python and no Node), checked against the SHA-256 the plugin pins, into `~/.bindwright/helper` for your user only, and says so in one line; `/bindwright:update` keeps the helper at the plugin's version.
 
 ## Use
 
