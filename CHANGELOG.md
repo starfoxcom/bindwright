@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **One `/bindwright:update` brings every wrights plugin and helper current.** A plugin update left both helpers behind, and FindWright's waited for `/findwright:update`, a command a Bindwright user has no reason to know. The update now starts by updating the wrights marketplace and its installed plugins, asking for a reload and a second run when one moved, and after Bindwright's own helper it runs FindWright's update steps from FindWright's installed plugin whenever that helper is behind. Setup and update also say how to turn on the wrights marketplace's auto-update, which updates the plugins themselves at each start.
+
 ## [v7.1.0] — 2026-11-17
 
 ### Added
