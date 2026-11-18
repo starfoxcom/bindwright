@@ -273,10 +273,12 @@ function refreshUnderLock(helperHome, rename) {
 }
 
 // Why the helper stays as it is, or null when it should move to the pin. With `exact`, any other
-// version moves, back included, also after a failure today.
+// version moves, back included, also after a failure today, and so does a helper with no VERSION.
 function reasonToStay(pin, helperHome, last, today, exact) {
   if (!pin) return "the plugin pins no helper";
-  if (!existsSync(join(helperHome, "node_modules", "bindwright", "VERSION"))) return "no helper is installed";
+  if (!existsSync(join(helperHome, "node_modules", "bindwright", "VERSION"))) {
+    return exact ? null : "no helper is installed";
+  }
   const have = helperVersion(helperHome);
   if (have === pin.version) return "the helper is current";
   if (exact) return null;
@@ -351,9 +353,27 @@ function isEntry() {
   }
 }
 
+/**
+ * Setup's install: the exact pin under the install lock. Returns { ready: true } once the helper
+ * reads the plugin's version, { busy: true } while another session holds the lock, or { error }.
+ */
+export async function installForSetup(options) {
+  const result = await follow({ ...options, exact: true });
+  if (result.skipped === "another session is installing it") return { busy: true };
+  const pin = readPin(options.pluginFolder);
+  let have = null;
+  try {
+    have = helperVersion(options.helperHome);
+  } catch {
+    // No VERSION: reported below with the result's own reason.
+  }
+  if (pin && have === pin.version) return { ready: true };
+  return { error: result.error ?? result.skipped ?? `the helper still reads ${have ?? "nothing"}` };
+}
+
 if (process.argv[1] && process.argv[2] === "install" && process.argv[3] && isEntry()) {
   // The helper home is three folders above this file: <home>/node_modules/bindwright/hooks.
   const helperHome = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-  const result = await follow({ pluginFolder: resolve(process.argv[3]), helperHome, exact: true });
+  const result = await installForSetup({ pluginFolder: resolve(process.argv[3]), helperHome });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
