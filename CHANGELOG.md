@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two sessions installing the helper at once no longer delete each other's download.** Setup's helper install, which `/bindwright:update` and the other commands run too, downloaded the release file to the same path in every run and deleted it after installing, so a second session installing at the same moment could find its checked file gone and fail. Each run now downloads into a folder of its own and removes it on every way out, a failed download included.
+
 ## [v7.3.0] — 2026-11-18
 
 ### Added
