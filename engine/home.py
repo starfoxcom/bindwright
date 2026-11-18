@@ -18,7 +18,7 @@ Standard library, Python 3.8+.
     python engine/home.py update-style FILE   (replaces an unedited earlier copy)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
-    python engine/home.py plugin-auto-update on|off   (the wrights marketplace's auto-update)
+    python engine/home.py plugin-auto-update on|off [--repo OWNER/NAME]   (the wrights marketplace's auto-update)
     python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
     python engine/home.py project-mod ROOT NAME on|off
 
@@ -357,7 +357,6 @@ def attribution_off(home):
 
 # The marketplace Bindwright and FindWright install from, as `/plugin marketplace add` names it.
 WRIGHTS = "wrights"
-WRIGHTS_SOURCE = {"source": "github", "repo": "starfoxcom/wrights"}
 # Each turns Claude Code's whole plugin auto-update pass off, unless FORCE_AUTOUPDATE_PLUGINS is set.
 UPDATE_BLOCKERS = ("DISABLE_UPDATES", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
 
@@ -368,16 +367,25 @@ def _update_blockers(env):
     return [name for name in UPDATE_BLOCKERS if env.get(name)]
 
 
-def set_plugin_auto_update(home, state):
+def set_plugin_auto_update(home, state, repo=None):
     """Turns Claude Code's auto-update for the wrights marketplace on or off. A settings
-    entry outranks the /plugin toggle, so off is written as false, not left out."""
+    entry outranks the /plugin toggle, so off is written as false, not left out. With no
+    entry yet, on needs the GitHub repo the marketplace was added from (`claude plugin
+    marketplace list --json`), so the entry never points it anywhere else; off has nothing
+    to turn off, since auto-update is off by default for that marketplace."""
     if state not in ("on", "off"):
         raise HomeError("Use on or off, not " + state)
+    if repo is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise HomeError("--repo takes owner/name, not " + repo)
     path, data = _load(home)
     marketplaces = _section(data, "extraKnownMarketplaces", dict, path)
     entry = marketplaces.get(WRIGHTS)
+    if entry is None and state == "off":
+        return {"settings": path, "on": False, "changed": False, "blocked_by": []}
+    if entry is None and repo is None:
+        raise HomeError("No wrights entry in %s yet: pass --repo with the repo the marketplace comes from" % path)
     if entry is None:
-        entry = marketplaces[WRIGHTS] = {"source": dict(WRIGHTS_SOURCE)}
+        entry = marketplaces[WRIGHTS] = {"source": {"source": "github", "repo": repo}}
     elif not isinstance(entry, dict):
         raise HomeError("%s: extraKnownMarketplaces.%s is not an object; fix it by hand first" % (path, WRIGHTS))
     changed = entry.get("autoUpdate") is not (state == "on")
@@ -728,7 +736,6 @@ NAMED_COMMANDS = {
     "remove-agent": remove_agent,
     "remove-style": remove_style,
     "set-language": set_language,
-    "plugin-auto-update": set_plugin_auto_update,
 }
 
 
@@ -736,7 +743,7 @@ def run(argv):
     argv = list(argv)
     home = _option(argv, "--home") or os.path.expanduser("~")
     python, matcher = _option(argv, "--python"), _option(argv, "--matcher")
-    events = _option(argv, "--events")
+    events, repo = _option(argv, "--events"), _option(argv, "--repo")
     block_on_failure = _flag(argv, "--block-on-failure")
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     one = args[0] if len(args) == 1 else None
@@ -748,6 +755,8 @@ def run(argv):
         return list_hooks(home)
     if cmd == "attribution-off" and not args:
         return attribution_off(home)
+    if cmd == "plugin-auto-update" and one:
+        return set_plugin_auto_update(home, one, repo)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
     if cmd == "project-mods" and one:

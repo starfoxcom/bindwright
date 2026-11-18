@@ -80,13 +80,17 @@ def _check_schema(schema, file):
         raise ValueError("%s was written by a newer Bindwright: update the plugin" % file)
 
 
-def _read_extras(extras, name, is_valid, ignored):
+# A setting extra applies only on some computers (a wrights install), so a project cannot rate it.
+RATEABLE = [extra for extra in EXTRAS if extra not in SETTING_EXTRAS]
+
+
+def _read_extras(extras, name, is_valid, ignored, names=EXTRAS):
     out = {}
     if not isinstance(extras, dict):
         ignored.append("%s: extras" % name)
         return out
     for extra in _sorted_keys(extras):
-        if extra in EXTRAS and is_valid(extras[extra]):
+        if extra in names and is_valid(extras[extra]):
             out[extra] = extras[extra]
         else:
             ignored.append("%s: extras.%s" % (name, extra))
@@ -143,7 +147,8 @@ def _read_project(answers):
         if key == "schema":
             continue
         if key == "extras":
-            layer["extras"] = _read_extras(value, "project", lambda v: _text(v) and v in LEVELS, layer["ignored"])
+            layer["extras"] = _read_extras(
+                value, "project", lambda v: _text(v) and v in LEVELS, layer["ignored"], RATEABLE)
         elif key == "required" and isinstance(value, list):
             for item in value:
                 if _text(item) and item in SETTINGS and item in layer["settings"]:

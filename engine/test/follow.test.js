@@ -96,6 +96,24 @@ test("a download that does not match the pin, or a failed install, keeps the old
       throw new Error("npm ERR! network\nmore");
     };
     assert.deepEqual(await run({ runInstall }), { error: "npm ERR! network" });
-    assert.deepEqual(readdirSync(helperHome), ["node_modules"], "no download or lock is left");
+    assert.deepEqual(readdirSync(helperHome), ["follow.json", "node_modules"], "no download or lock is left");
   });
 });
+
+test("after a failure the same pin is tried again the next day, not at every session start", () =>
+  scene({}, async ({ calls, run }) => {
+    const fetchFile = async (url) => {
+      calls.fetched.push(url);
+      throw new Error("offline");
+    };
+    assert.deepEqual(await run({ fetchFile, today: "2026-11-17" }), { error: "offline" });
+    assert.deepEqual(await run({ fetchFile, today: "2026-11-17" }), { skipped: "it failed today already" });
+    assert.deepEqual(await run({ today: "2026-11-18" }), { moved: "7.2.0" });
+    assert.equal(calls.fetched.length, 2);
+  }));
+
+test("the helper only moves forward: an older plugin pin leaves a newer helper alone", () =>
+  scene({ have: "7.10.0" }, async ({ calls, run }) => {
+    assert.deepEqual(await run(), { skipped: "the helper is newer than this plugin" });
+    assert.deepEqual(calls.fetched, []);
+  }));

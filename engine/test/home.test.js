@@ -516,38 +516,43 @@ test("set-language sets the work language, its rule file and the settings key", 
 });
 
 test("plugin-auto-update writes the wrights marketplace's autoUpdate and keeps the rest", { skip }, () => {
-  const source = { source: "github", repo: "starfoxcom/wrights" };
+  const source = { source: "github", repo: "a-fork/wrights" };
+  const repo = ["--repo", "a-fork/wrights"];
   const rows = [
-    ["on with no settings file adds the entry", "on", undefined,
+    ["on with no settings file adds the entry from the repo given", ["on", ...repo], undefined,
       { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } }, true],
-    ["on keeps the entry's own source and the other marketplaces", "on",
+    ["on keeps the entry's own source, over any repo given, and the other marketplaces", ["on", ...repo],
       { model: "opus", extraKnownMarketplaces: { other: { source: {} }, wrights: { source: { source: "git" } } } },
       { model: "opus", extraKnownMarketplaces: { other: { source: {} },
         wrights: { source: { source: "git" }, autoUpdate: true } } }, true],
-    ["on again changes nothing", "on", { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
+    ["on again changes nothing", ["on"], { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
       { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } }, false],
-    ["off writes false, which outranks the /plugin toggle", "off",
+    ["off writes false, which outranks the /plugin toggle", ["off"],
       { extraKnownMarketplaces: { wrights: { source, autoUpdate: true } } },
       { extraKnownMarketplaces: { wrights: { source, autoUpdate: false } } }, true],
+    ["off with no entry has nothing to turn off", ["off"], { model: "opus" }, { model: "opus" }, false],
   ];
-  for (const [label, state, before, after, changed] of rows) {
+  for (const [label, args, before, after, changed] of rows) {
     withHome((dir) => {
       if (before !== undefined) writeSettings(dir, before);
-      const r = home(dir, "plugin-auto-update", state);
+      const r = home(dir, "plugin-auto-update", ...args);
       assert.equal(r.status, 0, label);
       assert.equal(r.out.changed, changed, label);
       assert.deepEqual(settings(dir), after, label);
     });
   }
   const refused = [
-    ["a state other than on or off", "maybe", { model: "opus" }, /Use on or off, not maybe/],
-    ["a wrights entry that is not an object", "on", { extraKnownMarketplaces: { wrights: true } }, /is not an object/],
-    ["a settings file that is not valid JSON", "on", "{ broken", /not valid JSON/],
+    ["a state other than on or off", ["maybe"], { model: "opus" }, /Use on or off, not maybe/],
+    ["on with no entry and no repo", ["on"], { model: "opus" }, /pass --repo/],
+    ["a repo that is not owner/name", ["on", "--repo", "a b"], { model: "opus" }, /owner\/name/],
+    ["a wrights entry that is not an object", ["on"], { extraKnownMarketplaces: { wrights: true } },
+      /is not an object/],
+    ["a settings file that is not valid JSON", ["on"], "{ broken", /not valid JSON/],
   ];
-  for (const [label, state, before, error] of refused) {
+  for (const [label, args, before, error] of refused) {
     withHome((dir) => {
       writeSettings(dir, before);
-      const r = home(dir, "plugin-auto-update", state);
+      const r = home(dir, "plugin-auto-update", ...args);
       assert.equal(r.status, 1, label);
       assert.match(r.out.error, error, label);
       assert.equal(readFileSync(settingsPath(dir), "utf8"), asText(before), label);
@@ -555,7 +560,8 @@ test("plugin-auto-update writes the wrights marketplace's autoUpdate and keeps t
   }
   withHome((dir) => {
     writeSettings(dir, { env: { DISABLE_AUTOUPDATER: "1" } });
-    assert.ok(home(dir, "plugin-auto-update", "on").out.blocked_by.includes("DISABLE_AUTOUPDATER"));
+    const r = home(dir, "plugin-auto-update", "on", "--repo", "starfoxcom/wrights");
+    assert.ok(r.out.blocked_by.includes("DISABLE_AUTOUPDATER"));
   });
 });
 

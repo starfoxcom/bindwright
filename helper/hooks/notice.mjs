@@ -1,11 +1,12 @@
 // Bindwright's start-session notice, run from the helper by the repo's
 // /start-session skill from the repo root, with `--plugin <plugin folder>`. First
-// it brings the helper to the plugin's pin when the plugin moved (follow.mjs). At
-// most once a day per repo it says when the repo's Bindwright files are older
+// it brings the helper up to the plugin's pin when the plugin moved ahead (follow.mjs),
+// saying so in one line, or once a day per pin why it could not. Then, at
+// most once a day per repo, it says when the repo's Bindwright files are older
 // than the plugin (/bindwright:update brings them up), when the helper is not
-// at the plugin's version, or when a newer plugin is out. It asks the network at most once a day, with
-// a short timeout, and prints nothing when offline, when nothing is behind, or
-// on any error. Node 18+.
+// at the plugin's version, or when a newer plugin is out. That check asks the network
+// at most once a day, with a short timeout, and prints nothing when offline, when
+// nothing is behind, or on any error. Node 18+.
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";

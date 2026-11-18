@@ -73,7 +73,10 @@ function checkSchema(schema, file) {
   if (schema > SCHEMA) throw new Error(`${file} was written by a newer Bindwright: update the plugin`);
 }
 
-function readExtras(extras, name, isValid, ignored) {
+// A setting extra applies only on some computers (a wrights install), so a project cannot rate it.
+const RATEABLE = EXTRAS.filter((extra) => !own(SETTING_EXTRAS, extra));
+
+function readExtras(extras, name, isValid, ignored, names = EXTRAS) {
   const out = {};
   if (extras === undefined) return out;
   if (!isObject(extras)) {
@@ -82,7 +85,7 @@ function readExtras(extras, name, isValid, ignored) {
   }
   for (const extra of Object.keys(extras).sort()) {
     const value = extras[extra];
-    if (EXTRAS.includes(extra) && isValid(value)) out[extra] = value;
+    if (names.includes(extra) && isValid(value)) out[extra] = value;
     else ignored.push(`${name}: extras.${extra}`);
   }
   return out;
@@ -126,7 +129,9 @@ function readProject(answers) {
   for (const key of Object.keys(setup).sort()) {
     const value = setup[key];
     if (key === "schema") continue;
-    if (key === "extras") layer.extras = readExtras(value, "project", (v) => LEVELS.includes(v), layer.ignored);
+    if (key === "extras") {
+      layer.extras = readExtras(value, "project", (v) => LEVELS.includes(v), layer.ignored, RATEABLE);
+    }
     else if (key === "required" && Array.isArray(value)) {
       for (const item of value) {
         if (own(SETTINGS, item) && own(layer.settings, item)) layer.required.push(item);

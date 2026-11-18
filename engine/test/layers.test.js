@@ -247,6 +247,14 @@ test("plugin auto-update counts as installed only while the wrights entry turns 
   }
 });
 
+test("a project cannot rate plugin auto-update, which only computers with a wrights install have", needsPython, () => {
+  const setup = { schema: 1, extras: { "plugin-auto-update": "required" } };
+  const out = both({ project: answers({}, setup), personal: { extras: { "plugin-auto-update": true } } });
+  assert.deepEqual(out.ignored, ["project: extras.plugin-auto-update"]);
+  assert.deepEqual(out.extras["plugin-auto-update"].from, "personal");
+  assert.deepEqual(out.drift, []);
+});
+
 // Seeded, so a failure names a case that replays.
 function random(seed) {
   let s = seed >>> 0;
