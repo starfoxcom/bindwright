@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.3.0] — 2026-11-18
+
 ### Added
 
 - **Setup shows the whole plan before it changes anything.** After the questions, `/bindwright:setup` lists every project file it will add or merge, each GitHub board or repo it will create, and every change to the computer (hooks, `settings.json` entries, mods, reply style, agent, code-search tool), then writes it on one "Apply all of this?"; the few steps that need something more from you, such as the verify skill or the code-style profile, still ask on their own. A no leaves the repo, `~/.claude` and GitHub as they were; until then setup saves no answer and changes nothing but what every run needs: the helper, which running the command installs, and, each on its own yes, the programs, the Git identity, `git init`, the removal of an older Bindwright's FindWright copy and finishing an earlier setup's merges. Lizard and the commit-check manager install after that yes, with no question of their own, since picking the check is the yes to them.
