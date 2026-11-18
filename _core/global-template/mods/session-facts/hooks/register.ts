@@ -17,7 +17,7 @@ import {
 } from './cache'
 import type { SharedPlan } from './plan'
 import { parseSharedPlan, planPart, SHARED_PLAN_FILE, sharedPlanText, wakePart } from './plan'
-import { absoluteDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 
 // The hooks run in a sandbox with no time zone of its own, so the host's
 // UTC offset and zone name are read once per load and again every hour
@@ -214,7 +214,7 @@ async function readWrapUpAt($: EngineInterface): Promise<number> {
 }
 
 async function usageGuardFile($: EngineInterface, name: string): Promise<string> {
-  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
+  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/usage-guard/${name}`.replaceAll('\\', '/')
 }
@@ -326,7 +326,7 @@ async function isAutoCompactOn($: EngineInterface): Promise<boolean> {
     idleCompaction?: unknown
   }
   if (settings.autoCompactEnabled === false || settings.idleCompaction === false) return false
-  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
+  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   const file = configured ? `${configured}/.claude.json` : `${home}/.claude.json`
   // The engine writes its global config at first start: one that cannot be read or parsed (another session
@@ -373,7 +373,7 @@ async function readLifetime($: EngineInterface, transcript: string): Promise<voi
 // be set up, and still has to tell the other one that a compaction started.
 async function compactionMarker($: EngineInterface): Promise<string | undefined> {
   try {
-    const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
+    const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
     const dir = `${configured ?? `${home}/.claude`}/mods-data/session-facts`.replaceAll('\\', '/')
     return `${dir}/${await $.session.id()}.compact.json`
@@ -398,7 +398,7 @@ let memoryFile: string | undefined
 
 async function prepareMemory($: EngineInterface): Promise<void> {
   try {
-    const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
+    const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
     const dir = `${configured ?? `${home}/.claude`}/mods-data/session-facts`.replaceAll('\\', '/')
     const id = await $.session.id()
@@ -458,7 +458,7 @@ async function setUp($: EngineInterface): Promise<void> {
 // call: the settings module follows it from there. Read here, since an engine handle is never passed into another file.
 async function readSettings($: EngineInterface): Promise<void> {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const config = (absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
+  const config = (givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
   const file = await $.fs.read(`${config}/mods-data/session-facts/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))

@@ -12,7 +12,7 @@ import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import { writeFileAtomic } from "./write-file.mjs";
 import { promisify } from "node:util";
@@ -520,8 +520,7 @@ function command([name, ...args], file) {
 }
 
 async function main(argv) {
-  const configured = process.env.CLAUDE_CONFIG_DIR || "";
-  const configDir = isAbsolute(configured) ? configured : join(homedir(), ".claude");
+  const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   const stateFile = stateFileIn(configDir);
   if (argv[0] === "send") {
     await send({ root: argv[1], stateFile, url: counterUrl(process.env.BINDWRIGHT_COUNTER_URL) }).catch(() => {});

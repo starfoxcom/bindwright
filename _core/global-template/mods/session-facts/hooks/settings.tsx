@@ -88,7 +88,7 @@ export function settingsList(values: Values, fields: Fields): string {
 }
 
 async function filePath($: Engine): Promise<string> {
-  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
+  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/${PLUGIN}/settings.json`.replace(/\\/g, '/')
 }
@@ -306,8 +306,8 @@ export function register(on: On, options: Options, apply: (values: Values) => vo
   })
 }
 
-// CLAUDE_CONFIG_DIR counts only as an absolute path: an empty or relative value would put
-// the files beside whatever folder the session runs in.
-export function absoluteDir(value: string | undefined): string | undefined {
-  return value && /^(?:[A-Za-z]:)?[\\/]/.test(value) ? value : undefined
+// An empty CLAUDE_CONFIG_DIR counts as unset, so paths built from it never start at the root
+// of the drive. Any other value is taken as given, the way Claude Code takes it.
+export function givenDir(value: string | undefined): string | undefined {
+  return value || undefined
 }

@@ -22,7 +22,7 @@
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bind } from "./bind.js";
 import { MAX_DEPTH, decodeSetupCode, depthOf } from "./setupcode.js";
@@ -72,8 +72,7 @@ async function run(argv) {
   ];
   const [code, year, folder, update, settings, exported, remember, layer, doctor, report, audit] =
     flags.map((n) => option(argv, n));
-  const configured = process.env.CLAUDE_CONFIG_DIR || "";
-  const config = isAbsolute(configured) ? configured : join(homedir(), ".claude");
+  const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
   const staging = option(argv, "--clean-staging");
   const discardIncoming = argv.includes("--discard-incoming");
   if (staging !== undefined) return cleanStaging(staging, { discardIncoming });

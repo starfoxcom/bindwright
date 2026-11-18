@@ -8,7 +8,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync, statfsSync } from "node:fs";
 import os from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
@@ -208,9 +208,9 @@ export function recommend({ limit, jobs, maxParallel }) {
   };
 }
 
-// CLAUDE_CONFIG_DIR when it is an absolute path, otherwise the ~/.claude folder.
+// CLAUDE_CONFIG_DIR when set, otherwise the ~/.claude folder.
 function configDirOf(env) {
-  return isAbsolute(env.CLAUDE_CONFIG_DIR || "") ? env.CLAUDE_CONFIG_DIR : join(os.homedir(), ".claude");
+  return env.CLAUDE_CONFIG_DIR || join(os.homedir(), ".claude");
 }
 
 // Cores, RAM and free disk on the repo's drive, in whole GB where a size is given in GB.

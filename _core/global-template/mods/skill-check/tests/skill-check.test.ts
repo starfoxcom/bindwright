@@ -15,9 +15,9 @@ const CONTRACTS = {
 
 type World = { prompts: string[]; duringSkill?: () => Promise<unknown> }
 
-function world(on: On): World {
+function world(on: On, env: Record<string, string> = {}): World {
   const seen: World = { prompts: [] }
-  mock.env(on, { USERPROFILE: 'C:/Users/me' })
+  mock.env(on, { USERPROFILE: 'C:/Users/me', ...env })
   on('fs.read', ($, e) => {
     if (e.path.replaceAll('\\', '/') !== 'C:/Users/me/.claude/skill-contracts.json') throw new Error('ENOENT')
     return { value: JSON.stringify(CONTRACTS) }
@@ -66,6 +66,14 @@ test('a run with a missing step gets one follow-up naming it', async ($, on) => 
   await endTurn($)
   expect(seen.prompts.length).toBe(1)
   expect(seen.prompts[0]).toContain('no sign of the board check')
+  await endTurn($)
+  expect(seen.prompts.length).toBe(1)
+})
+
+test('an empty CLAUDE_CONFIG_DIR reads the contracts from ~/.claude', async ($, on) => {
+  const seen = world(on, { CLAUDE_CONFIG_DIR: '' })
+  await runSkill($)
+  await shell($, 'git commit -q -F msg.txt')
   await endTurn($)
   expect(seen.prompts.length).toBe(1)
 })

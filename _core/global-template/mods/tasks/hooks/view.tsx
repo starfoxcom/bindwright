@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register } from 'claude-code'
 
 import type { TaskRow, TasksView } from '../types'
-import { absoluteDir } from './settings'
+import { givenDir } from './settings'
 
 // The task list on screen: one line above the prompt and the whole list, finished tasks included, in a
 // pane. It only reads the mirror register.ts writes; the engine deletes its own task files once every
@@ -16,7 +16,7 @@ const view = atom({ plugin: 'tasks', key: 'view' } as const, null)
 const ctx = { isStarted: false }
 
 async function mirrorPath($: Engine): Promise<string> {
-  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
+  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/tasks/${await $.session.id()}.json`.replaceAll('\\', '/')
 }

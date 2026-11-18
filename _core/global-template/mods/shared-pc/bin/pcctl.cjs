@@ -12,8 +12,7 @@ const path = require('path')
 // never hot-reload a mod.
 const DIR =
   process.env.SHARED_PC_DIR ||
-  path.join(path.isAbsolute(process.env.CLAUDE_CONFIG_DIR || '') ? process.env.CLAUDE_CONFIG_DIR
-    : path.join(os.homedir(), '.claude'), 'mods-data', 'shared-pc')
+  path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'mods-data', 'shared-pc')
 const SESSIONS = path.join(DIR, 'sessions')
 const STATE = path.join(DIR, 'state.json')
 const LOG = path.join(DIR, 'log.jsonl')

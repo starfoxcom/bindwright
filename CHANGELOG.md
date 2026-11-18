@@ -18,7 +18,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **An empty or relative `CLAUDE_CONFIG_DIR` no longer puts Bindwright's files beside the repo.** The mods, the engine, the helper and the reply-style hook took the variable as given, so an empty value made the mods read and write `mods-data/` from the root of the drive, and a relative one from whatever folder the session ran in. Each now takes it only as an absolute path and otherwise uses `~/.claude`, the rule the XDG base directory spec gives for its own variables.
+- **An empty `CLAUDE_CONFIG_DIR` no longer sends the mods to the root of the drive.** The mods kept an empty value as set, so they read and wrote `mods-data/`, their settings and Claude Code's own files from paths such as `/mods-data/<mod>/`. They now treat an empty value as unset and use `~/.claude`, as the engine, the helper and the hooks already did; any other value is taken as given, the way Claude Code takes it.
 
 ## [v7.1.0] — 2026-11-17
 
