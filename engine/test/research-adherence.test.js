@@ -19,7 +19,7 @@ const custom = { name: "FindWright", url: "https://example.com/fw" };
 const tool = researchTool({ codeResearch: "custom", codeResearchCustom: custom });
 const template = join(repo, "_core", "project-template", ".claude", "scripts", "research-adherence.py");
 const scriptDir = mkdtempSync(join(tmpdir(), "adherence-script-"));
-const script = join(scriptDir, "research_adherence.py");
+const script = join(scriptDir, "research-adherence.py");
 writeFileSync(script, readFileSync(template, "utf8")
   .replaceAll("{{TOOLS_CODE_RESEARCH_NAME}}", tool.name)
   .replaceAll("{{TOOLS_CODE_RESEARCH_MATCH}}", tool.match)
