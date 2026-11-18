@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { GitState, SessionLine } from '../types'
 import { GIT_STATUS, modelName, parseStatus, phoneText } from './git'
-import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 
 const line = atom({ plugin: 'session-info', key: 'line' } as const, null)
 const isExpanded = atom({ plugin: 'session-info', key: 'isExpanded' } as const, false)
@@ -133,7 +133,7 @@ function armRefresh($: EngineInterface): void {
 // there. Read here, since an engine handle is never passed into another file.
 async function readSettings($: EngineInterface): Promise<void> {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  const config = (givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
   const file = await $.fs.read(`${config}/mods-data/session-info/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))

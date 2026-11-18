@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, SessionCompactInput, SessionCompactResult, SessionMessage } from 'claude-code'
 
-import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 
 export const PERSON_MARK = "[compact-handoff] The person's messages, word for word"
 const MESSAGE_SPLIT = '\n--- message ---\n'
@@ -224,7 +224,7 @@ async function ensureDir($: EngineInterface, dir: string): Promise<void> {
 }
 
 async function dataDir($: EngineInterface): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/compact-handoff`.replace(/\\/g, '/')
 }
@@ -342,7 +342,7 @@ const live = { mode: 'on' as Mode, isRead: false }
 async function readSettings($: EngineInterface): Promise<void> {
   live.isRead = true
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  const config = (givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
   const file = await $.fs.read(`${config}/mods-data/compact-handoff/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))

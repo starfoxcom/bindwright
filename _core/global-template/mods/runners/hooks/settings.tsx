@@ -88,7 +88,7 @@ export function settingsList(values: Values, fields: Fields): string {
 }
 
 async function filePath($: Engine): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/${PLUGIN}/settings.json`.replace(/\\/g, '/')
 }
@@ -304,4 +304,10 @@ export function register(on: On, options: Options, apply: (values: Values) => vo
     if (e.requestId !== SETTINGS_PANE || e.surface === 'mobile') return next(e)
     return drawPane($.ui.resolve(e) as Ui, $)
   })
+}
+
+// An empty CLAUDE_CONFIG_DIR counts as unset, so paths built from it never start at the root
+// of the drive. Any other value is taken as given, the way Claude Code takes it.
+export function givenDir(value: string | undefined): string | undefined {
+  return value || undefined
 }

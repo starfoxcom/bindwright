@@ -16,6 +16,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **FindWright's own setup carries what the agent needs to know about FindWright.** Bindwright wrote FindWright's tool list, lookup sequence, fallback marker and session-close hit rate into the files it binds, so a FindWright release that changed how its tools are used needed a Bindwright release too. With FindWright 2.2.0, `/findwright:setup` installs that guidance itself, and Bindwright keeps only the choice of FindWright, its install and one line pointing at `/findwright:find`. Close-session runs the step the code-search tool's own guidance names for the end of a session, and the grep-versus-tool count (`research-adherence.py`) now ships only for a custom tool: `/bindwright:update` offers to remove it from a FindWright project. Every FindWright release ships `/findwright:find`, with its fallback cases, so an older FindWright keeps its lookup steps; its session-close search report returns once FindWright moves to 2.2.0, which `/bindwright:update` offers.
 
+### Fixed
+
+- **An empty `CLAUDE_CONFIG_DIR` no longer sends the mods to the root of the drive.** The mods kept an empty value as set, so they read and wrote `mods-data/`, their settings and Claude Code's own files from paths such as `/mods-data/<mod>/`. They now treat an empty value as unset and use `~/.claude`, as the engine, the helper and the hooks already did; any other value is taken as given, the way Claude Code takes it.
+
 ## [v7.1.0] — 2026-11-17
 
 ### Added
