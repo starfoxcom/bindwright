@@ -9,7 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **Two sessions installing the helper at once no longer delete each other's download.** Setup's helper install, which `/bindwright:update` and the other commands run too, downloaded the release file to the same path in every run and deleted it after installing, so a second session installing at the same moment could find its checked file gone and fail. Each run now downloads into a folder of its own and removes it on every way out, a failed download included.
-- **Two sessions updating the helper at once take turns.** When a helper is already installed, setup installs the new one through the helper's own install command, under the lock the helper's update at session start already takes, so a second session waits for the first instead of writing the same folder at the same time. A first install, and a helper from before this release, keep the plain steps.
+- **Two sessions updating the helper at once take turns.** With Node running the helper and one already installed, setup installs the new one through the helper's own install command, under the lock the helper's update at session start already takes, so a second session waits for the first instead of writing the same folder at the same time. Setups that run the helper with Python, a first install, and a helper from before this release keep the plain steps, without the lock.
 
 ## [v7.3.0] — 2026-11-18
 
