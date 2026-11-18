@@ -10,7 +10,8 @@ import { join } from "node:path";
 export const PROFILE_PREFIX = "layout-check-";
 // Every run ends well within this, so an older profile belongs to a run that was cut off.
 export const STALE_AFTER_MS = 10 * 60 * 1000;
-const LIST_TIMEOUT_MS = 20000;
+// The Windows process query can pass 15 s on a busy machine, and a query cut off reads as no browsers.
+const LIST_TIMEOUT_MS = 60000;
 
 /** The profile folder's name for a run started at `startMs`, before mkdtemp's random end. */
 export function profilePrefix(startMs) {
