@@ -15,7 +15,7 @@ const BYTES = Buffer.from("the 7.2.0 helper");
 const SHA = createHash("sha256").update(BYTES).digest("hex");
 const RELEASE = "https://github.com/starfoxcom/bindwright/releases/download/v7.2.0/bindwright-7.2.0.tgz";
 const PIN = { version: "7.2.0", node: { file: "bindwright-7.2.0.tgz", url: RELEASE, sha256: SHA } };
-const MOVED = { moved: "7.2.0", refreshed: [], kept: [] };
+const MOVED = { moved: "7.2.0" };
 
 // A plugin folder pinning `pin` and a helper home holding `have`, given to `fn` with `run`,
 // which calls follow with stand-ins that record each download and install.
@@ -121,7 +121,7 @@ test("the helper only moves forward: an older plugin pin leaves a newer helper a
     assert.deepEqual(calls.fetched, []);
   }));
 
-test("hook copies still as installed take the new helper's text; edited ones stay", () => {
+test("an unedited hook takes the helper's text with its whole package; one edited file keeps it all", () => {
   const home = mkdtempSync(join(tmpdir(), "bw-hooks-"));
   try {
     const helperHome = join(home, ".bindwright", "helper");
@@ -131,21 +131,26 @@ test("hook copies still as installed take the new helper's text; edited ones sta
       mkdirSync(join(dir, rel, ".."), { recursive: true });
       writeFileSync(join(dir, rel), text);
     };
+    const read = (rel) => readFileSync(join(hooks, rel), "utf8");
     const hash = (text) => createHash("sha256").update(text).digest("hex");
-    for (const rel of ["guard.py", "guard_pkg/rules.py", "edited.py", "dropped.py"]) put(hooks, rel, "old\n");
-    put(hooks, "edited.py", "mine\n");
-    for (const rel of ["guard.py", "guard_pkg/rules.py", "edited.py"]) put(sources, rel, "new\r\n");
-    const files = Object.fromEntries(["guard.py", "guard_pkg/rules.py", "edited.py", "dropped.py"]
-      .map((rel) => [rel, hash("old\n")]));
+    const installed = ["guard.py", "guard/rules.py", "edited-guard.py", "edited_guard/rules.py", "dropped.py"];
+    for (const rel of installed) put(hooks, rel, "old\n");
+    put(hooks, "edited_guard/rules.py", "mine\n");
+    for (const rel of ["guard.py", "guard/rules.py", "guard/added.py", "edited-guard.py", "edited_guard/rules.py"]) {
+      put(sources, rel, "new\r\n");
+    }
+    const files = Object.fromEntries(installed.map((rel) => [rel, hash("old\n")]));
     put(join(home, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files }));
-    const out = refreshHooks(helperHome);
-    assert.deepEqual(out, { refreshed: ["guard.py", "guard_pkg/rules.py"], kept: ["edited.py"] });
-    assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "new\n");
-    assert.equal(readFileSync(join(hooks, "edited.py"), "utf8"), "mine\n");
-    assert.equal(readFileSync(join(hooks, "dropped.py"), "utf8"), "old\n");
+
+    assert.deepEqual(refreshHooks(helperHome), { refreshed: ["guard.py"], kept: ["edited-guard.py"] });
+    for (const rel of ["guard.py", "guard/rules.py", "guard/added.py"]) assert.equal(read(rel), "new\n", rel);
+    assert.equal(read("edited-guard.py"), "old\n", "a hook whose module was edited keeps its own text too");
+    assert.equal(read("edited_guard/rules.py"), "mine\n");
+    assert.equal(read("dropped.py"), "old\n", "a hook the helper no longer ships is left alone");
     const record = JSON.parse(readFileSync(join(home, ".bindwright", "hooks.json"), "utf8")).files;
-    assert.equal(record["guard.py"], hash("new\n"));
-    assert.deepEqual(refreshHooks(helperHome), { refreshed: [], kept: ["edited.py"] }, "a second run changes nothing");
+    assert.equal(record["guard/added.py"], hash("new\n"), "a module the new release adds is recorded");
+    const again = refreshHooks(helperHome);
+    assert.deepEqual(again, { refreshed: [], kept: ["edited-guard.py"] }, "a second run changes nothing");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

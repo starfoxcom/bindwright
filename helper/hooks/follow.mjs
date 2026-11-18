@@ -7,9 +7,12 @@
 import { createHash } from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
 import {
-  closeSync, existsSync, linkSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
+  closeSync, existsSync, linkSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+
+import { writeFileAtomic } from "./write-file.mjs";
 
 // Where every release's helper is downloaded from; a pin naming any other place is refused.
 const RELEASES = "https://github.com/starfoxcom/bindwright/releases/download/";
@@ -125,39 +128,69 @@ async function install(pin, helperHome, fetchFile, runInstall) {
   }
   const now = helperVersion(helperHome);
   if (now !== pin.version) return { error: `the helper still reads ${now}` };
-  return { moved: now, ...refreshHooks(helperHome) };
+  return { moved: now };
 }
 
-const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+// A hook file, or one module in its package folder; no segment starts with a dot.
+const HOOK_PATH = /^[\w-][\w.-]*(\/[\w-][\w.-]*)?\.py$/;
+// The folder of modules a hook loads beside it, as home.py names it: `no-ai-attribution.py` → `no_ai_attribution`.
+const packageOf = (hook) => hook.slice(0, -3).replace(/-/g, "_");
+
+/** Where the helper keeps the hook copies setup installs, as they ship. */
+export const hookSources = (helperHome) =>
+  join(helperHome, "node_modules", "bindwright", "_core", "global-template", "hooks");
+
+// One hook as the helper ships it, [path, LF text] pairs: the hook, then every module of its
+// package folder. Null when the helper no longer ships the hook.
+function shippedUnit(sources, hook) {
+  if (!existsSync(join(sources, hook))) return null;
+  const rels = [hook];
+  const folder = join(sources, packageOf(hook));
+  if (existsSync(folder)) {
+    rels.push(...readdirSync(folder).sort().map((name) => `${packageOf(hook)}/${name}`)
+      .filter((rel) => HOOK_PATH.test(rel)));
+  }
+  return rels.map((rel) => [rel, readFileSync(join(sources, ...rel.split("/")), "utf8").replace(/\r\n/g, "\n")]);
+}
 
 /**
- * Brings each hook copy in ~/.claude/hooks that home.py's install-hook recorded, and that still
- * holds exactly the recorded bytes, to the new helper's copy. A copy the user edited, or one the
- * helper no longer ships, stays as it is. Returns the paths it refreshed and those it kept.
+ * Brings each hook that home.py's install-hook recorded in ~/.bindwright/hooks.json to the
+ * helper's copy, the hook and its package folder together, when every recorded file of it still
+ * holds exactly the recorded text. A hook with any file the user edited stays whole and is
+ * listed in `kept`; one whose copy was removed, or that the helper no longer ships, is left alone.
  */
 export function refreshHooks(helperHome) {
   const bindwrightHome = dirname(helperHome);
   const hooksDir = join(dirname(bindwrightHome), ".claude", "hooks");
-  const sources = join(helperHome, "node_modules", "bindwright", "_core", "global-template", "hooks");
   const recordFile = join(bindwrightHome, "hooks.json");
   const files = readJson(recordFile)?.files;
   const out = { refreshed: [], kept: [] };
   if (!files || typeof files !== "object") return out;
-  for (const [rel, recorded] of Object.entries(files)) {
-    const installed = join(hooksDir, ...rel.split("/"));
-    const source = join(sources, ...rel.split("/"));
-    if (!/^[\w.-]+(\/[\w.-]+)?\.py$/.test(rel) || !existsSync(installed) || !existsSync(source)) continue;
-    if (sha256(readFileSync(installed)) !== recorded) {
-      out.kept.push(rel);
-      continue;
+  const copyOf = (rel) => join(hooksDir, ...rel.split("/"));
+  const asInstalled = (rel) => existsSync(copyOf(rel)) && sha256(readFileSync(copyOf(rel))) === files[rel];
+  const recorded = Object.keys(files).filter((rel) => HOOK_PATH.test(rel));
+  let changed = false;
+  try {
+    for (const hook of recorded.filter((rel) => !rel.includes("/") && existsSync(copyOf(rel)))) {
+      const shipped = shippedUnit(hookSources(helperHome), hook);
+      if (!shipped) continue;
+      const unit = recorded.filter((rel) => rel === hook || rel.startsWith(`${packageOf(hook)}/`));
+      if (!unit.every(asInstalled)) {
+        out.kept.push(hook);
+        continue;
+      }
+      if (shipped.every(([rel, text]) => files[rel] === sha256(text))) continue;
+      for (const [rel, text] of shipped) {
+        writeFileAtomic(copyOf(rel), text);
+        files[rel] = sha256(text);
+        changed = true;
+      }
+      out.refreshed.push(hook);
     }
-    const text = readFileSync(source, "utf8").replace(/\r\n/g, "\n");
-    if (sha256(Buffer.from(text, "utf8")) === recorded) continue;
-    writeFileSync(installed, text);
-    files[rel] = sha256(Buffer.from(text, "utf8"));
-    out.refreshed.push(rel);
+  } finally {
+    if (changed) writeFileAtomic(recordFile, `${JSON.stringify({ schema: 1, files }, null, 2)}\n`);
   }
-  if (out.refreshed.length) writeFileSync(recordFile, `${JSON.stringify({ schema: 1, files }, null, 2)}\n`);
   return out;
 }
 

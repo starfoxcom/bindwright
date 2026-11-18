@@ -13,7 +13,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { follow } from "./follow.mjs";
+import { follow, hookSources, refreshHooks } from "./follow.mjs";
 import { writeFileAtomic } from "./write-file.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readState, repoKey, stateFileIn } from "./counts.mjs";
@@ -163,6 +163,29 @@ function startCountsSend(repo, config) {
   child.unref();
 }
 
+// Brings the unedited hook copies to the helper's text, and says what it did: the hooks it
+// refreshed, an error (the next session start tries again), and, after a helper move, the
+// edited copies it kept.
+function hookLines(helperHome, moved) {
+  let hooks;
+  try {
+    hooks = refreshHooks(helperHome);
+  } catch (e) {
+    const reason = String(e?.message ?? e).split("\n")[0];
+    return `Bindwright could not refresh its hook copies in ~/.claude/hooks (${reason}): `
+      + "the next session start tries again.\n";
+  }
+  let text = "";
+  if (hooks.refreshed.length) {
+    text += `Bindwright's hook copies took the helper's new text: ${hooks.refreshed.join(", ")}.\n`;
+  }
+  if (moved && hooks.kept.length) {
+    text += `Hook copies you edited stay as they are (${hooks.kept.join(", ")}); `
+      + `the new text is in ${hookSources(helperHome)}, to compare by hand.\n`;
+  }
+  return text;
+}
+
 async function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -196,18 +219,12 @@ async function main() {
   const followed = pluginFolder
     ? await follow({ pluginFolder, helperHome: join(root, "..", "..") })
     : { skipped: "no plugin folder" };
-  if (followed.moved) {
-    const hooks = followed.refreshed?.length ? `, with its hook copies (${followed.refreshed.join(", ")})` : "";
-    const kept = followed.kept?.length
-      ? ` Edited hook copies stay as they are (${followed.kept.join(", ")}): `
-        + "/bindwright:setup global offers the new ones."
-      : "";
-    process.stdout.write(`Bindwright's helper moved to ${followed.moved} by itself${hooks}.${kept}\n`);
-  }
+  if (followed.moved) process.stdout.write(`Bindwright's helper moved to ${followed.moved} by itself.\n`);
   if (followed.error) {
     process.stdout.write(`Bindwright's helper could not follow the plugin (${followed.error}): `
       + "/bindwright:update installs it.\n");
   }
+  process.stdout.write(hookLines(join(root, "..", ".."), Boolean(followed.moved)));
   const helperVersion = readIn(root, "VERSION")?.trim() ?? null;
   const pluginVersion = pluginFolder ? manifestVersion(pluginFolder) : helperVersion;
   if (!parse(pluginVersion)) return;
