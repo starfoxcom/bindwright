@@ -11,7 +11,7 @@ The argument is: `$ARGUMENTS`
 
 This skill undoes what `/bindwright:setup` did: first in this repo, then on this computer, then the plugin itself. It removes only what setup wrote and the user did not change, asks before anything else, and never touches the user's own files. With the argument `computer`, skip the repo part and start at step 4.
 
-Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper on a yes when it is missing or holds another version than the plugin.
+Find the helper and pick the engine as setup's step 0 does (`${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`), installing the helper when it is missing or holds another version than the plugin.
 
 ## 1. Check the repo
 
