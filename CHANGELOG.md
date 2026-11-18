@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The weekly pin check holds the hand-pinned Bun to the review action's own.** The review workflows bring the Bun the action uses, with its version and checksums set by hand, so an action bump could keep handing it an older Bun unnoticed. `pin_check.py` now reads the `bun-version` of the action pinned in the same workflow, on GitHub at that commit, and lists a Bun that differs from it, or one it could not check.
+
 ## [v7.2.0] — 2026-11-18
 
 ### Added
