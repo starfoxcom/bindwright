@@ -326,7 +326,7 @@ export default {
   "settings.reply-style.value": "Sí",
   "settings.plugin-auto-update.title": "Actualización automática de plugins",
   "settings.plugin-auto-update.text": "Claude Code baja solo las versiones nuevas de Bindwright y FindWright, "
-    + "unos minutos después de empezar una sesión. Solo se pregunta cuando vienen del marketplace wrights.",
+    + "unos minutos después de empezar una sesión. Se activa sin preguntar cuando vienen del marketplace wrights.",
   "settings.plugin-auto-update.value": "Sí",
 
   "settings.who-works.title": "Quién trabaja en él",

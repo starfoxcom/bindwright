@@ -79,7 +79,7 @@ export const COMPUTER = [
     id: "plugin-auto-update",
     title: "Plugin auto-update",
     text: "Claude Code fetches new Bindwright and FindWright versions by itself, a few minutes "
-      + "into a session. Asked only when they come from the wrights marketplace.",
+      + "into a session. On without asking when they come from the wrights marketplace.",
     value: "Yes",
     keys: ["extra:plugin-auto-update"],
   },
