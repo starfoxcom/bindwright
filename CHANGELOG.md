@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Setup's plan lists what FindWright's own setup installs, and FindWright takes that yes.** With FindWright as the code-search tool, the plan now names each part FindWright's setup puts on the computer and in the project (a newer Node when needed, its helper, its meaning model, its registration, guidance, search hook and the project's fit), and setup hands over to FindWright's setup as Bindwright's, so FindWright 2.3.0 and later apply it on the plan's yes instead of showing a plan of their own.
+
 ## [v7.4.0] — 2026-11-18
 
 ### Changed
