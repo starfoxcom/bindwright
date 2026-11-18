@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { follow, hookSources } from "./follow.mjs";
 import { writeFileAtomic } from "./write-file.mjs";
@@ -185,7 +185,8 @@ function hookLines(followed, helperHome) {
 
 async function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const config = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+  const configured = process.env.CLAUDE_CONFIG_DIR || "";
+  const config = isAbsolute(configured) ? configured : join(homedir(), ".claude");
   let countsFailedAt = null;
   try {
     // Read before this session's send starts, so a failure it then clears still shows once.

@@ -5,7 +5,7 @@ import {
   nearCompactionText, workable,
 } from './keepgoing'
 import { builtInName, registerOwnTools } from './owntools'
-import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { absoluteDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { PANE, phoneText } from './view'
 import type { EngineTask, Mirror, TaskArgs } from './mirror'
 import {
@@ -108,7 +108,7 @@ async function ensureDir($: EngineInterface, dir: string): Promise<void> {
 }
 
 async function dataDir($: EngineInterface): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/tasks`.replaceAll('\\', '/')
 }
@@ -163,7 +163,7 @@ function withContext<T extends object>(result: T, note: string | undefined): T {
 async function clearEngineStore($: EngineInterface): Promise<void> {
   if (live.isEngineCleared) return
   live.isEngineCleared = true
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   const dir = `${configured ?? `${home}/.claude`}/tasks/${await $.session.id()}`.replaceAll('\\', '/')
   let names: string[]
@@ -279,7 +279,7 @@ async function isAutoCompactOff($: EngineInterface): Promise<boolean> {
   const settings = (await $.settings.read().catch(() => ({}))) as { autoCompactEnabled?: unknown }
   if (settings.autoCompactEnabled === false) return true
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const file = (configured ? `${configured}/.claude.json` : `${home}/.claude.json`).replace(/\\/g, '/')
   try {
     return (JSON.parse(String(await $.fs.read(file))) as { autoCompactEnabled?: unknown }).autoCompactEnabled === false
@@ -340,7 +340,7 @@ async function refusedStop($: EngineInterface, isRepeat: boolean): Promise<strin
 // there. Read here, since an engine handle is never passed into another file.
 async function readSettings($: EngineInterface): Promise<void> {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  const config = (absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
   const file = await $.fs.read(`${config}/mods-data/tasks/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))

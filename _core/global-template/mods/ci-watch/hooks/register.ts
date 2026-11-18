@@ -7,7 +7,7 @@ import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './inc
 import {
   hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsToResearch, stepBackOf, withTopic,
 } from './rounds'
-import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { absoluteDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
   dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
 } from './store'
@@ -644,7 +644,7 @@ function armPolling($: EngineInterface): void {
 // there. Read here, since an engine handle is never passed into another file.
 async function readSettings($: EngineInterface): Promise<void> {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  const config = (absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
   const file = await $.fs.read(`${config}/mods-data/ci-watch/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))

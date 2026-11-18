@@ -141,14 +141,32 @@ for (const [name, input, expected] of recommendRows) {
 }
 
 // Runs the script with CLAUDE_CONFIG_DIR set and PATH emptied, so gh is not found.
-function runCli(args, configDir) {
+function runCli(args, configDir, { cwd, home } = {}) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: configDir };
   for (const key of Object.keys(env)) {
     if (key.toUpperCase() === "PATH") delete env[key];
   }
   env.PATH = "";
-  return spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env });
+  if (home) Object.assign(env, { HOME: home, USERPROFILE: home });
+  return spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env, cwd });
 }
+
+test("a relative or empty CLAUDE_CONFIG_DIR reads ~/.claude, never the working folder", () => {
+  const temp = mkdtempSync(join(tmpdir(), "bw-runners-"));
+  try {
+    mkdirSync(join(temp, "config", "mods", "shared-pc"), { recursive: true });
+    mkdirSync(join(temp, "mods", "shared-pc"), { recursive: true });
+    const home = join(temp, "home");
+    mkdirSync(home);
+    for (const value of ["config", ""]) {
+      const out = JSON.parse(runCli([temp], value, { cwd: temp, home }).stdout);
+      assert.equal(out.sharedPc, false, `CLAUDE_CONFIG_DIR=${JSON.stringify(value)}`);
+    }
+    assert.equal(JSON.parse(runCli([temp], join(temp, "config")).stdout).sharedPc, true, "an absolute path counts");
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
 
 test("the CLI prints one JSON line for a two-job repo when gh is missing", () => {
   const temp = mkdtempSync(join(tmpdir(), "bw-runners-"));

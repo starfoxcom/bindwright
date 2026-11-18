@@ -90,6 +90,13 @@ ACTIONS_ONLY = (
 )
 
 
+def _config_dir():
+    """CLAUDE_CONFIG_DIR when it is an absolute path, else ~/.claude: an empty or relative value would
+    read beside the folder the engine runs in."""
+    configured = os.environ.get("CLAUDE_CONFIG_DIR", "")
+    return configured if os.path.isabs(configured) else os.path.join(os.path.expanduser("~"), ".claude")
+
+
 def _included(path, a, flags):
     adv = a["advanced"]
     # The review gate's scripts, settings, guide and pin check serve both tiers.
@@ -369,7 +376,7 @@ def _choices_from_stdin():
 def _settings(argv):
     """--settings, --export, --remember and --audit: the settings layers of a repo, for this machine's config folder."""
     try:
-        config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+        config = _config_dir()
         if "--export" in argv:
             return {"setup": export_setup(_option(argv, "--export"), _choices_from_stdin(), _state_json)}
         if "--remember" in argv:
@@ -389,7 +396,7 @@ def _doctor(argv, read_file):
     try:
         folder = _option(argv, "--doctor")
         version = read_file("VERSION").strip(JS_WHITESPACE).lstrip("v")
-        config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+        config = _config_dir()
         return run_doctor(folder, config, version, cli_version_from(os.environ.get("AI_AGENT")))
     except Exception as e:  # every failure is reported, as the JS engine throws it
         return {"error": str(e)}
@@ -401,7 +408,7 @@ def _report(argv, read_file):
         folder = _option(argv, "--report")
         what = _stdin_json()
         version = read_file("VERSION").strip(JS_WHITESPACE).lstrip("v")
-        config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+        config = _config_dir()
         facts = {"pluginVersion": version, "cliVersion": cli_version_from(os.environ.get("AI_AGENT")),
                  "os": sys.platform, "engine": "python"}
         user = os.environ.get("USERNAME") or os.environ.get("USER") or ""

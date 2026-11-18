@@ -7,6 +7,7 @@ import { EMPTY_ARM_NOTE } from './plan'
 import { SAVED_OFFER_LINE } from './saved'
 import type { Tone } from './texts'
 import { cardTone } from './texts'
+import { absoluteDir } from './settings'
 
 // `/usage-guard phone`: what the card above the prompt and the status line show at the PC, as plain
 // text for a chat that draws neither (the phone app, the web). Colour becomes a square in the card's tone.
@@ -18,7 +19,7 @@ const OFFER_LINE =
 const SQUARES: Record<Tone, string> = { green: '🟩', blue: '🟦', yellow: '🟨' }
 
 async function readShared<T>($: EngineInterface, name: string): Promise<T | undefined> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   const dir = `${configured ?? `${home}/.claude`}/mods-data/usage-guard`.replace(/\\/g, '/')
   try {

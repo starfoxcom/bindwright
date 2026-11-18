@@ -70,7 +70,9 @@ def read_json(path):
 
 
 def config_dir():
-    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    # Only an absolute path counts: an empty or relative value would read beside the session's folder.
+    configured = os.environ.get("CLAUDE_CONFIG_DIR", "")
+    return configured if os.path.isabs(configured) else os.path.join(os.path.expanduser("~"), ".claude")
 
 
 def active_style(project):

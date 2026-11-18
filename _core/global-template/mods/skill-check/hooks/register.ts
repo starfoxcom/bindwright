@@ -53,7 +53,9 @@ export function followUpText(run: Run): string {
 }
 
 async function contractsFor($: EngineInterface, skill: string): Promise<Step[] | undefined> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const value = await $.env.get('CLAUDE_CONFIG_DIR')
+  // Only an absolute path counts: an empty or relative value would read beside the session's folder.
+  const configured = value && /^(?:[A-Za-z]:)?[\\/]/.test(value) ? value : undefined
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   try {
     const path = `${configured ?? `${home}/.claude`}/skill-contracts.json`.replaceAll('\\', '/')

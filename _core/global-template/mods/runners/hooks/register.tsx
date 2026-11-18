@@ -19,7 +19,7 @@ import {
 } from './disk'
 import { RUNNERS } from './rules'
 import type { Runner } from './rules'
-import { applyFile, register as settings, SETTINGS_PANE } from './settings'
+import { absoluteDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 
 // The machine's local CI runners in one row above the prompt: on or off, how many are online and
 // busy, queued runs and the next scheduled run, with Start and Stop. Every value is read in a timer,
@@ -55,7 +55,7 @@ const live = {
 // A per-machine list beside the shipped rules.ts, so a template update never overwrites it: a JSON
 // array of the same entries in mods-data/runners/runners.json. A missing or unreadable file adds none.
 async function listPath($: Engine): Promise<string> {
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return `${configured ?? `${home}/.claude`}/mods-data/runners/runners.json`.replace(/\\/g, '/')
 }
@@ -381,7 +381,7 @@ export function clockTime(ms: number, offsetMinutes: number | null): string {
 // there. Read here, since an engine handle is never passed into another file.
 async function readSettings($: Engine): Promise<void> {
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  const config = (absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))) ?? `${home}/.claude`
   const file = await $.fs.read(`${config}/mods-data/runners/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))

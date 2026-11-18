@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Fence, Pause } from './plan'
+import { absoluteDir } from './settings'
 
 // The mod's data folder and the shared pause file, read and written the same way by every part of the mod.
 
@@ -8,7 +9,7 @@ let dir: string | undefined
 
 export async function dataDir($: EngineInterface): Promise<string> {
   if (dir) return dir
-  const configured = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configured = absoluteDir(await $.env.get('CLAUDE_CONFIG_DIR'))
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
   return (dir = `${configured ?? `${home}/.claude`}/mods-data/usage-guard`.replace(/\\/g, '/'))
 }

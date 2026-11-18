@@ -9,7 +9,8 @@ const path = require('path')
 const readline = require('readline')
 
 function configDir() {
-  return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude')
+  const configured = process.env.CLAUDE_CONFIG_DIR || ''
+  return path.isAbsolute(configured) ? configured : path.join(os.homedir(), '.claude')
 }
 
 function findTranscript(sessionId) {
