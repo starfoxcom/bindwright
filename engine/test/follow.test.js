@@ -3,14 +3,16 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, utimesSync,
-  writeFileSync,
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync,
+  utimesSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { follow, readPin, refreshHooks } from "../../helper/hooks/follow.mjs";
+import { fileURLToPath } from "node:url";
+import { follow, installForSetup, readPin, refreshHooks } from "../../helper/hooks/follow.mjs";
 
 const BYTES = Buffer.from("the 7.2.0 helper");
 const SHA = createHash("sha256").update(BYTES).digest("hex");
@@ -55,8 +57,11 @@ function scene({ pin = PIN, have = "7.1.0", lockAgeMs = null }, fn) {
     assert.ok(existsSync(file), "the downloaded file is there while npm installs it");
     writeFileSync(join(prefix, "node_modules", "bindwright", "VERSION"), "7.2.0\n");
   };
-  const run = (overrides = {}) => follow({ pluginFolder: plugin, helperHome, fetchFile, runInstall, ...overrides });
-  return fn({ root, plugin, helperHome, calls, run }).finally(() => rmSync(root, { recursive: true, force: true }));
+  const given = { pluginFolder: plugin, helperHome, fetchFile, runInstall };
+  const run = (overrides = {}) => follow({ ...given, ...overrides });
+  const setup = (overrides = {}) => installForSetup({ ...given, ...overrides });
+  const cleanUp = () => rmSync(root, { recursive: true, force: true });
+  return fn({ root, plugin, helperHome, calls, run, setup }).finally(cleanUp);
 }
 
 test("the helper moves to the plugin's pin and leaves no download or lock behind", () =>
@@ -130,6 +135,44 @@ test("the helper only moves forward: an older plugin pin leaves a newer helper a
   scene({ have: "7.10.0" }, async ({ calls, run }) => {
     assert.deepEqual(await run(), { skipped: "the helper is newer than this plugin" });
     assert.deepEqual(calls.fetched, []);
+  }));
+
+test("setup's install answers ready, busy or an error, and moves to the pin from any state", async () => {
+  const failedToday = { pin: "7.2.0", failedOn: new Date().toLocaleDateString("en-CA") };
+  const offline = async () => {
+    throw new Error("offline");
+  };
+  const cutShort = (prefix) => {
+    writeFileSync(join(prefix, "node_modules", "bindwright", "VERSION"), "7.2.0\n");
+    throw new Error("npm timed out");
+  };
+  const rows = [
+    ["a newer helper", { have: "7.10.0" }, null, {}, { ready: true }],
+    ["a failure today", {}, failedToday, {}, { ready: true }],
+    ["a helper with no VERSION", { have: null }, null, {}, { ready: true }],
+    ["a current helper, refresh pending", { have: "7.2.0" }, { hooksPending: true }, {}, { ready: true }],
+    ["another session holds a fresh lock", { lockAgeMs: 1000 }, null, {}, { busy: true }],
+    ["the download fails", {}, null, { fetchFile: offline }, { error: "offline" }],
+    ["npm fails after writing VERSION", {}, null, { runInstall: cutShort }, { error: "npm timed out" }],
+  ];
+  for (const [name, options, state, overrides, expected] of rows) {
+    await scene(options, async ({ helperHome, setup }) => {
+      if (state) writeFileSync(join(helperHome, "follow.json"), JSON.stringify(state));
+      assert.deepEqual(await setup(overrides), expected, name);
+    });
+  }
+});
+
+test("the install command runs from its helper home and prints its answer", () =>
+  scene({ have: "7.2.0" }, async ({ plugin, helperHome }) => {
+    const hooks = join(helperHome, "node_modules", "bindwright", "hooks");
+    mkdirSync(hooks, { recursive: true });
+    for (const name of ["follow.mjs", "write-file.mjs"]) {
+      copyFileSync(fileURLToPath(new URL(`../../helper/hooks/${name}`, import.meta.url)), join(hooks, name));
+    }
+    const args = [join(hooks, "follow.mjs"), "install", plugin];
+    const out = execFileSync(process.execPath, args, { encoding: "utf8" });
+    assert.deepEqual(JSON.parse(out), { ready: true });
   }));
 
 // A home folder with hook copies as install-hook wrote them (`installed`, all "old\n" and
