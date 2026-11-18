@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync,
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,14 +15,24 @@ const BYTES = Buffer.from("the 7.2.0 helper");
 const SHA = createHash("sha256").update(BYTES).digest("hex");
 const RELEASE = "https://github.com/starfoxcom/bindwright/releases/download/v7.2.0/bindwright-7.2.0.tgz";
 const PIN = { version: "7.2.0", node: { file: "bindwright-7.2.0.tgz", url: RELEASE, sha256: SHA } };
-const MOVED = { moved: "7.2.0" };
+const MOVED = { moved: "7.2.0", hooks: { refreshed: [], kept: [] } };
+// A swap the test makes fail: not one of the busy codes a swap waits out.
+const diskFull = () => Object.assign(new Error("disk full"), { code: "ENOSPC" });
+const sha = (text) => createHash("sha256").update(text).digest("hex");
+const put = (dir, rel, text) => {
+  mkdirSync(join(dir, rel, ".."), { recursive: true });
+  writeFileSync(join(dir, rel), text);
+};
+const hookSourcesIn = (helperHome) =>
+  join(helperHome, "node_modules", "bindwright", "_core", "global-template", "hooks");
 
 // A plugin folder pinning `pin` and a helper home holding `have`, given to `fn` with `run`,
 // which calls follow with stand-ins that record each download and install.
 function scene({ pin = PIN, have = "7.1.0", lockAgeMs = null }, fn) {
   const root = mkdtempSync(join(tmpdir(), "bw-follow-"));
   const plugin = join(root, "plugin");
-  const helperHome = join(root, "helper");
+  // The home folder is `root`, so hook copies land in root/.claude/hooks.
+  const helperHome = join(root, ".bindwright", "helper");
   const helper = join(helperHome, "node_modules", "bindwright");
   mkdirSync(plugin, { recursive: true });
   mkdirSync(helper, { recursive: true });
@@ -45,7 +55,7 @@ function scene({ pin = PIN, have = "7.1.0", lockAgeMs = null }, fn) {
     writeFileSync(join(prefix, "node_modules", "bindwright", "VERSION"), "7.2.0\n");
   };
   const run = (overrides = {}) => follow({ pluginFolder: plugin, helperHome, fetchFile, runInstall, ...overrides });
-  return fn({ plugin, helperHome, calls, run }).finally(() => rmSync(root, { recursive: true, force: true }));
+  return fn({ root, plugin, helperHome, calls, run }).finally(() => rmSync(root, { recursive: true, force: true }));
 }
 
 test("the helper moves to the plugin's pin and leaves no download or lock behind", () =>
@@ -121,50 +131,81 @@ test("the helper only moves forward: an older plugin pin leaves a newer helper a
     assert.deepEqual(calls.fetched, []);
   }));
 
-test("an unedited hook takes the helper's text with its whole package; one edited file keeps it all", () => {
+// A home folder with hook copies as install-hook wrote them (`installed`, all "old\n" and
+// recorded) and the helper's sources (`shipped`), given to `fn`.
+function hookScene({ installed, shipped }, fn) {
   const home = mkdtempSync(join(tmpdir(), "bw-hooks-"));
   try {
     const helperHome = join(home, ".bindwright", "helper");
-    const sources = join(helperHome, "node_modules", "bindwright", "_core", "global-template", "hooks");
     const hooks = join(home, ".claude", "hooks");
-    const put = (dir, rel, text) => {
-      mkdirSync(join(dir, rel, ".."), { recursive: true });
-      writeFileSync(join(dir, rel), text);
-    };
-    const read = (rel) => readFileSync(join(hooks, rel), "utf8");
-    const hash = (text) => createHash("sha256").update(text).digest("hex");
-    const installed = ["guard.py", "guard/rules.py", "edited-guard.py", "edited_guard/rules.py", "dropped.py"];
     for (const rel of installed) put(hooks, rel, "old\n");
-    put(hooks, "edited_guard/rules.py", "mine\n");
-    for (const rel of ["guard.py", "guard/rules.py", "guard/added.py", "edited-guard.py", "edited_guard/rules.py"]) {
-      put(sources, rel, "new\r\n");
-    }
-    const files = Object.fromEntries(installed.map((rel) => [rel, hash("old\n")]));
+    for (const [rel, text] of Object.entries(shipped)) put(hookSourcesIn(helperHome), rel, text);
+    const files = Object.fromEntries(installed.map((rel) => [rel, sha("old\n")]));
     put(join(home, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files }));
+    const read = (rel) => readFileSync(join(hooks, rel), "utf8");
+    const recorded = () => JSON.parse(readFileSync(join(home, ".bindwright", "hooks.json"), "utf8")).files;
+    return fn({ helperHome, hooks, read, recorded });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
 
+test("an unedited hook takes the helper's text with its whole package; one edited file keeps it all", () => {
+  const installed = ["guard.py", "guard/rules.py", "edited-guard.py", "edited_guard/rules.py", "dropped.py"];
+  const shipped = Object.fromEntries(
+    ["guard.py", "guard/rules.py", "guard/added.py", "edited-guard.py", "edited_guard/rules.py"]
+      .map((rel) => [rel, "new\r\n"]));
+  hookScene({ installed, shipped }, ({ helperHome, hooks, read, recorded }) => {
+    put(hooks, "edited_guard/rules.py", "mine\n");
     assert.deepEqual(refreshHooks(helperHome), { refreshed: ["guard.py"], kept: ["edited-guard.py"] });
     for (const rel of ["guard.py", "guard/rules.py", "guard/added.py"]) assert.equal(read(rel), "new\n", rel);
     assert.equal(read("edited-guard.py"), "old\n", "a hook whose module was edited keeps its own text too");
     assert.equal(read("edited_guard/rules.py"), "mine\n");
     assert.equal(read("dropped.py"), "old\n", "a hook the helper no longer ships is left alone");
-    const record = JSON.parse(readFileSync(join(home, ".bindwright", "hooks.json"), "utf8")).files;
-    assert.equal(record["guard/added.py"], hash("new\n"), "a module the new release adds is recorded");
+    assert.equal(recorded()["guard/added.py"], sha("new\n"), "a module the new release adds is recorded");
     const again = refreshHooks(helperHome);
     assert.deepEqual(again, { refreshed: [], kept: ["edited-guard.py"] }, "a second run changes nothing");
-
-    // A swap that fails partway puts back what was already swapped, so the hook never runs beside
-    // modules of another version, and leaves the record as it was.
-    put(sources, "guard.py", "newer\n");
-    put(sources, "guard/rules.py", "newer\n");
-    put(sources, "guard/blocked.py", "newer\n");
-    mkdirSync(join(hooks, "guard", "blocked.py"));
-    const before = readFileSync(join(home, ".bindwright", "hooks.json"), "utf8");
-    assert.throws(() => refreshHooks(helperHome));
-    for (const rel of ["guard.py", "guard/rules.py"]) assert.equal(read(rel), "new\n", rel);
-    assert.equal(readFileSync(join(home, ".bindwright", "hooks.json"), "utf8"), before);
-    assert.deepEqual(readdirSync(join(hooks, "guard")).sort(), ["added.py", "blocked.py", "rules.py"],
-      "no temporary file is left");
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
+  });
 });
+
+test("a swap that fails partway puts the swapped files back; a refresh cut short is finished next time", () => {
+  const shipped = { "guard.py": "new\n", "guard/rules.py": "new\n" };
+  hookScene({ installed: ["guard.py", "guard/rules.py"], shipped }, ({ helperHome, hooks, read, recorded }) => {
+    const before = recorded();
+    let swaps = 0;
+    const failSecond = (from, to) => {
+      swaps += 1;
+      if (swaps === 2) throw diskFull();
+      renameSync(from, to);
+    };
+    assert.throws(() => refreshHooks(helperHome, { rename: failSecond }), /disk full/);
+    for (const rel of ["guard.py", "guard/rules.py"]) assert.equal(read(rel), "old\n", rel);
+    assert.deepEqual(recorded(), before);
+    const left = [...readdirSync(hooks), ...readdirSync(join(hooks, "guard"))];
+    assert.deepEqual(left.filter((name) => name.endsWith(".tmp")), [], "no temporary file is left");
+
+    // A file that already holds the helper's text, as a restore that failed leaves it, still counts
+    // as installed, so the next refresh moves the rest instead of reading the hook as edited.
+    put(hooks, "guard.py", "new\n");
+    assert.deepEqual(refreshHooks(helperHome), { refreshed: ["guard.py"], kept: [] });
+    assert.equal(read("guard/rules.py"), "new\n");
+    assert.equal(recorded()["guard.py"], sha("new\n"));
+  });
+});
+
+test("the hook refresh runs under the install lock after a move; when it fails, the next start finishes it", () =>
+  scene({}, async ({ root, helperHome, run }) => {
+    const hooks = join(root, ".claude", "hooks");
+    put(hooks, "guard.py", "old\n");
+    put(hookSourcesIn(helperHome), "guard.py", "new\n");
+    put(join(root, ".bindwright"), "hooks.json", JSON.stringify({ schema: 1, files: { "guard.py": sha("old\n") } }));
+    const failing = () => {
+      throw diskFull();
+    };
+    const first = await run({ rename: failing });
+    assert.deepEqual(first, { moved: "7.2.0", hooksError: "disk full" }, "the move stands; the hooks wait");
+    assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "old\n");
+    assert.deepEqual(await run(), { hooks: { refreshed: ["guard.py"], kept: [] } });
+    assert.equal(readFileSync(join(hooks, "guard.py"), "utf8"), "new\n");
+    assert.deepEqual(await run(), { skipped: "the helper is current" }, "nothing is left pending");
+  }));

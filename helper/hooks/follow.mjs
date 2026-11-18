@@ -2,7 +2,9 @@
 // Code's plugin auto-update (or /plugin) moves the plugin's code, and this moves the helper
 // after it. notice.mjs runs it at session start with the plugin's folder. It installs only the
 // file the plugin's helper.json names, checked against its SHA-256, with setup's own npm line,
-// only ever forward, and after a failure tries that pin again the next day. Node 18+.
+// only ever forward, and after a failure tries that pin again the next day. After a move it
+// brings the hook copies setup installed into ~/.claude/hooks to the new helper's text, leaving
+// any the user edited; a refresh that fails is tried again at the next session start. Node 18+.
 
 import { createHash } from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
@@ -156,8 +158,9 @@ function shippedUnit(sources, hook) {
 
 // Writes a hook's files, [path, text] pairs, so it never runs beside modules of another version:
 // every new text goes to a temporary file first, then each is swapped in, and when a swap fails
-// the files already swapped get their old text back (or go, when they are new) before it throws.
-function writeUnit(pairs) {
+// every file already swapped is given its old text back (or removed, when it is new) before the
+// swap's error is thrown. `rename` is the swap itself, replaced only by tests.
+function writeUnit(pairs, rename) {
   const old = pairs.map(([path]) => (existsSync(path) ? readFileSync(path) : null));
   const temps = [];
   try {
@@ -168,12 +171,16 @@ function writeUnit(pairs) {
   }
   let swapped = 0;
   try {
-    for (; swapped < pairs.length; swapped++) swapIn(temps[swapped], pairs[swapped][0]);
+    for (; swapped < pairs.length; swapped++) swapIn(temps[swapped], pairs[swapped][0], rename);
   } catch (error) {
     for (const temp of temps.slice(swapped + 1)) rmSync(temp, { force: true });
     for (let i = 0; i < swapped; i++) {
-      if (old[i] === null) rmSync(pairs[i][0], { force: true });
-      else writeFileAtomic(pairs[i][0], old[i]);
+      try {
+        if (old[i] === null) rmSync(pairs[i][0], { force: true });
+        else writeFileAtomic(pairs[i][0], old[i]);
+      } catch {
+        // That file keeps the new text, which the next refresh counts as installed and finishes.
+      }
     }
     throw error;
   }
@@ -181,11 +188,13 @@ function writeUnit(pairs) {
 
 /**
  * Brings each hook that home.py's install-hook recorded in ~/.bindwright/hooks.json to the
- * helper's copy, the hook and its package folder together, when every recorded file of it still
- * holds exactly the recorded text. A hook with any file the user edited stays whole and is
- * listed in `kept`; one whose copy was removed, or that the helper no longer ships, is left alone.
+ * helper's copy, the hook and its package folder together. A hook moves only when each recorded
+ * file of it holds the recorded text or already the helper's, so a refresh cut short is finished
+ * by the next one; a hook with any file the user edited stays whole and is listed in `kept`, and
+ * one whose copy was removed, or that the helper no longer ships, is left alone. Callers hold the
+ * install lock, so the helper's files are never read while npm writes them.
  */
-export function refreshHooks(helperHome) {
+export function refreshHooks(helperHome, { rename } = {}) {
   const bindwrightHome = dirname(helperHome);
   const hooksDir = join(dirname(bindwrightHome), ".claude", "hooks");
   const recordFile = join(bindwrightHome, "hooks.json");
@@ -193,28 +202,47 @@ export function refreshHooks(helperHome) {
   const out = { refreshed: [], kept: [] };
   if (!files || typeof files !== "object") return out;
   const copyOf = (rel) => join(hooksDir, ...rel.split("/"));
-  const asInstalled = (rel) => existsSync(copyOf(rel)) && sha256(readFileSync(copyOf(rel))) === files[rel];
+  const onDisk = (rel) => (existsSync(copyOf(rel)) ? sha256(readFileSync(copyOf(rel))) : null);
   const recorded = Object.keys(files).filter((rel) => HOOK_PATH.test(rel));
   let changed = false;
   try {
     for (const hook of recorded.filter((rel) => !rel.includes("/") && existsSync(copyOf(rel)))) {
       const shipped = shippedUnit(hookSources(helperHome), hook);
       if (!shipped) continue;
+      const target = Object.fromEntries(shipped.map(([rel, text]) => [rel, sha256(text)]));
       const unit = recorded.filter((rel) => rel === hook || rel.startsWith(`${packageOf(hook)}/`));
-      if (!unit.every(asInstalled)) {
+      const isOurs = (rel) => [files[rel], target[rel]].includes(onDisk(rel));
+      if (!unit.every(isOurs)) {
         out.kept.push(hook);
         continue;
       }
-      if (shipped.every(([rel, text]) => files[rel] === sha256(text))) continue;
-      writeUnit(shipped.map(([rel, text]) => [copyOf(rel), text]));
-      for (const [rel, text] of shipped) files[rel] = sha256(text);
-      changed = true;
-      out.refreshed.push(hook);
+      const stale = shipped.filter(([rel]) => onDisk(rel) !== target[rel]);
+      if (stale.length) {
+        writeUnit(stale.map(([rel, text]) => [copyOf(rel), text]), rename);
+        out.refreshed.push(hook);
+      }
+      for (const rel of unit.filter((rel) => !(rel in target))) {
+        delete files[rel];
+        changed = true;
+      }
+      for (const [rel, sha] of Object.entries(target).filter(([rel, sha]) => files[rel] !== sha)) {
+        files[rel] = sha;
+        changed = true;
+      }
     }
   } finally {
     if (changed) writeFileAtomic(recordFile, `${JSON.stringify({ schema: 1, files }, null, 2)}\n`);
   }
   return out;
+}
+
+// The hook refresh after an install, still under the install lock: what it did, or its error.
+function refreshAfterInstall(helperHome, rename) {
+  try {
+    return { hooks: refreshHooks(helperHome, { rename }) };
+  } catch (e) {
+    return { hooksError: String(e?.message ?? e).split("\n")[0] };
+  }
 }
 
 // Why the helper stays as it is, or null when it should move to the pin.
@@ -230,29 +258,34 @@ function reasonToStay(pin, helperHome, stateFile, today) {
 }
 
 /**
- * Moves the helper when it lags the plugin. Returns { moved: version }, { skipped: reason }
- * or { error: message }, and never throws. `fetchFile` and `runInstall` stand in for the
- * network and npm in tests.
+ * Moves the helper when it lags the plugin, then refreshes the hook copies under the same lock.
+ * Returns { moved: version, hooks } or { moved, hooksError } after a move, { hooks } when it
+ * finished a hook refresh an earlier move left pending, { skipped: reason } or { error: message },
+ * and never throws. `fetchFile`, `runInstall` and `rename` stand in for the network, npm and the
+ * file swap in tests.
  */
 export async function follow({
   pluginFolder, helperHome, today = new Date().toLocaleDateString("en-CA"),
-  fetchFile = download, runInstall = npmInstall,
+  fetchFile = download, runInstall = npmInstall, rename,
 }) {
   const stateFile = join(helperHome, "follow.json");
   let pin = null;
   try {
     pin = readPin(pluginFolder);
     const reason = reasonToStay(pin, helperHome, stateFile, today);
-    if (reason) return { skipped: reason };
+    const hooksPending = reason === "the helper is current" && readJson(stateFile)?.hooksPending === true;
+    if (reason && !hooksPending) return { skipped: reason };
     const lockFile = join(helperHome, "follow.lock");
     if (!lock(lockFile)) return { skipped: "another session is installing it" };
     let result;
     try {
-      result = await install(pin, helperHome, fetchFile, runInstall);
+      result = hooksPending ? {} : await install(pin, helperHome, fetchFile, runInstall);
+      if (!result.error) Object.assign(result, refreshAfterInstall(helperHome, rename));
     } finally {
       rmSync(lockFile, { force: true });
     }
     if (result.error) writeFileSync(stateFile, JSON.stringify({ pin: pin.version, failedOn: today }));
+    else if (result.hooksError) writeFileSync(stateFile, JSON.stringify({ hooksPending: true }));
     else rmSync(stateFile, { force: true });
     return result;
   } catch (e) {
