@@ -170,7 +170,8 @@ class BunPin(unittest.TestCase):
                 self.assertEqual(out, expected)
 
     def test_looks_each_action_up_once_and_only_for_files_with_a_bun(self):
-        out, calls = self.check([("a.yml", BUN_WORKFLOW), ("b.yml", BUN_WORKFLOW), ("c.yml", WORKFLOW)],
+        no_bun = WORKFLOW.replace(OLD_SHA, NEW_SHA)
+        out, calls = self.check([("a.yml", BUN_WORKFLOW), ("b.yml", BUN_WORKFLOW), ("c.yml", no_bun)],
                                 {OLD_SHA: action_yml("1.4.4")})
         self.assertEqual((out, len(calls)), ("", 1))
 
