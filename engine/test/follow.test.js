@@ -142,6 +142,10 @@ test("setup's install answers ready, busy or an error, and moves to the pin from
   const offline = async () => {
     throw new Error("offline");
   };
+  const cutShort = (prefix) => {
+    writeFileSync(join(prefix, "node_modules", "bindwright", "VERSION"), "7.2.0\n");
+    throw new Error("npm timed out");
+  };
   const rows = [
     ["a newer helper", { have: "7.10.0" }, null, {}, { ready: true }],
     ["a failure today", {}, failedToday, {}, { ready: true }],
@@ -149,6 +153,7 @@ test("setup's install answers ready, busy or an error, and moves to the pin from
     ["a current helper, refresh pending", { have: "7.2.0" }, { hooksPending: true }, {}, { ready: true }],
     ["another session holds a fresh lock", { lockAgeMs: 1000 }, null, {}, { busy: true }],
     ["the download fails", {}, null, { fetchFile: offline }, { error: "offline" }],
+    ["npm fails after writing VERSION", {}, null, { runInstall: cutShort }, { error: "npm timed out" }],
   ];
   for (const [name, options, state, overrides, expected] of rows) {
     await scene(options, async ({ helperHome, setup }) => {

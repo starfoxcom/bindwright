@@ -360,6 +360,8 @@ function isEntry() {
 export async function installForSetup(options) {
   const result = await follow({ ...options, exact: true });
   if (result.skipped === "another session is installing it") return { busy: true };
+  // An install that failed is a failure even when VERSION already reads the pin: npm writes it early.
+  if (result.error) return { error: result.error };
   const pin = readPin(options.pluginFolder);
   let have = null;
   try {
@@ -368,7 +370,7 @@ export async function installForSetup(options) {
     // No VERSION: reported below with the result's own reason.
   }
   if (pin && have === pin.version) return { ready: true };
-  return { error: result.error ?? result.skipped ?? `the helper still reads ${have ?? "nothing"}` };
+  return { error: result.skipped ?? `the helper still reads ${have ?? "nothing"}` };
 }
 
 if (process.argv[1] && process.argv[2] === "install" && process.argv[3] && isEntry()) {
