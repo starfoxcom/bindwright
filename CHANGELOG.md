@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.5.0] — 2026-11-18
+
 ### Changed
 
 - **Setup's plan says what FindWright's own setup does next.** With FindWright as the code-search tool, the plan names its plugin and then its own setup, which checks what FindWright still needs on the computer and in the project, shows its own plan of it and asks before it changes anything (FindWright 2.3.0 and later), so nothing FindWright installs rides on a yes that did not list it.
