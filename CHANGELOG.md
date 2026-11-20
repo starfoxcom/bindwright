@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Changed
 
 - **A usage pause arms each session on its own.** When a plan limit pauses the sessions, each one gets the same arm `/usage-guard arm` sets, so its resume can be cancelled alone: `/usage-guard disarm` and the pause card's new "Cancel resume (this session)" drop it, and the other sessions still resume after the reset. `/usage-guard disarm-global` (the card's "Cancel resume (all sessions)") cancels every session's resume, the arms set by hand included, and ends the pause. `/usage-guard cancel` still works as the earlier name of `disarm-global`. An arm set by hand during a pause replaces the pause's own for that session.
+- **usage-guard knows which account is signed in.** A pause records the account it was made on, from Claude Code's login record. After a `/login` to another account whose plan windows have room, the pause ends and the sessions resume their saved work; plan readings a session took before the switch never start a pause on the new account. A session armed by hand shows a card after the switch, with "Lift it here" and "Lift in every session" (`/usage-guard lift`, `/usage-guard lift-all`), since that arm waits for the person.
 
 ## [v7.5.0] — 2026-11-18
 

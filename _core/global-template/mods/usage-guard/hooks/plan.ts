@@ -19,6 +19,10 @@ export type Pause = {
   resets?: Record<string, string>
   /** Its wake was brought forward by an early reset: it covers no plan, since the fence drops stale readings. */
   isBroughtForward?: boolean
+  /** The id of the account signed in when it was planned; missing when no login was on record. */
+  account?: string
+  /** Brought forward by a switch to an account with room: only the arms the pause set lift with it. */
+  isAccountLift?: boolean
   /** The reset the first pause of this run named. Kept when a later limit extends the pause, so the
    * wrap-up, stop and resume claims (keyed on it) still run once per session. */
   episode?: string

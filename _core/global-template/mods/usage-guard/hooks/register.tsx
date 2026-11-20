@@ -3,7 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { ArmedWake, UsageCard } from '../types'
 import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
-import { armPath, dropIfDisarmedByAll, followSession, restoreArm, setArm, writeDisarmAll } from './armstore'
+import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
+import { switchCardText } from './account'
+import { clearSwitchCard, endIfSwitched, isLiftAsked, meetSwitch, noteReading, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
@@ -34,6 +36,7 @@ const band = atom({ plugin: 'usage-guard', key: 'band' } as const, null)
 // The same state armstore.ts saves: the engine lists what each file reads, so each names it itself.
 const armedWake = atom({ plugin: 'usage-guard', key: 'armed' } as const, null)
 const armNote = atom({ plugin: 'usage-guard', key: 'armNote' } as const, null)
+const accountView = atom({ plugin: 'usage-guard', key: 'account' } as const, null)
 
 async function runClaimHelper($: EngineInterface, name: string): Promise<{ exitCode: number; stdout: string }> {
   return $.process.run(['node', '-e', CLAIM, await dataDir($), name.replace(/[^\w-]/g, '_')], { timeoutMs: 10_000 })
@@ -95,7 +98,7 @@ async function refresh($: EngineInterface): Promise<void> {
 // Every session's arm goes, the ones set by hand included: each session drops its own at its next check, or at
 // its wake at the latest. An active pause turns cancelled, so nothing waits on it any more.
 async function disarmGlobal($: EngineInterface): Promise<string> {
-  await writeDisarmAll($, await $.clock.now())
+  await writeMark($, 'disarm', await $.clock.now())
   await disarm($)
   const pause = await readPause($)
   if (pause?.status === 'active') {
@@ -459,11 +462,30 @@ async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): P
   return forward
 }
 
+// An arm set by hand wakes now: the card's "Lift it here", `/usage-guard lift`, or a lift of every session.
+async function liftHere($: EngineInterface): Promise<string> {
+  await clearSwitchCard($)
+  const arm = await read($, armedWake)
+  if (!arm || arm.isAuto) return 'No resume set by hand here to lift.'
+  const moved = { ...arm, isQuestioned: false, wakeAt: await $.clock.now() }
+  await setArm($, moved)
+  await scheduleArm($, moved)
+  return 'Lifted: this session resumes now.'
+}
+
+async function liftAll($: EngineInterface): Promise<string> {
+  await writeMark($, 'lift', await $.clock.now())
+  await liftHere($)
+  return 'Lifting every resume set by hand: each session resumes at its next check, within a minute.'
+}
+
 // A wake brought forward (another session saw the early reset): an arm on this pause, or one already due, moves to
 // now, and its timer resumes the session through the pause. An arm set by hand for later keeps its own time.
 async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
   const held = await read($, armedWake)
-  const isOnPause = held && held.wakeAt > now && (held.isAuto || held.resetsAt === pause.resetsAt)
+  // A switch to another account resets no window, so an arm set by hand waits for the person to lift it.
+  const isOnReset = held?.resetsAt === pause.resetsAt && !pause.isAccountLift
+  const isOnPause = held && held.wakeAt > now && (held.isAuto || isOnReset)
   if (!isOnPause) return
   const moved = { ...held, resetsAt: pause.resetsAt, wakeAt: now }
   await setArm($, moved)
@@ -475,17 +497,27 @@ async function check($: EngineInterface): Promise<void> {
   await dropIfDisarmedByAll($)
   const now = await $.clock.now()
   const sessionId = await $.session.id()
+  // This session's readings belong to the account signed in once a turn of its own ended under that login.
+  const login = await seeLogin($, now)
+  await meetSwitch($, login)
   let pause = await readPause($)
-  if (pause) pause = await endIfResetEarly($, pause, now)
+  // Another account's windows reset at their own times, which is no early reset of the paused ones.
+  const isSameAccount = !pause?.account || !login.account || pause.account === login.account.id
+  if (pause && isSameAccount) pause = await endIfResetEarly($, pause, now)
+  if (pause) pause = await endIfSwitched($, pause, login)
   if (pause && pause.status !== 'cancelled' && pause.wakeAt <= now) await resumeEarly($, pause, now)
+  if (await isLiftAsked($, pause, now)) await liftHere($)
   const isLive = pause?.status === 'active' && pause.wakeAt > now
 
   if (!isLive) {
+    // Readings from before a switch, of another account, never plan a pause.
+    if (!login.isFresh) return
     const { rateLimits } = await $.session.usage()
     const fresh = unfenced(rateLimits, await readFence($))
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
-    const planned = planPause(hot, live.delayMinutes, sessionId)
+    const onAccount = login.account ? { account: login.account.id } : {}
+    const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount }
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
     // stale one for a reset it was extended past.
     if (covers(pause, planned)) return
@@ -576,6 +608,17 @@ async function cardsAbove($: EngineInterface): Promise<Card[]> {
       { key: 'usage-arm-cancel', label: 'Cancel the resume', onPress: () => cancelFromArmCard($) },
     ]
     cards.push({ key: 'usage-arm-question', tone: 'yellow', text, buttons })
+  }
+  const switched = (await read($, accountView))?.card
+  if (switched && arm && !arm.isAuto) {
+    const dismiss = () => clearSwitchCard($)
+    const buttons: CardButton[] = [
+      { key: 'usage-switch-dismiss', label: 'Dismiss', isPrimary: true, onPress: dismiss },
+      { key: 'usage-lift-here', label: 'Lift it here', onPress: async () => confirmPress($, await liftHere($)) },
+      { key: 'usage-lift-all', label: 'Lift in every session', onPress: async () => confirmPress($, await liftAll($)) },
+    ]
+    const text = switchCardText(switched.label, localTime(arm.wakeAt))
+    cards.push({ key: 'usage-switch', tone: 'yellow', text, buttons })
   }
   const note = await read($, armNote)
   if (note) {
@@ -672,6 +715,7 @@ export const register: Register = (on, options) => {
     await startTimers($).catch(() => undefined)
     await measureCompaction($).catch(() => undefined)
     await runPendingWrapUp($).catch(() => undefined)
+    await noteReading($).catch(() => undefined)
     await check($).catch(() => undefined)
     return result
   })
@@ -692,7 +736,7 @@ export const register: Register = (on, options) => {
   })
 }
 
-// `/usage-guard [help | settings | arm ... | disarm | disarm-global]`; with no argument, the status.
+// `/usage-guard [help | settings | arm ... | disarm | disarm-global | lift | lift-all]`; with no argument, the status.
 async function runCommand($: EngineInterface, args: string): Promise<string> {
   const [verb = ''] = args.trim().split(/\s+/)
   if (verb === 'help') return HELP
@@ -704,6 +748,8 @@ async function runCommand($: EngineInterface, args: string): Promise<string> {
   if (verb === 'disarm') return disarm($)
   // `cancel` is the earlier name of disarm-global, kept so a habit or a script still works.
   if (verb === 'disarm-global' || verb === 'cancel') return disarmGlobal($)
+  if (verb === 'lift') return liftHere($)
+  if (verb === 'lift-all') return liftAll($)
   const pause = await readPause($)
   const armAt = (await read($, armedWake))?.wakeAt
   return statusText({ pause, armAt, lastCompaction: live.lastCompaction, wrapUpAt: live.wrapUpAt, zone: live.zone })

@@ -71,7 +71,7 @@ export async function restoreArm($: EngineInterface): Promise<ArmedWake | undefi
   const parsed = parseSavedArm(String(text))
   if (!parsed) return undefined
   const saved = { ...parsed, session: await $.session.id() }
-  if (isDisarmedByAll(saved, await readDisarmAll($))) return void (await setArm($, null))
+  if (isDisarmedByAll(saved, await readMark($, 'disarm'))) return void (await setArm($, null))
   const action = catchUpOf(saved.wakeAt, await $.clock.now(), live.catchUpMinutes)
   if (action === 'drop') {
     await setArm($, null)
@@ -83,18 +83,21 @@ export async function restoreArm($: EngineInterface): Promise<ArmedWake | undefi
   return saved
 }
 
-export async function readDisarmAll($: EngineInterface): Promise<DisarmAll | undefined> {
-  return readJson<DisarmAll>($, `${await dataDir($)}/disarm.json`)
+/** A press or command for every session: `disarm` drops each arm set before it, `lift` wakes each one set by hand. */
+export type Mark = 'disarm' | 'lift'
+
+export async function readMark($: EngineInterface, mark: Mark): Promise<DisarmAll | undefined> {
+  return readJson<DisarmAll>($, `${await dataDir($)}/${mark}.json`)
 }
 
-export async function writeDisarmAll($: EngineInterface, at: number): Promise<void> {
-  await $.fs.write(`${await dataDir($)}/disarm.json`, JSON.stringify({ at } satisfies DisarmAll, null, 2))
+export async function writeMark($: EngineInterface, mark: Mark, at: number): Promise<void> {
+  await $.fs.write(`${await dataDir($)}/${mark}.json`, JSON.stringify({ at } satisfies DisarmAll, null, 2))
 }
 
 /** Drops this session's arm when a disarm of every session came after it was set; true when it did. */
 export async function dropIfDisarmedByAll($: EngineInterface): Promise<boolean> {
   const arm = await read($, armedWake)
-  if (!arm || !isDisarmedByAll(arm, await readDisarmAll($))) return false
+  if (!arm || !isDisarmedByAll(arm, await readMark($, 'disarm'))) return false
   live.armTimer?.cancel()
   live.armTimer = undefined
   await setArm($, null)

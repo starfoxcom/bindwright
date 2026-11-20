@@ -89,6 +89,13 @@ declare module 'claude-code' {
       band: UsageGuardBand | null
       settings: SettingsView | null
       armed: ArmedWake | null
+      /** The signed-in account this session last saw, and the one its plan readings came from (at its last
+       * turn's end); then the card about an arm set by hand after a switch, until answered. */
+      account: {
+        seen: string | null
+        reading: string | null
+        card: { label: string; wakeAt: number } | null
+      } | null
       /** What the last press on the arm card did, shown in its place until dismissed. */
       armNote: string | null
       /** A closed session's arm that never ran, or its saved work, offered here; then what the press did. */

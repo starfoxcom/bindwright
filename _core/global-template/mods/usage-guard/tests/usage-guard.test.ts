@@ -1047,7 +1047,7 @@ test('/usage-guard shows its arguments in the menu and lists them on help', asyn
   await start($)
   const hint = registered.find(command => command.name === 'usage-guard')?.argumentHint
   const arm = 'arm 5h|week|HH:MM [compact] ["reason"]'
-  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | disarm-global | adopt]`)
+  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | disarm-global | lift | lift-all | adopt]`)
   const help = await $.command.run({ command: 'usage-guard', args: 'help' } as never)
   const lines = [
     '/usage-guard disarm-global',
