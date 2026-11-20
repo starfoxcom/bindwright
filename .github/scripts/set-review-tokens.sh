@@ -63,13 +63,20 @@ secret_name() {
   if [ "$1" = 1 ]; then echo "$TOKEN_SECRET"; else echo "${TOKEN_SECRET}_$1"; fi
 }
 
+# Only GitHub's "not found" means a repository holds no review; any other
+# failure stops the sweep, so a passing outage never skips a repository.
 find_repos() {
-  local name
+  local name names err
+  names=$(gh repo list --limit 1000 --no-archived --json nameWithOwner --jq '.[].nameWithOwner') \
+    || die "cannot list your repositories"
   while IFS= read -r name; do
-    if gh api "repos/$name/contents/$WORKFLOW" --silent 2> /dev/null; then
+    [ -n "$name" ] || continue
+    if err=$(gh api "repos/$name/contents/$WORKFLOW" --silent 2>&1); then
       REPOS+=("$name")
+    elif [[ $err != *"HTTP 404"* ]]; then
+      die "cannot read whether $name holds $WORKFLOW: $err"
     fi
-  done < <(gh repo list --limit 1000 --no-archived --json nameWithOwner --jq '.[].nameWithOwner')
+  done <<< "$names"
   [ ${#REPOS[@]} -gt 0 ] || die "none of your repositories holds $WORKFLOW; name them with --repo"
 }
 
@@ -77,7 +84,8 @@ read_tokens() {
   local i j token
   for ((i = 1; i <= ACCOUNTS; i++)); do
     printf "Account %s's token (input hidden): " "$i" >&2
-    IFS= read -rs token || die "no token for account $i"
+    IFS= read -rs token \
+      || die "no token for account $i: run this in a terminal of your own, where it can ask for each one"
     echo >&2
     [[ $token == sk-ant-* ]] \
       || die "account $i: that is not a token from 'claude setup-token' (those start with sk-ant-)"
