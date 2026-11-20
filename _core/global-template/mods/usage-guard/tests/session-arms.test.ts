@@ -99,6 +99,16 @@ test('a disarm holds after a /clear and after a restart', LONG, async ($, on) =>
   expect(resumes(seen)).toEqual([])
 })
 
+test('a disarm after a /clear marks the resume declined where its saved work is filed', LONG, async ($, on) => {
+  const seen = world(on)
+  await pauseWithWork($, seen)
+  seen.sessionId = 'sess-b'
+  await seen.clock.advance(60_000)
+  await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
+
+  expect(pauseArmOf(seen)?.isDeclined).toBe(true)
+})
+
 test("another session's disarm-global drops this session's arm at its next check", LONG, async ($, on) => {
   const seen = world(on)
   await start($)

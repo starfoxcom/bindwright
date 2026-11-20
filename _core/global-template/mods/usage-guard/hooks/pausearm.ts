@@ -23,6 +23,8 @@ export type PauseArm = {
   hasWork?: boolean
   /** The person cancelled this session's resume: the pause never arms it again. */
   isDeclined?: boolean
+  /** The session id it was first filed under, which its saved work is filed under too: a /clear does not change it. */
+  session?: string
 }
 
 const pauseArm = atom({ plugin: 'usage-guard', key: 'pauseArm' } as const, null)
@@ -51,8 +53,10 @@ export async function isPauseResumeDeclined($: EngineInterface, key: string, ses
 
 async function savePauseArm($: EngineInterface, arm: PauseArm): Promise<void> {
   await update($, pauseArm, () => arm)
-  // A claim folder the helper could not make leaves the arm in state alone, as before saved arms existed.
-  await $.fs.write(await pauseArmPath($, arm.key), JSON.stringify(arm, null, 2)).catch(() => undefined)
+  // Under this session's id, for a restart, and under the one it was first filed under, where the offer of its saved
+  // work looks. A claim folder the helper could not make leaves the arm in state alone, as before saved arms existed.
+  const paths = new Set([await pauseArmPath($, arm.key), await pauseArmPath($, arm.key, arm.session)])
+  for (const path of paths) await $.fs.write(path, JSON.stringify(arm, null, 2)).catch(() => undefined)
 }
 
 export async function readPauseArm($: EngineInterface): Promise<PauseArm | null> {
@@ -75,7 +79,8 @@ export async function armForPause(
   const found = held?.key === key ? held : await readSavedPauseArm($, key)
   // A saved copy that cannot be read leaves the session un-armed.
   if (found === null) return
-  const arm = found ?? { key, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, setAt: now, hasWork }
+  const fresh: PauseArm = { key, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, setAt: now, hasWork }
+  const arm = found ?? { ...fresh, session: await $.session.id() }
   if (arm.isDeclined) return keepDeclined($, arm, held)
   if (isDisarmedByAll(arm, await readDisarmAll($))) return void (await declinePauseArm($))
   const next = { ...arm, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, hasWork: Boolean(arm.hasWork || hasWork) }
