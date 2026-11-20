@@ -56,7 +56,8 @@ test("GitHub with apps, Actions and boards blocked: no workflow, gate or board, 
   Object.assign(a.advanced, { uiRule: true, confidentiality: true, cleanRoom: true, plainWriting: true });
   const files = await bind(a, { readFile, coreFiles, year: 2026 });
   const paths = [...files.keys()];
-  const actionsFiles = /^\.github\/(workflows\/|review-|scripts\/(review_gate|setup-review-gate|pin_check))/;
+  const actionsFiles =
+    /^\.github\/(workflows\/|review-|scripts\/(review_gate|setup-review-gate|set-review-tokens|pin_check))/;
   assert.deepEqual(paths.filter((path) => actionsFiles.test(path)), []);
   assert.ok(paths.includes(".claude/rules/code-host.md") && paths.includes(".github/scripts/size_check.py"));
   const rules = [...files].filter(([path]) => path.endsWith(".md") && !path.startsWith(".bindwright/global/")

@@ -52,6 +52,7 @@
   ".github/scripts/pin_check.py",
   ".github/scripts/public_roadmap.py",
   ".github/scripts/review_gate.py",
+  ".github/scripts/set-review-tokens.sh",
   ".github/scripts/setup-review-gate.sh",
   ".github/scripts/size_check.py",
   ".github/scripts/version_check.py",
