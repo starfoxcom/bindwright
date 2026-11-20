@@ -14,7 +14,7 @@ const OLD_FILE = `${ARMS_DIR}/sess-old.json`
 // The arm session sess-old saved before it was closed: its wake passed ten minutes ago.
 const MISSED = { kind: 'five_hour', resetsAt: RESET, wakeAt: NOW - 10 * 60_000, armedIn: 'sess-old', root: ROOT }
 // The claim the arm's own session takes when its wake fires: one resume per arm, wherever it runs.
-const ARM_CLAIM = `arm-${Date.parse(RESET)}-${MISSED.wakeAt}-sess-old`
+const ARM_CLAIM = `arm-${Date.parse(RESET)}-sess-old`
 
 function leaveMissedArm(seen: World, arm: object = MISSED): void {
   seen.files.set(OLD_FILE, JSON.stringify(arm))
@@ -165,7 +165,7 @@ test('after an answer on the phone, a later missed arm is still offered there', 
 async function wakeAfterClaimTaken($: Engine, seen: World, savedCopy: string): Promise<string> {
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
-  seen.claims.add(`arm-${Date.parse(RESET)}-${WAKE}-sess-a`)
+  seen.claims.add(`arm-${Date.parse(RESET)}-sess-a`)
   seen.files.set(ARM_FILE, savedCopy)
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])

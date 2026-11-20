@@ -28,7 +28,8 @@ export function parseSavedArm(text: string): ArmedWake | undefined {
     const reason = typeof arm.reason === 'string' && arm.reason ? { reason: arm.reason.slice(0, REASON_MAX) } : {}
     const isQuestioned = arm.isQuestioned === true
     const setAt = typeof arm.setAt === 'number' && Number.isFinite(arm.setAt) ? { setAt: arm.setAt } : {}
-    const fields = { ...armedIn, ...root, ...reason, ...setAt }
+    const offReset = arm.isOffReset === true ? { isOffReset: true } : {}
+    const fields = { ...armedIn, ...root, ...reason, ...setAt, ...offReset }
     return { kind: arm.kind, resetsAt: arm.resetsAt, wakeAt: arm.wakeAt, isQuestioned, ...fields }
   } catch {
     return undefined

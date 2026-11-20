@@ -483,7 +483,7 @@ async function liftHere($: EngineInterface): Promise<string> {
   await clearSwitchCard($)
   const arm = await read($, armedWake)
   if (!arm) return 'No resume set by hand here to lift.'
-  const moved = { ...arm, isQuestioned: false, wakeAt: await $.clock.now() }
+  const moved = { ...arm, isQuestioned: false, wakeAt: await $.clock.now(), isOffReset: true }
   await setArm($, moved)
   await scheduleArm($, moved)
   return 'Lifted: this session resumes now.'
@@ -499,7 +499,7 @@ async function liftAll($: EngineInterface): Promise<string> {
 // A switch to another account resets no window: a session with an arm set by hand waits for the person to lift it.
 // The arm moves onto the pause's reset and keeps its own time, so its wake, or a lift, resumes the saved work too.
 async function holdForLift($: EngineInterface, held: ArmedWake, pause: Pause): Promise<void> {
-  const onPause = { ...held, resetsAt: pause.resetsAt }
+  const onPause = { ...held, resetsAt: pause.resetsAt, isOffReset: true }
   await setArm($, onPause)
   await scheduleArm($, onPause)
   await raiseSwitchCard($, onPause.wakeAt)

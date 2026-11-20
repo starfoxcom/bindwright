@@ -136,11 +136,13 @@ export function limitName(pause: Pause): string {
 }
 
 /**
- * The claim a session's arm takes when it fires, filed under `owner`. It names the wake time too, so an arm lifted
- * or held before its reset leaves the next arm for that same reset its own claim.
+ * The claim a session's arm takes when it fires, filed under `owner`: one per reset, the name every version takes, so
+ * an instance a hot reload left on older code shares it. An arm lifted or held after a switch, which no older version
+ * makes, names its wake time too, so the next arm for that same reset keeps a claim of its own.
  */
-export function armClaim(arm: Pick<ArmedWake, 'resetsAt' | 'wakeAt'>, owner: string): string {
-  return `arm-${Date.parse(arm.resetsAt)}-${arm.wakeAt}-${owner}`
+export function armClaim(arm: Pick<ArmedWake, 'resetsAt' | 'wakeAt' | 'isOffReset'>, owner: string): string {
+  const reset = Date.parse(arm.resetsAt)
+  return arm.isOffReset ? `arm-${reset}-${arm.wakeAt}-${owner}` : `arm-${reset}-${owner}`
 }
 
 // Claims under mods-data/usage-guard/claims/. `mkdir` is atomic, so of several
