@@ -9,7 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - **The AI reviews can run on up to 5 Claude accounts.** When a review fails and its first account has no room left, the backup review (and the deep review's fallback) runs on the next account that answers a one-line check, so a spent plan stops no pull request until its reset. Each extra account is a repository secret of its own, `CLAUDE_CODE_OAUTH_TOKEN_2` to `CLAUDE_CODE_OAUTH_TOKEN_5`; nothing is checked unless the review failed, and without those secrets the reviews run as before. Setup asks how many accounts the reviews use, and the new `.github/scripts/set-review-tokens.sh --accounts N` asks for each account's token once, with the input hidden, and sets them in every repository of yours that holds the routine review. `setup-review-gate.sh --accounts N` checks that each one is set.
-- **session-facts names the account a session runs on.** The line every prompt carries adds the signed-in account's plan name (`| account Max`), read from Claude Code's login record, never an email. After a `/login` to another account it reads `, not confirmed yet` until the session's own plan figures move to the new account's, then notes `| switched to Max` once.
+- **session-facts names the account a session runs on.** The line every prompt carries adds the signed-in account's plan name (`| account Max`), read from Claude Code's login record, never an email. Running sessions follow that record, so after a `/login` to another account the next line names the new account and notes `| switched to Max` once.
 
 ### Changed
 

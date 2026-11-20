@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
 import type { Budgets, CacheCheck } from '../types'
-import { type AccountView, accountText, figuresOf, nextView, readAccount } from './account'
+import { type Account, accountText, nextAccount, readAccount } from './account'
 import { compactedMark, contextText, fillTone, phoneText, registerBudgetsView } from './budgets'
 import {
   checkCache,
@@ -115,9 +115,9 @@ async function factsLine($: EngineInterface, isCompacting = false): Promise<Fact
     // A login record that cannot be read is no account change, and never costs the line.
     const login = readAccount($).catch(() => undefined)
     const [pausedUntil, armAt, signedIn] = await Promise.all([readPausedUntil($), readArmAt($), login])
-    const seen = nextView(live.account, signedIn, figuresOf(rateLimits), now)
-    live.account = seen.view
-    const account = accountText(seen.view, seen.isSwitched)
+    const seen = nextAccount(live.account, signedIn)
+    live.account = seen.account
+    const account = accountText(seen.account, seen.isSwitched)
     const wake = wakePart(now, live.zone.offsetMinutes, pausedUntil, armAt)
     const note = nearCompactionNote(tokens, context.window)
     const text = `${time} | ${ctx.text}${plan.text}${account}${wake}${note}`
@@ -187,8 +187,8 @@ const live: {
   sharedPlan?: SharedPlan
   // When the newest facts line went out, and whether it had a figure to improve on.
   lastLine?: { at: number; isPartial: boolean }
-  // The signed-in account this session runs on, as far as its own plan figures show.
-  account?: AccountView
+  // The signed-in account the newest facts line showed.
+  account?: Account
 } = {
   zone: UTC,
   isSetUp: false,

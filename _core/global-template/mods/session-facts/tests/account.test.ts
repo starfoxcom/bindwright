@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { type Account, type AccountView, accountOf, type Figures, nextView } from '../hooks/account'
+import { type Account, accountOf, nextAccount } from '../hooks/account'
 
-// The facts line names the account the session runs on: the plan name from the login record, unconfirmed after a
-// /login until the session's own plan figures move, then one note that the switch took.
+// The facts line names the account the session runs on, the plan name from the login record, and notes a /login
+// to another account once.
 
 const NOON_UTC = Date.UTC(2026, 9, 2, 16, 0, 0)
 const CONFIG = 'C:/Users/me/.claude.json'
@@ -27,39 +27,21 @@ for (const [name, login, label] of LABELS) {
 
 const A = { id: 'acct-a', label: 'Ultra' }
 const B = { id: 'acct-b', label: 'Max' }
-const EARLY = Date.UTC(2026, 9, 2, 17, 0, 0)
-const LATE = Date.UTC(2026, 9, 2, 20, 0, 0)
-const ON_A = { five_hour: '2026-10-02T19:00:00Z' }
-const ON_B = { five_hour: '2026-10-02T21:00:00Z' }
-const ROLLED_A = { five_hour: '2026-10-03T00:00:00Z' }
-const WEEK_A = { seven_day: '2026-10-04T18:00:00Z' }
-const PENDING_B = { onRecord: B, confirmed: A, figuresAtSwitch: ON_A }
-type Row = [string, AccountView | undefined, Account | undefined, Figures | undefined, number, string, boolean]
-const VIEWS: Row[] = [
-  ['the first account seen is the one the session runs on', undefined, A, ON_A, EARLY, 'Ultra', false],
-  ['another account on record waits for proof', { onRecord: A, confirmed: A }, B, ON_A, EARLY, 'Max?', false],
-  ['figures moved before the old reset prove it', PENDING_B, B, ON_B, EARLY, 'Max', true],
-  ['the confirmed account back on record is no switch', PENDING_B, A, ON_A, EARLY, 'Ultra', false],
-  ['the old window rolling over proves nothing', PENDING_B, B, ROLLED_A, LATE, 'Max?', false],
-  ['a window kind that appears proves nothing', PENDING_B, B, { ...ON_A, seven_day: 'x' }, EARLY, 'Max?', false],
-  ['no figures at the switch: the first ones are only a baseline', { onRecord: B, confirmed: A }, B, ON_B, EARLY,
-    'Max?', false],
-  ['a missing record changes nothing', PENDING_B, undefined, ON_B, EARLY, 'Max?', false],
-  ['an early reset of one old window proves nothing', { ...PENDING_B, figuresAtSwitch: { ...ON_A, ...WEEK_A } }, B,
-    { ...ROLLED_A, ...WEEK_A }, EARLY, 'Max?', false],
-  ['every window moved proves it', { ...PENDING_B, figuresAtSwitch: { ...ON_A, ...WEEK_A } }, B,
-    { ...ON_B, seven_day: '2026-10-06T08:00:00Z' }, EARLY, 'Max', true],
+type Row = [string, Account | undefined, Account | undefined, string | undefined, boolean]
+const LOOKS: Row[] = [
+  ['the first account seen is no switch', undefined, A, 'Ultra', false],
+  ['the same account again is no switch', A, A, 'Ultra', false],
+  ['another account on record is a switch', A, B, 'Max', true],
+  ['a missing record keeps the account shown', B, undefined, 'Max', false],
 ]
-for (const [name, view, account, figures, now, shown, isSwitched] of VIEWS) {
-  test(`account view: ${name}`, () => {
-    const next = nextView(view, account, figures, now)
-    const v = next.view
-    const label = v && `${v.onRecord.label}${v.onRecord.id === v.confirmed.id ? '' : '?'}`
-    expect([label, next.isSwitched]).toEqual([shown, isSwitched])
+for (const [name, shown, onRecord, label, isSwitched] of LOOKS) {
+  test(`account look: ${name}`, () => {
+    const next = nextAccount(shown, onRecord)
+    expect([next.account?.label, next.isSwitched]).toEqual([label, isSwitched])
   })
 }
 
-test('a /login shows as unconfirmed until the plan figures move, then as switched once', async ($, on) => {
+test('a /login shows the new account at once and notes the switch once; plan figures never do', async ($, on) => {
   mock.clock(on, { now: NOON_UTC })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   on('process.run', () => {
@@ -90,20 +72,20 @@ test('a /login shows as unconfirmed until the plan figures move, then as switche
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   await prompt()
   expect(line).toContain(' | account Ultra')
-  expect(line).not.toContain('not confirmed')
+
+  // An early (banked) reset moves the windows on the same account: no switch.
+  limits = MAX
+  await prompt()
+  expect(line).toContain(' | account Ultra')
+  expect(line).not.toContain('switched')
 
   signIn('acct-max', 'Max')
-  await prompt()
-  expect(line).toContain(' | account Max, not confirmed yet')
-
-  limits = MAX
   await prompt()
   expect(line).toContain(' | account Max | switched to Max')
 
   await prompt()
   expect(line).toContain(' | account Max')
   expect(line).not.toContain('switched')
-  expect(line).not.toContain('not confirmed')
 
   files.delete(CONFIG)
   await prompt()
