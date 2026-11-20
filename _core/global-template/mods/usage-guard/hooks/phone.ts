@@ -40,8 +40,10 @@ async function phoneText($: EngineInterface, status: string): Promise<string> {
   const lines = [`${isPaused ? '🟨' : '🟩'} ${status}`]
   const card = await readShared<UsageCard>($, 'card.json')
   if (card && !card.dismissed) lines.push(`${SQUARES[cardTone(card.id)]} ${card.text}`)
-  if ((await read($, armedWake))?.isQuestioned) lines.push(`🟨 ${EMPTY_ARM_NOTE}`)
-  if ((await read($, accountView))?.card) lines.push(SWITCH_LINE)
+  const arm = await read($, armedWake)
+  if (arm?.isQuestioned) lines.push(`🟨 ${EMPTY_ARM_NOTE}`)
+  const switched = (await read($, accountView))?.card
+  if (switched && arm?.wakeAt === switched.wakeAt) lines.push(SWITCH_LINE)
   const offered = await read($, adopt)
   if (offered?.offer) lines.push(OFFER_LINE)
   else if (offered?.saved) lines.push(SAVED_OFFER_LINE)

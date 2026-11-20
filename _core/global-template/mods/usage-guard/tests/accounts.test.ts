@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { accountOf } from '../hooks/account'
-import { doWork, endTurn, mountCard, NOW, pauseOf, RESET, resumes, start, world, type World } from './world'
+import { doWork, endTurn, mountCard, NOW, pauseOf, RESET, resumes, start, TASKS_DIR, world, type World } from './world'
 
 // Two accounts on one computer: a pause belongs to the account it was made on, and a /login to one with room
 // lifts the arms the pause set, while an arm set by hand waits for the person.
@@ -83,6 +83,74 @@ test('an arm set by hand waits after a switch, with a card that lifts it', LONG,
   await seen.clock.advance(1_000)
   expect(resumes(seen)).toHaveLength(1)
   expect(resumes(seen)[0]).toContain('check CI')
+})
+
+test('a session armed by hand at a time of day still resumes its saved work when lifted after a switch', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    // No open task: only the work saved at the wrap-up makes the wake a resume and not a quiet "the wake came".
+    seen.hasTasksMod = true
+    seen.files.set(`${TASKS_DIR}/${seen.sessionId}.json`, JSON.stringify({ session: seen.sessionId, tasks: [] }))
+    await start($)
+    await $.command.run({ command: 'usage-guard', args: 'arm 23:30' } as never)
+    await doWork($)
+    seen.limits = HOT
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = ROOMY
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    expect(resumes(seen)).toEqual([])
+
+    await (await mountCard($)).press({ key: 'usage-lift-here' })
+    await seen.clock.advance(1_000)
+    expect(resumes(seen)).toHaveLength(1)
+  })
+
+test('a switch with no pause to end raises no card', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
+  signIn(seen, 'acct-max', 'Max')
+  await endTurn($)
+
+  expect(await (await mountCard($)).find({ key: 'usage-switch' })).toBeUndefined()
+})
+
+test('a lift while a pause still holds keeps the arm at its own time', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  await $.command.run({ command: 'usage-guard', args: 'arm 23:30' } as never)
+  seen.limits = HOT
+  await endTurn($)
+  const answer = await $.command.run({ command: 'usage-guard', args: 'lift' } as never)
+  await seen.clock.advance(1_000)
+
+  expect(answer.text).toContain('A pause still holds')
+  expect(resumes(seen)).toEqual([])
+})
+
+test('back on the spent account after a switch, the sessions pause again as a new episode', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  await doWork($)
+  seen.limits = HOT
+  await endTurn($)
+  signIn(seen, 'acct-max', 'Max')
+  seen.limits = ROOMY
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  signIn(seen, 'acct-ultra')
+  seen.limits = HOT
+  await endTurn($)
+
+  const again = pauseOf(seen)
+  expect([again?.status, again?.isAccountLift, again?.episode === undefined]).toEqual(['active', undefined, false])
 })
 
 test('a lift of every session wakes this session\'s arm set by hand at its next check', LONG, async ($, on) => {

@@ -5,7 +5,8 @@ import type { ArmedWake, UsageCard } from '../types'
 import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
-import { clearSwitchCard, endIfSwitched, isLiftAsked, meetSwitch, noteReading, seeLogin } from './switch'
+import { clearSwitchCard, endIfSwitched, isLiftAsked, meetSwitch, noteReading } from './switch'
+import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
@@ -466,8 +467,16 @@ async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): P
   return forward
 }
 
+const HELD_BY_PAUSE = 'A pause still holds, so every arm keeps its time: lift it once the pause ends.'
+
+async function isPauseHolding($: EngineInterface): Promise<boolean> {
+  const pause = await readPause($)
+  return pause?.status === 'active' && pause.wakeAt > (await $.clock.now())
+}
+
 // An arm set by hand wakes now: the card's "Lift it here", `/usage-guard lift`, or a lift of every session.
 async function liftHere($: EngineInterface): Promise<string> {
+  if (await isPauseHolding($)) return HELD_BY_PAUSE
   await clearSwitchCard($)
   const arm = await read($, armedWake)
   if (!arm) return 'No resume set by hand here to lift.'
@@ -478,19 +487,28 @@ async function liftHere($: EngineInterface): Promise<string> {
 }
 
 async function liftAll($: EngineInterface): Promise<string> {
+  if (await isPauseHolding($)) return HELD_BY_PAUSE
   await writeMark($, 'lift', await $.clock.now())
   await liftHere($)
   return 'Lifting every resume set by hand: each session resumes at its next check, within a minute.'
 }
 
+// A switch to another account resets no window: a session with an arm set by hand waits for the person to lift it.
+// The arm moves onto the pause's reset and keeps its own time, so its wake, or a lift, resumes the saved work too.
+async function holdForLift($: EngineInterface, held: ArmedWake, pause: Pause): Promise<void> {
+  const onPause = { ...held, resetsAt: pause.resetsAt }
+  await setArm($, onPause)
+  await scheduleArm($, onPause)
+  await raiseSwitchCard($, onPause.wakeAt)
+}
+
 // A wake brought forward (another session saw the early reset) resumes this session now, if the pause still holds
 // its resume. An arm already due, or already moved onto this pause, stands down as at the pause's own wake: brought
 // to now on this reset, resume() counts it and its own timer then clears it. An arm still ahead keeps its own time.
-// A switch to another account resets no window: a session with an arm set by hand waits for the person to lift it.
 async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
   if (!(await takePauseArm($, pause))) return
   const held = await read($, armedWake)
-  if (pause.isAccountLift && held) return
+  if (pause.isAccountLift && held) return holdForLift($, held, pause)
   const isStandingDown = held && (held.wakeAt <= now || held.resetsAt === pause.resetsAt)
   const moved = isStandingDown && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
   if (moved) await setArm($, moved).then(() => scheduleArm($, moved))
@@ -522,7 +540,9 @@ async function check($: EngineInterface): Promise<void> {
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
-    const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount }
+    // Back on an account whose pause a switch ended: that pause's claims are spent, so this one is a new episode.
+    const anew = pause?.isAccountLift ? { episode: new Date(now).toISOString() } : {}
+    const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount, ...anew }
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
     // stale one for a reset it was extended past.
     if (covers(pause, planned)) return
@@ -615,7 +635,8 @@ async function cardsAbove($: EngineInterface): Promise<Card[]> {
     cards.push({ key: 'usage-arm-question', tone: 'yellow', text, buttons })
   }
   const switched = (await read($, accountView))?.card
-  if (switched && arm) {
+  // Only while the arm it was raised for stands: a wake, a disarm or a new arm ends what it says.
+  if (switched && arm && arm.wakeAt === switched.wakeAt) {
     const dismiss = () => clearSwitchCard($)
     const buttons: CardButton[] = [
       { key: 'usage-switch-dismiss', label: 'Dismiss', isPrimary: true, onPress: dismiss },
