@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { type Account, isLiftedBySwitch, readAccount } from './account'
 import { readMark } from './armstore'
-import { readPause, writePause } from './files'
+import { readPause, writeEpisode, writePause } from './files'
 import { live } from './live'
 import { bringForward, type Pause } from './plan'
 import { notice } from './say'
@@ -27,6 +27,8 @@ export async function endIfSwitched($: EngineInterface, pause: Pause, seen: Swit
   if (!forward) return current ?? pause
   const lifted = { ...forward, isAccountLift: true }
   await writePause($, lifted)
+  // Named from the lift's own wake, which every session reads alike.
+  if (pause.account) await writeEpisode($, pause.account, new Date(lifted.wakeAt).toISOString())
   await notice($, `Signed in with an account that has room left (${seen.account?.label}): the pause ends now.`)
   return lifted
 }

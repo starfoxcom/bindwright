@@ -16,7 +16,7 @@ import { fenceAfter, joinPause, unfenced } from './plan'
 import { armForPause, declinePauseArm, readPauseArm, takePauseArm } from './pausearm'
 import { planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
-import { dataDir, pausePath, readFence, readJson, readPause, writeFence, writePause } from './files'
+import { dataDir, pausePath, readEpisodes, readFence, readJson, readPause, writeFence, writePause } from './files'
 import { drawArmLine, drawCards } from './cards'
 import { register as adopt } from './adopt'
 import { register as phone } from './phone'
@@ -552,9 +552,9 @@ async function check($: EngineInterface): Promise<void> {
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
-    // Back on an account whose pause a switch ended: that pause's claims are spent, so this one is a new episode,
-    // named from the ended pause's own wake so every session that read it plans the same claims.
-    const anew = pause?.isAccountLift ? { episode: new Date(pause.wakeAt).toISOString() } : {}
+    // On an account whose pause a switch ended, that pause's claims are spent: the account's episode names this one.
+    const episode = login.account && (await readEpisodes($))[login.account.id]
+    const anew = episode ? { episode } : {}
     const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount, ...anew }
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
     // stale one for a reset it was extended past.

@@ -267,6 +267,56 @@ test('back on the spent account after a switch, the sessions pause again as a ne
   expect([again?.status, again?.isAccountLift, again?.episode]).toEqual(['active', undefined, episode])
 })
 
+test('back on the spent account after the other one paused and reset, the sessions pause again as a new episode', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await doWork($)
+    const weekReset = new Date(NOW + 3 * 24 * 3_600_000).toISOString()
+    const weekHot = [{ kind: 'seven_day', percentUsed: 97, resetsAt: weekReset }]
+    seen.limits = weekHot
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    const otherWeek = { kind: 'seven_day', percentUsed: 5, resetsAt: new Date(NOW + 5 * 24 * 3_600_000).toISOString() }
+    seen.limits = [...ROOMY, otherWeek]
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    const lifted = pauseOf(seen)
+    expect(lifted?.isAccountLift).toBe(true)
+    // The other account runs hot, pauses, and its window resets.
+    const otherReset = ROOMY[0]?.resetsAt ?? ''
+    seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: otherReset }, otherWeek]
+    await endTurn($)
+    await seen.clock.advance(Date.parse(otherReset) + 10 * 60_000 - NOW)
+    const later = new Date(NOW + 8 * 3_600_000).toISOString()
+    seen.limits = [{ kind: 'five_hour', percentUsed: 5, resetsAt: later }, otherWeek]
+    await endTurn($)
+    signIn(seen, 'acct-ultra')
+    seen.limits = weekHot
+    await endTurn($)
+
+    const again = pauseOf(seen)
+    const episode = lifted && new Date(lifted.wakeAt).toISOString()
+    expect([again?.status, again?.resetsAt, again?.episode]).toEqual(['active', weekReset, episode])
+  })
+
+test('a switch to an account with another window running hot leaves the pause on', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  await doWork($)
+  seen.limits = HOT
+  await endTurn($)
+  signIn(seen, 'acct-max', 'Max')
+  const weekHot = { kind: 'seven_day', percentUsed: 99, resetsAt: new Date(NOW + 2 * 24 * 3_600_000).toISOString() }
+  seen.limits = [...ROOMY, weekHot]
+  await endTurn($)
+  await seen.clock.advance(1_000)
+
+  expect([pauseOf(seen)?.isAccountLift, resumes(seen)]).toEqual([undefined, []])
+})
+
 test('a lift of every session wakes this session\'s arm set by hand at its next check', LONG, async ($, on) => {
   const seen = world(on)
   await start($)

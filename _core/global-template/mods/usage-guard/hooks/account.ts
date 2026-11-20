@@ -1,6 +1,6 @@
 import type { EngineInterface, SessionRateLimit } from 'claude-code'
 
-import type { Pause } from './plan'
+import { hotLimits, type Pause } from './plan'
 import { givenDir } from './settings'
 
 // Which account this computer is signed in with. Claude Code keeps the login in its global config
@@ -60,7 +60,9 @@ export function isLiftedBySwitch(
     const limit = limits.find(item => item.kind === kind)
     return limit !== undefined && limit.percentUsed < s.wrapUpAt
   }
-  return pause.kinds.length > 0 && pause.kinds.every(isClear)
+  // Room on the new account means no window of it runs hot, not only the windows the pause covered.
+  const isRoomy = hotLimits(limits, s.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > s.now).length === 0
+  return pause.kinds.length > 0 && pause.kinds.every(isClear) && isRoomy
 }
 
 /** The card a session holding an arm set by hand shows after a switch. */
