@@ -70,7 +70,7 @@ export async function armForPause(
   if (found === null) return
   const arm = found ?? { key, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, setAt: now, hasWork }
   if (arm.isDeclined) return void (held?.key === key ? undefined : await update($, pauseArm, () => arm))
-  if (isDisarmedByAll(arm, await readDisarmAll($))) return declinePauseArm($)
+  if (isDisarmedByAll(arm, await readDisarmAll($))) return void (await declinePauseArm($))
   const next = { ...arm, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, hasWork: Boolean(arm.hasWork || hasWork) }
   if (JSON.stringify(next) !== JSON.stringify(held)) await savePauseArm($, next)
   if (live.wakeTimer && held?.wakeAt === next.wakeAt) return
