@@ -1,6 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
+import type { PauseArm } from '../types'
 import { readDisarmAll } from './armstore'
 import { dataDir } from './files'
 import { live } from './live'
@@ -11,21 +12,6 @@ import { isDisarmedByAll, type Pause, resetKey } from './plan'
 // session back. It lives in plugin state, so a hot reload keeps it, and in the session's pause claim folder
 // (`claims/<reset>-<session>/arm.json`), so a restart finds it; a session that met the pause under an earlier
 // version has the claim and no file, and is armed when it next sees the pause.
-
-export type PauseArm = {
-  /** The pause's reset key (`resetKey`): an extended pause keeps it. */
-  key: string
-  resetsAt: string
-  wakeAt: number
-  /** When it was set, in ms: a disarm of every session after it declines it. */
-  setAt: number
-  /** The session saved work at the wrap-up, so its wake resumes something. */
-  hasWork?: boolean
-  /** The person cancelled this session's resume: the pause never arms it again. */
-  isDeclined?: boolean
-  /** The session id it was first filed under, which its saved work is filed under too: a /clear does not change it. */
-  session?: string
-}
 
 const pauseArm = atom({ plugin: 'usage-guard', key: 'pauseArm' } as const, null)
 
