@@ -91,6 +91,14 @@ export function planPause(hot: readonly SessionRateLimit[], delayMinutes: number
   }
 }
 
+/** Written by `/usage-guard disarm-global` (or the card): every arm set before `at` is dropped. */
+export type DisarmAll = { at: number }
+
+/** Whether a disarm of every session came after this arm was set. An arm with no time is an old one. */
+export function isDisarmedByAll(arm: { setAt?: number }, disarmAll: DisarmAll | undefined): boolean {
+  return disarmAll !== undefined && (arm.setAt ?? 0) < disarmAll.at
+}
+
 const ARM_KINDS: Record<string, string> = { '5h': 'five_hour', week: 'seven_day' }
 
 // The wake `/usage-guard arm <5h|week>` sets: the named window's next reset plus the resume delay,

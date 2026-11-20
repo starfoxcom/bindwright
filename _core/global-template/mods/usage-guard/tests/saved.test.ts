@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { SavedWork } from '../types'
 import { ADOPT_GRACE_MS, ADOPT_MAX_AGE_MS } from '../hooks/arms'
 import type { Pause } from '../hooks/plan'
-import { KEPT_MAX_AGE_MS, parseSaved, pickSaved, shouldResumeOwn } from '../hooks/saved'
+import { KEPT_MAX_AGE_MS, parseSaved, pickSaved, SAVED_FILE, shouldResumeOwn } from '../hooks/saved'
 import type { World } from './world'
 import { CLAIMS_DIR, doWork, endTurn, KEY, mountCard, NOW, PAUSE_FILE, RESET, start, WAKE } from './world'
 import { world } from './world'
@@ -108,7 +108,8 @@ test('a session that changed nothing files no saved work', async ($, on) => {
   await start($)
   seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
-  expect([...seen.files.keys()].filter(path => path.startsWith(CLAIMS_DIR))).toEqual([])
+  const saved = [...seen.files.keys()].filter(path => path.startsWith(CLAIMS_DIR) && path.endsWith(`/${SAVED_FILE}`))
+  expect(saved).toEqual([])
 })
 
 test('taking saved work over claims its resume, clears it and submits the resume', LONG, async ($, on) => {
@@ -174,6 +175,16 @@ test('dropping saved work clears it without a resume', LONG, async ($, on) => {
   await seen.clock.advance(1_000)
   expect(seen.files.get(OLD_FILE)).toBe('null')
   expect(seen.prompts).toEqual([])
+})
+
+test('saved work of a session that cancelled its resume is never offered', LONG, async ($, on) => {
+  const seen = world(on)
+  leaveSaved(seen)
+  const declined = { key: KEY, resetsAt: RESET, wakeAt: SAVED.wakeAt, setAt: NOW - 60_000, isDeclined: true }
+  seen.files.set(`${CLAIMS_DIR}/${KEY}-sess-old/arm.json`, JSON.stringify(declined))
+  await start($)
+  const ui = await offered($, seen)
+  expect(await ui.find({ key: 'usage-adopt' })).toBeUndefined()
 })
 
 test('saved work taken elsewhere after the offer showed is not resumed twice', LONG, async ($, on) => {
