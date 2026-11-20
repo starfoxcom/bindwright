@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The AI reviews can run on up to 5 Claude accounts.** When a review fails and its first account has no room left, the backup review (and the deep review's fallback) runs on the next account that answers a one-line check, so a spent plan stops no pull request until its reset. Each extra account is a repository secret of its own, `CLAUDE_CODE_OAUTH_TOKEN_2` to `CLAUDE_CODE_OAUTH_TOKEN_5`; nothing is checked unless the review failed, and without those secrets the reviews run as before. Setup asks how many accounts the reviews use, and the new `.github/scripts/set-review-tokens.sh --accounts N` asks for each account's token once, with the input hidden, and sets them in every repository of yours that holds the routine review. `setup-review-gate.sh --accounts N` checks that each one is set.
+
 ## [v7.5.0] — 2026-11-18
 
 ### Changed
