@@ -770,6 +770,8 @@ def api(path, opts, st):
     path = path.split("?")[0]
     repo = "repos/" + st["name"]
     sets = st["rulesets"]
+    if path.endswith("/contents/.github/workflows/claude-code-review.yml"):
+        return {} if "/".join(path.split("/")[1:3]) in st.get("with_workflow", []) else KeyError
     if method == "PATCH" and path == repo:
         for field in opts.get("-F", []):
             key, value = field.split("=", 1)
@@ -828,8 +830,12 @@ def main():
         st["labels"].append(pos[2])
     elif cmd == ["secret", "list"]:
         data = [{"name": n} for n in st["secrets"]]
+    elif cmd == ["repo", "list"]:
+        data = [{"nameWithOwner": n} for n in st.get("owned", [])]
     elif cmd == ["secret", "set"]:
         st["secrets"].append(pos[2])
+        value = "" if sys.stdin.isatty() else sys.stdin.read()
+        st.setdefault("written", []).append([opts.get("-R", [""])[0], pos[2], value])
     if data is KeyError:
         return not_found()
     if data is PermissionError:
@@ -849,6 +855,7 @@ sys.exit(main())
 '''
 
 SETUP = os.path.join(ROOT, ".github", "scripts", "setup-review-gate.sh")
+SWEEP = os.path.join(ROOT, ".github", "scripts", "set-review-tokens.sh")
 WRITES = (["label", "create"], ["secret", "set"])
 
 
@@ -901,15 +908,16 @@ class SetupScript(unittest.TestCase):
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args):
+    def run_setup(self, state, *args, script=SETUP, stdin=None):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
                    PATH=self.dir + os.pathsep + os.environ["PATH"])
+        repo = ["--repo", "acme/game"] if script == SETUP else []
         # The full path: on Windows a bare "bash" can start WSL's instead.
-        run = subprocess.run([tool("bash"), SETUP, "--repo", "acme/game", *args], env=env,
-                             stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        run = subprocess.run([tool("bash"), script, *repo, *args], env=env, input=stdin or "",
+                             capture_output=True, text=True)
         with open(self.state) as f:
             after = json.load(f)
         with open(self.log) as f:
@@ -1015,6 +1023,42 @@ class SetupScript(unittest.TestCase):
         self.assertIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN", run.stdout)
         self.assertEqual(after["secrets"], [])
         self.assertFalse([c for c in calls if c[:2] == ["secret", "set"]])
+
+    def test_accounts_past_the_first_are_checked_up_to_the_count_asked(self):
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN_2",
+                                    "CLAUDE_CODE_OAUTH_TOKEN_5"])
+        run, _, _ = self.run_setup(state, "--check", "--accounts", "3")
+        self.assertIn("ok       secret CLAUDE_CODE_OAUTH_TOKEN_2 (account 2)", run.stdout)
+        self.assertIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN_3 (account 3", run.stdout)
+        self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN_4", run.stdout)
+        self.assertIn("ok       secret CLAUDE_CODE_OAUTH_TOKEN_5 (account 5)", run.stdout)
+        run, _, _ = self.run_setup(state, "--check")
+        self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN_3", run.stdout)
+        run, _, _ = self.run_setup(state, "--check", "--accounts", "6")
+        self.assertEqual(run.returncode, 2)
+
+    def test_the_sweep_sets_every_account_in_every_repository_with_the_review(self):
+        state = fresh_repo(owned=["acme/game", "acme/site", "acme/notes"],
+                           with_workflow=["acme/game", "acme/site"])
+        run, after, calls = self.run_setup(state, "--accounts", "2", script=SWEEP,
+                                           stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\nsk-ant-oat01-bbbbbbbbbbbbbbbbbbbb\n")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(sorted(after["written"]), [
+            ["acme/game", "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa"],
+            ["acme/game", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"],
+            ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa"],
+            ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"]])
+        self.assertFalse([c for c in calls if any("sk-ant" in a for a in c)])
+        self.assertNotIn("sk-ant", run.stdout + run.stderr)
+
+    def test_the_sweep_writes_nothing_for_a_bad_or_repeated_token(self):
+        for name, tokens in (("not a token", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\npassword\n"),
+                             ("same token twice", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\nsk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n"),
+                             ("too few tokens", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")):
+            run, after, _ = self.run_setup(fresh_repo(), "--accounts", "2", "--repo", "acme/game",
+                                           script=SWEEP, stdin=tokens)
+            self.assertEqual(run.returncode, 2, name)
+            self.assertNotIn("written", after, name)
 
     def test_names_that_could_break_out_of_a_string_are_refused(self):
         for args in (["--branch", 'ma"in'], ["--require", "a\\b"], ["--approvals", "11"],
