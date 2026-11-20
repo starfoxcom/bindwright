@@ -41,30 +41,17 @@ export async function seeLogin($: EngineInterface, now: number): Promise<SwitchS
   return { account, isFresh: !account || !reading || reading === account.id, now }
 }
 
-// The account this session saw last.
-export async function meetSwitch($: EngineInterface, seen: SwitchSeen): Promise<void> {
-  const { account } = seen
-  const view = await read($, accountView)
-  if (!account || view?.seen === account.id) return
-  await update($, accountView, () => ({ seen: account.id, reading: view?.reading ?? null, card: view?.card ?? null }))
-}
-
 /** The card about an arm set by hand that a switch held back when it ended the pause, for the arm at `wakeAt`. */
 export async function raiseSwitchCard($: EngineInterface, wakeAt: number): Promise<void> {
   const label = (await readAccount($))?.label ?? 'another account'
-  const card = { label, wakeAt }
-  await update($, accountView, view => ({ seen: view?.seen ?? null, reading: view?.reading ?? null, card }))
+  await update($, accountView, view => ({ reading: view?.reading ?? null, card: { label, wakeAt } }))
 }
 
 // At a turn's end this session's plan readings are the signed-in account's. A login that cannot be read then
 // leaves the account they were last known to be.
 export async function noteReading($: EngineInterface): Promise<void> {
   const id = (await readAccount($))?.id
-  await update($, accountView, view => ({
-    seen: view?.seen ?? id ?? null,
-    reading: id ?? view?.reading ?? null,
-    card: view?.card ?? null,
-  }))
+  await update($, accountView, view => ({ reading: id ?? view?.reading ?? null, card: view?.card ?? null }))
 }
 
 export async function clearSwitchCard($: EngineInterface): Promise<void> {

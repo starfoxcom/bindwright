@@ -48,6 +48,8 @@ test('a switch to an account with room ends the pause and resumes the saved work
 
   expect(pauseOf(seen)?.isAccountLift).toBe(true)
   expect(resumes(seen)).toHaveLength(1)
+  // No window reset: the resume says what ended the pause.
+  expect(resumes(seen)[0]).toContain('Signed in with an account that has room')
 })
 
 test('readings from before a switch plan no pause on the new account', LONG, async ($, on) => {
@@ -145,12 +147,15 @@ test('back on the spent account after a switch, the sessions pause again as a ne
   seen.limits = ROOMY
   await endTurn($)
   await seen.clock.advance(1_000)
+  const lifted = pauseOf(seen)
   signIn(seen, 'acct-ultra')
   seen.limits = HOT
   await endTurn($)
 
+  // Named from the ended pause's wake, which every session reads alike, so all of them plan the same claims.
   const again = pauseOf(seen)
-  expect([again?.status, again?.isAccountLift, again?.episode === undefined]).toEqual(['active', undefined, false])
+  const episode = lifted && new Date(lifted.wakeAt).toISOString()
+  expect([again?.status, again?.isAccountLift, again?.episode]).toEqual(['active', undefined, episode])
 })
 
 test('a lift of every session wakes this session\'s arm set by hand at its next check', LONG, async ($, on) => {

@@ -104,10 +104,9 @@ declare module 'claude-code' {
       settings: SettingsView | null
       armed: ArmedWake | null
       pauseArm: PauseArm | null
-      /** The signed-in account this session last saw, and the one its plan readings came from (at its last
-       * turn's end); then the card about an arm set by hand after a switch, until answered. */
+      /** The account this session's plan readings came from (at its last turn's end), and the card about an arm
+       * set by hand that a switch held back, until answered. */
       account: {
-        seen: string | null
         reading: string | null
         card: { label: string; wakeAt: number } | null
       } | null

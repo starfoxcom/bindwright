@@ -5,7 +5,8 @@ import type { ArmedWake, UsageCard } from '../types'
 import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
-import { clearSwitchCard, endIfSwitched, isLiftAsked, meetSwitch, noteReading } from './switch'
+import { clearSwitchCard, endIfSwitched, isLiftAsked, noteReading } from './switch'
+import { NO_WORK_REST } from './plan'
 import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
@@ -253,21 +254,26 @@ async function resume($: EngineInterface, resetsAt: string, isArmed = false): Pr
   if (won === false) return
   if (pause.status === 'active') await writePause($, { ...pause, status: 'done' })
   setStatus($, undefined)
-  await showCard($, `reset:${resetsAt}`, 'Plan limits have reset. Sessions are resuming their saved work.')
+  // A switch to an account with room ended the pause: no window reset, and a session armed by hand waits.
+  const why = pause.isAccountLift ? 'Signed in with an account that has room' : 'Plan limits have reset'
+  const shared = pause.isAccountLift
+    ? `${why}. Sessions are resuming their saved work; one armed by hand waits until you lift it.`
+    : `${why}. Sessions are resuming their saved work.`
+  await showCard($, `reset:${resetsAt}`, shared)
   // Fails closed: with no resume claim on disk, an instance a hot reload left beside this one could
   // win it too, and find the work claim this one's question made.
   if (won === null) return notice($, UNCONFIRMED_NOTICE)
   // Only a session that saved work, or one armed, goes on by itself. Another session in the project
   // would rebuild the same hand-off and work the same tasks beside it, with nobody watching either.
   const work = await hadWork($, pause)
-  const text = 'Plan limits have reset: resuming the saved work.'
+  const text = `${why}: resuming the saved work.`
   const reason = isArmedHere ? held?.reason : undefined
   if (work === true) return resumeWork($, text, reason)
   if (isArmedHere) return resumeArmed($, `after the ${limitName(pause)} reset`, text, held?.armedIn, reason)
   if (work === null) return notice($, UNCONFIRMED_NOTICE)
   // Worded as what is on record, not what happened: a wrap-up whose own claim failed before a hot
   // reload, or one before a /clear, saved work that left no claim under this session's id.
-  return notice($, NO_WORK_NOTICE)
+  return notice($, pause.isAccountLift ? `${why}. ${NO_WORK_REST}` : NO_WORK_NOTICE)
 }
 
 // An armed session goes on with its work, or, with nothing pending, only says so: the person asked for
@@ -522,7 +528,6 @@ async function check($: EngineInterface): Promise<void> {
   const sessionId = await $.session.id()
   // This session's readings belong to the account signed in once a turn of its own ended under that login.
   const login = await seeLogin($, now)
-  await meetSwitch($, login)
   let pause = await readPause($)
   // Another account's windows reset at their own times, which is no early reset of the paused ones.
   const isSameAccount = !pause?.account || !login.account || pause.account === login.account.id
@@ -540,8 +545,9 @@ async function check($: EngineInterface): Promise<void> {
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
-    // Back on an account whose pause a switch ended: that pause's claims are spent, so this one is a new episode.
-    const anew = pause?.isAccountLift ? { episode: new Date(now).toISOString() } : {}
+    // Back on an account whose pause a switch ended: that pause's claims are spent, so this one is a new episode,
+    // named from the ended pause's own wake so every session that read it plans the same claims.
+    const anew = pause?.isAccountLift ? { episode: new Date(pause.wakeAt).toISOString() } : {}
     const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount, ...anew }
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
     // stale one for a reset it was extended past.
