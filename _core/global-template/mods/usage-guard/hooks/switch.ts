@@ -28,7 +28,8 @@ export async function endIfSwitched($: EngineInterface, pause: Pause, seen: Swit
   const lifted = { ...forward, isAccountLift: true }
   await writePause($, lifted)
   // Named from the lift's own wake, which every session reads alike.
-  if (pause.account) await writeEpisode($, pause.account, new Date(lifted.wakeAt).toISOString())
+  const ended = { episode: new Date(lifted.wakeAt).toISOString(), until: lifted.resetsAt }
+  if (pause.account) await writeEpisode($, pause.account, ended)
   await notice($, `Signed in with an account that has room left (${seen.account?.label}): the pause ends now.`)
   return lifted
 }

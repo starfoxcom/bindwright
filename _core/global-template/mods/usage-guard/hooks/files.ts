@@ -41,15 +41,24 @@ export async function readFence($: EngineInterface): Promise<Fence> {
 }
 
 /**
- * Per account id, the episode its next pause is named with. A switch that ends a pause on an account starts a new
- * one there: that pause's claims are spent, whatever pause the pause file holds by the time the account runs hot again.
+ * A switch that ended a pause on an account spent that pause's claims, whatever pause the pause file holds by the
+ * time the account runs hot again: a pause planned there for a window up to `until` (the ended pause's reset) is
+ * named with `episode`. A later window's pause has claims of its own.
  */
-export async function readEpisodes($: EngineInterface): Promise<Record<string, string>> {
-  return (await readJson<Record<string, string>>($, `${await dataDir($)}/episodes.json`)) ?? {}
+export type EndedBySwitch = { episode: string; until: string }
+
+/** Per account id, the newest pause a switch ended there. */
+export async function readEpisodes($: EngineInterface): Promise<Record<string, EndedBySwitch>> {
+  const file = await readJson<Record<string, Partial<EndedBySwitch>>>($, `${await dataDir($)}/episodes.json`)
+  const episodes: Record<string, EndedBySwitch> = {}
+  for (const [account, { episode, until } = {}] of Object.entries(file ?? {})) {
+    if (typeof episode === 'string' && typeof until === 'string') episodes[account] = { episode, until }
+  }
+  return episodes
 }
 
-export async function writeEpisode($: EngineInterface, account: string, episode: string): Promise<void> {
-  const episodes = { ...(await readEpisodes($)), [account]: episode }
+export async function writeEpisode($: EngineInterface, account: string, ended: EndedBySwitch): Promise<void> {
+  const episodes = { ...(await readEpisodes($)), [account]: ended }
   await $.fs.write(`${await dataDir($)}/episodes.json`, JSON.stringify(episodes, null, 2))
 }
 

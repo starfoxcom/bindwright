@@ -301,6 +301,54 @@ test('back on the spent account after the other one paused and reset, the sessio
     expect([again?.status, again?.resetsAt, again?.episode]).toEqual(['active', weekReset, episode])
   })
 
+test('after the re-pause on the spent account, its next window pauses and resumes with claims of its own', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await doWork($)
+    seen.limits = HOT
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = ROOMY
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    signIn(seen, 'acct-ultra')
+    seen.limits = HOT
+    await endTurn($)
+    await seen.clock.advance(WAKE - NOW)
+    const before = resumes(seen).length
+    // Hours later the next window runs hot with no switch in between.
+    const nextReset = new Date(Date.parse(RESET) + 5 * 3_600_000).toISOString()
+    await doWork($)
+    seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: nextReset }]
+    await endTurn($)
+    await seen.clock.advance(Date.parse(nextReset) + 10 * 60_000 - (WAKE + 1_000))
+
+    expect([pauseOf(seen)?.resetsAt, pauseOf(seen)?.episode, resumes(seen).length]).toEqual([nextReset, undefined,
+      before + 1])
+  })
+
+test('another account\'s cancelled pause does not stand in for one on the spent account', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  seen.limits = HOT
+  await endTurn($)
+  signIn(seen, 'acct-max', 'Max')
+  seen.limits = ROOMY
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: ROOMY[0]?.resetsAt ?? '' }]
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'disarm-global' } as never)
+  signIn(seen, 'acct-ultra')
+  seen.limits = HOT
+  await endTurn($)
+
+  expect([pauseOf(seen)?.status, pauseOf(seen)?.account]).toEqual(['active', 'acct-ultra'])
+})
+
 test('a switch to an account with another window running hot leaves the pause on', LONG, async ($, on) => {
   const seen = world(on)
   signIn(seen, 'acct-ultra')

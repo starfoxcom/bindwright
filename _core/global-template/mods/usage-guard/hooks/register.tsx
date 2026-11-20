@@ -552,10 +552,11 @@ async function check($: EngineInterface): Promise<void> {
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
-    // On an account whose pause a switch ended, that pause's claims are spent: the account's episode names this one.
-    const episode = login.account && (await readEpisodes($))[login.account.id]
-    const anew = episode ? { episode } : {}
-    const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount, ...anew }
+    const plan = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount }
+    // A window a switch ended a pause for has its claims spent: a pause for it is named with that switch's episode.
+    const ended = login.account && (await readEpisodes($))[login.account.id]
+    const isEnded = ended && Date.parse(plan.resetsAt) <= Date.parse(ended.until)
+    const planned = isEnded ? { ...plan, episode: ended.episode } : plan
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
     // stale one for a reset it was extended past.
     if (covers(pause, planned)) return

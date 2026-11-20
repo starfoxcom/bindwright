@@ -216,8 +216,10 @@ export function pausedReset(pause: Pause, kind: string): number {
 // A pause that already reaches a planned reset: the plan is part of it. Weekly usage only falls at its
 // reset, so a fresh reading after an extension plans that later reset; an earlier one is a stale reading.
 // A pause brought forward covers nothing: the fence already dropped every reading of the windows it paused.
+// Another account's pause covers nothing on this one: its windows are its own.
 export function covers(pause: Pause | undefined, planned: Pause): boolean {
   if (pause?.isBroughtForward) return false
+  if (pause?.account && planned.account && pause.account !== planned.account) return false
   return pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
 }
 
