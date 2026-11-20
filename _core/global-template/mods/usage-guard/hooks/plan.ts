@@ -77,6 +77,24 @@ export const NO_WORK_REST =
   'No saved work is on record for this session, so it does not go on by itself; ' +
   'pick up a hand-off by hand, for example with /start-session (or /session-start).'
 
+/** The reset whose pause an arm's wake resumes: the one a switch held it for, else its own. */
+export function armPauseReset(arm: ArmedWake): string {
+  return arm.override?.by === 'switch' ? arm.override.pause : arm.resetsAt
+}
+
+/** What an arm's wake came after, as the texts at the wake say it: never a reset that did not come. */
+export function armWaitedFor(arm: ArmedWake): string {
+  if (arm.override?.by === 'lift') return 'lifted early by hand'
+  if (arm.override?.by === 'switch') return 'after the switch to an account with room'
+  return armFor(arm.kind)
+}
+
+/** The arm moved onto a pause's wake: from there the pause decides why it fires, so any override is dropped. */
+export function movedOntoPause(arm: ArmedWake, pause: Pick<Pause, 'resetsAt' | 'wakeAt'>): ArmedWake {
+  const { override, ...rest } = arm
+  return { ...rest, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+}
+
 // How the texts at a pause's end name what ended it: a window's reset, or a switch to an account with room.
 export function endedBy(pause: Pause): { opening: string; armedFor: string } {
   if (pause.isAccountLift) {

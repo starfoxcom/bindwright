@@ -48,9 +48,14 @@ export type ArmedWake = {
   root?: string
   /** What the wake is for, as the person quoted it: handed to the session it wakes. */
   reason?: string
-  /** The reset of a pause a switch ended while this arm stood: its wake, or a lift, resumes that pause's saved work. */
-  heldFor?: string
+  /**
+   * Why it fires apart from its own reset: held when a switch ended the pause at `pause`'s reset (its wake, or a lift,
+   * resumes that pause's saved work), or lifted early by hand. Dropped whenever the arm moves onto a pause's wake.
+   */
+  override?: ArmOverride
 }
+
+export type ArmOverride = { by: 'switch'; pause: string } | { by: 'lift' }
 
 /** This session's own resume at a pause's wake (hooks/pausearm.ts), kept apart from the arm set by hand. */
 export type PauseArm = {

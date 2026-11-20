@@ -162,7 +162,30 @@ test('a lifted arm leaves the next arm for the same reset its own resume', LONG,
   await seen.clock.advance(WAKE - NOW)
 
   expect(resumes(seen)).toHaveLength(2)
+  // No reset came at the lift, and its resume does not say one did.
+  expect(resumes(seen)[0]).toContain('The wake you armed, lifted early by hand, has come')
 })
+
+test('an arm held after a switch, moved onto the other account\'s pause, resumes once at its wake', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await $.command.run({ command: 'usage-guard', args: 'arm 5h "check CI"' } as never)
+    seen.limits = HOT
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = ROOMY
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    // The other account runs hot too: its own pause holds when the held arm's wake comes.
+    const otherReset = ROOMY[0]?.resetsAt ?? ''
+    seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: otherReset }]
+    await endTurn($)
+    await seen.clock.advance(Date.parse(otherReset) + 10 * 60_000 - NOW)
+
+    expect(resumes(seen)).toHaveLength(1)
+  })
 
 test('an arm held after a switch fires under the claim an older instance of this module takes', LONG,
   async ($, on) => {

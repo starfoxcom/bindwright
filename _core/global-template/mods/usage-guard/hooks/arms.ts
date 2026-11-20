@@ -1,4 +1,4 @@
-import type { AdoptOffer, ArmedWake } from '../types'
+import type { AdoptOffer, ArmedWake, ArmOverride } from '../types'
 import { type DisarmAll, isDisarmedByAll, projectOf, REASON_MAX, reasonText } from './plan'
 
 // An arm survives a restart in `mods-data/usage-guard/arms/<session>.json`: the arm, or `null` once it
@@ -28,12 +28,18 @@ export function parseSavedArm(text: string): ArmedWake | undefined {
     const reason = typeof arm.reason === 'string' && arm.reason ? { reason: arm.reason.slice(0, REASON_MAX) } : {}
     const isQuestioned = arm.isQuestioned === true
     const setAt = typeof arm.setAt === 'number' && Number.isFinite(arm.setAt) ? { setAt: arm.setAt } : {}
-    const heldFor = typeof arm.heldFor === 'string' && arm.heldFor ? { heldFor: arm.heldFor } : {}
-    const fields = { ...armedIn, ...root, ...reason, ...setAt, ...heldFor }
+    const fields = { ...armedIn, ...root, ...reason, ...setAt, ...overrideOf(arm.override) }
     return { kind: arm.kind, resetsAt: arm.resetsAt, wakeAt: arm.wakeAt, isQuestioned, ...fields }
   } catch {
     return undefined
   }
+}
+
+function overrideOf(value: unknown): { override?: ArmOverride } {
+  const given = value as { by?: unknown; pause?: unknown } | null | undefined
+  if (given?.by === 'lift') return { override: { by: 'lift' } }
+  const isSwitch = given?.by === 'switch' && typeof given.pause === 'string' && given.pause !== ''
+  return isSwitch ? { override: { by: 'switch', pause: given.pause as string } } : {}
 }
 
 // `armedFor` (here and below): what the arm waited for, as `armFor` says it.

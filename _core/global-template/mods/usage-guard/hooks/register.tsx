@@ -6,7 +6,7 @@ import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
 import { clearSwitchCard, endIfSwitched, isLiftAsked, noteReading } from './switch'
-import { armClaim, endedBy, NO_WORK_REST } from './plan'
+import { armClaim, armPauseReset, armWaitedFor, endedBy, movedOntoPause, NO_WORK_REST } from './plan'
 import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
@@ -245,7 +245,7 @@ function scheduleOwedCompaction($: EngineInterface): void {
 async function resume($: EngineInterface, resetsAt: string, isArmed = false): Promise<void> {
   // Read first: an arm for this reset counts even if its own timer clears it while this one runs.
   const held = await read($, armedWake)
-  const isArmedHere = isArmed || held?.resetsAt === resetsAt || held?.heldFor === resetsAt
+  const isArmedHere = isArmed || (held !== null && armPauseReset(held) === resetsAt)
   const pause = await readPause($)
   if (!pause || pause.resetsAt !== resetsAt || pause.status === 'cancelled') return
   // Each session resumes once per reset, even when an instance left by a hot reload still runs its own
@@ -341,7 +341,7 @@ async function wakeArmed($: EngineInterface, arm: ArmedWake): Promise<void> {
   const pause = await readPause($)
   if (pause?.status === 'active' && pause.wakeAt > (await $.clock.now())) {
     // From the arm as it stands, not as this timer was set: its question, its sessions are kept.
-    const later: ArmedWake = { ...current, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+    const later = movedOntoPause(current, pause)
     await setArm($, later)
     await scheduleArm($, later)
     return
@@ -356,13 +356,14 @@ async function wakeArmed($: EngineInterface, arm: ArmedWake): Promise<void> {
   const copy = won === false && parseSavedArm(String(await $.fs.read(await armPath($, filedAs)).catch(() => '')))
   if (won === false) return void (copy ? undefined : await update($, armedWake, () => null))
   // The arm stays set until the resume has run, so the pause's own timer, firing beside this one, sees it.
-  const pauseReset = current.heldFor ?? arm.resetsAt
+  const pauseReset = armPauseReset(current)
   const isPauseReset = pause && pause.resetsAt === pauseReset && pause.status !== 'cancelled'
   if (won === null) await notice($, UNCONFIRMED_NOTICE)
   else if (isPauseReset) await resume($, pauseReset, true)
   else {
-    const text = `The wake you armed, ${armFor(arm.kind)}, has come: resuming the saved work.`
-    await resumeArmed($, armFor(arm.kind), text, current.armedIn, current.reason)
+    const waitedFor = armWaitedFor(current)
+    const text = `The wake you armed, ${waitedFor}, has come: resuming the saved work.`
+    await resumeArmed($, waitedFor, text, current.armedIn, current.reason)
   }
   // Cleared only if still this arm: the person may have set another while the resume ran.
   const now = await read($, armedWake)
@@ -486,7 +487,8 @@ async function liftHere($: EngineInterface): Promise<string> {
   if (!arm) return 'No resume set by hand here to lift.'
   // Its own reset, the lift's time: the claim of the reset it waited for stays free for a later arm.
   const now = await $.clock.now()
-  const moved = { ...arm, isQuestioned: false, resetsAt: new Date(now).toISOString(), wakeAt: now }
+  const override = arm.override ?? { by: 'lift' as const }
+  const moved = { ...arm, isQuestioned: false, resetsAt: new Date(now).toISOString(), wakeAt: now, override }
   await setArm($, moved)
   await scheduleArm($, moved)
   return 'Lifted: this session resumes now.'
@@ -502,7 +504,7 @@ async function liftAll($: EngineInterface): Promise<string> {
 // A switch to another account resets no window: a session with an arm set by hand waits for the person to lift it.
 // The arm moves onto the pause's reset and keeps its own time, so its wake, or a lift, resumes the saved work too.
 async function holdForLift($: EngineInterface, held: ArmedWake, pause: Pause): Promise<void> {
-  const onPause = { ...held, heldFor: pause.resetsAt }
+  const onPause = { ...held, override: { by: 'switch' as const, pause: pause.resetsAt } }
   await setArm($, onPause)
   await scheduleArm($, onPause)
   await raiseSwitchCard($, onPause.wakeAt)
@@ -521,7 +523,7 @@ async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promi
   const held = await read($, armedWake)
   if (pause.isAccountLift && held) return holdForLift($, held, pause)
   const isStandingDown = held && (held.wakeAt <= now || held.resetsAt === pause.resetsAt)
-  const moved = isStandingDown && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+  const moved = isStandingDown && movedOntoPause(held, pause)
   if (moved) await setArm($, moved).then(() => scheduleArm($, moved))
   return resume($, pause.resetsAt)
 }
