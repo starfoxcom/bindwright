@@ -14,6 +14,8 @@ export type UsageGuardBand = {
   card: UsageCard | null
   /** True while the pause is on and its automatic resume can still be cancelled. */
   canCancel: boolean
+  /** This session holds an arm, so the card can cancel its resume alone. */
+  canDisarmHere?: boolean
 }
 
 /** The settings pane's own state: the last refusal per field, shown under that field. */
@@ -24,11 +26,15 @@ export type SettingsView = {
 }
 
 /**
- * A wake that resumes this session's work after a reset or at a time of day, armed by hand
- * (`/usage-guard arm 5h|week|HH:MM`, or the `arm` tool). Kept in state so a hot reload (a settings
- * change, an edit) re-arms it.
+ * A wake that resumes this session's work after a reset or at a time of day: armed by hand
+ * (`/usage-guard arm 5h|week|HH:MM`, or the `arm` tool), or by a pause for every session it holds. Kept in
+ * state so a hot reload (a settings change, an edit) re-arms it.
  */
 export type ArmedWake = {
+  /** Set by a pause: at its wake the session resumes only work it saved at the wrap-up. */
+  isAuto?: boolean
+  /** When it was set, in ms: a disarm of every session drops the arms set before it. */
+  setAt?: number
   /** The limit's kind, `five_hour` or `seven_day`, or `clock` for a time of day. */
   kind: string
   /** For a reset, its time; for a time of day, the wake's own (the claims are keyed on it). */

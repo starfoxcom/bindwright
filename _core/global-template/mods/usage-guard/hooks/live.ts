@@ -12,8 +12,7 @@ export type Live = {
   /** The session id whose tool calls changed something: a /clear goes on under a new id with none. */
   workSession?: string
   isStatusShown: boolean
-  wakeTimer?: Timer
-  /** The wake the person armed by hand (`armedWake`), counting down in this module. */
+  /** The wake this session is armed for (`armedWake`), by hand or by a pause, counting down in this module. */
   armTimer?: Timer
   /** A wrap-up due when the running turn ends: the pause it is for. */
   pendingWrapUp?: Pause
@@ -42,6 +41,9 @@ export function applyValues(live: Live, values: Record<string, unknown>): void {
   live.compactAbovePercent = Number(values.compactAbovePercent ?? 35)
   live.catchUpMinutes = Number(values.catchUpMinutes ?? 30)
 }
+
+/** The module state every hooks file of this mod shares; a hot reload starts it over. */
+export const live: Live = newLive()
 
 /** The state a fresh module load starts from. */
 export function newLive(): Live {

@@ -5,6 +5,7 @@ import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_NOTICE, pla
 import { unfenced, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
+  ARM_FILE,
   cardOf,
   doWork,
   endTurn,
@@ -231,14 +232,15 @@ test('a session opened after the reset is told to resume by hand', async ($, on)
   expect(resumes(seen)).toEqual([])
 })
 
-test('cancel stops the automatic resume', LONG, async ($, on) => {
+test('disarm-global stops the automatic resume and ends the pause', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
   await endTurn($)
-  const answer = await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
+  const answer = await $.command.run({ command: 'usage-guard', args: 'disarm-global' } as never)
 
-  expect(answer.text).toContain('cancelled')
+  expect(answer.text).toContain('Disarmed every session')
+  expect(pauseOf(seen)?.status).toBe('cancelled')
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
 })
@@ -364,7 +366,7 @@ test('a pause over two limits ends early once both read in new windows', LONG, a
   expect(resumes(seen)).toHaveLength(1)
 })
 
-test('an arm not yet due keeps its own time when the pause ends early', LONG, async ($, on) => {
+test("a hand-set arm replaces the pause's own and keeps its time when the pause ends early", LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await doWork($)
@@ -374,12 +376,11 @@ test('an arm not yet due keeps its own time when the pause ends early', LONG, as
   seen.limits = [fresh(2, NEW_WINDOW), { kind: 'seven_day', percentUsed: 3, resetsAt: afterReset(7 * 24 * HOUR) }]
   await seen.clock.advance(60_000)
 
-  expect(resumes(seen)).toHaveLength(1)
-  expect(resumes(seen)[0]).not.toContain('check CI')
-  // The arm fires at the 5-hour reset it was set for, with its reason.
+  expect(resumes(seen)).toEqual([])
+  // The arm fires at the 5-hour reset it was set for, once, with its reason.
   for (let step = 0; step < 7; step++) await seen.clock.advance(10 * 60_000)
-  expect(resumes(seen)).toHaveLength(2)
-  expect(resumes(seen)[1]).toContain('check CI')
+  expect(resumes(seen)).toHaveLength(1)
+  expect(resumes(seen)[0]).toContain('check CI')
 })
 
 // A weekly pause whose reset is two days out, ended early by a banked reset: the weekly reads 3% in a new window.
@@ -665,6 +666,9 @@ test('a cancel of an extended pause holds against a session still reading the ea
   expect(resumes(seen)).toEqual([])
 })
 
+// The arm the pause gave this session when it wrapped up, saved where a restart or a hot reload finds it.
+const PAUSE_ARM = { kind: 'five_hour', resetsAt: RESET, wakeAt: WAKE, isAuto: true, setAt: NOW, session: 'sess-a' }
+
 test('after a hot reload during a pause, the first turn arms the wake timer again', LONG, async ($, on) => {
   const seen = world(on)
   // This session wrapped up before the reload; the reload dropped its timer and skipped session.start.
@@ -681,6 +685,7 @@ test('after a hot reload during a pause, the first turn arms the wake timer agai
   seen.claims.add(`${KEY}-sess-a`)
   // It wrapped up with work: the claim says so, though the reload emptied the module's memory.
   seen.claims.add(`work-${KEY}-sess-a`)
+  seen.files.set(ARM_FILE, JSON.stringify(PAUSE_ARM))
   await $.turn.start({ turnId: 't2' } as never)
 
   expect(seen.commands).toEqual([])
@@ -707,6 +712,7 @@ test('after a hot reload, a session with no work on record waits and says what i
   const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 98, resetsAt: RESET, wakeAt: WAKE }
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, triggeredBy: 'sess-a' }))
   seen.claims.add(`${KEY}-sess-a`)
+  seen.files.set(ARM_FILE, JSON.stringify(PAUSE_ARM))
   await $.turn.start({ turnId: 't2' } as never)
   await seen.clock.advance(WAKE - NOW)
 
@@ -728,6 +734,7 @@ test(
   seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, triggeredBy: 'sess-a' }))
   seen.claims.add(`${KEY}-sess-a`)
   seen.failClaims = new Set([`resume-${KEY}-sess-a`])
+  seen.files.set(ARM_FILE, JSON.stringify(PAUSE_ARM))
   await $.turn.start({ turnId: 't2' } as never)
   await seen.clock.advance(WAKE - NOW)
 
@@ -977,7 +984,7 @@ test('an armed wake another instance of this module already fired does not resum
   expect(resumes(seen)).toEqual([])
 })
 
-test('a cancel in this session also drops its armed wake', LONG, async ($, on) => {
+test('the earlier cancel command still disarms every session, this one included', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
@@ -988,11 +995,11 @@ test('a cancel in this session also drops its armed wake', LONG, async ($, on) =
   expect(resumes(seen)).toEqual([])
 })
 
-test("another session's cancel leaves this session's own arm in place", LONG, async ($, on) => {
+test("a pause cancelled elsewhere without a disarm leaves this session's own arm in place", LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
-  // Session B paused for the same reset and cancelled it; this session never crossed the line.
+  // Session B paused for the same reset and its pause was cancelled; nobody disarmed every session.
   const cancelled: Pause = {
     status: 'cancelled',
     kinds: ['five_hour'],
@@ -1040,10 +1047,10 @@ test('/usage-guard shows its arguments in the menu and lists them on help', asyn
   await start($)
   const hint = registered.find(command => command.name === 'usage-guard')?.argumentHint
   const arm = 'arm 5h|week|HH:MM [compact] ["reason"]'
-  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | cancel | adopt]`)
+  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | disarm-global | adopt]`)
   const help = await $.command.run({ command: 'usage-guard', args: 'help' } as never)
   const lines = [
-    '/usage-guard cancel',
+    '/usage-guard disarm-global',
     '/usage-guard arm 5h|week',
     '/usage-guard arm HH:MM',
     '/usage-guard arm ... compact',

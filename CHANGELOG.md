@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **A usage pause arms each session on its own.** When a plan limit pauses the sessions, each one gets the same arm `/usage-guard arm` sets, so its resume can be cancelled alone: `/usage-guard disarm` and the pause card's new "Cancel resume (this session)" drop it, and the other sessions still resume after the reset. `/usage-guard disarm-global` (the card's "Cancel resume (all sessions)") cancels every session's resume, the arms set by hand included, and ends the pause. `/usage-guard cancel` still works as the earlier name of `disarm-global`. An arm set by hand during a pause replaces the pause's own for that session.
+
 ## [v7.5.0] — 2026-11-18
 
 ### Changed
