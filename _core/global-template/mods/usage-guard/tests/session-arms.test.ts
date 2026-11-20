@@ -8,6 +8,7 @@ import {
   KEY,
   mountCard,
   NOW,
+  PAUSE_FILE,
   pauseOf,
   RESET,
   resumes,
@@ -40,11 +41,33 @@ test("a disarm cancels only this session's resume; its saved work is offered now
   const answer = await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
   expect(answer.text).toContain('Disarmed')
   expect(pauseArmOf(seen)?.isDeclined).toBe(true)
-  // Its resume is taken as handled, so a later session never offers the work as a closed session's.
-  expect(seen.claims.has(`resume-${KEY}-sess-a`)).toBe(true)
   expect(pauseOf(seen)?.status).toBe('active')
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
+})
+
+test('an arm set by hand after a disarm still resumes the session at the reset, once', LONG, async ($, on) => {
+  const seen = world(on)
+  await pauseWithWork($, seen)
+  await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
+  await seen.clock.advance(WAKE - NOW + 60_000)
+
+  expect(resumes(seen)).toHaveLength(1)
+})
+
+test('a session that met the pause under an earlier version is armed knowing it saved work', LONG, async ($, on) => {
+  const seen = world(on)
+  const window = { kinds: ['five_hour'], resetsAt: RESET, wakeAt: WAKE }
+  const saved = { ...window, session: 'sess-a', root: 'C:/Repos/my-game', key: KEY }
+  const pause = { ...window, status: 'active', percentUsed: 97, triggeredBy: 'x' }
+  seen.files.set(PAUSE_FILE, JSON.stringify(pause))
+  seen.files.set(`${CLAIMS_DIR}/work-${KEY}-sess-a/saved.json`, JSON.stringify(saved))
+  seen.claims.add(`${KEY}-sess-a`)
+  await start($)
+  await seen.clock.advance(60_000)
+
+  expect(pauseArmOf(seen)).toEqual(expect.objectContaining({ wakeAt: WAKE, hasWork: true }))
 })
 
 test('the pause card cancels the resume of the session it shows in, or of all', LONG, async ($, on) => {
@@ -66,6 +89,9 @@ test('a disarm holds after a /clear and after a restart', LONG, async ($, on) =>
   await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
   seen.sessionId = 'sess-b'
   await seen.clock.advance(60_000)
+  // Saved under the new id too, so a restart into it finds the cancel.
+  const underNewId = JSON.parse(seen.files.get(PAUSE_ARM_FILE.replace('sess-a', 'sess-b')) ?? 'null')
+  expect(underNewId?.isDeclined).toBe(true)
   seen.sessionId = 'sess-a'
   await start($)
   await seen.clock.advance(WAKE - NOW)

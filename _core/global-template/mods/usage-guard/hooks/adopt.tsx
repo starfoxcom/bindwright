@@ -3,10 +3,12 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { AdoptOffer, SavedOffer, SavedWork } from '../types'
 import { ADOPT_GRACE_MS, adoptReason, offerText, parseSavedArm, pickOffer } from './arms'
+import { readDisarmAll } from './armstore'
+import { isPauseResumeDeclined } from './pausearm'
 import { drawCards } from './cards'
-import type { DisarmAll, Pause } from './plan'
+import type { Pause } from './plan'
 import { armFor, CLAIM, resumePrompt } from './plan'
-import { dataDir, readJson, readPause } from './files'
+import { dataDir, readPause } from './files'
 import { keptReason, parseSaved, pickSaved, resumeClaim, SAVED_FILE, savedOfferText } from './saved'
 import { shouldResumeOwn, takeOverReason, workClaims } from './saved'
 import type { Card } from './texts'
@@ -39,7 +41,8 @@ async function timeText($: EngineInterface, ms: number): Promise<string> {
 const savedPath = async ($: EngineInterface, record: SavedWork) =>
   `${await dataDir($)}/claims/work-${record.key}-${record.session}/${SAVED_FILE}`
 
-// The work claims' saved records (this session's own, or every other session's), and every claim's name.
+// The work claims' saved records (this session's own, or every other session's), and every claim's name. Another
+// session's work is left out once it cancelled its resume: the person chose not to have that work go on.
 async function savedRecords($: EngineInterface, isOwn: boolean) {
   const dir = `${await dataDir($)}/claims`
   const names = new Set((await $.fs.list(dir).catch(() => [])).map(entry => entry.name))
@@ -48,7 +51,8 @@ async function savedRecords($: EngineInterface, isOwn: boolean) {
   for (const { name, owner } of workClaims([...names])) {
     if ((owner === me) !== isOwn) continue
     const record = parseSaved(String(await $.fs.read(`${dir}/${name}/${SAVED_FILE}`).catch(() => '')))
-    if (record) records.push(record)
+    if (!record || (!isOwn && (await isPauseResumeDeclined($, record.key, record.session)))) continue
+    records.push(record)
   }
   return { records, names }
 }
@@ -72,7 +76,7 @@ async function lookForOffer($: EngineInterface, isAsked = false): Promise<void> 
     if (kind !== 'file') continue
     files.push({ name, text: String(await $.fs.read(`${dir}/${name}`).catch(() => '')) })
   }
-  const disarmAll = await readJson<DisarmAll>($, `${await dataDir($)}/disarm.json`)
+  const disarmAll = await readDisarmAll($)
   const offer = pickOffer(files, await $.session.id(), await $.session.root(), now, disarmAll)
   if (offer) {
     const text = offerText(armFor(offer.arm.kind), await timeText($, offer.arm.wakeAt))

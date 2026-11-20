@@ -23,7 +23,7 @@ import { localTime, notice, readZone, setStatus } from './say'
 import { ARGUMENT_HINT, armLineText, CANCELLED_TEXT, cardTone, COMMAND_TEXT, HELP } from './texts'
 import { armedText, joinedPauseText, pausedText, questionText, statusText } from './texts'
 import { finishStepText, nothingToSaveText, savingText, UNCONFIRMED_NOTICE } from './texts'
-import { SAVED_FILE, savedRecord } from './saved'
+import { parseSaved, SAVED_FILE, savedRecord } from './saved'
 import { ARM_TOOL, ARM_TOOL_NAME, type ArmRequest, parseArmArgs, planWake, toolRequest, untilText } from './wake'
 
 const CHECK_EVERY_MS = 60_000
@@ -298,8 +298,12 @@ async function resumeWork($: EngineInterface, text: string, reason?: string): Pr
 }
 
 // The pause arms this session for its wake (pausearm.ts), so a disarm here cancels this session's resume alone.
+// Saved work is read from disk too: a hot reload or a restart starts the module over with no memory of the wrap-up.
 async function armPause($: EngineInterface, pause: Pause): Promise<void> {
-  const hasWork = live.workSession === (await $.session.id())
+  const me = await $.session.id()
+  const savedAt = `${await dataDir($)}/claims/work-${resetKey(pause)}-${me}/${SAVED_FILE}`
+  const isSaved = async () => parseSaved(String(await $.fs.read(savedAt).catch(() => ''))) !== undefined
+  const hasWork = live.workSession === me || (await isSaved())
   await armForPause($, pause, hasWork, resetsAt => resume($, resetsAt))
 }
 
@@ -424,14 +428,14 @@ async function confirmPress($: EngineInterface, text: string): Promise<void> {
 }
 
 // Drops this session's arms, the one set by hand and its resume at a pause's wake: then it does not resume on its
-// own. Other sessions keep theirs. Work it saved for the pause is taken as handled, so no later session offers it.
+// own. Other sessions keep theirs. The declined resume, saved, keeps the work it saved for the pause from being
+// offered to another session, and leaves the resume to an arm set by hand later.
 async function disarm($: EngineInterface): Promise<string> {
   const current = await read($, armedWake)
   live.armTimer?.cancel()
   live.armTimer = undefined
   await setArm($, null)
   const declined = await declinePauseArm($)
-  if (declined?.hasWork) await claim($, `resume-${declined.key}-${await $.session.id()}`)
   return current || declined ? 'Disarmed: this session will not resume on its own.' : 'Nothing was armed.'
 }
 

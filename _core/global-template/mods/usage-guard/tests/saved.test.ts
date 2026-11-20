@@ -177,6 +177,16 @@ test('dropping saved work clears it without a resume', LONG, async ($, on) => {
   expect(seen.prompts).toEqual([])
 })
 
+test('saved work of a session that cancelled its resume is never offered', LONG, async ($, on) => {
+  const seen = world(on)
+  leaveSaved(seen)
+  const declined = { key: KEY, resetsAt: RESET, wakeAt: SAVED.wakeAt, setAt: NOW - 60_000, isDeclined: true }
+  seen.files.set(`${CLAIMS_DIR}/${KEY}-sess-old/arm.json`, JSON.stringify(declined))
+  await start($)
+  const ui = await offered($, seen)
+  expect(await ui.find({ key: 'usage-adopt' })).toBeUndefined()
+})
+
 test('saved work taken elsewhere after the offer showed is not resumed twice', LONG, async ($, on) => {
   const seen = world(on)
   leaveSaved(seen)

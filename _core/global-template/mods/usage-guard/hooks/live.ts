@@ -16,6 +16,8 @@ export type Live = {
   armTimer?: Timer
   /** This session's resume at the pause's wake (`pauseArm`), kept apart from the arm set by hand. */
   wakeTimer?: Timer
+  /** The wake `wakeTimer` is set for, in ms. */
+  wakeTimerAt?: number
   /** A wrap-up due when the running turn ends: the pause it is for. */
   pendingWrapUp?: Pause
   /** A wrap-up started: once its turn ends, the session may compact before the pause. */

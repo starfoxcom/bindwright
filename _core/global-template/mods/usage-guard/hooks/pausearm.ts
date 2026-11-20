@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import { dataDir, readJson } from './files'
+import { readDisarmAll } from './armstore'
+import { dataDir } from './files'
 import { live } from './live'
-import { type DisarmAll, isDisarmedByAll, type Pause, resetKey } from './plan'
+import { isDisarmedByAll, type Pause, resetKey } from './plan'
 
 // This session's own resume at a pause's wake: the pause arms every session it holds, and a disarm here cancels
 // this session's resume alone. It is kept apart from the arm set by hand, which says when the person wants the
@@ -26,13 +27,14 @@ export type PauseArm = {
 
 const pauseArm = atom({ plugin: 'usage-guard', key: 'pauseArm' } as const, null)
 
-async function pauseArmPath($: EngineInterface, key: string): Promise<string> {
-  return `${await dataDir($)}/claims/${key}-${await $.session.id()}/arm.json`
+async function pauseArmPath($: EngineInterface, key: string, session?: string): Promise<string> {
+  return `${await dataDir($)}/claims/${key}-${session ?? (await $.session.id())}/arm.json`
 }
 
-// The saved copy: undefined when there is none (never armed, or met under an earlier version).
-async function readSavedPauseArm($: EngineInterface, key: string): Promise<PauseArm | null | undefined> {
-  const text = await $.fs.read(await pauseArmPath($, key)).catch(() => undefined)
+// The saved copy: undefined when there is none (never armed, or met under an earlier version), null when it cannot
+// be read, which leaves the session un-armed, as a saved hand arm that cannot be read does.
+async function readSavedPauseArm($: EngineInterface, key: string, session?: string) {
+  const text = await $.fs.read(await pauseArmPath($, key, session)).catch(() => undefined)
   if (text === undefined) return undefined
   try {
     const arm = JSON.parse(String(text)) as PauseArm | null
@@ -40,6 +42,11 @@ async function readSavedPauseArm($: EngineInterface, key: string): Promise<Pause
   } catch {
     return null
   }
+}
+
+/** Whether a session cancelled its resume at this pause's wake: its saved work is then offered to no other session. */
+export async function isPauseResumeDeclined($: EngineInterface, key: string, session: string): Promise<boolean> {
+  return Boolean((await readSavedPauseArm($, key, session))?.isDeclined)
 }
 
 async function savePauseArm($: EngineInterface, arm: PauseArm): Promise<void> {
@@ -66,28 +73,36 @@ export async function armForPause(
   const now = await $.clock.now()
   const held = await read($, pauseArm)
   const found = held?.key === key ? held : await readSavedPauseArm($, key)
-  // A saved null is an arm already declined, or one done with.
+  // A saved copy that cannot be read leaves the session un-armed.
   if (found === null) return
   const arm = found ?? { key, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, setAt: now, hasWork }
-  if (arm.isDeclined) return void (held?.key === key ? undefined : await update($, pauseArm, () => arm))
+  if (arm.isDeclined) return keepDeclined($, arm, held)
   if (isDisarmedByAll(arm, await readDisarmAll($))) return void (await declinePauseArm($))
   const next = { ...arm, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, hasWork: Boolean(arm.hasWork || hasWork) }
   if (JSON.stringify(next) !== JSON.stringify(held)) await savePauseArm($, next)
-  if (live.wakeTimer && held?.wakeAt === next.wakeAt) return
+  // Against this module's own timer: after a hot reload the shared state may already hold a wake set by the other.
+  if (live.wakeTimer && live.wakeTimerAt === next.wakeAt) return
   live.wakeTimer?.cancel()
+  live.wakeTimerAt = next.wakeAt
   live.wakeTimer = $.clock.after(Math.max(0, next.wakeAt - now), () => {
     live.wakeTimer = undefined
     void wakeFromPause($, next, onWake).catch(() => undefined)
   })
 }
 
-// At the wake: unless a disarm of every session came after it, the pause resumes this session.
+// A cancelled resume found in state is saved under this session's id too, so a restart after a /clear keeps it.
+async function keepDeclined($: EngineInterface, arm: PauseArm, held: PauseArm | null): Promise<void> {
+  if (held?.key !== arm.key) return void (await update($, pauseArm, () => arm))
+  if ((await readSavedPauseArm($, arm.key)) === undefined) await savePauseArm($, arm)
+}
+
+// At the wake this timer was set for: unless a disarm of every session came after it, the pause resumes this session.
 async function wakeFromPause($: EngineInterface, arm: PauseArm, onWake: (resetsAt: string) => Promise<void>) {
   const current = await read($, pauseArm)
-  if (current?.key !== arm.key || current.isDeclined) return
+  if (current?.key !== arm.key || current.wakeAt !== arm.wakeAt || current.isDeclined) return
   if (isDisarmedByAll(current, await readDisarmAll($))) return declinePauseArm($)
   await update($, pauseArm, () => null)
-  await onWake(current.resetsAt)
+  await onWake(arm.resetsAt)
 }
 
 /** Ends this session's resume now that the pause's wake came early: true when it held one to end. */
@@ -110,6 +125,3 @@ export async function declinePauseArm($: EngineInterface): Promise<PauseArm | un
   return current
 }
 
-async function readDisarmAll($: EngineInterface): Promise<DisarmAll | undefined> {
-  return readJson<DisarmAll>($, `${await dataDir($)}/disarm.json`)
-}
