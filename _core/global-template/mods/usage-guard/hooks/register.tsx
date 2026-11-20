@@ -6,7 +6,7 @@ import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
 import { clearSwitchCard, endIfSwitched, isLiftAsked, noteReading } from './switch'
-import { NO_WORK_REST } from './plan'
+import { endedBy, NO_WORK_REST } from './plan'
 import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
@@ -14,7 +14,7 @@ import { closeCommand, limitName, type Pause } from './plan'
 import { armFor, bringForward, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly } from './plan'
 import { fenceAfter, joinPause, unfenced } from './plan'
 import { armForPause, declinePauseArm, readPauseArm, takePauseArm } from './pausearm'
-import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
+import { planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
 import { dataDir, pausePath, readFence, readJson, readPause, writeFence, writePause } from './files'
 import { drawArmLine, drawCards } from './cards'
@@ -254,26 +254,22 @@ async function resume($: EngineInterface, resetsAt: string, isArmed = false): Pr
   if (won === false) return
   if (pause.status === 'active') await writePause($, { ...pause, status: 'done' })
   setStatus($, undefined)
-  // A switch to an account with room ended the pause: no window reset, and a session armed by hand waits.
-  const why = pause.isAccountLift ? 'Signed in with an account that has room' : 'Plan limits have reset'
-  const shared = pause.isAccountLift
-    ? `${why}. Sessions are resuming their saved work; one armed by hand waits until you lift it.`
-    : `${why}. Sessions are resuming their saved work.`
-  await showCard($, `reset:${resetsAt}`, shared)
+  const { opening, armedFor } = endedBy(pause)
+  await showCard($, `reset:${resetsAt}`, `${opening}. Sessions are resuming their saved work.`)
   // Fails closed: with no resume claim on disk, an instance a hot reload left beside this one could
   // win it too, and find the work claim this one's question made.
   if (won === null) return notice($, UNCONFIRMED_NOTICE)
   // Only a session that saved work, or one armed, goes on by itself. Another session in the project
   // would rebuild the same hand-off and work the same tasks beside it, with nobody watching either.
   const work = await hadWork($, pause)
-  const text = `${why}: resuming the saved work.`
+  const text = `${opening}: resuming the saved work.`
   const reason = isArmedHere ? held?.reason : undefined
   if (work === true) return resumeWork($, text, reason)
-  if (isArmedHere) return resumeArmed($, `after the ${limitName(pause)} reset`, text, held?.armedIn, reason)
+  if (isArmedHere) return resumeArmed($, armedFor, text, held?.armedIn, reason)
   if (work === null) return notice($, UNCONFIRMED_NOTICE)
   // Worded as what is on record, not what happened: a wrap-up whose own claim failed before a hot
   // reload, or one before a /clear, saved work that left no claim under this session's id.
-  return notice($, pause.isAccountLift ? `${why}. ${NO_WORK_REST}` : NO_WORK_NOTICE)
+  return notice($, `${opening}. ${NO_WORK_REST}`)
 }
 
 // An armed session goes on with its work, or, with nothing pending, only says so: the person asked for
@@ -530,7 +526,7 @@ async function check($: EngineInterface): Promise<void> {
   const login = await seeLogin($, now)
   let pause = await readPause($)
   // Another account's windows reset at their own times, which is no early reset of the paused ones.
-  const isSameAccount = !pause?.account || !login.account || pause.account === login.account.id
+  const isSameAccount = login.isFresh && (!pause?.account || !login.account || pause.account === login.account.id)
   if (pause && isSameAccount) pause = await endIfResetEarly($, pause, now)
   if (pause) pause = await endIfSwitched($, pause, login)
   if (pause && pause.status !== 'cancelled' && pause.wakeAt <= now) await resumeEarly($, pause, now)
@@ -598,7 +594,7 @@ async function startOnce($: EngineInterface): Promise<void> {
 async function meetPause($: EngineInterface, pause: Pause): Promise<void> {
   if (pause.wakeAt <= (await $.clock.now())) {
     await writePause($, { ...pause, status: 'done' })
-    const text = 'Plan limits have reset since the last wrap-up. Run /start-session (or /session-start) to resume.'
+    const text = `${endedBy(pause).opening} since the last wrap-up. Run /start-session (or /session-start) to resume.`
     await showCard($, `missed:${pause.resetsAt}`, text)
     await notice($, text)
     return

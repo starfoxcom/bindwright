@@ -76,7 +76,14 @@ export function resumePrompt(reason: string): string {
 export const NO_WORK_REST =
   'No saved work is on record for this session, so it does not go on by itself; ' +
   'pick up a hand-off by hand, for example with /start-session (or /session-start).'
-export const NO_WORK_NOTICE = `Plan limits have reset. ${NO_WORK_REST}`
+
+// How the texts at a pause's end name what ended it: a window's reset, or a switch to an account with room.
+export function endedBy(pause: Pause): { opening: string; armedFor: string } {
+  if (pause.isAccountLift) {
+    return { opening: 'Signed in with an account that has room', armedFor: 'after the switch to an account with room' }
+  }
+  return { opening: 'Plan limits have reset', armedFor: `after the ${limitName(pause)} reset` }
+}
 
 export function hotLimits(limits: readonly SessionRateLimit[], wrapUpAt: number): SessionRateLimit[] {
   return limits.filter(limit => limit.resetsAt !== undefined && limit.percentUsed >= wrapUpAt)

@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { accountOf } from '../hooks/account'
-import { doWork, endTurn, mountCard, NOW, pauseOf, RESET, resumes, start, TASKS_DIR, world, type World } from './world'
+import { CARD_FILE, doWork, endTurn, mountCard, NOW, PAUSE_FILE, pauseOf, quietWakes, RESET, resumes } from './world'
+import { start, TASKS_DIR, WAKE, world, type World } from './world'
 
 // Two accounts on one computer: a pause belongs to the account it was made on, and a /login to one with room
 // lifts the arms the pause set, while an arm set by hand waits for the person.
@@ -50,7 +51,47 @@ test('a switch to an account with room ends the pause and resumes the saved work
   expect(resumes(seen)).toHaveLength(1)
   // No window reset: the resume says what ended the pause.
   expect(resumes(seen)[0]).toContain('Signed in with an account that has room')
+  const card = JSON.parse(seen.files.get(CARD_FILE) ?? '{}')
+  expect(card.text).toBe('Signed in with an account that has room. Sessions are resuming their saved work.')
 })
+
+test('a quiet wake lifted after a switch names the switch, not a reset', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  seen.hasTasksMod = true
+  seen.files.set(`${TASKS_DIR}/${seen.sessionId}.json`, JSON.stringify({ session: seen.sessionId, tasks: [] }))
+  await start($)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
+  seen.limits = HOT
+  await endTurn($)
+  signIn(seen, 'acct-max', 'Max')
+  seen.limits = ROOMY
+  await endTurn($)
+  await seen.clock.advance(1_000)
+  await (await mountCard($)).press({ key: 'usage-lift-here' })
+  await seen.clock.advance(1_000)
+
+  expect(quietWakes(seen)).toHaveLength(1)
+  expect(quietWakes(seen)[0]).toContain('after the switch to an account with room')
+})
+
+test('an idle session holding the other account\'s readings leaves that account\'s new pause on', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = ROOMY
+    await endTurn($)
+    // Another session signed back in with the spent account and paused it again; this one stays idle.
+    signIn(seen, 'acct-ultra')
+    const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 97, resetsAt: RESET, wakeAt: WAKE }
+    seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, account: 'acct-ultra', triggeredBy: 'sess-b' }))
+    await seen.clock.advance(61_000)
+
+    expect([pauseOf(seen)?.status, pauseOf(seen)?.wakeAt]).toEqual(['active', WAKE])
+  })
 
 test('readings from before a switch plan no pause on the new account', LONG, async ($, on) => {
   const seen = world(on)
