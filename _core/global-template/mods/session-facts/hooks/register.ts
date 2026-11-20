@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
 import type { Budgets, CacheCheck } from '../types'
+import { type AccountView, accountText, figuresKey, nextView, readAccount } from './account'
 import { compactedMark, contextText, fillTone, phoneText, registerBudgetsView } from './budgets'
 import {
   checkCache,
@@ -111,10 +112,16 @@ async function factsLine($: EngineInterface, isCompacting = false): Promise<Fact
     const ctx = contextPart(tokens, context.window, now)
     const borrowedAt = live.sharedPlan && formatLocal(live.sharedPlan.at, live.zone).slice(11, 16)
     const plan = planPart(rateLimits, live.hasReplied, live.sharedPlan, borrowedAt)
-    const [pausedUntil, armAt] = await Promise.all([readPausedUntil($), readArmAt($)])
+    // A login record that cannot be read is no account change, and never costs the line.
+    const login = readAccount($).catch(() => undefined)
+    const [pausedUntil, armAt, signedIn] = await Promise.all([readPausedUntil($), readArmAt($), login])
+    const seen = nextView(live.account, signedIn, figuresKey(rateLimits))
+    live.account = seen.view
+    const account = accountText(seen.view, seen.isSwitched)
     const wake = wakePart(now, live.zone.offsetMinutes, pausedUntil, armAt)
     const note = nearCompactionNote(tokens, context.window)
-    return { text: `${time} | ${ctx.text}${plan.text}${wake}${note}`, isPartial: !ctx.isKnown || !plan.isOwn }
+    const text = `${time} | ${ctx.text}${plan.text}${account}${wake}${note}`
+    return { text, isPartial: !ctx.isKnown || !plan.isOwn }
   } catch {
     return { text: `${time} | ctx unreadable`, isPartial: true }
   }
@@ -180,6 +187,8 @@ const live: {
   sharedPlan?: SharedPlan
   // When the newest facts line went out, and whether it had a figure to improve on.
   lastLine?: { at: number; isPartial: boolean }
+  // The signed-in account this session runs on, as far as its own plan figures show.
+  account?: AccountView
 } = {
   zone: UTC,
   isSetUp: false,
