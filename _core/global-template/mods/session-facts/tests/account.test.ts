@@ -32,6 +32,7 @@ const LATE = Date.UTC(2026, 9, 2, 20, 0, 0)
 const ON_A = { five_hour: '2026-10-02T19:00:00Z' }
 const ON_B = { five_hour: '2026-10-02T21:00:00Z' }
 const ROLLED_A = { five_hour: '2026-10-03T00:00:00Z' }
+const WEEK_A = { seven_day: '2026-10-04T18:00:00Z' }
 const PENDING_B = { onRecord: B, confirmed: A, figuresAtSwitch: ON_A }
 type Row = [string, AccountView | undefined, Account | undefined, Figures | undefined, number, string, boolean]
 const VIEWS: Row[] = [
@@ -44,6 +45,10 @@ const VIEWS: Row[] = [
   ['no figures at the switch: the first ones are only a baseline', { onRecord: B, confirmed: A }, B, ON_B, EARLY,
     'Max?', false],
   ['a missing record changes nothing', PENDING_B, undefined, ON_B, EARLY, 'Max?', false],
+  ['an early reset of one old window proves nothing', { ...PENDING_B, figuresAtSwitch: { ...ON_A, ...WEEK_A } }, B,
+    { ...ROLLED_A, ...WEEK_A }, EARLY, 'Max?', false],
+  ['every window moved proves it', { ...PENDING_B, figuresAtSwitch: { ...ON_A, ...WEEK_A } }, B,
+    { ...ON_B, seven_day: '2026-10-06T08:00:00Z' }, EARLY, 'Max', true],
 ]
 for (const [name, view, account, figures, now, shown, isSwitched] of VIEWS) {
   test(`account view: ${name}`, () => {

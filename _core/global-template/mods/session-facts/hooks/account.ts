@@ -60,12 +60,14 @@ export function figuresOf(limits: readonly SessionRateLimit[]): Figures | undefi
   return Object.keys(figures).length > 0 ? figures : undefined
 }
 
-// Proof of another account: a window both readings report moved to another reset before the old one came due.
-// A window past its reset rolls over on the same account, so it proves nothing.
+// Proof of another account: every window both readings report moved to another reset before the old one came due.
+// A window past its reset rolls over on the same account, and an early (banked) reset moves one window alone, so
+// neither proves anything; another account shares none of the old resets.
 function isMovedOff(before: Figures, after: Figures, now: number): boolean {
-  return Object.keys(before).some(kind => {
+  const shared = Object.keys(before).filter(kind => after[kind] !== undefined)
+  return shared.length > 0 && shared.every(kind => {
     const was = before[kind] ?? ''
-    return after[kind] !== undefined && after[kind] !== was && Date.parse(was) > now
+    return after[kind] !== was && Date.parse(was) > now
   })
 }
 
