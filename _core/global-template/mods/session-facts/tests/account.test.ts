@@ -61,6 +61,7 @@ test('a /login shows the new account at once and notes the switch once; plan fig
   on('fs.write', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } as never }))
+  on('tool.call', { tool: 'Read' }, () => ({ result: {} as never }))
   let line = ''
   on('prompt.submit', ($, e) => {
     line = e.context?.[0] ?? ''
@@ -90,4 +91,12 @@ test('a /login shows the new account at once and notes the switch once; plan fig
   files.delete(CONFIG)
   await prompt()
   expect(line).toContain(' | account Max')
+
+  // A tool result whose line is not sent still leaves the note to the next sent line.
+  limits = []
+  await prompt()
+  signIn('acct-ultra', 'Ultra')
+  expect((await $.tool.call({ tool: 'Read', file_path: 'C:/repo/a.txt' } as never)).context).toBeUndefined()
+  await prompt()
+  expect(line).toContain(' | account Ultra | switched to Ultra')
 })

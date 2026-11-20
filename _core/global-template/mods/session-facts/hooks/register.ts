@@ -88,7 +88,13 @@ function contextPart(tokens: number | undefined, fullWindow: number, now: number
 }
 
 // `isPartial`: a figure is unknown or borrowed, so a later line in the same turn can do better.
-type FactsLine = { text: string; isPartial: boolean }
+// `account`: the account the line shows, recorded only once the line goes out, so a switch is noted on a sent line.
+type FactsLine = { text: string; isPartial: boolean; account?: Account }
+
+function markSent(line: FactsLine, at: number): void {
+  live.lastLine = { at, isPartial: line.isPartial }
+  if (line.account) live.account = line.account
+}
 
 // Sessions read a yellow or red bar as a cue to wrap up, and stopped or held work right before the
 // compaction (2026-10-13). The note sits outside the ctx text the State line copies.
@@ -116,12 +122,11 @@ async function factsLine($: EngineInterface, isCompacting = false): Promise<Fact
     const login = readAccount($).catch(() => undefined)
     const [pausedUntil, armAt, signedIn] = await Promise.all([readPausedUntil($), readArmAt($), login])
     const seen = nextAccount(live.account, signedIn)
-    live.account = seen.account
     const account = accountText(seen.account, seen.isSwitched)
     const wake = wakePart(now, live.zone.offsetMinutes, pausedUntil, armAt)
     const note = nearCompactionNote(tokens, context.window)
     const text = `${time} | ${ctx.text}${plan.text}${account}${wake}${note}`
-    return { text, isPartial: !ctx.isKnown || !plan.isOwn }
+    return { text, isPartial: !ctx.isKnown || !plan.isOwn, account: seen.account }
   } catch {
     return { text: `${time} | ctx unreadable`, isPartial: true }
   }
@@ -561,7 +566,7 @@ export const register: Register = (on, options) => {
     void refreshBudgets($)
     await loadSharedPlan($)
     const line = await factsLine($)
-    live.lastLine = { at: await $.clock.now(), isPartial: line.isPartial }
+    markSent(line, await $.clock.now())
     const fact =
       `[session-facts] ${line.text} | ` + 'base every time-of-day reference and every State line figure on THIS line'
     return next({ ...e, context: [...(e.context ?? []), fact] })
@@ -578,7 +583,7 @@ export const register: Register = (on, options) => {
     if (!live.lastLine.isPartial && !isOld) return result
     const line = await factsLine($)
     if (line.isPartial && !isOld) return result
-    live.lastLine = { at: now, isPartial: line.isPartial }
+    markSent(line, now)
     const fact = `[session-facts] ${line.text} | newer than the prompt's line: base the State line on THIS line`
     return { ...result, context: [...(result.context ?? []), fact] }
   })
@@ -602,7 +607,7 @@ export const register: Register = (on, options) => {
     live.compaction = { at: await $.clock.now() }
     live.isWindowFresh = true
     const line = await factsLine($, true)
-    live.lastLine = { at: live.compaction.at, isPartial: line.isPartial }
+    markSent(line, live.compaction.at)
     const fact =
       `[session-facts] ${line.text} | ` +
       'every figure in the summary above is from before the compaction; base the State line on THIS line'
