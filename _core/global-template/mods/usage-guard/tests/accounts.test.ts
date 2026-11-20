@@ -164,6 +164,25 @@ test('a lifted arm leaves the next arm for the same reset its own resume', LONG,
   expect(resumes(seen)).toHaveLength(2)
 })
 
+test('an arm held after a switch fires under the claim an older instance of this module takes', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await $.command.run({ command: 'usage-guard', args: 'arm 5h "check CI"' } as never)
+    seen.limits = HOT
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = ROOMY
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    // The instance a hot reload left on older code won the arm's claim first.
+    seen.claims.add(`arm-${Date.parse(RESET)}-${seen.sessionId}`)
+    await seen.clock.advance(WAKE - NOW)
+
+    expect(resumes(seen)).toEqual([])
+  })
+
 test('a login that cannot be read leaves this session\'s readings tied to their account', LONG, async ($, on) => {
   const seen = world(on)
   signIn(seen, 'acct-ultra')
