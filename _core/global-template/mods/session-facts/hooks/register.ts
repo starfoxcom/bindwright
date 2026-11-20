@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
 import type { Budgets, CacheCheck } from '../types'
-import { type AccountView, accountText, figuresKey, nextView, readAccount } from './account'
+import { type AccountView, accountText, figuresOf, nextView, readAccount } from './account'
 import { compactedMark, contextText, fillTone, phoneText, registerBudgetsView } from './budgets'
 import {
   checkCache,
@@ -115,7 +115,7 @@ async function factsLine($: EngineInterface, isCompacting = false): Promise<Fact
     // A login record that cannot be read is no account change, and never costs the line.
     const login = readAccount($).catch(() => undefined)
     const [pausedUntil, armAt, signedIn] = await Promise.all([readPausedUntil($), readArmAt($), login])
-    const seen = nextView(live.account, signedIn, figuresKey(rateLimits))
+    const seen = nextView(live.account, signedIn, figuresOf(rateLimits), now)
     live.account = seen.view
     const account = accountText(seen.view, seen.isSwitched)
     const wake = wakePart(now, live.zone.offsetMinutes, pausedUntil, armAt)

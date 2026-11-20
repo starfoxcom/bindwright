@@ -9,8 +9,14 @@ import { givenDir } from './settings'
 /** A signed-in account: its id, and the plan name the line shows (never an email). */
 export type Account = { id: string; label: string }
 
-/** What this session knows of the login: the account, and the figures it had when the record named a new one. */
-export type AccountView = { account: Account; isConfirmed: boolean; figuresAtSwitch?: string }
+/** Each plan window's reset time, by kind. */
+export type Figures = Record<string, string>
+
+/**
+ * What this session knows of the login: the account on record, the one its own figures last showed it runs on,
+ * and, while those differ, the figures it had when the record changed (none until it has any).
+ */
+export type AccountView = { onRecord: Account; confirmed: Account; figuresAtSwitch?: Figures }
 
 type Login = {
   accountUuid?: unknown
@@ -47,38 +53,52 @@ export async function readAccount($: EngineInterface): Promise<Account | undefin
   return accountOf(String(await $.fs.read(file).catch(() => '')))
 }
 
-/** The figures that change when a session's requests run on another account: each plan window's reset time. */
-export function figuresKey(limits: readonly SessionRateLimit[]): string {
-  return limits
-    .map(limit => `${limit.kind}@${limit.resetsAt ?? ''}`)
-    .sort()
-    .join(',')
+/** The reset time of each plan window the session reports, or undefined while it reports none. */
+export function figuresOf(limits: readonly SessionRateLimit[]): Figures | undefined {
+  const figures: Figures = {}
+  for (const limit of limits) if (limit.resetsAt) figures[limit.kind] = limit.resetsAt
+  return Object.keys(figures).length > 0 ? figures : undefined
+}
+
+// Proof of another account: a window both readings report moved to another reset before the old one came due.
+// A window past its reset rolls over on the same account, so it proves nothing.
+function isMovedOff(before: Figures, after: Figures, now: number): boolean {
+  return Object.keys(before).some(kind => {
+    const was = before[kind] ?? ''
+    return after[kind] !== undefined && after[kind] !== was && Date.parse(was) > now
+  })
+}
+
+// A window of the baseline came due: a rollover from here on proves nothing, so the comparison starts over.
+function isStale(before: Figures, now: number): boolean {
+  return Object.values(before).some(resetsAt => !(Date.parse(resetsAt) > now))
 }
 
 /**
  * The view after one more look at the login record and this session's figures. The first account a session sees
- * is the one it runs on. A new one on record is unconfirmed until the figures move off the ones the session had
- * when the record changed; `isSwitched` is true on the one look that confirms it. A missing record changes nothing.
+ * is the one it runs on. Another one on record stays unconfirmed until the figures move off the ones the session
+ * had when the record changed; `isSwitched` is true on the one look that confirms it. The confirmed account back on
+ * record is no switch, and a missing record changes nothing.
  */
 export function nextView(
   view: AccountView | undefined,
   account: Account | undefined,
-  figures: string,
+  figures: Figures | undefined,
+  now: number,
 ): { view: AccountView | undefined; isSwitched: boolean } {
   if (!account) return { view, isSwitched: false }
-  if (!view) return { view: { account, isConfirmed: true }, isSwitched: false }
-  if (account.id !== view.account.id) {
-    return { view: { account, isConfirmed: false, figuresAtSwitch: figures }, isSwitched: false }
-  }
-  if (!view.isConfirmed && figures !== view.figuresAtSwitch) {
-    return { view: { account, isConfirmed: true }, isSwitched: true }
-  }
-  return { view: { ...view, account }, isSwitched: false }
+  const settled = { onRecord: account, confirmed: account }
+  if (!view || account.id === view.confirmed.id) return { view: settled, isSwitched: false }
+  const before = view.onRecord.id === account.id ? view.figuresAtSwitch : undefined
+  if (before && figures && isMovedOff(before, figures, now)) return { view: settled, isSwitched: true }
+  const baseline = before && !isStale(before, now) ? before : figures
+  return { view: { onRecord: account, confirmed: view.confirmed, figuresAtSwitch: baseline }, isSwitched: false }
 }
 
 /** The facts line's account field, and the one-time note when a switch is confirmed. */
 export function accountText(view: AccountView | undefined, isSwitched: boolean): string {
   if (!view) return ''
-  const field = ` | account ${view.account.label}${view.isConfirmed ? '' : ', not confirmed yet'}`
-  return isSwitched ? `${field} | switched to ${view.account.label}` : field
+  const label = view.onRecord.label
+  const field = ` | account ${label}${view.onRecord.id === view.confirmed.id ? '' : ', not confirmed yet'}`
+  return isSwitched ? `${field} | switched to ${label}` : field
 }
