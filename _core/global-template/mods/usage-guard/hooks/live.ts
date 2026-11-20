@@ -14,6 +14,10 @@ export type Live = {
   isStatusShown: boolean
   /** The wake this session is armed for (`armedWake`), by hand or by a pause, counting down in this module. */
   armTimer?: Timer
+  /** This session's resume at the pause's wake (`pauseArm`), kept apart from the arm set by hand. */
+  wakeTimer?: Timer
+  /** The wake `wakeTimer` is set for, in ms. */
+  wakeTimerAt?: number
   /** A wrap-up due when the running turn ends: the pause it is for. */
   pendingWrapUp?: Pause
   /** A wrap-up started: once its turn ends, the session may compact before the pause. */

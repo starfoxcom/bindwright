@@ -23,7 +23,10 @@
 # The review runs on the API credits first (ANTHROPIC_API_KEY, optional) and
 # on the subscription when that run leaves no verdict.
 #
-# Requires: CLAUDE_CODE_OAUTH_TOKEN in repo secrets.
+# Requires: CLAUDE_CODE_OAUTH_TOKEN in repo secrets. Optional:
+# CLAUDE_CODE_OAUTH_TOKEN_2 to CLAUDE_CODE_OAUTH_TOKEN_5, more accounts' tokens
+# for the fallback when the first account has no room left (see the routine
+# workflow's header for why each account has a secret of its own).
 
 name: Claude On-Demand
 
@@ -1170,6 +1173,74 @@ jobs:
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "version=$installed" >> "$GITHUB_OUTPUT"
 
+      # More accounts, as in the routine workflow's "Pick the backup's account":
+      # with CLAUDE_CODE_OAUTH_TOKEN_2 to _5 set, the fallback runs on the first
+      # account, counting from the first, that answers a one-line request on
+      # the fallback model. Only the CLI's exit status, error flag and API
+      # status are read, never a file the PR can write. Without those secrets,
+      # or when no account answers, the fallback keeps the first account.
+      - name: Pick the fallback's account
+        id: account
+        if: steps.claude-cli-stable.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          CLI: ${{ steps.claude-cli-stable.outputs.path }}
+          DISABLE_AUTOUPDATER: "1"
+          MODEL: ${{ steps.gate.outputs.deep_fallback_model }}
+          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN_2$TOKEN_3$TOKEN_4$TOKEN_5" ]; then
+            echo "index=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # An empty folder, so the CLI finds no project config. The token goes
+          # in through the environment, never a command line.
+          probe_dir=$(mktemp -d)
+          trap 'rm -rf "$probe_dir"' EXIT
+          picked=""
+          for i in 1 2 3 4 5; do
+            var="TOKEN_$i"
+            [ -n "${!var}" ] || continue
+            out="$probe_dir/probe-$i.json"
+            status=0
+            (cd "$probe_dir" && unset ANTHROPIC_API_KEY && export CLAUDE_CODE_OAUTH_TOKEN="${!var}" \
+              && timeout -k 10 120 "$CLI" -p "Reply with the single word OK." \
+                --setting-sources user --strict-mcp-config --permission-mode default \
+                --max-turns 1 --model "$MODEL" --effort low --output-format json) > "$out" 2>/dev/null || status=$?
+            if python3 -I - "$out" "$status" "$i" <<'PYEOF'
+          import json, sys
+          path, status, i = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+          try:
+              with open(path, encoding='utf-8') as f:
+                  r = json.load(f)
+          except (OSError, ValueError):
+              r = {}
+          if not isinstance(r, dict):
+              r = {}
+          if status == 0 and r and not r.get('is_error') and r.get('subtype', 'success') == 'success':
+              sys.exit(0)
+          print(f"::notice::Account {i} has no room for the fallback (exit {status}, API status {r.get('api_error_status')})")
+          sys.exit(1)
+          PYEOF
+            then
+              picked=$i
+              break
+            fi
+          done
+          if [ -z "$picked" ]; then
+            echo "::warning::No account answered: the fallback tries the first account"
+            picked=1
+          elif [ "$picked" != 1 ]; then
+            echo "::notice::The first account has no room left: the fallback runs on account $picked"
+          fi
+          echo "index=$picked" >> "$GITHUB_OUTPUT"
+
       # Attempt 2b: the fallback model from the settings. Fires on a usage limit,
       # or when the same-model retry also left no verdict. It runs only on the
       # CLI copy the step above picked. The Evaluate step below owns the
@@ -1182,7 +1253,9 @@ jobs:
         continue-on-error: true
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc  # v1 (v1.0.276)
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The account the step above picked; an index is set only when that
+          # account answered, so its secret is never empty.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ steps.account.outputs.index == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || steps.account.outputs.index == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || steps.account.outputs.index == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || steps.account.outputs.index == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The action puts the base branch's config in the checkout before the
           # reviewer starts; this tells it where the PR's own copies are.
           APPEND_SYSTEM_PROMPT: "In this checkout the top-level .claude/, CLAUDE.md, CLAUDE.local.md, .mcp.json, .claude.json, .gitmodules, .ripgreprc and .husky/ hold the base branch's copies, put there before you start: read the PR's version of any of them with `git show HEAD:<path>`, never with Read, also when the diff shows one as binary. CLAUDE.md and .claude/rules/ are read from the base on purpose: they hold the rules. ${{ steps.gate.outputs.guide_note }}"
@@ -1191,7 +1264,7 @@ jobs:
           # The Bun from "Bring a Bun for the review action". Empty off Linux
           # or when that step failed, and then the action sets up its own.
           path_to_bun_executable: ${{ steps.bun.outputs.path }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_code_oauth_token: ${{ steps.account.outputs.index == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || steps.account.outputs.index == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || steps.account.outputs.index == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || steps.account.outputs.index == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: '--setting-sources user,project --permission-mode default --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read${{ steps.gate.outputs.tools_suffix }}" --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" --max-turns ${{ steps.gate.outputs.deep_max_turns }} --model ${{ steps.gate.outputs.deep_fallback_model }} --effort ${{ steps.gate.outputs.deep_fallback_effort }} --json-schema ''${{ env.DEEP_SCHEMA }}'''
           show_full_output: false
           additional_permissions: |
@@ -1336,7 +1409,7 @@ jobs:
           # The model whose review was posted, for the check summaries: the job
           # name and a green first step cannot tell (every attempt continues on
           # error).
-          REVIEWER: ${{ steps.post.outcome != 'success' && 'none' || steps.claude_credits.outcome == 'success' && format('{0} {1} (API credits)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-1.outputs.posted == 'yes' && format('{0} {1}', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-2.outputs.posted == 'yes' && format('{0} {1} (retry)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-3.outputs.posted == 'yes' && format('{0} {1} (fallback)', steps.gate.outputs.deep_fallback_model, steps.gate.outputs.deep_fallback_effort) || 'none' }}
+          REVIEWER: ${{ steps.post.outcome != 'success' && 'none' || steps.claude_credits.outcome == 'success' && format('{0} {1} (API credits)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-1.outputs.posted == 'yes' && format('{0} {1}', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-2.outputs.posted == 'yes' && format('{0} {1} (retry)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-3.outputs.posted == 'yes' && format('{0} {1} (fallback{2})', steps.gate.outputs.deep_fallback_model, steps.gate.outputs.deep_fallback_effort, steps.account.outputs.index != '' && steps.account.outputs.index != '1' && format(', account {0}', steps.account.outputs.index) || '') || 'none' }}
           ATTEMPTS: "API credits: ${{ steps.claude_credits.outcome || 'skipped' }}, first: ${{ steps.claude_attempt_1.outcome || 'skipped' }}, usage limit: ${{ steps.failure_class.outputs.usage_limit || 'no' }}, retry: ${{ steps.claude_retry.outcome || 'skipped' }}, fallback: ${{ steps.claude_fallback.outcome || 'skipped' }}, newest CLI: ${{ steps.claude-cli.outputs.version || 'not installed' }}, fallback CLI: ${{ steps.claude-cli-stable.outputs.version || 'none' }}"
         run: |
           set -o pipefail

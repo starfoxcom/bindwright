@@ -26,13 +26,11 @@ export type SettingsView = {
 }
 
 /**
- * A wake that resumes this session's work after a reset or at a time of day: armed by hand
- * (`/usage-guard arm 5h|week|HH:MM`, or the `arm` tool), or by a pause for every session it holds. Kept in
- * state so a hot reload (a settings change, an edit) re-arms it.
+ * A wake that resumes this session's work after a reset or at a time of day, armed by hand
+ * (`/usage-guard arm 5h|week|HH:MM`, or the `arm` tool). Kept in state so a hot reload (a settings
+ * change, an edit) re-arms it.
  */
 export type ArmedWake = {
-  /** Set by a pause: at its wake the session resumes only work it saved at the wrap-up. */
-  isAuto?: boolean
   /** When it was set, in ms: a disarm of every session drops the arms set before it. */
   setAt?: number
   /** The limit's kind, `five_hour` or `seven_day`, or `clock` for a time of day. */
@@ -50,6 +48,22 @@ export type ArmedWake = {
   root?: string
   /** What the wake is for, as the person quoted it: handed to the session it wakes. */
   reason?: string
+}
+
+/** This session's own resume at a pause's wake (hooks/pausearm.ts), kept apart from the arm set by hand. */
+export type PauseArm = {
+  /** The pause's reset key (`resetKey`): an extended pause keeps it. */
+  key: string
+  resetsAt: string
+  wakeAt: number
+  /** When it was set, in ms: a disarm of every session after it declines it. */
+  setAt: number
+  /** The session saved work at the wrap-up, so its wake resumes something. */
+  hasWork?: boolean
+  /** The person cancelled this session's resume: the pause never arms it again. */
+  isDeclined?: boolean
+  /** The session id it was first filed under, which its saved work is filed under too: a /clear does not change it. */
+  session?: string
 }
 
 /** Another session's arm in this project whose wake passed while that session was closed. */
@@ -89,6 +103,7 @@ declare module 'claude-code' {
       band: UsageGuardBand | null
       settings: SettingsView | null
       armed: ArmedWake | null
+      pauseArm: PauseArm | null
       /** The signed-in account this session last saw, and the one its plan readings came from (at its last
        * turn's end); then the card about an arm set by hand after a switch, until answered. */
       account: {

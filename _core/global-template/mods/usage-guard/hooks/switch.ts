@@ -45,7 +45,7 @@ export async function meetSwitch($: EngineInterface, seen: SwitchSeen): Promise<
   const view = await read($, accountView)
   if (!account || view?.seen === account.id) return
   const arm = await read($, armedWake)
-  const isHeld = Boolean(view?.seen) && arm !== null && !arm.isAuto && arm.wakeAt > now
+  const isHeld = Boolean(view?.seen) && arm !== null && arm.wakeAt > now
   const card = isHeld && arm ? { label: account.label, wakeAt: arm.wakeAt } : (view?.card ?? null)
   await update($, accountView, () => ({ seen: account.id, reading: view?.reading ?? null, card }))
 }
@@ -63,7 +63,7 @@ export async function clearSwitchCard($: EngineInterface): Promise<void> {
 /** A lift of every session reached this one: its arm set by hand before the lift is due now, unless a pause holds. */
 export async function isLiftAsked($: EngineInterface, pause: Pause | undefined, now: number): Promise<boolean> {
   const arm = await read($, armedWake)
-  if (!arm || arm.isAuto || arm.wakeAt <= now) return false
+  if (!arm || arm.wakeAt <= now) return false
   const mark = await readMark($, 'lift')
   const isHeld = pause?.status === 'active' && pause.wakeAt > now
   return mark !== undefined && (arm.setAt ?? 0) < mark.at && !isHeld
