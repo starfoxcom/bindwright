@@ -67,7 +67,7 @@ secret_name() {
 # failure stops the sweep, so a passing outage never skips a repository.
 find_repos() {
   local name names err
-  names=$(gh repo list --limit 1000 --no-archived --json nameWithOwner --jq '.[].nameWithOwner') \
+  names=$(gh repo list --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
     || die "cannot list your repositories"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
@@ -87,7 +87,7 @@ read_tokens() {
     IFS= read -rs token \
       || die "no token for account $i: run this in a terminal of your own, where it can ask for each one"
     echo >&2
-    [[ $token == sk-ant-* ]] \
+    [[ $token =~ ^sk-ant-[A-Za-z0-9_-]{20,}$ ]] \
       || die "account $i: that is not a token from 'claude setup-token' (those start with sk-ant-)"
     for ((j = 0; j < ${#TOKENS[@]}; j++)); do
       [ "${TOKENS[j]}" != "$token" ] || die "accounts $((j + 1)) and $i got the same token"

@@ -1041,20 +1041,20 @@ class SetupScript(unittest.TestCase):
         state = fresh_repo(owned=["acme/game", "acme/site", "acme/notes"],
                            with_workflow=["acme/game", "acme/site"])
         run, after, calls = self.run_setup(state, "--accounts", "2", script=SWEEP,
-                                           stdin="sk-ant-one\nsk-ant-two\n")
+                                           stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\nsk-ant-oat01-bbbbbbbbbbbbbbbbbbbb\n")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(sorted(after["written"]), [
-            ["acme/game", "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-one"],
-            ["acme/game", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-two"],
-            ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-one"],
-            ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-two"]])
+            ["acme/game", "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa"],
+            ["acme/game", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"],
+            ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa"],
+            ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"]])
         self.assertFalse([c for c in calls if any("sk-ant" in a for a in c)])
         self.assertNotIn("sk-ant", run.stdout + run.stderr)
 
     def test_the_sweep_writes_nothing_for_a_bad_or_repeated_token(self):
-        for name, tokens in (("not a token", "sk-ant-one\npassword\n"),
-                             ("same token twice", "sk-ant-one\nsk-ant-one\n"),
-                             ("too few tokens", "sk-ant-one\n")):
+        for name, tokens in (("not a token", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\npassword\n"),
+                             ("same token twice", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\nsk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n"),
+                             ("too few tokens", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")):
             run, after, _ = self.run_setup(fresh_repo(), "--accounts", "2", "--repo", "acme/game",
                                            script=SWEEP, stdin=tokens)
             self.assertEqual(run.returncode, 2, name)
