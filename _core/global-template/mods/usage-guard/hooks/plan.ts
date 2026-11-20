@@ -19,10 +19,19 @@ export type Pause = {
   resets?: Record<string, string>
   /** Its wake was brought forward by an early reset: it covers no plan, since the fence drops stale readings. */
   isBroughtForward?: boolean
+  /** The id of the account signed in when it was planned; missing when no login was on record. */
+  account?: string
+  /** Brought forward by a switch to an account with room: only the arms the pause set lift with it. */
+  isAccountLift?: boolean
   /** The reset the first pause of this run named. Kept when a later limit extends the pause, so the
    * wrap-up, stop and resume claims (keyed on it) still run once per session. */
   episode?: string
+  /** Named anew after a switch ended a pause keyed this: the key a plan for its window would have had. */
+  natural?: string
 }
+
+/** The key a plan for this pause's window would have had: its own, unless a switch had it named anew. */
+export const naturalKey = (pause: Pause) => pause.natural ?? resetKey(pause)
 
 export const LIMIT_NAMES: Record<string, string> = { five_hour: '5-hour', seven_day: 'weekly' }
 
@@ -69,9 +78,36 @@ export function resumePrompt(reason: string): string {
 
 // What a session hears at the reset when no saved work is on record under its id. Never "saved no work":
 // a wrap-up whose claim failed before a hot reload, or one before a /clear, left work and no record.
-export const NO_WORK_NOTICE =
-  'Plan limits have reset. No saved work is on record for this session, so it does not go on by itself; ' +
+export const NO_WORK_REST =
+  'No saved work is on record for this session, so it does not go on by itself; ' +
   'pick up a hand-off by hand, for example with /start-session (or /session-start).'
+
+/** Whether an arm's wake is `pause`'s own: the pause a switch held it for (by claim key, so a later pause of the same
+ * window is not it), else the pause for its own reset. */
+export function isArmFor(arm: ArmedWake, pause: Pause): boolean {
+  return arm.override?.by === 'switch' ? arm.override.key === resetKey(pause) : arm.resetsAt === pause.resetsAt
+}
+
+/** What an arm's wake came after, as the texts at the wake say it: never a reset that did not come. */
+export function armWaitedFor(arm: ArmedWake): string {
+  if (arm.override?.by === 'lift') return 'lifted early by hand'
+  if (arm.override?.by === 'switch') return 'after the switch to an account with room'
+  return armFor(arm.kind)
+}
+
+/** The arm moved onto a pause's wake: from there the pause decides why it fires, so any override is dropped. */
+export function movedOntoPause(arm: ArmedWake, pause: Pick<Pause, 'resetsAt' | 'wakeAt'>): ArmedWake {
+  const { override, ...rest } = arm
+  return { ...rest, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+}
+
+// How the texts at a pause's end name what ended it: a window's reset, or a switch to an account with room.
+export function endedBy(pause: Pause): { opening: string; armedFor: string } {
+  if (pause.isAccountLift) {
+    return { opening: 'Signed in with an account that has room', armedFor: 'after the switch to an account with room' }
+  }
+  return { opening: 'Plan limits have reset', armedFor: `after the ${limitName(pause)} reset` }
+}
 
 export function hotLimits(limits: readonly SessionRateLimit[], wrapUpAt: number): SessionRateLimit[] {
   return limits.filter(limit => limit.resetsAt !== undefined && limit.percentUsed >= wrapUpAt)
@@ -121,6 +157,15 @@ export function planArm(
 
 export function limitName(pause: Pause): string {
   return pause.kinds.map(kind => LIMIT_NAMES[kind] ?? kind.replace(/_/g, '-')).join(' + ')
+}
+
+/**
+ * The claim a session's arm takes when it fires, filed under `owner`. Every version builds it this way from the arm
+ * all instances read alike, so one left on older code by a hot reload takes the same name. A firing that must not
+ * spend its reset's claim (a lift) gives the arm a reset of its own instead.
+ */
+export function armClaim(arm: Pick<ArmedWake, 'resetsAt'>, owner: string): string {
+  return `arm-${Date.parse(arm.resetsAt)}-${owner}`
 }
 
 // Claims under mods-data/usage-guard/claims/. `mkdir` is atomic, so of several
@@ -177,8 +222,10 @@ export function pausedReset(pause: Pause, kind: string): number {
 // A pause that already reaches a planned reset: the plan is part of it. Weekly usage only falls at its
 // reset, so a fresh reading after an extension plans that later reset; an earlier one is a stale reading.
 // A pause brought forward covers nothing: the fence already dropped every reading of the windows it paused.
+// Another account's pause covers nothing on this one: its windows are its own.
 export function covers(pause: Pause | undefined, planned: Pause): boolean {
   if (pause?.isBroughtForward) return false
+  if (pause?.account && planned.account && pause.account !== planned.account) return false
   return pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
 }
 

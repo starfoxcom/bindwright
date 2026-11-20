@@ -3,11 +3,11 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { AdoptOffer, SavedOffer, SavedWork } from '../types'
 import { ADOPT_GRACE_MS, adoptReason, offerText, parseSavedArm, pickOffer } from './arms'
-import { readDisarmAll } from './armstore'
+import { readMark } from './armstore'
 import { isPauseResumeDeclined } from './pausearm'
 import { drawCards } from './cards'
 import type { Pause } from './plan'
-import { armFor, CLAIM, resumePrompt } from './plan'
+import { armClaim, armFor, CLAIM, resumePrompt } from './plan'
 import { dataDir, readPause } from './files'
 import { keptReason, parseSaved, pickSaved, resumeClaim, SAVED_FILE, savedOfferText } from './saved'
 import { shouldResumeOwn, takeOverReason, workClaims } from './saved'
@@ -76,7 +76,7 @@ async function lookForOffer($: EngineInterface, isAsked = false): Promise<void> 
     if (kind !== 'file') continue
     files.push({ name, text: String(await $.fs.read(`${dir}/${name}`).catch(() => '')) })
   }
-  const disarmAll = await readDisarmAll($)
+  const disarmAll = await readMark($, 'disarm')
   const offer = pickOffer(files, await $.session.id(), await $.session.root(), now, disarmAll)
   if (offer) {
     const text = offerText(armFor(offer.arm.kind), await timeText($, offer.arm.wakeAt))
@@ -147,7 +147,7 @@ async function answerArm($: EngineInterface, offer: AdoptOffer, isAdopted: boole
   const file = `${await dataDir($)}/arms/${offer.owner}.json`
   const saved = parseSavedArm(String(await $.fs.read(file).catch(() => '')))
   const isSame = saved?.resetsAt === offer.arm.resetsAt && saved.wakeAt === offer.arm.wakeAt
-  const claim = `arm-${Date.parse(offer.arm.resetsAt)}-${offer.owner}`
+  const claim = armClaim(offer.arm, offer.owner)
   const won = !isSame ? undefined : isAdopted ? await claimOnce($, claim) : true
   let note = 'Dropped: that resume will not be offered again.'
   if (!isSame) note = 'That resume changed meanwhile (its session came back or set it again): nothing was done.'

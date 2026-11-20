@@ -1,7 +1,7 @@
 import type { SessionRateLimit } from 'claude-code'
 import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_NOTICE, planArm } from '../hooks/plan'
+import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_REST, planArm } from '../hooks/plan'
 import { unfenced, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
@@ -716,8 +716,8 @@ test('after a hot reload, a session with no work on record waits and says what i
   expect(seen.claims.has(`work-${KEY}-sess-a`)).toBe(true)
   // The test engine keeps no transcript, so the notice is checked as text: what is on record, never
   // a claim that the session saved nothing.
-  expect(NO_WORK_NOTICE).toContain('No saved work is on record for this session')
-  expect(NO_WORK_NOTICE).not.toContain('saved no work')
+  expect(NO_WORK_REST).toContain('No saved work is on record for this session')
+  expect(NO_WORK_REST).not.toContain('saved no work')
 })
 
 test(
@@ -1041,7 +1041,7 @@ test('/usage-guard shows its arguments in the menu and lists them on help', asyn
   await start($)
   const hint = registered.find(command => command.name === 'usage-guard')?.argumentHint
   const arm = 'arm 5h|week|HH:MM [compact] ["reason"]'
-  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | disarm-global | adopt]`)
+  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | disarm-global | lift | lift-all | adopt]`)
   const help = await $.command.run({ command: 'usage-guard', args: 'help' } as never)
   const lines = [
     '/usage-guard disarm-global',

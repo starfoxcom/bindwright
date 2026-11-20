@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { PauseArm } from '../types'
-import { readDisarmAll } from './armstore'
+import { readMark } from './armstore'
 import { dataDir } from './files'
 import { live } from './live'
 import { isDisarmedByAll, type Pause, resetKey } from './plan'
@@ -68,7 +68,7 @@ export async function armForPause(
   const fresh: PauseArm = { key, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, setAt: now, hasWork }
   const arm = found ?? { ...fresh, session: await $.session.id() }
   if (arm.isDeclined) return keepDeclined($, arm, held)
-  if (isDisarmedByAll(arm, await readDisarmAll($))) return void (await declinePauseArm($))
+  if (isDisarmedByAll(arm, await readMark($, 'disarm'))) return void (await declinePauseArm($))
   const next = { ...arm, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, hasWork: Boolean(arm.hasWork || hasWork) }
   if (JSON.stringify(next) !== JSON.stringify(held)) await savePauseArm($, next)
   // Against this module's own timer: after a hot reload the shared state may already hold a wake set by the other.
@@ -91,7 +91,7 @@ async function keepDeclined($: EngineInterface, arm: PauseArm, held: PauseArm | 
 async function wakeFromPause($: EngineInterface, arm: PauseArm, onWake: (resetsAt: string) => Promise<void>) {
   const current = await read($, pauseArm)
   if (current?.key !== arm.key || current.wakeAt !== arm.wakeAt || current.isDeclined) return
-  if (isDisarmedByAll(current, await readDisarmAll($))) return declinePauseArm($)
+  if (isDisarmedByAll(current, await readMark($, 'disarm'))) return declinePauseArm($)
   await update($, pauseArm, () => null)
   await onWake(arm.resetsAt)
 }
