@@ -135,6 +135,14 @@ export function limitName(pause: Pause): string {
   return pause.kinds.map(kind => LIMIT_NAMES[kind] ?? kind.replace(/_/g, '-')).join(' + ')
 }
 
+/**
+ * The claim a session's arm takes when it fires, filed under `owner`. It names the wake time too, so an arm lifted
+ * or held before its reset leaves the next arm for that same reset its own claim.
+ */
+export function armClaim(arm: Pick<ArmedWake, 'resetsAt' | 'wakeAt'>, owner: string): string {
+  return `arm-${Date.parse(arm.resetsAt)}-${arm.wakeAt}-${owner}`
+}
+
 // Claims under mods-data/usage-guard/claims/. `mkdir` is atomic, so of several
 // sessions acting on one pause at the same moment exactly one wins each claim:
 // `pause-<reset>`, the session that writes the pause and stops its project's

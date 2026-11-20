@@ -746,11 +746,11 @@ test(
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
-  seen.failClaims = new Set([`arm-${KEY}-sess-a`])
+  seen.failClaims = new Set([`arm-${KEY}-${WAKE}-sess-a`])
   await seen.clock.advance(WAKE - NOW)
 
   expect(resumes(seen)).toEqual([])
-  expect(seen.claims.has(`arm-${KEY}-sess-a`)).toBe(false)
+  expect(seen.claims.has(`arm-${KEY}-${WAKE}-sess-a`)).toBe(false)
 })
 
 test('a session resumes once per reset, even beside an instance left by a hot reload', LONG, async ($, on) => {
@@ -973,7 +973,7 @@ test('an armed wake another instance of this module already fired does not resum
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
   // The instance a hot reload left behind won the claim first.
-  seen.claims.add(`arm-${KEY}-sess-a`)
+  seen.claims.add(`arm-${KEY}-${WAKE}-sess-a`)
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
 })

@@ -119,7 +119,8 @@ test('an arm set by hand waits after a switch, with a card that lifts it', LONG,
   await endTurn($)
   await seen.clock.advance(1_000)
 
-  expect(pauseOf(seen)?.isAccountLift).toBe(true)
+  // Ended, not left active with a past wake that a session opened now would read as a missed reset.
+  expect([pauseOf(seen)?.isAccountLift, pauseOf(seen)?.status]).toEqual([true, 'done'])
   expect(resumes(seen)).toEqual([])
   const ui = await mountCard($)
   await ui.press({ key: 'usage-lift-here' })
@@ -150,6 +151,31 @@ test('a session armed by hand at a time of day still resumes its saved work when
     await seen.clock.advance(1_000)
     expect(resumes(seen)).toHaveLength(1)
   })
+
+test('a lifted arm leaves the next arm for the same reset its own resume', LONG, async ($, on) => {
+  const seen = world(on)
+  await start($)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h "check CI"' } as never)
+  await $.command.run({ command: 'usage-guard', args: 'lift' } as never)
+  await seen.clock.advance(1_000)
+  await $.command.run({ command: 'usage-guard', args: 'arm 5h "check CI"' } as never)
+  await seen.clock.advance(WAKE - NOW)
+
+  expect(resumes(seen)).toHaveLength(2)
+})
+
+test('a login that cannot be read leaves this session\'s readings tied to their account', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  await endTurn($)
+  // Another session switched, and this check caught the file half-written.
+  seen.files.set(CONFIG, '{"oauthAccount": {"accountUu')
+  seen.limits = HOT
+  await seen.clock.advance(60_000)
+
+  expect(pauseOf(seen)).toBeUndefined()
+})
 
 test('a switch with no pause to end raises no card', LONG, async ($, on) => {
   const seen = world(on)

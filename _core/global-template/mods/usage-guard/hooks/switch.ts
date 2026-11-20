@@ -32,13 +32,14 @@ export async function endIfSwitched($: EngineInterface, pause: Pause, seen: Swit
 }
 
 /**
- * The account signed in, and whether this session's plan readings are that account's: true with no login, and
- * before any turn of this session ended under a login it could read.
+ * The account signed in, and whether this session's plan readings are that account's: true before any turn of
+ * this session ended under a login it could read. A login that cannot be read then proves nothing (the file may be
+ * mid-write), so readings already tied to an account are not fresh; with none ever tied (no login), they are.
  */
 export async function seeLogin($: EngineInterface, now: number): Promise<SwitchSeen> {
   const account = await readAccount($)
   const reading = (await read($, accountView))?.reading
-  return { account, isFresh: !account || !reading || reading === account.id, now }
+  return { account, isFresh: !reading || reading === account?.id, now }
 }
 
 /** The card about an arm set by hand that a switch held back when it ended the pause, for the arm at `wakeAt`. */

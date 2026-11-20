@@ -6,7 +6,7 @@ import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
 import { clearSwitchCard, endIfSwitched, isLiftAsked, noteReading } from './switch'
-import { endedBy, NO_WORK_REST } from './plan'
+import { armClaim, endedBy, NO_WORK_REST } from './plan'
 import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
@@ -350,7 +350,8 @@ async function wakeArmed($: EngineInterface, arm: ArmedWake): Promise<void> {
   // claim on disk the other could win it too, so a failed helper resumes nothing (fails closed).
   // Under the id the arm is filed under, the one an adopting session claims (a /clear may lag behind).
   const filedAs = current.session ?? (await $.session.id())
-  const won = await tryClaim($, `arm-${Date.parse(arm.resetsAt)}-${filedAs}`)
+  // The arm as it stands, which every instance reads alike, names the claim.
+  const won = await tryClaim($, armClaim(current, filedAs))
   // Taken with the saved copy gone: another session adopted it, so nothing here runs it. Stand down.
   const copy = won === false && parseSavedArm(String(await $.fs.read(await armPath($, filedAs)).catch(() => '')))
   if (won === false) return void (copy ? undefined : await update($, armedWake, () => null))
@@ -502,6 +503,11 @@ async function holdForLift($: EngineInterface, held: ArmedWake, pause: Pause): P
   await setArm($, onPause)
   await scheduleArm($, onPause)
   await raiseSwitchCard($, onPause.wakeAt)
+  // Ended, so a session opened meanwhile meets no pause it would read as a missed reset.
+  const current = await readPause($)
+  if (current?.status === 'active' && resetKey(current) === resetKey(pause)) {
+    await writePause($, { ...current, status: 'done' })
+  }
 }
 
 // A wake brought forward (another session saw the early reset) resumes this session now, if the pause still holds
