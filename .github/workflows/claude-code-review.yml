@@ -1641,8 +1641,23 @@ jobs:
         run: |
           set -euo pipefail
           second=no
-          if [ "$HAS_SECOND" = "true" ] && [ -n "$ANSWER_FROM" ] && [ -f "$ANSWER_FROM" ] \
-            && grep -Eqi "hit your (usage )?limit|usage limit (reached|exceeded)" "$ANSWER_FROM"; then
+          # Only the run's last result, and only an error one: the file also
+          # holds the PR under review, whose text may name a usage limit.
+          if [ "$HAS_SECOND" = "true" ] && [ -n "$ANSWER_FROM" ] && python3 -I - "$ANSWER_FROM" <<'PYEOF'
+          import json, re, sys
+          try:
+              with open(sys.argv[1], encoding='utf-8') as f:
+                  data = json.load(f)
+          except (OSError, ValueError):
+              sys.exit(1)
+          if isinstance(data, list):
+              results = [m for m in data if isinstance(m, dict) and m.get('type') == 'result']
+              data = results[-1] if results else {}
+          text = data.get('result') if isinstance(data, dict) and data.get('is_error') else None
+          limit = re.compile(r'hit your (usage )?limit|usage limit (reached|exceeded)', re.I)
+          sys.exit(0 if isinstance(text, str) and limit.search(text) else 1)
+          PYEOF
+          then
             second=yes
             echo "::notice::The first account hit its usage limit: the backup runs on the second account"
           fi
