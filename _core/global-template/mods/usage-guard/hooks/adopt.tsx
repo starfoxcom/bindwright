@@ -4,9 +4,9 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { AdoptOffer, SavedOffer, SavedWork } from '../types'
 import { ADOPT_GRACE_MS, adoptReason, offerText, parseSavedArm, pickOffer } from './arms'
 import { drawCards } from './cards'
-import type { Pause } from './plan'
+import type { DisarmAll, Pause } from './plan'
 import { armFor, CLAIM, resumePrompt } from './plan'
-import { dataDir, readPause } from './files'
+import { dataDir, readJson, readPause } from './files'
 import { keptReason, parseSaved, pickSaved, resumeClaim, SAVED_FILE, savedOfferText } from './saved'
 import { shouldResumeOwn, takeOverReason, workClaims } from './saved'
 import type { Card } from './texts'
@@ -72,7 +72,8 @@ async function lookForOffer($: EngineInterface, isAsked = false): Promise<void> 
     if (kind !== 'file') continue
     files.push({ name, text: String(await $.fs.read(`${dir}/${name}`).catch(() => '')) })
   }
-  const offer = pickOffer(files, await $.session.id(), await $.session.root(), now)
+  const disarmAll = await readJson<DisarmAll>($, `${await dataDir($)}/disarm.json`)
+  const offer = pickOffer(files, await $.session.id(), await $.session.root(), now, disarmAll)
   if (offer) {
     const text = offerText(armFor(offer.arm.kind), await timeText($, offer.arm.wakeAt))
     return void (await update($, state, () => ({ offer, saved: null, text, note: null })))

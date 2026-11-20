@@ -26,13 +26,11 @@ export type SettingsView = {
 }
 
 /**
- * A wake that resumes this session's work after a reset or at a time of day: armed by hand
- * (`/usage-guard arm 5h|week|HH:MM`, or the `arm` tool), or by a pause for every session it holds. Kept in
- * state so a hot reload (a settings change, an edit) re-arms it.
+ * A wake that resumes this session's work after a reset or at a time of day, armed by hand
+ * (`/usage-guard arm 5h|week|HH:MM`, or the `arm` tool). Kept in state so a hot reload (a settings
+ * change, an edit) re-arms it.
  */
 export type ArmedWake = {
-  /** Set by a pause: at its wake the session resumes only work it saved at the wrap-up. */
-  isAuto?: boolean
   /** When it was set, in ms: a disarm of every session drops the arms set before it. */
   setAt?: number
   /** The limit's kind, `five_hour` or `seven_day`, or `clock` for a time of day. */
@@ -89,6 +87,15 @@ declare module 'claude-code' {
       band: UsageGuardBand | null
       settings: SettingsView | null
       armed: ArmedWake | null
+      /** This session's own resume at a pause's wake (hooks/pausearm.ts), apart from the arm set by hand. */
+      pauseArm: {
+        key: string
+        resetsAt: string
+        wakeAt: number
+        setAt: number
+        hasWork?: boolean
+        isDeclined?: boolean
+      } | null
       /** What the last press on the arm card did, shown in its place until dismissed. */
       armNote: string | null
       /** A closed session's arm that never ran, or its saved work, offered here; then what the press did. */

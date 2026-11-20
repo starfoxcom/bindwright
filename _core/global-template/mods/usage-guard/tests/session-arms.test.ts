@@ -1,9 +1,11 @@
-import { expect, test } from 'claude-code/testing'
+import { type Engine, expect, test } from 'claude-code/testing'
+import { pickOffer } from '../hooks/arms'
 import {
-  ARM_FILE,
-  cardOf,
+  CARD_FILE,
+  CLAIMS_DIR,
   doWork,
   endTurn,
+  KEY,
   mountCard,
   NOW,
   pauseOf,
@@ -12,26 +14,34 @@ import {
   start,
   WAKE,
   world,
+  type World,
 } from './world'
 
-// A pause arms every session it holds with an arm of its own, so one session's resume can be cancelled alone.
+// A pause arms every session it holds with a resume of its own, so one session's resume can be cancelled alone.
 
 const LONG = { timeoutMs: 15_000 }
 const DISARM_FILE = 'C:/Users/me/.claude/mods-data/usage-guard/disarm.json'
+const PAUSE_ARM_FILE = `${CLAIMS_DIR}/${KEY}-sess-a/arm.json`
 const HOT = [{ kind: 'five_hour', percentUsed: 97, resetsAt: RESET }]
+const pauseArmOf = (seen: World) => JSON.parse(seen.files.get(PAUSE_ARM_FILE) ?? 'null')
 
-test('a pause arms the session, and a disarm there cancels only its resume', LONG, async ($, on) => {
-  const seen = world(on)
+async function pauseWithWork($: Engine, seen: World): Promise<void> {
   await start($)
   await doWork($)
   seen.limits = HOT
   await endTurn($)
+}
 
-  const saved = JSON.parse(seen.files.get(ARM_FILE) ?? 'null')
-  expect(saved).toEqual(expect.objectContaining({ wakeAt: WAKE, isAuto: true }))
+test("a disarm cancels only this session's resume; its saved work is offered nowhere", LONG, async ($, on) => {
+  const seen = world(on)
+  await pauseWithWork($, seen)
+  expect(pauseArmOf(seen)).toEqual(expect.objectContaining({ wakeAt: WAKE, hasWork: true }))
+
   const answer = await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
   expect(answer.text).toContain('Disarmed')
-  // The pause stands for every other session.
+  expect(pauseArmOf(seen)?.isDeclined).toBe(true)
+  // Its resume is taken as handled, so a later session never offers the work as a closed session's.
+  expect(seen.claims.has(`resume-${KEY}-sess-a`)).toBe(true)
   expect(pauseOf(seen)?.status).toBe('active')
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
@@ -39,19 +49,28 @@ test('a pause arms the session, and a disarm there cancels only its resume', LON
 
 test('the pause card cancels the resume of the session it shows in, or of all', LONG, async ($, on) => {
   const seen = world(on)
-  await start($)
-  await doWork($)
-  seen.limits = HOT
-  await endTurn($)
+  await pauseWithWork($, seen)
   const ui = await mountCard($)
   await seen.clock.advance(2_000)
   await ui.press({ key: 'usage-disarm-here' })
 
-  expect(seen.files.get(ARM_FILE)).toBe('null')
+  expect(pauseArmOf(seen)?.isDeclined).toBe(true)
   expect(pauseOf(seen)?.status).toBe('active')
-  expect(cardOf(seen)?.id).toBe(`paused:${RESET}`)
   await ui.press({ key: 'usage-cancel' })
   expect(pauseOf(seen)?.status).toBe('cancelled')
+})
+
+test('a disarm holds after a /clear and after a restart', LONG, async ($, on) => {
+  const seen = world(on)
+  await pauseWithWork($, seen)
+  await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
+  seen.sessionId = 'sess-b'
+  await seen.clock.advance(60_000)
+  seen.sessionId = 'sess-a'
+  await start($)
+  await seen.clock.advance(WAKE - NOW)
+
+  expect(resumes(seen)).toEqual([])
 })
 
 test("another session's disarm-global drops this session's arm at its next check", LONG, async ($, on) => {
@@ -61,7 +80,6 @@ test("another session's disarm-global drops this session's arm at its next check
   seen.files.set(DISARM_FILE, JSON.stringify({ at: NOW + 1 }))
   await seen.clock.advance(60_000)
 
-  expect(seen.files.get(ARM_FILE)).toBe('null')
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
 })
@@ -76,16 +94,17 @@ test('an arm set after a disarm-global stands', LONG, async ($, on) => {
   expect(resumes(seen)).toHaveLength(1)
 })
 
-test('a session that disarmed during a pause is not armed again when it starts again', LONG, async ($, on) => {
+test('disarm-global with no pause raises no card', async ($, on) => {
   const seen = world(on)
   await start($)
-  await doWork($)
-  seen.limits = HOT
-  await endTurn($)
-  await $.command.run({ command: 'usage-guard', args: 'disarm' } as never)
-  await start($)
+  await $.command.run({ command: 'usage-guard', args: 'disarm-global' } as never)
 
-  expect(seen.files.get(ARM_FILE)).toBe('null')
-  await seen.clock.advance(WAKE - NOW)
-  expect(resumes(seen)).toEqual([])
+  expect(seen.files.has(CARD_FILE)).toBe(false)
+})
+
+test('a closed session\'s arm set before a disarm-global is not offered', () => {
+  const arm = { kind: 'five_hour', resetsAt: RESET, wakeAt: NOW - 10 * 60_000, root: 'C:/Repos/my-game', setAt: 1 }
+  const files = [{ name: 'sess-b.json', text: JSON.stringify(arm) }]
+  expect(pickOffer(files, 'sess-a', 'C:/Repos/my-game', NOW)?.owner).toBe('sess-b')
+  expect(pickOffer(files, 'sess-a', 'C:/Repos/my-game', NOW, { at: 2 })).toBeUndefined()
 })

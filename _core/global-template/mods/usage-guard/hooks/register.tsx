@@ -8,7 +8,8 @@ import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
 import { armFor, bringForward, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly } from './plan'
-import { autoArmOf, fenceAfter, joinPause, unfenced } from './plan'
+import { fenceAfter, joinPause, unfenced } from './plan'
+import { armForPause, declinePauseArm, readPauseArm, takePauseArm } from './pausearm'
 import { NO_WORK_NOTICE, planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
 import { dataDir, pausePath, readFence, readJson, readPause, writeFence, writePause } from './files'
@@ -87,7 +88,9 @@ async function refresh($: EngineInterface): Promise<void> {
   const isPaused = pause?.status === 'active' && pause.wakeAt > (await $.clock.now())
   // A pause cancelled or ended from another session clears this one's status too.
   if (!isPaused && live.isStatusShown) setStatus($, undefined)
-  const canDisarmHere = shown ? (await read($, armedWake)) !== null : false
+  const own = shown ? await readPauseArm($) : null
+  const hasOwnResume = Boolean(own && !own.isDeclined && own.hasWork)
+  const canDisarmHere = shown ? hasOwnResume || (await read($, armedWake)) !== null : false
   const next = shown ? { card: shown, canCancel: isPaused, canDisarmHere } : null
   if (JSON.stringify(await read($, band)) !== JSON.stringify(next)) await update($, band, () => next)
 }
@@ -101,8 +104,8 @@ async function disarmGlobal($: EngineInterface): Promise<string> {
   if (pause?.status === 'active') {
     await writePause($, { ...pause, status: 'cancelled' })
     setStatus($, undefined)
+    await showCard($, `cancelled:${pause.resetsAt}`, CANCELLED_TEXT)
   }
-  await showCard($, `cancelled:${pause?.resetsAt ?? await $.clock.now()}`, CANCELLED_TEXT)
   return 'Disarmed every session: none resumes on its own.'
 }
 
@@ -237,8 +240,7 @@ function scheduleOwedCompaction($: EngineInterface): void {
 async function resume($: EngineInterface, resetsAt: string, isArmed = false): Promise<void> {
   // Read first: an arm for this reset counts even if its own timer clears it while this one runs.
   const held = await read($, armedWake)
-  // An arm the pause set resumes only saved work; one set by hand resumes whatever is pending.
-  const isArmedHere = isArmed || (held?.resetsAt === resetsAt && !held.isAuto)
+  const isArmedHere = isArmed || held?.resetsAt === resetsAt
   const pause = await readPause($)
   if (!pause || pause.resetsAt !== resetsAt || pause.status === 'cancelled') return
   // Each session resumes once per reset, even when an instance left by a hot reload still runs its own
@@ -295,16 +297,10 @@ async function resumeWork($: EngineInterface, text: string, reason?: string): Pr
   void $.prompt.submit({ text: resumePrompt(said) }).catch(() => undefined)
 }
 
-// The pause arms this session for its wake, so a disarm here cancels this session's resume alone. An arm
-// already standing is kept: one set by hand says when this session resumes, and wakeArmed moves an earlier
-// one onto the pause's wake.
-async function armForPause($: EngineInterface, pause: Pause): Promise<void> {
-  if (await read($, armedWake)) return
-  // A restart's saved arm is restored once the start reads it: never written over here.
-  if (parseSavedArm(String(await $.fs.read(await armPath($)).catch(() => '')))) return
-  const arm = autoArmOf(pause, await $.clock.now())
-  await setArm($, arm)
-  await scheduleArm($, arm)
+// The pause arms this session for its wake (pausearm.ts), so a disarm here cancels this session's resume alone.
+async function armPause($: EngineInterface, pause: Pause): Promise<void> {
+  const hasWork = live.workSession === (await $.session.id())
+  await armForPause($, pause, hasWork, resetsAt => resume($, resetsAt))
 }
 
 async function scheduleArm($: EngineInterface, arm: ArmedWake): Promise<void> {
@@ -348,12 +344,11 @@ async function wakeArmed($: EngineInterface, arm: ArmedWake): Promise<void> {
   // Taken with the saved copy gone: another session adopted it, so nothing here runs it. Stand down.
   const copy = won === false && parseSavedArm(String(await $.fs.read(await armPath($, filedAs)).catch(() => '')))
   if (won === false) return void (copy ? undefined : await update($, armedWake, () => null))
-  // The arm stays set until the resume has run, so resume() reads its reason. An arm the pause set with no
-  // pause left to end (cancelled, or replaced) resumes nothing.
+  // The arm stays set until the resume has run, so the pause's own timer, firing beside this one, sees it.
   const isPauseReset = pause && pause.resetsAt === arm.resetsAt && pause.status !== 'cancelled'
   if (won === null) await notice($, UNCONFIRMED_NOTICE)
-  else if (isPauseReset) await resume($, arm.resetsAt, !arm.isAuto)
-  else if (!arm.isAuto) {
+  else if (isPauseReset) await resume($, arm.resetsAt, true)
+  else {
     const text = `The wake you armed, ${armFor(arm.kind)}, has come: resuming the saved work.`
     await resumeArmed($, armFor(arm.kind), text, current.armedIn, current.reason)
   }
@@ -428,22 +423,27 @@ async function confirmPress($: EngineInterface, text: string): Promise<void> {
   await notice($, text)
 }
 
-// Drops this session's arm, set by hand or by a pause: then it does not resume on its own. Other sessions keep theirs.
+// Drops this session's arms, the one set by hand and its resume at a pause's wake: then it does not resume on its
+// own. Other sessions keep theirs. Work it saved for the pause is taken as handled, so no later session offers it.
 async function disarm($: EngineInterface): Promise<string> {
   const current = await read($, armedWake)
   live.armTimer?.cancel()
   live.armTimer = undefined
   await setArm($, null)
-  return current ? 'Disarmed: this session will not resume on its own.' : 'Nothing was armed.'
+  const declined = await declinePauseArm($)
+  if (declined?.hasWork) await claim($, `resume-${declined.key}-${await $.session.id()}`)
+  return current || declined ? 'Disarmed: this session will not resume on its own.' : 'Nothing was armed.'
 }
 
-// This session's part in a live pause, once per pause (the claim is on disk): it is armed for the wake and wraps
-// up. Its arm outlives a hot reload or a restart on its own, and a disarm here is never undone by the pause.
+// This session's part in a live pause: it wraps up once and is armed for the wake. A session that met the pause
+// before a hot reload or a restart, or under an earlier version, is armed again here; one that cancelled its
+// resume stays cancelled (pausearm.ts).
 async function act($: EngineInterface, pause: Pause): Promise<void> {
-  if (!(await claim($, `${resetKey(pause)}-${await $.session.id()}`))) return
-  await armForPause($, pause)
-  await stopBackground($, pause)
-  await wrapUp($, pause)
+  if (await claim($, `${resetKey(pause)}-${await $.session.id()}`)) {
+    await armPause($, pause)
+    await stopBackground($, pause)
+    await wrapUp($, pause)
+  } else await armPause($, pause)
 }
 
 // A plan that reset before the pause's wake (a banked reset, for one) brings the wake to now for every session:
@@ -459,15 +459,16 @@ async function endIfResetEarly($: EngineInterface, pause: Pause, now: number): P
   return forward
 }
 
-// A wake brought forward (another session saw the early reset): an arm on this pause, or one already due, moves to
-// now, and its timer resumes the session through the pause. An arm set by hand for later keeps its own time.
+// A wake brought forward (another session saw the early reset) resumes this session now, if the pause still holds
+// its resume. An arm already due, or already moved onto this pause, stands down as at the pause's own wake: brought
+// to now on this reset, resume() counts it and its own timer then clears it. An arm still ahead keeps its own time.
 async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
+  if (!(await takePauseArm($, pause))) return
   const held = await read($, armedWake)
-  const isOnPause = held && held.wakeAt > now && (held.isAuto || held.resetsAt === pause.resetsAt)
-  if (!isOnPause) return
-  const moved = { ...held, resetsAt: pause.resetsAt, wakeAt: now }
-  await setArm($, moved)
-  await scheduleArm($, moved)
+  const isStandingDown = held && (held.wakeAt <= now || held.resetsAt === pause.resetsAt)
+  const moved = isStandingDown && { ...held, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+  if (moved) await setArm($, moved).then(() => scheduleArm($, moved))
+  return resume($, pause.resetsAt)
 }
 
 async function check($: EngineInterface): Promise<void> {
@@ -540,8 +541,8 @@ async function meetPause($: EngineInterface, pause: Pause): Promise<void> {
     await notice($, text)
     return
   }
-  // A session started again after it met this pause already has its arm saved, or dropped it on purpose.
-  if (await claim($, `${resetKey(pause)}-${await $.session.id()}`)) await armForPause($, pause)
+  await claim($, `${resetKey(pause)}-${await $.session.id()}`)
+  await armPause($, pause)
   // A project no session had open when the pause began still has its background work stopped.
   await stopBackground($, pause)
   setStatus($, `Plan limit near: paused until ${localTime(pause.wakeAt)}`)
@@ -560,7 +561,7 @@ async function cardsAbove($: EngineInterface): Promise<Card[]> {
     ]
     if (shown.canCancel && shown.canDisarmHere) {
       const label = 'Cancel resume (this session)'
-      buttons.push({ key: 'usage-disarm-here', label, onPress: () => cancelFromArmCard($) })
+      buttons.push({ key: 'usage-disarm-here', label, onPress: async () => confirmPress($, await disarm($)) })
     }
     if (shown.canCancel) {
       const label = 'Cancel resume (all sessions)'
