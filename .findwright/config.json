@@ -339,6 +339,13 @@
       ],
       "kind": "text-key",
       "pattern": "^\\s*\"(?<name>[\\w.-]+)\"\\s*:"
+    },
+    {
+      "globs": [
+        "**/*.sql"
+      ],
+      "kind": "column",
+      "pattern": "^\\s*[Aa][Ll][Tt][Ee][Rr]\\s+[Tt][Aa][Bb][Ll][Ee]\\s+\\w+\\s+[Aa][Dd][Dd]\\s+(?:[Cc][Oo][Ll][Uu][Mm][Nn]\\s+)?(?<name>\\w+)"
     }
   ]
 }
