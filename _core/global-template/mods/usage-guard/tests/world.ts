@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import { mock } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
 import { CLAIM } from '../hooks/plan'
+import { REFRESH_MS } from '../hooks/register'
 import { READ_ZONE } from '../hooks/texts'
 
 // The faked engine every usage-guard hook test runs in, and the helpers that read it.
@@ -64,13 +65,32 @@ export type World = {
   duringRead?: (path: string) => unknown
 }
 
+// The fake clock fires the card's 2-second refresh 30 times a simulated minute, so a jump of hours takes
+// seconds of real time, and the kit lets go of any wait held past ten. Once a minute keeps every hour-long
+// jump well inside that.
+const TEST_REFRESH_MS = 60_000
+
+type AnyOn = (event: string, ...rest: unknown[]) => unknown
+type EveryHook = ($: unknown, e: { ms: number }, next: unknown) => unknown
+
+// The kit takes one hook per event, so the mock clock's own answer to `clock.every` is wrapped instead.
+function withSlowRefresh(on: On): On {
+  const register = on as unknown as AnyOn
+  return ((event: string, ...rest: unknown[]) => {
+    if (event !== 'clock.every') return register(event, ...rest)
+    const hook = rest.pop() as EveryHook
+    const slowed: EveryHook = ($, e, next) => hook($, e.ms === REFRESH_MS ? { ...e, ms: TEST_REFRESH_MS } : e, next)
+    return register(event, ...rest, slowed)
+  }) as unknown as On
+}
+
 export function world(on: On, root = 'C:/Repos/my-game'): World {
   const seen: World = {
     files: new Map(),
     runs: [],
     commands: [],
     prompts: [],
-    clock: mock.clock(on, { now: NOW }),
+    clock: mock.clock(withSlowRefresh(on), { now: NOW }),
     limits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: RESET }],
     claims: new Set(),
     sessionId: 'sess-a',

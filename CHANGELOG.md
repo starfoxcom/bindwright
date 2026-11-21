@@ -6,6 +6,21 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.7.0] — 2026-11-21
+
+### Added
+
+- **ci-watch notices a background run that goes quiet.** A background shell or subagent the session started whose output file stops growing for 30 minutes, with no notice that it finished, wakes the session once with its name and the output file to read, so a hung or killed run is no longer waited on for good. A run that reports back is forgotten.
+
+### Changed
+
+- **Memory entries carry the date they were written and their source.** The memory format setup teaches adds `written:` and `source:` lines, and the monthly pruning pass also lists entries older than 90 days or with no date, to confirm or drop. The pass is now offered at `/start-session` too, whichever ritual runs first that month, so a session that never closes still gets it.
+- **The security rule names scripts loaded from another party's server.** A web page that loads a script from someone else's CDN runs whatever that server sends, so the rule now says to pin such a script to an exact version with an integrity hash, or serve a copy from the project, under a Content-Security-Policy that names the allowed sources, and to keep scripts their vendor changes on purpose (tag managers, A/B testing) off pages that handle sign-ins or payments.
+
+### Fixed
+
+- **The AI reviews move to another account only when the plan is spent or the token is refused.** The check that picks the backup's account now treats any other failure, such as a network error, as a reason to stay on the account it tried, so a passing blip no longer spends another account's window. Each check also runs with only its own account's token, in a home folder of its own, and the step stops after 12 minutes at most.
+
 ## [v7.6.1] — 2026-11-21
 
 ### Fixed

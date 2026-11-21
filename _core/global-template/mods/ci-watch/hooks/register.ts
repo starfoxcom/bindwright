@@ -17,6 +17,7 @@ import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
 import { HELP, HINT } from './help'
+import { checkRuns, noteRun, registerRuns, takeRunNotes } from './runs'
 export { HELP } from './help'
 export { MKDIR_SCRIPT } from './store'
 export { wakeText } from './wake'
@@ -187,8 +188,7 @@ async function gh($: EngineInterface, args: readonly string[], cwd?: string): Pr
   return stdout.trim()
 }
 
-// The branch's PR, or the PR `number` names, in the repo of the folder.
-// `inRepo` (owner/name) looks the PR up in that repo instead of the folder's.
+// The PR of the folder's branch, or PR `number`; `inRepo` (owner/name) looks in that repo instead.
 async function prOfBranch(
   $: EngineInterface,
   cwd?: string,
@@ -570,19 +570,19 @@ async function markPending($: EngineInterface, watch: Watch): Promise<void> {
   await save($)
 }
 
-// As the old Monitor did: checks that finish while a turn runs reach it at once, on the next tool result,
-// instead of waiting for the turn's end. Each is taken from the pending list in one step and saved.
+// Checks that finish while a turn runs reach it on the next tool result, not at the turn's end, with any quiet
+// background run's wake. Each is taken from the pending list in one step and saved.
 async function takeNotes($: EngineInterface): Promise<string[]> {
   // A newer load may have taken over while the tool ran: the notes and the file are its own.
   if (!live.isTurnRunning || (await isRetired($))) return []
   const due = live.watches.filter(isHeld)
-  if (due.length === 0) return []
+  if (due.length === 0) return takeRunNotes($)
   live.watches = live.watches.map(asSent)
   live.generation++
   await save($)
   const now = await $.clock.now()
   const rounds = await readRounds($)
-  return due.map(w => wakeText(w, now, redStreak(rounds[`${w.repo}#${w.number}`])))
+  return [...due.map(w => wakeText(w, now, redStreak(rounds[`${w.repo}#${w.number}`]))), ...(await takeRunNotes($))]
 }
 
 // A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.
@@ -635,7 +635,7 @@ function armPolling($: EngineInterface): void {
       tick.cancel()
       armPolling($)
     }
-    await poll($).catch(() => undefined)
+    await Promise.allSettled([poll($), checkRuns($, live.isTurnRunning)])
   })
   live.tick = tick
 }
@@ -650,9 +650,10 @@ async function readSettings($: EngineInterface): Promise<void> {
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))
 }
 
+// The settings come from the mod's own file over the loaded options, read again as it changes.
 export const register: Register = (on, options) => {
   registerView(on)
-  // The settings come from the mod's own file over the loaded options, read again as it changes.
+  registerRuns(on)
   settings(on, options, values => {
     live.pollMs = Number(values.pollSeconds ?? 30) * 1000
     live.timeoutMs = Number(values.timeoutMinutes ?? 60) * 60_000
@@ -692,7 +693,6 @@ export const register: Register = (on, options) => {
     await setTurnRunning($, false)
     return result
   })
-
   on('session.end', endSession)
 
   // startPolling first: a freshly loaded instance claims the owner file before any check.
@@ -744,6 +744,7 @@ export const register: Register = (on, options) => {
     const isPlain = 'deny' in answered || notes.length === 0
     const result = isPlain ? answered : { ...answered, context: [...(answered.context ?? []), ...notes] }
     if (result.deny !== undefined || result.isError) return result
+    await noteRun($, e, result)
     // One command can merge a PR and push or open the next: forget the one, then watch the other.
     const merged = mergedNumber(command, isPowerShell)
     if (merged !== undefined) await forgetMerged($, merged)
@@ -754,7 +755,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: ['WebSearch', 'WebFetch', 'Agent'] }, async ($, e, next) => {
     await startPolling($)
     const result = await next(e)
-    if (!('deny' in result) && !result.isError) await noteWebLookup($, e)
+    if (!('deny' in result) && !result.isError) await noteWebLookup($, e).then(() => noteRun($, e, result))
     return result
   })
   on('tool.call', { tool: 'mcp__ci-watch__watch' }, async ($, e, next) => {
