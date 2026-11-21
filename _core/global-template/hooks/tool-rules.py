@@ -393,6 +393,11 @@ RULES = [
      ENFORCE),
     ("`gh pr merge --admin`", both(Followed(r"\bgh\s+pr\s+merge\b", r"\n", r"\s--admin\b")),
      "it skips the required checks. Fix what blocks the merge.", ENFORCE),
+    ("a repo secret write (`gh secret set`, `set-review-tokens.sh`)",
+     both(r"\bgh\s+secret\s+(?:set|delete|remove)\b"
+          r"|(?:\b(?:ba|z)?sh\s+(?:-\S+\s+)*\S*|(?:^|(?<=[\s;&|(]))\.{0,2}/\S*)set-review-tokens\.sh\b"),
+     "secrets are the maintainer's, and a test run can overwrite the real ones. Give the user the command.",
+     ENFORCE),
     ("`<rev>:.<path>` in Git Bash",
      lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
      "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root.", ENFORCE),

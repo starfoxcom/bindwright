@@ -105,6 +105,25 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
                 self.assertEqual([entry["rule"] for entry in observed(self.hook)[before:]], [want] if want else [])
 
 
+class SecretWriteRowTest(unittest.TestCase):
+    """Writing a repo secret is refused; reading, staging or listing never is."""
+
+    NAME = "a repo secret write (`gh secret set`, `set-review-tokens.sh`)"
+
+    def test_a_write_is_refused_and_a_read_passes(self):
+        hook = load_tool_rules()
+        for command in ("gh secret set CLAUDE_CODE_OAUTH_TOKEN -R o/r", "gh secret delete X -R o/r",
+                        "bash .github/scripts/set-review-tokens.sh --accounts 2", "./set-review-tokens.sh",
+                        "cd x; sh /p/r/.github/scripts/set-review-tokens.sh"):
+            with self.subTest(command=command):
+                self.assertEqual(hook.refusal(command, "bash")[0], self.NAME)
+        for command in ("git add .github/scripts/set-review-tokens.sh", "gh secret list -R o/r",
+                        "sed -n 1,40p .github/scripts/set-review-tokens.sh",
+                        'git commit -m "fix(scripts): set-review-tokens.sh sweeps orgs"'):
+            with self.subTest(command=command):
+                self.assertIsNone(hook.refusal(command, "bash"))
+
+
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
     a comment or a here-document body, always passes, and the same trigger run as a command is
@@ -113,6 +132,7 @@ class ToolRulesSweepTest(unittest.TestCase):
     TRIGGERS = (("gh run watch 1", "both"), ("python .github/scripts/size_check.py && git commit -m x", "both"),
                 ("git push && gh pr create", "both"), ("git checkout dev -- .", "both"),
                 ("gh pr merge 5 --admin", "both"), ("gh run rerun 5 --failed", "both"),
+                ("gh secret set TOKEN -R o/r", "both"), ("bash .github/scripts/set-review-tokens.sh", "both"),
                 ("git rebase -i HEAD~3", "both"), ("gh pr create --body x", "both"),
                 ("node -e \"console.log('a\\\\b')\"", "both"),
                 ("@'\nprint('C:\\\\x')\n'@ | python -", "powershell"),
