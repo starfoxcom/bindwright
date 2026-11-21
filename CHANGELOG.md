@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **A Python-only helper install no longer races another session's.** With Python and no Node, setup and update installed the helper with a plain `pip install`, so two sessions updating at once could write into the same folder together. The Python engine now has `home.py helper-install`, which takes the same install lock the Node helper uses, checks the download against the plugin's pin, and answers ready, busy or error, as the Node install does.
+
 ## [v7.7.0] — 2026-11-21
 
 ### Added

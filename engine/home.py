@@ -21,6 +21,8 @@ Standard library, Python 3.8+.
     python engine/home.py plugin-auto-update on|off [--repo OWNER/NAME]   (the wrights marketplace's auto-update)
     python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
     python engine/home.py project-mod ROOT NAME on|off
+    python engine/home.py helper-install PLUGIN
+        (installs the plugin's pinned helper under the install lock: ready, busy or error)
 
 project-mod writes the repo's personal .claude/settings.local.json, never
 ~/.claude, and keeps no .bak there: the repo's ignore list covers that file,
@@ -50,6 +52,7 @@ import subprocess
 import sys
 
 from apply import _is_link
+from helper_install import helper_install
 
 # Its front-matter reader names an output style here too, so both find the same style.
 _REPLY_STYLE_HOOK = os.path.join(
@@ -762,6 +765,7 @@ NAMED_COMMANDS = {
     "remove-agent": remove_agent,
     "remove-style": remove_style,
     "set-language": set_language,
+    "helper-install": helper_install,
 }
 
 

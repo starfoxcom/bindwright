@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -26,7 +26,12 @@ function withHome(fn) {
 }
 
 function home(dir, ...args) {
-  const r = spawnSync(python, [join(engine, "home.py"), ...args, "--home", dir], { encoding: "utf8" });
+  return homeWithEnv({}, dir, ...args);
+}
+
+function homeWithEnv(env, dir, ...args) {
+  const options = { encoding: "utf8", env: { ...process.env, ...env } };
+  const r = spawnSync(python, [join(engine, "home.py"), ...args, "--home", dir], options);
   return { status: r.status, out: JSON.parse(r.stdout), stderr: r.stderr };
 }
 
@@ -815,5 +820,59 @@ test("install-hook records each copy it writes, so the helper's follow can tell 
     assert.deepEqual(Object.keys(recorded()).sort(), ["push-guard.py", "push_guard/a.py"]);
     assert.equal(home(dir, "remove-hook", "push-guard.py").status, 0);
     assert.deepEqual(recorded(), {}, "a removed hook is forgotten");
+  });
+});
+
+const HELPER_VERSION = "9.9.9";
+const HELPER_FILE = `bindwright-${HELPER_VERSION}-py3-none-any.whl`;
+const HELPER_URL = `https://github.com/starfoxcom/bindwright/releases/download/v${HELPER_VERSION}/${HELPER_FILE}`;
+
+// A plugin folder whose helper.json pins the Python helper with `python` as its entry.
+function pluginWithPin(dir, python) {
+  const folder = join(dir, "plugin");
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, "helper.json"), JSON.stringify({ version: HELPER_VERSION, python }));
+  return folder;
+}
+
+const pinEntry = (url = HELPER_URL) => ({ file: HELPER_FILE, url, sha256: "0".repeat(64) });
+
+test("a helper install waits while a fresh install lock from another session is held", { skip }, () => {
+  withHome((dir) => {
+    const lock = join(dir, ".bindwright", "helper", "follow.lock");
+    mkdirSync(join(dir, ".bindwright", "helper"), { recursive: true });
+    writeFileSync(lock, "");
+    const r = home(dir, "helper-install", pluginWithPin(dir, pinEntry()));
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.out, { busy: true });
+    assert.ok(existsSync(lock), "the other session's lock stays in place");
+  });
+});
+
+test("a helper pin that names another host is refused, and no install lock is left behind", { skip }, () => {
+  withHome((dir) => {
+    const elsewhere = "https://example.com/releases/" + HELPER_FILE;
+    const r = home(dir, "helper-install", pluginWithPin(dir, pinEntry(elsewhere)));
+    assert.equal(r.status, 1, r.stderr);
+    assert.deepEqual(r.out, { error: "the plugin's helper pin is missing or names an unexpected file" });
+    assert.ok(!existsSync(join(dir, ".bindwright", "helper", "follow.lock")));
+  });
+});
+
+test("a stale install lock is taken over, and a download that fails reports an error, not busy", { skip }, () => {
+  withHome((dir) => {
+    const helperHome = join(dir, ".bindwright", "helper");
+    const lock = join(helperHome, "follow.lock");
+    mkdirSync(helperHome, { recursive: true });
+    writeFileSync(lock, "");
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60_000);
+    utimesSync(lock, tenMinutesAgo, tenMinutesAgo);
+    // A proxy nothing listens on refuses the connection at once, so the download fails without the network.
+    const deadProxy = { HTTPS_PROXY: "http://127.0.0.1:9", https_proxy: "http://127.0.0.1:9" };
+    const r = homeWithEnv(deadProxy, dir, "helper-install", pluginWithPin(dir, pinEntry()));
+    assert.equal(r.status, 1, r.stderr);
+    assert.equal(typeof r.out.error, "string");
+    assert.equal(r.out.busy, undefined);
+    assert.ok(!existsSync(lock), "the taken-over lock is released after the failed attempt");
   });
 });
