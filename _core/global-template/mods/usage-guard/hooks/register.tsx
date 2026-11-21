@@ -7,7 +7,7 @@ import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setA
 import { switchCardText } from './account'
 import { clearSwitchCard, endIfSwitched, isLiftAsked, noteReading, noteTurnStart } from './switch'
 import { armClaim, armWaitedFor, endedBy, isArmFor, movedOntoPause, NO_WORK_REST } from './plan'
-import { raiseSwitchCard, seeLogin } from './switch'
+import { ownLimits, raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
@@ -16,7 +16,7 @@ import { fenceAfter, joinPause, unfenced } from './plan'
 import { armForPause, declinePauseArm, readPauseArm, takePauseArm } from './pausearm'
 import { planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
-import { dataDir, pausePath, readEpisodes, readFence, readJson, readPause, writeFence, writePause } from './files'
+import { dataDir, pausePath, readFence, readJson, readPause, writeFence, writePause } from './files'
 import { drawArmLine, drawCards } from './cards'
 import { register as adopt } from './adopt'
 import { register as phone } from './phone'
@@ -514,9 +514,8 @@ async function holdForLift($: EngineInterface, held: ArmedWake, pause: Pause): P
   }
 }
 
-// A wake brought forward (another session saw the early reset) resumes this session now, if the pause still holds
-// its resume. An arm already due, or already moved onto this pause, stands down as at the pause's own wake: brought
-// to now on this reset, resume() counts it and its own timer then clears it. An arm still ahead keeps its own time.
+// A wake brought forward (an early reset, a switch) resumes this session now, if the pause still holds its resume. An
+// arm due or moved onto this pause stands down with it (resume() counts it); one still ahead keeps its own time.
 async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
   if (!(await takePauseArm($, pause))) return
   const held = await read($, armedWake)
@@ -552,10 +551,11 @@ async function check($: EngineInterface): Promise<void> {
     const fresh = unfenced(rateLimits, await readFence($))
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
+    // Without this account's windows, nothing; a plan that would take a switch's spent claims takes its episode.
+    const { own, ended } = await ownLimits($, hot, login.account?.id)
+    if (own.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
-    const plan = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount }
-    // A plan that would take the claims of a pause a switch ended (spent) is named with that switch's episode.
-    const ended = login.account && (await readEpisodes($))[login.account.id]
+    const plan = { ...planPause(own, live.delayMinutes, sessionId), ...onAccount }
     const natural = resetKey(plan)
     const planned = ended?.key === natural ? { ...plan, episode: ended.episode, natural } : plan
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a

@@ -93,6 +93,27 @@ test('an idle session holding the other account\'s readings leaves that account\
     expect([pauseOf(seen)?.status, pauseOf(seen)?.wakeAt]).toEqual(['active', WAKE])
   })
 
+test('a whole turn under the new login that still reads the old account\'s windows plans no pause', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await doWork($)
+    seen.limits = HOT
+    await endTurn($)
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = ROOMY
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    // The credentials reach this session late (the macOS keychain), or its turn made no request: the old figures.
+    seen.limits = HOT
+    await $.turn.start({ turnId: 't2' } as never)
+    await endTurn($)
+    await seen.clock.advance(61_000)
+
+    expect(pauseOf(seen)?.status).not.toBe('active')
+  })
+
 test('readings from before a switch plan no pause on the new account', LONG, async ($, on) => {
   const seen = world(on)
   signIn(seen, 'acct-ultra')

@@ -45,14 +45,21 @@ export async function readFence($: EngineInterface): Promise<Fence> {
  * time the account runs hot again: a pause planned there whose key would be `key` (the ended pause's own) is named
  * with `episode`. Any other window, or kind of window, keeps a key of its own.
  */
-export type EndedBySwitch = { episode: string; key: string }
+export type EndedBySwitch = {
+  episode: string
+  key: string
+  /** The ended pause's windows, by kind: a reading of one of them is this account's, whatever login it came under. */
+  resets: Record<string, string>
+}
 
 /** Per account id, the newest pause a switch ended there. */
 export async function readEpisodes($: EngineInterface): Promise<Record<string, EndedBySwitch>> {
   const file = await readJson<Record<string, Partial<EndedBySwitch>>>($, `${await dataDir($)}/episodes.json`)
   const episodes: Record<string, EndedBySwitch> = {}
-  for (const [account, { episode, key } = {}] of Object.entries(file ?? {})) {
-    if (typeof episode === 'string' && typeof key === 'string') episodes[account] = { episode, key }
+  for (const [account, { episode, key, resets } = {}] of Object.entries(file ?? {})) {
+    if (typeof episode !== 'string' || typeof key !== 'string') continue
+    const windows = Object.entries(resets ?? {}).filter(([, at]) => typeof at === 'string')
+    episodes[account] = { episode, key, resets: Object.fromEntries(windows) }
   }
   return episodes
 }

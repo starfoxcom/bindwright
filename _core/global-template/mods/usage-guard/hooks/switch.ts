@@ -1,9 +1,9 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface } from 'claude-code'
+import type { EngineInterface, SessionRateLimit } from 'claude-code'
 
 import { type Account, isLiftedBySwitch, readAccount } from './account'
 import { readMark } from './armstore'
-import { readPause, writeEpisode, writePause } from './files'
+import { readEpisodes, readPause, writeEpisode, writePause } from './files'
 import { live } from './live'
 import { bringForward, naturalKey, type Pause } from './plan'
 import { notice } from './say'
@@ -30,10 +30,23 @@ export async function endIfSwitched($: EngineInterface, pause: Pause, seen: Swit
   const lifted = { ...forward, isAccountLift: true }
   await writePause($, lifted)
   // Named from the lift's own wake, which every session reads alike.
-  const ended = { episode: new Date(lifted.wakeAt).toISOString(), key: naturalKey(pause) }
+  const resets = pause.resets ?? Object.fromEntries(pause.kinds.map(kind => [kind, pause.resetsAt]))
+  const ended = { episode: new Date(lifted.wakeAt).toISOString(), key: naturalKey(pause), resets }
   if (pause.account) await writeEpisode($, pause.account, ended)
   await notice($, `Signed in with an account that has room left (${seen.account?.label}): the pause ends now.`)
   return lifted
+}
+
+/**
+ * The hot limits this account may pause for, and its own record of a pause a switch ended. A window a switch ended
+ * on another account is that account's: readings of it plan nothing here, whichever login they were taken under.
+ */
+export async function ownLimits($: EngineInterface, hot: SessionRateLimit[], accountId: string | undefined) {
+  const episodes = await readEpisodes($)
+  const others = Object.entries(episodes).filter(([id]) => id !== accountId)
+  const foreign = new Set(others.flatMap(([, ended]) => Object.entries(ended.resets).map(([kind, at]) => kind + at)))
+  const own = hot.filter(limit => !foreign.has(limit.kind + limit.resetsAt))
+  return { own, ended: accountId === undefined ? undefined : episodes[accountId] }
 }
 
 /**
