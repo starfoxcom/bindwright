@@ -162,7 +162,8 @@ def _installed_version(target):
 def _install_pin(pin, helper_home, fetch, run_install):
     try:
         data = (fetch or _download)(pin["url"])
-    # ValueError covers a malformed proxy or URL (http.client.InvalidURL).
+    # ValueError: a proxy setting urllib cannot parse. HTTPException: a bad proxy port
+    # (http.client.InvalidURL) or a truncated or garbled response.
     except (OSError, ValueError, http.client.HTTPException) as error:
         return {"error": _failure_line(error)}
     if hashlib.sha256(data).hexdigest() != pin["sha256"]:
