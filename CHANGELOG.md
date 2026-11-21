@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **ci-watch notices a background run that goes quiet.** A background shell or subagent the session started whose output file stops growing for 30 minutes, with no notice that it finished, wakes the session once with its name and the output file to read, so a hung or killed run is no longer waited on for good. A run that reports back is forgotten.
+
 ### Changed
 
 - **Memory entries carry the date they were written and their source.** The memory format setup teaches adds `written:` and `source:` lines, and the monthly pruning pass also lists entries older than 90 days or with no date, to confirm or drop. The pass is now offered at `/start-session` too, whichever ritual runs first that month, so a session that never closes still gets it.

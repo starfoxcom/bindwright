@@ -37,11 +37,29 @@ export type Watch = {
   stepBackNeeded?: number
 }
 
+/** A background run (a shell or a subagent) this session started and has not heard back from. */
+export type Run = {
+  id: string
+  label: string
+  /** Where the engine writes the run's output. */
+  file: string
+  /** The output's size at the last check; -1 before the first or while it cannot be read. */
+  size: number
+  /** When the output last grew, or when the run started. */
+  grewAt: number
+  /** Set once it went quiet, so it wakes the session only once. */
+  isReported?: boolean
+  /** Its quiet wake is due and not sent yet. Saved, so a reload sends it. */
+  isWakePending?: boolean
+  /** How many sends of its wake were refused. */
+  wakeTries?: number
+}
+
 /** The settings pane's own state: the last refusal per field. */
 export type SettingsView = { errors: Record<string, string>; saved?: Record<string, string> }
 
 declare module 'claude-code' {
   interface PluginState {
-    'ci-watch': { watches: Watch[]; expanded: string[]; settings: SettingsView | null }
+    'ci-watch': { watches: Watch[]; expanded: string[]; settings: SettingsView | null; runs: Run[] }
   }
 }
