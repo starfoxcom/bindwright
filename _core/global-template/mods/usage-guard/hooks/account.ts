@@ -45,17 +45,18 @@ export async function readAccount($: EngineInterface): Promise<Account | undefin
 }
 
 /**
- * A live pause made on another account, now that this session's own readings come from the account signed in
- * and every limit the pause covers reads under the wrap-up line there: the switch left room, so the pause ends.
+ * A live pause made on another account, now that every limit the pause covers reads under the wrap-up line: the
+ * switch left room, so the pause ends. A session the new login has not reached yet still reads the old account's
+ * hot windows, so it never lifts the pause; one the login has reached does.
  */
 export function isLiftedBySwitch(
   pause: Pause,
   account: Account | undefined,
   limits: readonly SessionRateLimit[],
-  s: { wrapUpAt: number; isFresh: boolean; now: number },
+  s: { wrapUpAt: number; now: number },
 ): boolean {
   const isLive = pause.status === 'active' && pause.wakeAt > s.now
-  if (!isLive || !pause.account || !account || account.id === pause.account || !s.isFresh) return false
+  if (!isLive || !pause.account || !account || account.id === pause.account) return false
   const isClear = (kind: string) => {
     const limit = limits.find(item => item.kind === kind)
     return limit !== undefined && limit.percentUsed < s.wrapUpAt

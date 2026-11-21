@@ -75,24 +75,6 @@ test('a quiet wake lifted after a switch names the switch, not a reset', LONG, a
   expect(quietWakes(seen)[0]).toContain('after the switch to an account with room')
 })
 
-test('an idle session holding the other account\'s readings leaves that account\'s new pause on', LONG,
-  async ($, on) => {
-    const seen = world(on)
-    signIn(seen, 'acct-ultra')
-    await start($)
-    await endTurn($)
-    signIn(seen, 'acct-max', 'Max')
-    seen.limits = ROOMY
-    await endTurn($)
-    // Another session signed back in with the spent account and paused it again; this one stays idle.
-    signIn(seen, 'acct-ultra')
-    const pause = { status: 'active', kinds: ['five_hour'], percentUsed: 97, resetsAt: RESET, wakeAt: WAKE }
-    seen.files.set(PAUSE_FILE, JSON.stringify({ ...pause, account: 'acct-ultra', triggeredBy: 'sess-b' }))
-    await seen.clock.advance(61_000)
-
-    expect([pauseOf(seen)?.status, pauseOf(seen)?.wakeAt]).toEqual(['active', WAKE])
-  })
-
 test('a whole turn under the new login that still reads the old account\'s windows plans no pause', LONG,
   async ($, on) => {
     const seen = world(on)
@@ -114,17 +96,21 @@ test('a whole turn under the new login that still reads the old account\'s windo
     expect(pauseOf(seen)?.status).not.toBe('active')
   })
 
-test('readings from before a switch plan no pause on the new account', LONG, async ($, on) => {
+test('after a cancelled pause, a switch leaves the old account\'s figures planning no pause', LONG, async ($, on) => {
   const seen = world(on)
   signIn(seen, 'acct-ultra')
   await start($)
-  await endTurn($)
-  // Another session signed in with the other account; this one's last readings are still the old account's.
-  signIn(seen, 'acct-max', 'Max')
+  await doWork($)
   seen.limits = HOT
-  await seen.clock.advance(60_000)
+  await endTurn($)
+  await $.command.run({ command: 'usage-guard', args: 'disarm-global' } as never)
+  // Signed in with the other account; this session's figures are still the old account's.
+  signIn(seen, 'acct-max', 'Max')
+  await $.turn.start({ turnId: 't2' } as never)
+  await endTurn($)
+  await seen.clock.advance(61_000)
 
-  expect(pauseOf(seen)).toBeUndefined()
+  expect(pauseOf(seen)?.status).toBe('cancelled')
 })
 
 test('an arm set by hand waits after a switch, with a card that lifts it', LONG, async ($, on) => {
@@ -269,19 +255,6 @@ test('an arm held after a switch fires under the claim an older instance of this
     expect(resumes(seen)).toEqual([])
   })
 
-test('a login that cannot be read leaves this session\'s readings tied to their account', LONG, async ($, on) => {
-  const seen = world(on)
-  signIn(seen, 'acct-ultra')
-  await start($)
-  await endTurn($)
-  // Another session switched, and this check caught the file half-written.
-  seen.files.set(CONFIG, '{"oauthAccount": {"accountUu')
-  seen.limits = HOT
-  await seen.clock.advance(60_000)
-
-  expect(pauseOf(seen)).toBeUndefined()
-})
-
 test('a switch with no pause to end raises no card', LONG, async ($, on) => {
   const seen = world(on)
   signIn(seen, 'acct-ultra')
@@ -308,63 +281,7 @@ test('a lift while a pause still holds keeps the arm at its own time', LONG, asy
   expect(resumes(seen)).toEqual([])
 })
 
-test('back on the spent account after a switch, the sessions pause again as a new episode', LONG, async ($, on) => {
-  const seen = world(on)
-  signIn(seen, 'acct-ultra')
-  await start($)
-  await doWork($)
-  seen.limits = HOT
-  await endTurn($)
-  signIn(seen, 'acct-max', 'Max')
-  seen.limits = ROOMY
-  await endTurn($)
-  await seen.clock.advance(1_000)
-  const lifted = pauseOf(seen)
-  signIn(seen, 'acct-ultra')
-  seen.limits = HOT
-  await endTurn($)
-
-  // Named from the ended pause's wake, which every session reads alike, so all of them plan the same claims.
-  const again = pauseOf(seen)
-  const episode = lifted && new Date(lifted.wakeAt).toISOString()
-  expect([again?.status, again?.isAccountLift, again?.episode]).toEqual(['active', undefined, episode])
-})
-
-test('back on the spent account after the other one paused and reset, the sessions pause again as a new episode', LONG,
-  async ($, on) => {
-    const seen = world(on)
-    signIn(seen, 'acct-ultra')
-    await start($)
-    await doWork($)
-    const weekReset = new Date(NOW + 3 * 24 * 3_600_000).toISOString()
-    const weekHot = [{ kind: 'seven_day', percentUsed: 97, resetsAt: weekReset }]
-    seen.limits = weekHot
-    await endTurn($)
-    signIn(seen, 'acct-max', 'Max')
-    const otherWeek = { kind: 'seven_day', percentUsed: 5, resetsAt: new Date(NOW + 5 * 24 * 3_600_000).toISOString() }
-    seen.limits = [...ROOMY, otherWeek]
-    await endTurn($)
-    await seen.clock.advance(1_000)
-    const lifted = pauseOf(seen)
-    expect(lifted?.isAccountLift).toBe(true)
-    // The other account runs hot, pauses, and its window resets.
-    const otherReset = ROOMY[0]?.resetsAt ?? ''
-    seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: otherReset }, otherWeek]
-    await endTurn($)
-    await seen.clock.advance(Date.parse(otherReset) + 10 * 60_000 - NOW)
-    const later = new Date(NOW + 8 * 3_600_000).toISOString()
-    seen.limits = [{ kind: 'five_hour', percentUsed: 5, resetsAt: later }, otherWeek]
-    await endTurn($)
-    signIn(seen, 'acct-ultra')
-    seen.limits = weekHot
-    await endTurn($)
-
-    const again = pauseOf(seen)
-    const episode = lifted && new Date(lifted.wakeAt).toISOString()
-    expect([again?.status, again?.resetsAt, again?.episode]).toEqual(['active', weekReset, episode])
-  })
-
-test('after the re-pause on the spent account, its next window pauses and resumes with claims of its own', LONG,
+test('back on the spent account after a switch, only its next window pauses, with claims of its own', LONG,
   async ($, on) => {
     const seen = world(on)
     signIn(seen, 'acct-ultra')
@@ -391,65 +308,6 @@ test('after the re-pause on the spent account, its next window pauses and resume
     expect([pauseOf(seen)?.resetsAt, pauseOf(seen)?.episode, resumes(seen).length]).toEqual([nextReset, undefined,
       before + 1])
   })
-
-test('another account\'s cancelled pause does not stand in for one on the spent account', LONG, async ($, on) => {
-  const seen = world(on)
-  signIn(seen, 'acct-ultra')
-  await start($)
-  seen.limits = HOT
-  await endTurn($)
-  signIn(seen, 'acct-max', 'Max')
-  seen.limits = ROOMY
-  await endTurn($)
-  await seen.clock.advance(1_000)
-  seen.limits = [{ kind: 'five_hour', percentUsed: 97, resetsAt: ROOMY[0]?.resetsAt ?? '' }]
-  await endTurn($)
-  await $.command.run({ command: 'usage-guard', args: 'disarm-global' } as never)
-  signIn(seen, 'acct-ultra')
-  seen.limits = HOT
-  await endTurn($)
-
-  expect([pauseOf(seen)?.status, pauseOf(seen)?.account]).toEqual(['active', 'acct-ultra'])
-})
-
-test('an arm held after a switch is not the re-pause\'s: it resumes at its own time, once', LONG, async ($, on) => {
-  const seen = world(on)
-  signIn(seen, 'acct-ultra')
-  await start($)
-  // 13:00 in the world's zone (UTC-7): 20:00 UTC, an hour after the paused window's reset.
-  await $.command.run({ command: 'usage-guard', args: 'arm 13:00 "read the results"' } as never)
-  seen.limits = HOT
-  await endTurn($)
-  signIn(seen, 'acct-max', 'Max')
-  seen.limits = ROOMY
-  await endTurn($)
-  await seen.clock.advance(1_000)
-  // Back on the spent account before its reset: the same window pauses again under a new episode.
-  signIn(seen, 'acct-ultra')
-  seen.limits = HOT
-  await endTurn($)
-  await seen.clock.advance(WAKE - NOW)
-  const handed = () => seen.prompts.filter(text => text.includes('read the results'))
-  expect(handed()).toEqual([])
-
-  await seen.clock.advance(Date.UTC(2026, 9, 2, 20, 1) - WAKE)
-  expect(handed()).toHaveLength(1)
-})
-
-test('readings from a turn another session\'s /login cut across plan no pause', LONG, async ($, on) => {
-  const seen = world(on)
-  signIn(seen, 'acct-ultra')
-  await start($)
-  await endTurn($)
-  await $.turn.start({ turnId: 't2' } as never)
-  // The turn's last answers came under the old account; the login changed before it ended.
-  seen.limits = HOT
-  signIn(seen, 'acct-max', 'Max')
-  await endTurn($)
-  await seen.clock.advance(60_000)
-
-  expect(pauseOf(seen)).toBeUndefined()
-})
 
 test('a switch to an account with another window running hot leaves the pause on', LONG, async ($, on) => {
   const seen = world(on)

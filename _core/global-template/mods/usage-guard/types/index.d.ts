@@ -115,14 +115,8 @@ declare module 'claude-code' {
       settings: SettingsView | null
       armed: ArmedWake | null
       pauseArm: PauseArm | null
-      /** The account this session's plan readings came from (at its last turn's end), and the card about an arm
-       * set by hand that a switch held back, until answered. */
-      account: {
-        reading: string | null
-        card: { label: string; wakeAt: number } | null
-        /** The account signed in when this session's running turn began (null: none could be read). */
-        turnLogin?: string | null
-      } | null
+      /** The card about an arm set by hand that a switch held back, until answered. */
+      account: { card: { label: string; wakeAt: number } | null } | null
       /** What the last press on the arm card did, shown in its place until dismissed. */
       armNote: string | null
       /** A closed session's arm that never ran, or its saved work, offered here; then what the press did. */

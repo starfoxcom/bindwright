@@ -5,9 +5,9 @@ import type { ArmedWake, UsageCard } from '../types'
 import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
-import { clearSwitchCard, endIfSwitched, isLiftAsked, noteReading, noteTurnStart } from './switch'
+import { clearSwitchCard, endIfSwitched, isLiftAsked } from './switch'
 import { armClaim, armWaitedFor, endedBy, isArmFor, movedOntoPause, NO_WORK_REST } from './plan'
-import { ownLimits, raiseSwitchCard, seeLogin } from './switch'
+import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
@@ -533,11 +533,10 @@ async function check($: EngineInterface): Promise<void> {
   await dropIfDisarmedByAll($)
   const now = await $.clock.now()
   const sessionId = await $.session.id()
-  // This session's readings belong to the account signed in once a turn of its own ended under that login.
   const login = await seeLogin($, now)
   let pause = await readPause($)
   // Another account's windows reset at their own times, which is no early reset of the paused ones.
-  const isSameAccount = login.isFresh && (!pause?.account || !login.account || pause.account === login.account.id)
+  const isSameAccount = !pause?.account || !login.account || pause.account === login.account.id
   if (pause && isSameAccount) pause = await endIfResetEarly($, pause, now)
   if (pause) pause = await endIfSwitched($, pause, login)
   if (pause && pause.status !== 'cancelled' && pause.wakeAt <= now) await resumeEarly($, pause, now)
@@ -545,19 +544,13 @@ async function check($: EngineInterface): Promise<void> {
   const isLive = pause?.status === 'active' && pause.wakeAt > now
 
   if (!isLive) {
-    // Readings from before a switch, of another account, never plan a pause.
-    if (!login.isFresh) return
     const { rateLimits } = await $.session.usage()
+    // The fence also drops the old account's windows after a switch, read under whatever login.
     const fresh = unfenced(rateLimits, await readFence($))
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
-    // Without this account's windows, nothing; a plan that would take a switch's spent claims takes its episode.
-    const { own, ended } = await ownLimits($, hot, login.account?.id)
-    if (own.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
-    const plan = { ...planPause(own, live.delayMinutes, sessionId), ...onAccount }
-    const natural = resetKey(plan)
-    const planned = ended?.key === natural ? { ...plan, episode: ended.episode, natural } : plan
+    const planned = { ...planPause(hot, live.delayMinutes, sessionId), ...onAccount }
     // One pause per reset: a cancelled or finished one is not re-armed by the same high reading, nor by a
     // stale one for a reset it was extended past.
     if (covers(pause, planned)) return
@@ -722,10 +715,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     // A subagent's turn (2.1.299+) has no main turn.complete after it, so it never marks a turn running.
-    if ((e as { agentId?: string }).agentId === undefined) {
-      live.isTurnRunning = true
-      await noteTurnStart($).catch(() => undefined)
-    }
+    if ((e as { agentId?: string }).agentId === undefined) live.isTurnRunning = true
     // A hot reload starts the module over without a session.start: the first turn after it restarts
     // the timers and reads the time zone again.
     await startTimers($).catch(() => undefined)
@@ -759,7 +749,6 @@ export const register: Register = (on, options) => {
     await startTimers($).catch(() => undefined)
     await measureCompaction($).catch(() => undefined)
     await runPendingWrapUp($).catch(() => undefined)
-    await noteReading($).catch(() => undefined)
     await check($).catch(() => undefined)
     return result
   })

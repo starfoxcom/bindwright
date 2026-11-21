@@ -26,12 +26,7 @@ export type Pause = {
   /** The reset the first pause of this run named. Kept when a later limit extends the pause, so the
    * wrap-up, stop and resume claims (keyed on it) still run once per session. */
   episode?: string
-  /** Named anew after a switch ended a pause keyed this: the key a plan for its window would have had. */
-  natural?: string
 }
-
-/** The key a plan for this pause's window would have had: its own, unless a switch had it named anew. */
-export const naturalKey = (pause: Pause) => pause.natural ?? resetKey(pause)
 
 export const LIMIT_NAMES: Record<string, string> = { five_hour: '5-hour', seven_day: 'weekly' }
 
@@ -221,10 +216,8 @@ export function pausedReset(pause: Pause, kind: string): number {
 // A pause that already reaches a planned reset: the plan is part of it. Weekly usage only falls at its
 // reset, so a fresh reading after an extension plans that later reset; an earlier one is a stale reading.
 // A pause brought forward covers nothing: the fence already dropped every reading of the windows it paused.
-// Another account's pause covers nothing on this one: its windows are its own.
 export function covers(pause: Pause | undefined, planned: Pause): boolean {
   if (pause?.isBroughtForward) return false
-  if (pause?.account && planned.account && pause.account !== planned.account) return false
   return pause !== undefined && Date.parse(planned.resetsAt) <= Date.parse(pause.resetsAt)
 }
 
