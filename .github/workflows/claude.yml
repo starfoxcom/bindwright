@@ -1261,7 +1261,7 @@ jobs:
           elif [ "$picked" != 1 ] && [ -z "$TOKEN_1" ]; then
             echo "::notice::The first account's token is not set: the fallback runs on account $picked"
           elif [ "$picked" != 1 ]; then
-            echo "::notice::The backup runs on account $picked"
+            echo "::notice::The fallback runs on account $picked"
           fi
           echo "index=$picked" >> "$GITHUB_OUTPUT"
 
@@ -1277,8 +1277,8 @@ jobs:
         continue-on-error: true
         uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689  # v1 (v1.0.282)
         env:
-          # The account the step above picked; an index is set only when that
-          # account answered, so its secret is never empty.
+          # The account the step above picked; an index from 2 up is set only
+          # for an account whose token is set, so its secret is never empty.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ steps.account.outputs.index == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || steps.account.outputs.index == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || steps.account.outputs.index == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || steps.account.outputs.index == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The action puts the base branch's config in the checkout before the
           # reviewer starts; this tells it where the PR's own copies are.
