@@ -848,7 +848,7 @@ jobs:
           }
           trap cleanup EXIT
           git worktree add --quiet --detach "$wt" "$HEAD_SHA"
-          for p in .claude .mcp.json .claude.json .gitmodules .ripgreprc CLAUDE.md CLAUDE.local.md .husky; do
+          for p in .claude .mcp.json .claude.json .gitmodules .ripgreprc CLAUDE.md CLAUDE.local.md AGENTS.md .husky; do
             rm -rf "${wt:?}/$p"
             git -C "$wt" checkout "$BASE_SHA" -- "$p" 2>/dev/null || true
           done
@@ -917,7 +917,7 @@ jobs:
         timeout-minutes: 30
         if: steps.pr-checkout.outcome == 'success'
         continue-on-error: true
-        # Pinned to the v1.0.276 release commit. The bare `@v1` floats.
+        # Pinned to the v1.0.282 release commit. The bare `@v1` floats.
         # Update via
         #   gh api repos/anthropics/claude-code-action/git/ref/tags/v1 --jq '.object.type + " " + .object.sha'
         # and, when the type is `tag` (an annotated tag), peel it to its commit:
@@ -925,7 +925,7 @@ jobs:
         # Confirm the diff, then bump the SHA here. Both tiers carry the same pin,
         # but `.github/workflows/claude-code-review.yml` always ships in a PR of
         # its own, so its pin moves in a separate PR.
-        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc  # v1 (v1.0.276)
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689  # v1 (v1.0.282)
         # The token goes in both as a `with:` input and as an env var, the
         # upstream workaround for credential loss.
         # Model, effort and turn cap from the gate settings (deep.*; the
@@ -1042,7 +1042,7 @@ jobs:
         timeout-minutes: 30
         if: steps.posted-1.outputs.posted == 'no' && steps.failure_class.outputs.usage_limit != 'true'
         continue-on-error: true
-        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc  # v1 (v1.0.276)
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689  # v1 (v1.0.282)
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The action puts the base branch's config in the checkout before the
@@ -1251,7 +1251,7 @@ jobs:
         timeout-minutes: 45
         if: steps.claude-cli-stable.outcome == 'success'
         continue-on-error: true
-        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc  # v1 (v1.0.276)
+        uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689  # v1 (v1.0.282)
         env:
           # The account the step above picked; an index is set only when that
           # account answered, so its secret is never empty.
