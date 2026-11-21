@@ -1,7 +1,7 @@
 import type { SessionRateLimit } from 'claude-code'
 import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_REST, planArm } from '../hooks/plan'
+import { bringForward, type Fence, fenceAfter, fenceWith, isResetEarly, NO_WORK_REST, planArm } from '../hooks/plan'
 import { unfenced, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
@@ -471,10 +471,52 @@ for (const [name, limit, isFresh] of FENCED) {
   })
 }
 
-test('fence: an early end fences each paused limit at its own reset and keeps a later fence', () => {
-  const pause: Pause = { ...FIVE_HOUR_PAUSE, ...BOTH }
+// A weekly pause that ended early, made on the account named (none: no login on record).
+const weeklyEnd = (hours: number, account?: string): Pause => ({
+  ...FIVE_HOUR_PAUSE,
+  kinds: ['seven_day'],
+  resetsAt: afterReset(hours * HOUR),
+  resets: { seven_day: afterReset(hours * HOUR) },
+  ...(account ? { account } : {}),
+})
+const fenceOf = (start: Fence, ends: Pause[]): Fence => ends.reduce(fenceAfter, start)
+// An older module fences at the top level alone, after A's early end.
+const OLDER_AFTER_A: Fence = { ...fenceOf({}, [weeklyEnd(48, 'a')]), seven_day: afterReset(50 * HOUR) }
+// Fence, early ends, the reading's weekly reset in hours, the login on record, and whether the reading is fresh.
+const BY_ACCOUNT: [string, Fence, Pause[], number, string | undefined, boolean][] = [
+  ["on A, a reading of A's fenced window is stale", {}, [weeklyEnd(48, 'a')], 48, 'a', false],
+  ['on A, a reading of an older window is stale', {}, [weeklyEnd(48, 'a')], 47, 'a', false],
+  ["on B, a stale reading of A's exact window is dropped", {}, [weeklyEnd(48, 'a')], 48, 'b', false],
+  ["on B, B's own window that resets earlier is fresh", {}, [weeklyEnd(48, 'a')], 47, 'b', true],
+  ['with no login on record, an older window is stale', {}, [weeklyEnd(48, 'a')], 47, undefined, false],
+  ['on B, both of A\'s early ends stay fenced', {}, [weeklyEnd(47, 'a'), weeklyEnd(48, 'a')], 47, 'b', false],
+  ['on B, a fence with no account keeps older windows stale after A\'s later one', {},
+    [weeklyEnd(47), weeklyEnd(48, 'a')], 46, 'b', false],
+  ['on B, a fence with no account after A\'s later one keeps older windows stale', {},
+    [weeklyEnd(48, 'a'), weeklyEnd(47)], 46, 'b', false],
+  ["on B, an older module's fence keeps older windows stale after A's later one", { seven_day: afterReset(47 * HOUR) },
+    [weeklyEnd(48, 'a')], 46, 'b', false],
+  ["on B, an older module's fence written after A's keeps older windows stale", OLDER_AFTER_A, [], 49, 'b', false],
+]
+for (const [name, start, ends, hours, account, isFresh] of BY_ACCOUNT) {
+  test(`fence per account: ${name}`, () => {
+    expect(unfenced([weekly(hours)], fenceOf(start, ends), account)).toEqual(isFresh ? [weekly(hours)] : [])
+  })
+}
+
+test("fence: a pause an older module ended early keeps its window stale on its account", () => {
+  // A's fence is later, so the older module's early end on B left the file as it was.
+  const file = fenceOf({}, [weeklyEnd(48, 'a')])
+  const endedOnB: Pause = { ...weeklyEnd(47, 'b'), isBroughtForward: true }
+  const switched: Pause = { ...endedOnB, isAccountLift: true }
+  expect(unfenced([weekly(47)], fenceWith(file, endedOnB), 'b')).toEqual([])
+  expect(unfenced([weekly(47)], fenceWith(file, switched), 'b')).toEqual([weekly(47)])
+})
+
+test('fence: the top level keeps the latest reset of each paused kind, the one older modules read', () => {
+  const pause: Pause = { ...FIVE_HOUR_PAUSE, ...BOTH, account: 'b' }
   const fence = fenceAfter({ five_hour: afterReset(HOUR) }, pause)
-  expect(fence).toEqual({ five_hour: afterReset(HOUR), seven_day: afterReset(48 * HOUR) })
+  expect([fence.five_hour, fence.seven_day]).toEqual([afterReset(HOUR), afterReset(48 * HOUR)])
 })
 
 test('an arm moved onto the pause is used once by the early resume and never fires again', LONG, async ($, on) => {

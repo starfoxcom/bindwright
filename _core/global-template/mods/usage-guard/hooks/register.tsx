@@ -12,7 +12,7 @@ import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
 import { closeCommand, limitName, type Pause } from './plan'
 import { armFor, bringForward, CLAIM, countOpenTasks, covers, EMPTY_ARM_NOTE, hotLimits, isResetEarly } from './plan'
-import { fenceAfter, joinPause, unfenced } from './plan'
+import { fenceAfter, fenceWith, joinPause, unfenced } from './plan'
 import { armForPause, declinePauseArm, readPauseArm, takePauseArm } from './pausearm'
 import { planPause, projectOf, reasonText, resetKey, resumePrompt, WRAP_UP_ARGS } from './plan'
 import { stopCommandsFor } from './rules'
@@ -545,7 +545,8 @@ async function check($: EngineInterface): Promise<void> {
 
   if (!isLive) {
     const { rateLimits } = await $.session.usage()
-    const fresh = unfenced(rateLimits, await readFence($)).filter(limit => !isSwitchedAway(pause, limit))
+    const fence = fenceWith(await readFence($), pause)
+    const fresh = unfenced(rateLimits, fence, login.account?.id).filter(limit => !isSwitchedAway(pause, limit))
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
