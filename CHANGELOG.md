@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **The security rule names scripts loaded from another party's server.** A web page that loads a script from someone else's CDN runs whatever that server sends, so the rule now says to pin such a script to an exact version with an integrity hash, or serve a copy from the project, under a Content-Security-Policy that names the allowed sources, and to keep scripts their vendor changes on purpose (tag managers, A/B testing) off pages that handle sign-ins or payments.
+
 ## [v7.6.1] — 2026-11-21
 
 ### Fixed
