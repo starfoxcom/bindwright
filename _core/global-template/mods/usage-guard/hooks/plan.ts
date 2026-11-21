@@ -224,26 +224,43 @@ export function covers(pause: Pause | undefined, planned: Pause): boolean {
 /**
  * Per limit kind, the latest reset of a window that ended early. A reading of that window or an older one is
  * stale (an idle session keeps its last reading), so it never plans a pause, whatever pause the file holds.
- * Every fence sits at the top level, `{ [kind]: reset }`, the shape every version of this module reads. A pause
- * made on a known account also fences under that account's id, `{ [account]: { [kind]: reset } }`, and a top-level
- * entry that mirrors one of those is read by the account rule in `unfenced`.
+ * The latest of them per kind sits at the top level, `{ [kind]: reset }`, the shape every version of this module
+ * reads and writes. `fences` lists every fenced window, each with the account its pause was made on (none when no
+ * login was on record); a top-level reset no entry of its kind holds was written by an older module.
  */
-export type Fence = Record<string, string | Record<string, string>>
+export type Fence = Record<string, string | FencedWindow[]>
 
-const isLater = (reset: string, than: string | undefined): boolean => !(Date.parse(reset) <= Date.parse(than ?? ''))
+export interface FencedWindow {
+  kind: string
+  reset: string
+  account?: string
+}
 
-/** The fence after `pause` ended early: each of its limits fenced at its paused reset, the later one kept. */
+const latestOf = (fence: Fence, kind: string): string | undefined => {
+  const reset = fence[kind]
+  return typeof reset === 'string' ? reset : undefined
+}
+
+const windowsOf = (fence: Fence): FencedWindow[] => (Array.isArray(fence.fences) ? fence.fences : [])
+
+const isListed = (windows: readonly FencedWindow[], kind: string, reset: string, account?: string): boolean =>
+  windows.some(w => w.kind === kind && w.reset === reset && (account === undefined || w.account === account))
+
+/** The fence after `pause` ended early: each of its limits fenced at its paused reset, every earlier fence kept. */
 export function fenceAfter(fence: Fence, pause: Pause): Fence {
   const next: Fence = { ...fence }
-  const own = pause.account ? fence[pause.account] : undefined
-  const perAccount: Record<string, string> = typeof own === 'object' ? { ...own } : {}
+  const windows = [...windowsOf(fence)]
   for (const kind of pause.kinds) {
     const reset = pause.resets?.[kind] ?? pause.resetsAt
-    const flat = next[kind]
-    if (isLater(reset, typeof flat === 'string' ? flat : undefined)) next[kind] = reset
-    if (isLater(reset, perAccount[kind])) perAccount[kind] = reset
+    const latest = latestOf(fence, kind)
+    // An older module's fence, kept with no account so every login still reads it.
+    if (latest && !isListed(windows, kind, latest)) windows.push({ kind, reset: latest })
+    if (!isListed(windows, kind, reset, pause.account)) {
+      windows.push(pause.account ? { kind, reset, account: pause.account } : { kind, reset })
+    }
+    if (!(Date.parse(reset) <= Date.parse(latest ?? ''))) next[kind] = reset
   }
-  return pause.account ? { ...next, [pause.account]: perAccount } : next
+  return { ...next, fences: windows }
 }
 
 /**
@@ -258,19 +275,18 @@ export function isSwitchedAway(pause: Pause | undefined, limit: SessionRateLimit
  * The limits a fence leaves: fresh readings, and every limit with no fence. A fence with no account, or one of
  * `account` (the login on record; every account's when none is), drops its window and older ones. Another
  * account's fence drops only its exact window, a stale reading of it, since this account's windows run on
- * their own clock. A top-level entry that mirrors an account's fence is left to that account's entry.
+ * their own clock. A top-level reset no listed window holds, an older module's fence, has no account.
  */
 export function unfenced(limits: readonly SessionRateLimit[], fence: Fence, account?: string): SessionRateLimit[] {
-  const isMirror = (kind: string, reset: string): boolean =>
-    Object.values(fence).some(entry => typeof entry === 'object' && entry[kind] === reset)
+  const windows = windowsOf(fence)
   return limits.filter(limit => {
     const reset = Date.parse(limit.resetsAt ?? '')
-    return !Object.entries(fence).some(([key, entry]) => {
-      if (typeof entry === 'string') {
-        return key === limit.kind && !isMirror(key, entry) && reset <= Date.parse(entry)
-      }
-      const fenced = Date.parse(entry[limit.kind] ?? '')
-      return !account || key === account ? reset <= fenced : reset === fenced
+    const latest = latestOf(fence, limit.kind)
+    if (latest && !isListed(windows, limit.kind, latest) && reset <= Date.parse(latest)) return false
+    return !windows.some(w => {
+      if (w.kind !== limit.kind) return false
+      const fenced = Date.parse(w.reset)
+      return !w.account || !account || w.account === account ? reset <= fenced : reset === fenced
     })
   })
 }
