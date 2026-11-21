@@ -62,10 +62,14 @@ name: short-kebab-case-slug
 description: one-line summary — used to decide relevance in future conversations
 metadata:
   type: user | feedback | project | reference
+  written: YYYY-MM-DD
+  source: the user's words | PR #N | issue #N | a file path
 ---
 
 {memory content. For feedback/project, structure as: rule/fact, then **Why:** and **How to apply:** lines. Link related memories with [[their-name]].}
 ```
+
+`written` is the day the entry was written or last confirmed true; `source` is where the fact came from, so a later session can check it again. Update both when you rewrite an entry.
 
 After writing, add a pointer line in `MEMORY.md`:
 
