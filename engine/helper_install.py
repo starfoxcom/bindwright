@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 
@@ -20,7 +21,6 @@ RELEASES = "https://github.com/starfoxcom/bindwright/releases/download/"
 # Together under the two minutes a shell call gets by default, so far under the stale-lock age.
 DOWNLOAD_TIMEOUT_SECONDS = 30
 INSTALL_TIMEOUT_SECONDS = 60
-CHUNK_BYTES = 64 * 1024
 # A lock older than this belongs to a session that died mid-install.
 STALE_LOCK_SECONDS = 5 * 60
 LOCK_NAME = "follow.lock"
@@ -100,17 +100,25 @@ def _take_lock(path):
 
 
 def _download(url):
-    """The file's bytes, read in chunks against one deadline for the whole transfer."""
-    deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SECONDS
-    chunks = []
-    with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-        while True:
-            if time.monotonic() > deadline:
-                raise TimeoutError("the download took longer than %d s" % DOWNLOAD_TIMEOUT_SECONDS)
-            chunk = response.read(CHUNK_BYTES)
-            if not chunk:
-                return b"".join(chunks)
-            chunks.append(chunk)
+    """The file's bytes. The fetch runs on a daemon thread, so the whole transfer, the connection
+    included, gives up after DOWNLOAD_TIMEOUT_SECONDS however slowly the server answers."""
+    outcome = []
+
+    def fetch():
+        try:
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+                outcome.append(response.read())
+        except Exception as error:  # handed to the caller, which reports it
+            outcome.append(error)
+
+    worker = threading.Thread(target=fetch, daemon=True)
+    worker.start()
+    worker.join(DOWNLOAD_TIMEOUT_SECONDS)
+    if not outcome:
+        raise TimeoutError("the download took longer than %d s" % DOWNLOAD_TIMEOUT_SECONDS)
+    if isinstance(outcome[0], Exception):
+        raise outcome[0]
+    return outcome[0]
 
 
 def _pip_install(target, wheel_path):
