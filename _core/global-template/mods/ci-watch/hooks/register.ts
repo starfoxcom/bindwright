@@ -576,13 +576,13 @@ async function takeNotes($: EngineInterface): Promise<string[]> {
   // A newer load may have taken over while the tool ran: the notes and the file are its own.
   if (!live.isTurnRunning || (await isRetired($))) return []
   const due = live.watches.filter(isHeld)
-  if (due.length === 0) return takeRunNotes()
+  if (due.length === 0) return takeRunNotes($)
   live.watches = live.watches.map(asSent)
   live.generation++
   await save($)
   const now = await $.clock.now()
   const rounds = await readRounds($)
-  return [...due.map(w => wakeText(w, now, redStreak(rounds[`${w.repo}#${w.number}`]))), ...takeRunNotes()]
+  return [...due.map(w => wakeText(w, now, redStreak(rounds[`${w.repo}#${w.number}`]))), ...(await takeRunNotes($))]
 }
 
 // A hot reload or a /clear starts over without a session.start: the next hook claims, loads and polls.

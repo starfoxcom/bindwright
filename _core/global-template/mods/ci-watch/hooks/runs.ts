@@ -9,22 +9,27 @@ import type { Run } from '../types'
 /** How long a run's output may stay the same size before the session hears about it. */
 export const QUIET_MS = 30 * 60_000
 const CHECK_EVERY_MS = 60_000
+// Sends per wake: a hook that drops every prompt is not asked again each minute.
+const MAX_TRIES = 3
 
 const runs = atom({ plugin: 'ci-watch', key: 'runs' } as const, [])
-const live = { notes: [] as string[], checkedAt: 0 }
+const live = { checkedAt: 0 }
 
 type Started = { id: string; file: string }
 
-// What the engine answers when it starts one, for a shell ("Command running in background with ID: <id>.
-// Output is being written to: <file>.") and for an agent ("agentId: <id> ... output_file: <file>").
-const SHELL_START = /running in background with ID: ([\w-]+)[\s\S]*?Output is being written to: (.+?\.output)/
-const AGENT_START = /agentId: ([\w-]+)[\s\S]*?output_file: (.+?\.output)/
+// A shell's record names only its id; the text the model reads names its output file.
+const SHELL_FILE = /Output is being written to: (.+?\.output)/
 const NOTIFIED = /<task-id>([\w-]+)<\/task-id>/g
 
-/** The run a tool result started, or none. */
-export function startedRun(resultText: string): Started | undefined {
-  const [, id, file] = SHELL_START.exec(resultText) ?? AGENT_START.exec(resultText) ?? []
-  return id && file ? { id, file: file.trim() } : undefined
+/** The run a tool call started, from the tool's own record and the text the model reads, or none. */
+export function startedRun(record: unknown, text: string): Started | undefined {
+  const fields = (record ?? {}) as Record<string, unknown>
+  const { agentId, outputFile, backgroundTaskId } = fields
+  if (fields.status === 'async_launched' && typeof agentId === 'string' && typeof outputFile === 'string') {
+    return { id: agentId, file: outputFile }
+  }
+  const file = SHELL_FILE.exec(text)?.[1]?.trim()
+  return typeof backgroundTaskId === 'string' && file ? { id: backgroundTaskId, file } : undefined
 }
 
 /** The ids a task notification reports on. */
@@ -39,25 +44,23 @@ export function quietText(run: Run, now: number): string {
   )
 }
 
-const textOf = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value ?? ''))
-
 function labelOf(input: Record<string, unknown>): string {
   const label = String(input.description ?? input.command ?? input.prompt ?? 'background run')
   return label.length > 60 ? `${label.slice(0, 57)}...` : label
 }
 
-/** Records a background run a tool call started, from its result. */
-export async function noteStart($: EngineInterface, input: unknown, result: unknown): Promise<void> {
-  const started = startedRun(textOf(result))
+/** Records a background run the main session's tool call started. */
+export async function noteRun(
+  $: EngineInterface,
+  call: { agentId?: string },
+  answer: { result?: unknown; text?: string },
+): Promise<void> {
+  if (call.agentId !== undefined) return
+  const started = startedRun(answer.result, answer.text ?? '')
   if (!started) return
   const now = await $.clock.now()
-  const run: Run = { ...started, label: labelOf((input ?? {}) as Record<string, unknown>), size: -1, grewAt: now }
+  const run: Run = { ...started, label: labelOf(call as Record<string, unknown>), size: -1, grewAt: now }
   await update($, runs, list => [...list.filter(other => other.id !== run.id), run])
-}
-
-/** The wakes held for the running turn, taken once. */
-export function takeRunNotes(): string[] {
-  return live.notes.splice(0)
 }
 
 // One output file's size; a file that cannot be read has not grown.
@@ -65,40 +68,79 @@ function sizeOf($: EngineInterface, file: string): Promise<number> {
   return $.fs.stat(file).then(stat => stat.size, () => -1)
 }
 
+// Lays each changed run over the list as it stands now, by id: a run dropped or added meanwhile stays so.
+async function merge($: EngineInterface, changed: Run[]): Promise<void> {
+  if (changed.length === 0) return
+  const byId = new Map(changed.map(run => [run.id, run]))
+  await update($, runs, list => list.map(run => byId.get(run.id) ?? run))
+}
+
 /** Measures the open runs at most once a minute; the poll of the instance that owns the session calls it. */
 export async function checkRuns($: EngineInterface, isTurnRunning: boolean): Promise<void> {
   const now = await $.clock.now()
   if (now - live.checkedAt < CHECK_EVERY_MS) return
   live.checkedAt = now
-  const quiet: Run[] = []
-  const measured: Run[] = []
+  const changed: Run[] = []
   for (const run of await read($, runs)) {
-    const size = run.isReported ? run.size : await sizeOf($, run.file)
-    if (size > run.size) measured.push({ ...run, size, grewAt: now })
-    else if (!run.isReported && now - run.grewAt >= QUIET_MS) {
-      quiet.push(run)
-      measured.push({ ...run, isReported: true })
-    } else measured.push(run)
+    if (run.isReported) continue
+    const size = await sizeOf($, run.file)
+    if (size > run.size) changed.push({ ...run, size, grewAt: now })
+    else if (now - run.grewAt >= QUIET_MS) changed.push({ ...run, isReported: true, isWakePending: true })
   }
-  await update($, runs, () => measured)
-  // Held while a turn runs, for its next tool result; sent between turns, held ones included.
-  live.notes.push(...quiet.map(run => quietText(run, now)))
-  if (isTurnRunning) return
-  for (const text of live.notes.splice(0)) await $.prompt.submit({ text }).catch(() => undefined)
+  await merge($, changed)
+  if (!isTurnRunning) await sendRunWakes($)
 }
 
-/** Drops the runs a task notification reports on. */
+// The wakes due, marked sent in the saved list before any goes out, so none goes twice.
+async function takeDue($: EngineInterface): Promise<Run[]> {
+  const due = (await read($, runs)).filter(run => run.isWakePending)
+  await merge($, due.map(run => ({ ...run, isWakePending: undefined })))
+  return due
+}
+
+/** The wakes due, for the running turn's next tool result. */
+export async function takeRunNotes($: EngineInterface): Promise<string[]> {
+  const now = await $.clock.now()
+  return (await takeDue($)).map(run => quietText(run, now))
+}
+
+// Between turns each due wake is its own prompt; a refused one is marked due again, up to MAX_TRIES sends.
+async function sendRunWakes($: EngineInterface): Promise<void> {
+  const now = await $.clock.now()
+  for (const run of await takeDue($)) {
+    const tries = (run.wakeTries ?? 0) + 1
+    void $.prompt
+      .submit({ text: quietText(run, now) })
+      .then(
+        sent => sent.drop !== undefined,
+        () => true,
+      )
+      .then(isRefused => (isRefused && tries < MAX_TRIES ? merge($, [{ ...run, wakeTries: tries }]) : undefined))
+      .catch(() => undefined)
+  }
+}
+
+async function dropNotified($: EngineInterface, text: string): Promise<void> {
+  const ended = new Set(notifiedIds(text))
+  if (ended.size > 0) await update($, runs, list => list.filter(run => !ended.has(run.id)))
+}
+
+// The text of an appended message, its blocks joined.
+function appendedText(content: string | readonly object[]): string {
+  return typeof content === 'string' ? content : content.map(b => ('text' in b ? String(b.text) : '')).join('\n')
+}
+
+/** Drops the runs a task notification reports on: one submitted between turns, or one appended mid-turn. */
 export function registerRuns(on: On): void {
   on('prompt.submit', async ($, e, next) => {
-    if (e.origin?.kind === 'task-notification') {
-      const ended = new Set(notifiedIds(e.text))
-      if (ended.size > 0) await update($, runs, list => list.filter(run => !ended.has(run.id)))
+    if (e.origin?.kind === 'task-notification') await dropNotified($, e.text)
+    return next(e)
+  })
+  on('session.append', async ($, e, next) => {
+    if (e.door !== 'response') {
+      const text = appendedText(e.message.content as string | readonly object[])
+      if (text.includes('<task-id>')) await dropNotified($, text)
     }
     return next(e)
   })
-}
-
-/** Records a background run the main session's tool call started. */
-export async function noteRun($: EngineInterface, call: { agentId?: string }, result: { result?: unknown }) {
-  if (call.agentId === undefined) await noteStart($, call, result.result)
 }

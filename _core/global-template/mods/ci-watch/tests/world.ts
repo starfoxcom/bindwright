@@ -69,10 +69,12 @@ export type Seen = {
   workflows?: number
   /** The PR has no check at all: `gh pr checks` says so on stderr and exits non-zero. */
   isCheckless?: boolean
-  /** What a shell or Agent call answers instead of an empty result: a background start's text. */
-  toolText?: string
+  /** What a shell or Agent call answers instead of an empty result: a background start's record and text. */
+  toolAnswer?: { result: object; text: string }
   /** Each file's size as `fs.stat` reports it; a file without an entry cannot be read. */
   sizes: Map<string, number>
+  /** Runs inside each `fs.stat`, before it answers: something else acting while a run is measured. */
+  duringStat?: () => unknown
 }
 
 export function world(on: On) {
@@ -168,13 +170,14 @@ export function world(on: On) {
   })
   // `gh pr create` prints the new PR's URL.
   const answer = (_: unknown, e: object) => {
-    if (seen.toolText !== undefined) return { result: seen.toolText as never }
+    if (seen.toolAnswer !== undefined) return seen.toolAnswer as never
     const command = (e as { command?: string }).command
     const stdout = command?.includes('pr create') ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
     return { result: { stdout, stderr: '', interrupted: false } as never }
   }
   on('tool.call', { tool: ['Bash', 'PowerShell', 'Agent'] }, answer)
-  on('fs.stat', ($, e) => {
+  on('fs.stat', async ($, e) => {
+    await seen.duringStat?.()
     const size = seen.sizes.get(e.path.replaceAll('\\', '/'))
     if (size === undefined) throw new Error('ENOENT')
     return { value: { size } as never }

@@ -47,8 +47,12 @@ export type Run = {
   size: number
   /** When the output last grew, or when the run started. */
   grewAt: number
-  /** Set once its quiet wake went out, so it wakes the session only once. */
+  /** Set once it went quiet, so it wakes the session only once. */
   isReported?: boolean
+  /** Its quiet wake is due and not sent yet. Saved, so a reload sends it. */
+  isWakePending?: boolean
+  /** How many sends of its wake were refused. */
+  wakeTries?: number
 }
 
 /** The settings pane's own state: the last refusal per field. */
