@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.6.1] — 2026-11-21
+
 ### Fixed
 
 - **After an early reset, another account's window still pauses when it runs hot.** An early reset fenced the paused window and every older one for any login, so after a `/login` to another account whose window reset earlier, that account could not pause in it. The fence is now kept per account: the account that reset early still drops its stale readings, and every other account drops only a stale reading of that exact window.
