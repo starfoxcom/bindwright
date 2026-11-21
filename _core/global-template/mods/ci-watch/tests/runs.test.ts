@@ -128,6 +128,18 @@ test('a refused wake is sent again at the next check', async ($, on) => {
   expect(quietWakes(seen.prompts)).toHaveLength(1)
 })
 
+test('a quiet wake due mid-turn rides one tool result, even when two finish at once', async ($, on) => {
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('tool.call', { tool: 'Read' }, () => ({ result: 'text' }) as never)
+  const { seen, clock } = await startShell($, on)
+  await $.turn.start({ turnId: 't1', prompt: 'work' } as never)
+  await clock.advance(QUIET_MS + 2 * MINUTE)
+  expect(quietWakes(seen.prompts)).toEqual([])
+  const read = () => $.tool.call({ tool: 'Read', file_path: 'C:/repo/a.ts' } as never)
+  const answers = await Promise.all([read(), read()])
+  expect(answers.flatMap(answer => quietWakes([...(answer.context ?? [])]))).toHaveLength(1)
+})
+
 test("a subagent's own background start is not the session's to watch", async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true

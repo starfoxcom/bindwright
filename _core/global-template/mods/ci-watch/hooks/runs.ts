@@ -91,10 +91,13 @@ export async function checkRuns($: EngineInterface, isTurnRunning: boolean): Pro
   if (!isTurnRunning) await sendRunWakes($)
 }
 
-// The wakes due, marked sent in the saved list before any goes out, so none goes twice.
+// The wakes due, chosen and marked sent in one update, so two callers at once never take the same one.
 async function takeDue($: EngineInterface): Promise<Run[]> {
-  const due = (await read($, runs)).filter(run => run.isWakePending)
-  await merge($, due.map(run => ({ ...run, isWakePending: undefined })))
+  let due: Run[] = []
+  await update($, runs, list => {
+    due = list.filter(run => run.isWakePending)
+    return due.length === 0 ? list : list.map(run => (run.isWakePending ? { ...run, isWakePending: undefined } : run))
+  })
   return due
 }
 
