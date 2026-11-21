@@ -876,3 +876,13 @@ test("a stale install lock is taken over, and a download that fails reports an e
     assert.ok(!existsSync(lock), "the taken-over lock is released after the failed attempt");
   });
 });
+
+test("a malformed proxy setting ends in an error answer and frees the lock", { skip }, () => {
+  withHome((dir) => {
+    const badProxy = { HTTPS_PROXY: "http://proxy:abc", https_proxy: "http://proxy:abc" };
+    const r = homeWithEnv(badProxy, dir, "helper-install", pluginWithPin(dir, pinEntry()));
+    assert.equal(r.status, 1, r.stderr);
+    assert.equal(typeof r.out.error, "string");
+    assert.ok(!existsSync(join(dir, ".bindwright", "helper", "follow.lock")));
+  });
+});

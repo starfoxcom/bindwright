@@ -17,8 +17,10 @@ import time
 import urllib.request
 
 RELEASES = "https://github.com/starfoxcom/bindwright/releases/download/"
+# Together under the two minutes a shell call gets by default, so far under the stale-lock age.
 DOWNLOAD_TIMEOUT_SECONDS = 30
-INSTALL_TIMEOUT_SECONDS = 120
+INSTALL_TIMEOUT_SECONDS = 60
+CHUNK_BYTES = 64 * 1024
 # A lock older than this belongs to a session that died mid-install.
 STALE_LOCK_SECONDS = 5 * 60
 LOCK_NAME = "follow.lock"
@@ -98,22 +100,32 @@ def _take_lock(path):
 
 
 def _download(url):
+    """The file's bytes, read in chunks against one deadline for the whole transfer."""
+    deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SECONDS
+    chunks = []
     with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-        return response.read()
+        while True:
+            if time.monotonic() > deadline:
+                raise TimeoutError("the download took longer than %d s" % DOWNLOAD_TIMEOUT_SECONDS)
+            chunk = response.read(CHUNK_BYTES)
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
 
 
 def _pip_install(target, wheel_path):
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--upgrade", "--no-deps", "--no-index",
          "--target", target, wheel_path],
-        check=True, timeout=INSTALL_TIMEOUT_SECONDS, capture_output=True, text=True,
+        check=True, timeout=INSTALL_TIMEOUT_SECONDS, capture_output=True,
     )
 
 
 def _failure_line(error):
     """The first line of what the install printed to stderr, or of the exception itself."""
     if isinstance(error, subprocess.CalledProcessError) and error.stderr:
-        text = str(error.stderr)
+        stderr = error.stderr
+        text = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else str(stderr)
     else:
         text = str(error)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -142,13 +154,14 @@ def _installed_version(target):
 def _install_pin(pin, helper_home, fetch, run_install):
     try:
         data = (fetch or _download)(pin["url"])
-    except (OSError, http.client.HTTPException) as error:
+    # ValueError covers a malformed proxy or URL (http.client.InvalidURL).
+    except (OSError, ValueError, http.client.HTTPException) as error:
         return {"error": _failure_line(error)}
     if hashlib.sha256(data).hexdigest() != pin["sha256"]:
         return {"error": "the download does not match the plugin's pin"}
     try:
         _install_wheel(pin, helper_home, data, run_install or _pip_install)
-    except (OSError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         return {"error": _failure_line(error)}
     found = _installed_version(os.path.join(helper_home, "python"))
     if found != pin["version"]:
