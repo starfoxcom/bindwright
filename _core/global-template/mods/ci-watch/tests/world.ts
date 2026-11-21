@@ -175,7 +175,7 @@ export function world(on: On) {
     const stdout = command?.includes('pr create') ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
     return { result: { stdout, stderr: '', interrupted: false } as never }
   }
-  on('tool.call', { tool: ['Bash', 'PowerShell', 'Agent'] }, answer)
+  on('tool.call', { tool: ['Bash', 'PowerShell', 'Agent', 'TaskStop'] }, answer)
   on('fs.stat', async ($, e) => {
     await seen.duringStat?.()
     const size = seen.sizes.get(e.path.replaceAll('\\', '/'))

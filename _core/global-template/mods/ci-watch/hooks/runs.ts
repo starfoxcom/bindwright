@@ -130,8 +130,20 @@ function appendedText(content: string | readonly object[]): string {
   return typeof content === 'string' ? content : content.map(b => ('text' in b ? String(b.text) : '')).join('\n')
 }
 
-/** Drops the runs a task notification reports on: one submitted between turns, or one appended mid-turn. */
+/**
+ * Drops the runs that ended: those a task notification reports on, submitted between turns or appended
+ * mid-turn, and those the session stopped itself, which no notification reports.
+ */
 export function registerRuns(on: On): void {
+  on('tool.call', { tool: 'TaskStop' }, async ($, e, next) => {
+    const ran = await next(e)
+    const input = e as { task_id?: string; shell_id?: string }
+    const id = input.task_id ?? input.shell_id
+    if (id && ran.deny === undefined && !ran.isError) {
+      await update($, runs, list => list.filter(run => run.id !== id))
+    }
+    return ran
+  })
   on('prompt.submit', async ($, e, next) => {
     if (e.origin?.kind === 'task-notification') await dropNotified($, e.text)
     return next(e)

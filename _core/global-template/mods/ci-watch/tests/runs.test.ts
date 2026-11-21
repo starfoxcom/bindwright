@@ -98,6 +98,13 @@ test('a run that reported back mid-turn is forgotten too', async ($, on) => {
   expect(quietWakes(seen.prompts)).toEqual([])
 })
 
+test('a run the session stopped itself never wakes it', async ($, on) => {
+  const { seen, clock } = await startShell($, on)
+  await $.tool.call({ tool: 'TaskStop', task_id: 'b1' } as never)
+  await clock.advance(QUIET_MS + 2 * MINUTE)
+  expect(quietWakes(seen.prompts)).toEqual([])
+})
+
 test('a notification that lands while the runs are measured is not undone', async ($, on) => {
   const { seen, clock } = await startShell($, on)
   let isSent = false
