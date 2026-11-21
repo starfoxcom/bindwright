@@ -650,10 +650,10 @@ async function readSettings($: EngineInterface): Promise<void> {
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))
 }
 
+// The settings come from the mod's own file over the loaded options, read again as it changes.
 export const register: Register = (on, options) => {
   registerView(on)
   registerRuns(on)
-  // The settings come from the mod's own file over the loaded options, read again as it changes.
   settings(on, options, values => {
     live.pollMs = Number(values.pollSeconds ?? 30) * 1000
     live.timeoutMs = Number(values.timeoutMinutes ?? 60) * 60_000
@@ -693,7 +693,6 @@ export const register: Register = (on, options) => {
     await setTurnRunning($, false)
     return result
   })
-
   on('session.end', endSession)
 
   // startPolling first: a freshly loaded instance claims the owner file before any check.
