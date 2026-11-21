@@ -264,6 +264,15 @@ export function fenceAfter(fence: Fence, pause: Pause): Fence {
 }
 
 /**
+ * The fence a reading meets: the file's, plus the windows of a pause that ended early. An older module ends a pause
+ * early without listing its windows, and leaves no trace when its reset is not the latest; the pause it brought
+ * forward still names them. A pause a switch ended fences nothing.
+ */
+export function fenceWith(fence: Fence, pause: Pause | undefined): Fence {
+  return pause?.isBroughtForward && !pause.isAccountLift ? fenceAfter(fence, pause) : fence
+}
+
+/**
  * A reading of a window a switch ended the pause for: that exact window (kind and reset), read under whatever login
  * by a session the new credentials have not reached. Only that window: another account's run on their own clock.
  */
