@@ -1,7 +1,7 @@
 import type { SessionRateLimit } from 'claude-code'
 import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_NOTICE, planArm } from '../hooks/plan'
+import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_REST, planArm } from '../hooks/plan'
 import { unfenced, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
@@ -231,14 +231,15 @@ test('a session opened after the reset is told to resume by hand', async ($, on)
   expect(resumes(seen)).toEqual([])
 })
 
-test('cancel stops the automatic resume', LONG, async ($, on) => {
+test('disarm-global stops the automatic resume and ends the pause', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   seen.limits = [{ kind: 'five_hour', percentUsed: 99, resetsAt: RESET }]
   await endTurn($)
-  const answer = await $.command.run({ command: 'usage-guard', args: 'cancel' } as never)
+  const answer = await $.command.run({ command: 'usage-guard', args: 'disarm-global' } as never)
 
-  expect(answer.text).toContain('cancelled')
+  expect(answer.text).toContain('Disarmed every session')
+  expect(pauseOf(seen)?.status).toBe('cancelled')
   await seen.clock.advance(WAKE - NOW)
   expect(resumes(seen)).toEqual([])
 })
@@ -715,8 +716,8 @@ test('after a hot reload, a session with no work on record waits and says what i
   expect(seen.claims.has(`work-${KEY}-sess-a`)).toBe(true)
   // The test engine keeps no transcript, so the notice is checked as text: what is on record, never
   // a claim that the session saved nothing.
-  expect(NO_WORK_NOTICE).toContain('No saved work is on record for this session')
-  expect(NO_WORK_NOTICE).not.toContain('saved no work')
+  expect(NO_WORK_REST).toContain('No saved work is on record for this session')
+  expect(NO_WORK_REST).not.toContain('saved no work')
 })
 
 test(
@@ -977,7 +978,7 @@ test('an armed wake another instance of this module already fired does not resum
   expect(resumes(seen)).toEqual([])
 })
 
-test('a cancel in this session also drops its armed wake', LONG, async ($, on) => {
+test('the earlier cancel command still disarms every session, this one included', LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
@@ -988,11 +989,11 @@ test('a cancel in this session also drops its armed wake', LONG, async ($, on) =
   expect(resumes(seen)).toEqual([])
 })
 
-test("another session's cancel leaves this session's own arm in place", LONG, async ($, on) => {
+test("a pause cancelled elsewhere without a disarm leaves this session's own arm in place", LONG, async ($, on) => {
   const seen = world(on)
   await start($)
   await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
-  // Session B paused for the same reset and cancelled it; this session never crossed the line.
+  // Session B paused for the same reset and its pause was cancelled; nobody disarmed every session.
   const cancelled: Pause = {
     status: 'cancelled',
     kinds: ['five_hour'],
@@ -1040,10 +1041,10 @@ test('/usage-guard shows its arguments in the menu and lists them on help', asyn
   await start($)
   const hint = registered.find(command => command.name === 'usage-guard')?.argumentHint
   const arm = 'arm 5h|week|HH:MM [compact] ["reason"]'
-  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | cancel | adopt]`)
+  expect(hint).toBe(`[help | settings | set | phone | ${arm} | disarm | disarm-global | lift | lift-all | adopt]`)
   const help = await $.command.run({ command: 'usage-guard', args: 'help' } as never)
   const lines = [
-    '/usage-guard cancel',
+    '/usage-guard disarm-global',
     '/usage-guard arm 5h|week',
     '/usage-guard arm HH:MM',
     '/usage-guard arm ... compact',

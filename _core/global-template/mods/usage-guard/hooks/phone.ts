@@ -13,6 +13,10 @@ import { givenDir } from './settings'
 // text for a chat that draws neither (the phone app, the web). Colour becomes a square in the card's tone.
 const armedWake = atom({ plugin: 'usage-guard', key: 'armed' } as const, null)
 const adopt = atom({ plugin: 'usage-guard', key: 'adopt' } as const, null)
+const accountView = atom({ plugin: 'usage-guard', key: 'account' } as const, null)
+const SWITCH_LINE =
+  '🟨 Signed in with another account, and this session was armed by hand: /usage-guard lift resumes it now, ' +
+  '/usage-guard lift-all every session armed by hand.'
 const OFFER_LINE =
   '🟨 A closed session in this project missed its armed resume: /usage-guard adopt runs it here, ' +
   '/usage-guard adopt drop forgets it.'
@@ -36,7 +40,10 @@ async function phoneText($: EngineInterface, status: string): Promise<string> {
   const lines = [`${isPaused ? '🟨' : '🟩'} ${status}`]
   const card = await readShared<UsageCard>($, 'card.json')
   if (card && !card.dismissed) lines.push(`${SQUARES[cardTone(card.id)]} ${card.text}`)
-  if ((await read($, armedWake))?.isQuestioned) lines.push(`🟨 ${EMPTY_ARM_NOTE}`)
+  const arm = await read($, armedWake)
+  if (arm?.isQuestioned) lines.push(`🟨 ${EMPTY_ARM_NOTE}`)
+  const switched = (await read($, accountView))?.card
+  if (switched && arm?.wakeAt === switched.wakeAt) lines.push(SWITCH_LINE)
   const offered = await read($, adopt)
   if (offered?.offer) lines.push(OFFER_LINE)
   else if (offered?.saved) lines.push(SAVED_OFFER_LINE)

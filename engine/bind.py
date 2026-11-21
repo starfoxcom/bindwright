@@ -133,6 +133,7 @@ def _included(path, a, flags):
         ".github/workflows/claude.yml.template": flags["github_actions_deep_review"],
         ".github/scripts/review_gate.py": gate,
         ".github/scripts/setup-review-gate.sh": gate,
+        ".github/scripts/set-review-tokens.sh": gate,
         ".github/scripts/pin_check.py": gate,
         ".github/workflows/pin-check.yml": gate,
         ".github/review-gate.yml.template": gate,

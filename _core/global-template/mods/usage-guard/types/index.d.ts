@@ -14,6 +14,8 @@ export type UsageGuardBand = {
   card: UsageCard | null
   /** True while the pause is on and its automatic resume can still be cancelled. */
   canCancel: boolean
+  /** This session holds an arm, so the card can cancel its resume alone. */
+  canDisarmHere?: boolean
 }
 
 /** The settings pane's own state: the last refusal per field, shown under that field. */
@@ -29,6 +31,8 @@ export type SettingsView = {
  * change, an edit) re-arms it.
  */
 export type ArmedWake = {
+  /** When it was set, in ms: a disarm of every session drops the arms set before it. */
+  setAt?: number
   /** The limit's kind, `five_hour` or `seven_day`, or `clock` for a time of day. */
   kind: string
   /** For a reset, its time; for a time of day, the wake's own (the claims are keyed on it). */
@@ -44,6 +48,33 @@ export type ArmedWake = {
   root?: string
   /** What the wake is for, as the person quoted it: handed to the session it wakes. */
   reason?: string
+  /**
+   * Why it fires apart from its own reset: held when a switch ended the pause keyed `key` (its wake, or a lift,
+   * resumes that pause's saved work), lifted early by hand, or moved onto a pause's wake (and then the pause decides).
+   */
+  override?: ArmOverride
+}
+
+/**
+ * `switch`: `key` is the claim key (`resetKey`) of the pause the switch ended, so a later pause of the same window is
+ * not it. `pause`: its own time came while a pause held, so it fires at that pause's wake, whatever ends the pause.
+ */
+export type ArmOverride = { by: 'switch'; key: string } | { by: 'lift' } | { by: 'pause' }
+
+/** This session's own resume at a pause's wake (hooks/pausearm.ts), kept apart from the arm set by hand. */
+export type PauseArm = {
+  /** The pause's reset key (`resetKey`): an extended pause keeps it. */
+  key: string
+  resetsAt: string
+  wakeAt: number
+  /** When it was set, in ms: a disarm of every session after it declines it. */
+  setAt: number
+  /** The session saved work at the wrap-up, so its wake resumes something. */
+  hasWork?: boolean
+  /** The person cancelled this session's resume: the pause never arms it again. */
+  isDeclined?: boolean
+  /** The session id it was first filed under, which its saved work is filed under too: a /clear does not change it. */
+  session?: string
 }
 
 /** Another session's arm in this project whose wake passed while that session was closed. */
@@ -83,6 +114,9 @@ declare module 'claude-code' {
       band: UsageGuardBand | null
       settings: SettingsView | null
       armed: ArmedWake | null
+      pauseArm: PauseArm | null
+      /** The card about an arm set by hand that a switch held back, until answered. */
+      account: { card: { label: string; wakeAt: number } | null } | null
       /** What the last press on the arm card did, shown in its place until dismissed. */
       armNote: string | null
       /** A closed session's arm that never ran, or its saved work, offered here; then what the press did. */

@@ -66,7 +66,7 @@ export function joinedPauseText(pause: Pause, wakeText: string): string {
   return (
     `Plan limits are nearly used up (${limitName(pause)} at ${pause.percentUsed}%). Work resumes at ` +
     `${wakeText}: a session with saved work then goes on by itself, and one with nothing ` +
-    `on record is told. To skip the automatic resume, run /usage-guard cancel.`
+    `on record is told. /usage-guard disarm skips the automatic resume here, disarm-global in every session.`
   )
 }
 
@@ -74,8 +74,8 @@ export function joinedPauseText(pause: Pause, wakeText: string): string {
 export function nothingToSaveText(pause: Pause, resumeAt: string): string {
   return (
     `${limitName(pause)} plan usage at ${pause.percentUsed}%: nothing to save here, so this session does not ` +
-    `wake by itself at ${resumeAt}; /usage-guard arm 5h|week sets it to. /usage-guard cancel skips the ` +
-    'automatic resume of the sessions that saved work.'
+    `wake by itself at ${resumeAt}; /usage-guard arm 5h|week sets it to. /usage-guard disarm-global skips ` +
+    'the automatic resume of every session.'
   )
 }
 
@@ -83,7 +83,7 @@ export function nothingToSaveText(pause: Pause, resumeAt: string): string {
 export function savingText(pause: Pause, resumeAt: string): string {
   return (
     `${limitName(pause)} plan usage at ${pause.percentUsed}%: saving work now. Work resumes on its own at ` +
-    `${resumeAt}. To skip the automatic resume, run /usage-guard cancel.`
+    `${resumeAt}. /usage-guard disarm skips the automatic resume here, disarm-global in every session.`
   )
 }
 
@@ -133,18 +133,22 @@ export type CardButton = { key: string; label: string; isPrimary?: boolean; onPr
 export type Card = { key: string; tone: Tone; text: string; buttons: CardButton[] }
 
 export const COMMAND_TEXT =
-  'Usage pause status. Also: cancel, arm 5h|week|HH:MM [compact] ["reason"], disarm, settings, set'
+  'Usage pause status. Also: arm 5h|week|HH:MM [compact] ["reason"], disarm, disarm-global, lift, lift-all, ' +
+  'settings, set'
 export const ARGUMENT_HINT =
-  '[help | settings | set | phone | arm 5h|week|HH:MM [compact] ["reason"] | disarm | cancel | adopt]'
+  '[help | settings | set | phone | arm 5h|week|HH:MM [compact] ["reason"] | disarm | disarm-global | lift | ' +
+  'lift-all | adopt]'
 export const HELP = [
   '/usage-guard: pauses a session before a plan window runs out and resumes it after the reset.',
   '  /usage-guard                      the pause status and the wrap-up level',
-  '  /usage-guard cancel               cancel the active pause: no automatic resume',
   '  /usage-guard arm 5h|week          resume this session after that window resets',
   '  /usage-guard arm HH:MM            resume it at that 24-hour time (21:05), the next time it comes',
   '  /usage-guard arm ... compact      the same, and compact the session now',
   '  /usage-guard arm ... "reason"     the same; the wake hands the session the quoted reason',
-  '  /usage-guard disarm               drop the armed resume',
+  '  /usage-guard disarm               drop this session\'s resume, set by hand or by a pause',
+  '  /usage-guard disarm-global        drop every session\'s resume, and end the pause',
+  '  /usage-guard lift                 resume now the work this session was armed for by hand',
+  '  /usage-guard lift-all             the same in every session armed by hand, unless a pause holds',
   '  /usage-guard adopt [keep | drop]  run here the work a closed session missed (keep: leave saved work',
   '                                    for that session; drop: forget it)',
   '  /usage-guard settings             open the settings pane',

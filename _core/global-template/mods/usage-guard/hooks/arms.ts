@@ -1,5 +1,5 @@
-import type { AdoptOffer, ArmedWake } from '../types'
-import { projectOf, REASON_MAX, reasonText } from './plan'
+import type { AdoptOffer, ArmedWake, ArmOverride } from '../types'
+import { type DisarmAll, isDisarmedByAll, projectOf, REASON_MAX, reasonText } from './plan'
 
 // An arm survives a restart in `mods-data/usage-guard/arms/<session>.json`: the arm, or `null` once it
 // is dropped or done (mods cannot delete files).
@@ -27,10 +27,20 @@ export function parseSavedArm(text: string): ArmedWake | undefined {
     const root = typeof arm.root === 'string' ? { root: arm.root } : {}
     const reason = typeof arm.reason === 'string' && arm.reason ? { reason: arm.reason.slice(0, REASON_MAX) } : {}
     const isQuestioned = arm.isQuestioned === true
-    return { kind: arm.kind, resetsAt: arm.resetsAt, wakeAt: arm.wakeAt, isQuestioned, ...armedIn, ...root, ...reason }
+    const setAt = typeof arm.setAt === 'number' && Number.isFinite(arm.setAt) ? { setAt: arm.setAt } : {}
+    const fields = { ...armedIn, ...root, ...reason, ...setAt, ...overrideOf(arm.override) }
+    return { kind: arm.kind, resetsAt: arm.resetsAt, wakeAt: arm.wakeAt, isQuestioned, ...fields }
   } catch {
     return undefined
   }
+}
+
+function overrideOf(value: unknown): { override?: ArmOverride } {
+  const given = value as { by?: unknown; key?: unknown } | null | undefined
+  if (given?.by === 'lift') return { override: { by: 'lift' } }
+  if (given?.by === 'pause') return { override: { by: 'pause' } }
+  const isSwitch = given?.by === 'switch' && typeof given.key === 'string' && given.key !== ''
+  return isSwitch ? { override: { by: 'switch', key: given.key as string } } : {}
 }
 
 // `armedFor` (here and below): what the arm waited for, as `armFor` says it.
@@ -72,12 +82,15 @@ export function pickOffer(
   me: string,
   root: string,
   now: number,
+  disarmAll?: DisarmAll,
 ): AdoptOffer | undefined {
   let best: AdoptOffer | undefined
   for (const { name, text } of files) {
     const owner = name.replace(/\.json$/, '')
     const arm = parseSavedArm(text)
     if (!arm?.root || owner === me || !name.endsWith('.json')) continue
+    // A disarm of every session reached the closed ones too.
+    if (isDisarmedByAll(arm, disarmAll)) continue
     if (projectOf(arm.root) !== projectOf(root)) continue
     const age = now - arm.wakeAt
     if (age < ADOPT_GRACE_MS || age > ADOPT_MAX_AGE_MS) continue

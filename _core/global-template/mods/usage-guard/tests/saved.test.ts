@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { SavedWork } from '../types'
 import { ADOPT_GRACE_MS, ADOPT_MAX_AGE_MS } from '../hooks/arms'
 import type { Pause } from '../hooks/plan'
-import { KEPT_MAX_AGE_MS, parseSaved, pickSaved, shouldResumeOwn } from '../hooks/saved'
+import { KEPT_MAX_AGE_MS, parseSaved, pickSaved, SAVED_FILE, shouldResumeOwn } from '../hooks/saved'
 import type { World } from './world'
 import { CLAIMS_DIR, doWork, endTurn, KEY, mountCard, NOW, PAUSE_FILE, RESET, start, WAKE } from './world'
 import { world } from './world'
@@ -108,7 +108,8 @@ test('a session that changed nothing files no saved work', async ($, on) => {
   await start($)
   seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: RESET }]
   await endTurn($)
-  expect([...seen.files.keys()].filter(path => path.startsWith(CLAIMS_DIR))).toEqual([])
+  const saved = [...seen.files.keys()].filter(path => path.startsWith(CLAIMS_DIR) && path.endsWith(`/${SAVED_FILE}`))
+  expect(saved).toEqual([])
 })
 
 test('taking saved work over claims its resume, clears it and submits the resume', LONG, async ($, on) => {
@@ -176,6 +177,16 @@ test('dropping saved work clears it without a resume', LONG, async ($, on) => {
   expect(seen.prompts).toEqual([])
 })
 
+test('saved work of a session that cancelled its resume is never offered', LONG, async ($, on) => {
+  const seen = world(on)
+  leaveSaved(seen)
+  const declined = { key: KEY, resetsAt: RESET, wakeAt: SAVED.wakeAt, setAt: NOW - 60_000, isDeclined: true }
+  seen.files.set(`${CLAIMS_DIR}/${KEY}-sess-old/arm.json`, JSON.stringify(declined))
+  await start($)
+  const ui = await offered($, seen)
+  expect(await ui.find({ key: 'usage-adopt' })).toBeUndefined()
+})
+
 test('saved work taken elsewhere after the offer showed is not resumed twice', LONG, async ($, on) => {
   const seen = world(on)
   leaveSaved(seen)
@@ -190,26 +201,18 @@ test('saved work taken elsewhere after the offer showed is not resumed twice', L
 
 test('saved work a closed session misses shows just past the reset, with no 15-minute wait', LONG, async ($, on) => {
   const seen = world(on)
-  const pause: Pause = { ...DONE, status: 'active', wakeAt: WAKE }
+  // A wake minutes away: the kit lets a timer go once it has been held ten seconds of real time, and the
+  // look past the wake is one timer held from the start.
+  const wake = NOW + 3 * 60_000
+  const pause: Pause = { ...DONE, status: 'active', wakeAt: wake }
   seen.files.set(PAUSE_FILE, JSON.stringify(pause))
-  leaveSaved(seen, { ...SAVED, wakeAt: WAKE })
+  leaveSaved(seen, { ...SAVED, wakeAt: wake })
   await start($)
   const ui = await offered($, seen)
   expect(await ui.find({ key: 'usage-adopt' })).toBeUndefined()
-  // In 10-minute steps, as in usage-guard.test.ts: one long jump stopped short on a slow CI runner.
-  const step = 10 * 60_000
-  for (let left = WAKE - NOW + ADOPT_GRACE_MS + 1_000; left > 0; left -= step) {
-    await seen.clock.advance(Math.min(step, left))
-  }
-  // The look past the wake is timed for a set moment, and on a slow runner the read that sets its timer
-  // can finish after the clock passed it. A minute more in one-second steps lets it fire, still far short
-  // of the next 15-minute scan, which is what the test rules out.
-  let take = await ui.find({ key: 'usage-adopt-take' })
-  for (let second = 0; !take && second < 60; second++) {
-    await seen.clock.advance(1_000)
-    take = await ui.find({ key: 'usage-adopt-take' })
-  }
-  expect(take).toBeDefined()
+  // Well short of the next 15-minute scan, which is what the test rules out.
+  await seen.clock.advance(wake - NOW + ADOPT_GRACE_MS + 1_000)
+  expect(await ui.find({ key: 'usage-adopt-take' })).toBeDefined()
 })
 
 for (const key of ['usage-adopt-take', 'usage-adopt-keep', 'usage-adopt-drop']) {

@@ -3,9 +3,11 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { AdoptOffer, SavedOffer, SavedWork } from '../types'
 import { ADOPT_GRACE_MS, adoptReason, offerText, parseSavedArm, pickOffer } from './arms'
+import { readMark } from './armstore'
+import { isPauseResumeDeclined } from './pausearm'
 import { drawCards } from './cards'
 import type { Pause } from './plan'
-import { armFor, CLAIM, resumePrompt } from './plan'
+import { armClaim, armFor, CLAIM, resumePrompt } from './plan'
 import { dataDir, readPause } from './files'
 import { keptReason, parseSaved, pickSaved, resumeClaim, SAVED_FILE, savedOfferText } from './saved'
 import { shouldResumeOwn, takeOverReason, workClaims } from './saved'
@@ -39,7 +41,8 @@ async function timeText($: EngineInterface, ms: number): Promise<string> {
 const savedPath = async ($: EngineInterface, record: SavedWork) =>
   `${await dataDir($)}/claims/work-${record.key}-${record.session}/${SAVED_FILE}`
 
-// The work claims' saved records (this session's own, or every other session's), and every claim's name.
+// The work claims' saved records (this session's own, or every other session's), and every claim's name. Another
+// session's work is left out once it cancelled its resume: the person chose not to have that work go on.
 async function savedRecords($: EngineInterface, isOwn: boolean) {
   const dir = `${await dataDir($)}/claims`
   const names = new Set((await $.fs.list(dir).catch(() => [])).map(entry => entry.name))
@@ -48,7 +51,8 @@ async function savedRecords($: EngineInterface, isOwn: boolean) {
   for (const { name, owner } of workClaims([...names])) {
     if ((owner === me) !== isOwn) continue
     const record = parseSaved(String(await $.fs.read(`${dir}/${name}/${SAVED_FILE}`).catch(() => '')))
-    if (record) records.push(record)
+    if (!record || (!isOwn && (await isPauseResumeDeclined($, record.key, record.session)))) continue
+    records.push(record)
   }
   return { records, names }
 }
@@ -72,7 +76,8 @@ async function lookForOffer($: EngineInterface, isAsked = false): Promise<void> 
     if (kind !== 'file') continue
     files.push({ name, text: String(await $.fs.read(`${dir}/${name}`).catch(() => '')) })
   }
-  const offer = pickOffer(files, await $.session.id(), await $.session.root(), now)
+  const disarmAll = await readMark($, 'disarm')
+  const offer = pickOffer(files, await $.session.id(), await $.session.root(), now, disarmAll)
   if (offer) {
     const text = offerText(armFor(offer.arm.kind), await timeText($, offer.arm.wakeAt))
     return void (await update($, state, () => ({ offer, saved: null, text, note: null })))
@@ -142,7 +147,7 @@ async function answerArm($: EngineInterface, offer: AdoptOffer, isAdopted: boole
   const file = `${await dataDir($)}/arms/${offer.owner}.json`
   const saved = parseSavedArm(String(await $.fs.read(file).catch(() => '')))
   const isSame = saved?.resetsAt === offer.arm.resetsAt && saved.wakeAt === offer.arm.wakeAt
-  const claim = `arm-${Date.parse(offer.arm.resetsAt)}-${offer.owner}`
+  const claim = armClaim(offer.arm, offer.owner)
   const won = !isSame ? undefined : isAdopted ? await claimOnce($, claim) : true
   let note = 'Dropped: that resume will not be offered again.'
   if (!isSame) note = 'That resume changed meanwhile (its session came back or set it again): nothing was done.'
