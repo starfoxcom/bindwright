@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { type Engine, expect, test } from 'claude-code/testing'
 import { accountOf } from '../hooks/account'
 import { CARD_FILE, doWork, endTurn, mountCard, NOW, PAUSE_FILE, pauseOf, quietWakes, RESET, resumes } from './world'
 import { start, TASKS_DIR, WAKE, world, type World } from './world'
@@ -129,20 +129,44 @@ test('an arm set by hand waits after a switch, with a card that lifts it', LONG,
   expect(resumes(seen)[0]).toContain('check CI')
 })
 
-test('an arm whose time came during the pause resumes at a switch, with no card to lift it', LONG, async ($, on) => {
-  const seen = world(on)
+// 10:05 in the world's zone, five minutes from now: the arm comes due while the pause holds, and moves onto its wake.
+async function armDueInPause($: Engine, seen: World, hot = HOT): Promise<void> {
   signIn(seen, 'acct-ultra')
   await start($)
-  // 10:05 in the world's zone, five minutes from now: it comes due while the pause holds, and moves onto its wake.
   await $.command.run({ command: 'usage-guard', args: 'arm 10:05 "check CI"' } as never)
   await doWork($)
-  seen.limits = HOT
+  seen.limits = hot
   await endTurn($)
   await seen.clock.advance(6 * 60_000)
+}
+
+async function switchToRoomy($: Engine, seen: World, limits = ROOMY): Promise<void> {
   signIn(seen, 'acct-max', 'Max')
-  seen.limits = ROOMY
+  seen.limits = limits
   await endTurn($)
   await seen.clock.advance(1_000)
+}
+
+test('an arm whose time came during the pause resumes at a switch', LONG, async ($, on) => {
+  const seen = world(on)
+  await armDueInPause($, seen)
+  await switchToRoomy($, seen)
+
+  expect(resumes(seen)).toHaveLength(1)
+})
+
+test('an arm whose time came during a pause extended since resumes once at a switch', LONG, async ($, on) => {
+  const seen = world(on)
+  // A window resetting 20 minutes from now, so the arm's old wake comes soon after the switch.
+  const near = new Date(NOW + 20 * 60_000).toISOString()
+  await armDueInPause($, seen, [{ kind: 'five_hour', percentUsed: 97, resetsAt: near }])
+  // Another session joined a weekly limit: the pause now runs to a later reset under the same episode.
+  const later = new Date(NOW + 3_600_000).toISOString()
+  const extended = { ...pauseOf(seen), resetsAt: later, wakeAt: Date.parse(later) + 120_000, episode: near }
+  seen.files.set(PAUSE_FILE, JSON.stringify({ ...extended, kinds: ['five_hour', 'seven_day'] }))
+  const week = { kind: 'seven_day', percentUsed: 10, resetsAt: new Date(NOW + 5 * 24 * 3_600_000).toISOString() }
+  await switchToRoomy($, seen, [...ROOMY, week])
+  await seen.clock.advance(20 * 60_000)
 
   expect(resumes(seen)).toHaveLength(1)
 })
