@@ -2,8 +2,9 @@
 # Sets the Claude account tokens the review workflows run on, in one sweep:
 # reads each account's token once, with the input hidden, and writes it as a
 # secret into every repository named with --repo, or else every repository
-# the signed-in GitHub account owns whose default branch holds the routine
-# review workflow. Account 1 is CLAUDE_CODE_OAUTH_TOKEN, account 2
+# the signed-in GitHub account owns, or owns through an organization it
+# administers, whose default branch holds the routine review workflow.
+# Account 1 is CLAUDE_CODE_OAUTH_TOKEN, account 2
 # CLAUDE_CODE_OAUTH_TOKEN_2, and so on up to 5; the workflows try them in
 # that order when an account has no room left.
 #
@@ -32,7 +33,8 @@ Usage: set-review-tokens.sh --accounts N [--repo OWNER/NAME]...
                        The script asks for each one's token, from
                        'claude setup-token' signed in to that account.
   --repo OWNER/NAME    A repository to set them in; repeat for more
-                       (default: every repository you own whose default
+                       (default: every repository you own, or that an
+                       organization you administer owns, whose default
                        branch holds .github/workflows/claude-code-review.yml).
 EOF
 }
@@ -65,10 +67,24 @@ secret_name() {
 
 # Only GitHub's "not found" means a repository holds no review; any other
 # failure stops the sweep, so a passing outage never skips a repository.
+# A repository an organization owns is swept when the user administers that
+# organization. Listing them needs the read:org scope; without it the sweep
+# says so and goes on with the user's own repositories.
 find_repos() {
-  local name names err
+  local name names err org orgs
   names=$(gh repo list --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
     || die "cannot list your repositories"
+  if orgs=$(gh api --paginate user/memberships/orgs \
+      --jq '.[] | select(.state == "active" and .role == "admin") | .organization.login' 2>&1); then
+    while IFS= read -r org; do
+      [ -n "$org" ] || continue
+      names+=$'\n'$(gh repo list "$org" --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
+        || die "cannot list the repositories of $org"
+    done <<< "$orgs"
+  else
+    echo "warning: cannot list your organizations ($orgs); their repositories are left out." \
+      "Run 'gh auth refresh -s read:org' and try again, or name them with --repo." >&2
+  fi
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     if err=$(gh api "repos/$name/contents/$WORKFLOW" --silent 2>&1); then
