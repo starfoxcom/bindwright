@@ -43,7 +43,7 @@ export type Run = {
   label: string
   /** Where the engine writes the run's output. */
   file: string
-  /** The output's size at the last check; -1 before the first or while it cannot be read. */
+  /** The largest output size seen so far; -1 until the file is first readable. */
   size: number
   /** When the output last grew, or when the run started. */
   grewAt: number
