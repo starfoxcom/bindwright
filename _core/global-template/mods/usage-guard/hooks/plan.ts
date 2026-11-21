@@ -237,6 +237,14 @@ export function fenceAfter(fence: Fence, pause: Pause): Fence {
   return next
 }
 
+/**
+ * A reading of a window a switch ended the pause for: that exact window (kind and reset), read under whatever login
+ * by a session the new credentials have not reached. Only that window: another account's run on their own clock.
+ */
+export function isSwitchedAway(pause: Pause | undefined, limit: SessionRateLimit): boolean {
+  return pause?.isAccountLift === true && Date.parse(limit.resetsAt ?? '') === pausedReset(pause, limit.kind)
+}
+
 /** The limits whose window resets after its fence: fresh readings, and every limit with no fence. */
 export function unfenced(limits: readonly SessionRateLimit[], fence: Fence): SessionRateLimit[] {
   return limits.filter(limit => !(Date.parse(limit.resetsAt ?? '') <= Date.parse(fence[limit.kind] ?? '')))

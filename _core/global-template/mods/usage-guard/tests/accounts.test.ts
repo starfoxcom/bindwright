@@ -96,6 +96,27 @@ test('a whole turn under the new login that still reads the old account\'s windo
     expect(pauseOf(seen)?.status).not.toBe('active')
   })
 
+test('after a switch, the new account\'s own window that resets earlier still pauses when it runs hot', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    signIn(seen, 'acct-ultra')
+    await start($)
+    await doWork($)
+    seen.limits = HOT
+    await endTurn($)
+    // The other account's window resets half an hour before the spent one's.
+    const earlier = new Date(Date.parse(RESET) - 30 * 60_000).toISOString()
+    signIn(seen, 'acct-max', 'Max')
+    seen.limits = [{ kind: 'five_hour', percentUsed: 40, resetsAt: earlier }]
+    await endTurn($)
+    await seen.clock.advance(1_000)
+    seen.limits = [{ kind: 'five_hour', percentUsed: 96, resetsAt: earlier }]
+    await endTurn($)
+
+    expect([pauseOf(seen)?.status, pauseOf(seen)?.resetsAt, pauseOf(seen)?.account]).toEqual(['active', earlier,
+      'acct-max'])
+  })
+
 test('after a cancelled pause, a switch leaves the old account\'s figures planning no pause', LONG, async ($, on) => {
   const seen = world(on)
   signIn(seen, 'acct-ultra')

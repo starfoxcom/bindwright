@@ -6,7 +6,7 @@ import { parseSavedArm, quietResumePrompt, quietResumeText } from './arms'
 import { armPath, dropIfDisarmedByAll, followSession, readMark, restoreArm, setArm, writeMark } from './armstore'
 import { switchCardText } from './account'
 import { clearSwitchCard, endIfSwitched, isLiftAsked } from './switch'
-import { armClaim, armWaitedFor, endedBy, isArmFor, movedOntoPause, NO_WORK_REST } from './plan'
+import { armClaim, armWaitedFor, endedBy, isArmFor, isSwitchedAway, movedOntoPause, NO_WORK_REST } from './plan'
 import { raiseSwitchCard, seeLogin } from './switch'
 import type { CompactOutcome, Fill } from './compact'
 import { measured, outcomeMark, outcomeOf, outcomeText, PAUSE_INSTRUCTIONS, shouldCompactAtPause } from './compact'
@@ -545,8 +545,7 @@ async function check($: EngineInterface): Promise<void> {
 
   if (!isLive) {
     const { rateLimits } = await $.session.usage()
-    // The fence also drops the old account's windows after a switch, read under whatever login.
-    const fresh = unfenced(rateLimits, await readFence($))
+    const fresh = unfenced(rateLimits, await readFence($)).filter(limit => !isSwitchedAway(pause, limit))
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
