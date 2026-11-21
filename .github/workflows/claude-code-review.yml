@@ -1719,8 +1719,8 @@ jobs:
       # account that failed, so a blip never starts another plan's window.
       # Nothing is checked unless the main review failed, so a working first
       # account costs nothing, and no file the PR can write is read. Without
-      # those secrets the backup keeps the first account, as before; when no
-      # account has room, it tries the first one anyway.
+      # those secrets the backup keeps the first account, as before; when every
+      # account has no room or refuses its token, it tries the first one anyway.
       - name: Pick the backup's account
         id: account
         if: steps.claude-review.outcome != 'skipped' && steps.main-answer.outputs.ok != 'yes' && steps.claude-cli-stable.outcome == 'success'
@@ -1780,7 +1780,9 @@ jobs:
               sys.exit(0)
           api = r.get('api_error_status')
           text = r.get('result') if isinstance(r.get('result'), str) else ''
-          if api == 429 or re.search(r"hit your (usage )?limit|usage limit reached", text, re.IGNORECASE):
+          # The same limit texts the deep review's failure class reads.
+          limit = r"rate_limit_error|usage limit|quota exceeded|resource_exhausted|(hit|reached) your [^.]{0,40}limit"
+          if api == 429 or re.search(limit, text, re.IGNORECASE):
               print(f"::notice::Account {i} has no room left (exit {status}, API status {api})")
               sys.exit(2)
           if api in (401, 403):
@@ -1794,7 +1796,7 @@ jobs:
             break
           done
           if [ -z "$picked" ]; then
-            echo "::warning::No account has room: the backup tries the first account"
+            echo "::warning::No account can take the backup (each has no room or refused its token): the backup tries the first account"
             picked=1
           elif [ "$picked" != 1 ] && [ -z "$TOKEN_1" ]; then
             echo "::notice::The first account's token is not set: the backup runs on account $picked"
@@ -1816,8 +1818,8 @@ jobs:
         uses: anthropics/claude-code-action@5a856893345e332afa621934082d8c660c26d689  # v1 (v1.0.282)
         with:
           # The account the step above picked. Each name is written out (see
-          # the header); an index is set only when that account answered, so
-          # its secret is never empty.
+          # the header); an index from 2 up is set only for an account whose
+          # token is set, so its secret is never empty.
           claude_code_oauth_token: ${{ steps.account.outputs.index == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || steps.account.outputs.index == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || steps.account.outputs.index == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || steps.account.outputs.index == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The job's read-only token: with it the action skips its exchange
           # for the review app's token, which the job cannot mint anyway.
