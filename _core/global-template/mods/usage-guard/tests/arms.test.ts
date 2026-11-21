@@ -319,7 +319,7 @@ test('an arm a longer pause moves keeps the session it was set in, and still res
   seen.sessionId = 'sess-b'
   await $.turn.start({ turnId: 't2', prompt: 'next' } as never)
   // Another session paused for the weekly reset, past this arm's wake.
-  const resetsAt = new Date(Date.parse(RESET) + 3 * 3_600_000).toISOString()
+  const resetsAt = new Date(Date.parse(RESET) + 3_600_000).toISOString()
   const wakeAt = Date.parse(resetsAt) + 2 * 60_000
   const pause = { status: 'active', kinds: ['seven_day'], percentUsed: 97, resetsAt, wakeAt, triggeredBy: 'sess-c' }
   seen.files.set(PAUSE_FILE, JSON.stringify(pause))

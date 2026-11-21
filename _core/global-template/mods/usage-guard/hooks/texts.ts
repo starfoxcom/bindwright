@@ -133,9 +133,11 @@ export type CardButton = { key: string; label: string; isPrimary?: boolean; onPr
 export type Card = { key: string; tone: Tone; text: string; buttons: CardButton[] }
 
 export const COMMAND_TEXT =
-  'Usage pause status. Also: arm 5h|week|HH:MM [compact] ["reason"], disarm, disarm-global, settings, set'
+  'Usage pause status. Also: arm 5h|week|HH:MM [compact] ["reason"], disarm, disarm-global, lift, lift-all, ' +
+  'settings, set'
 export const ARGUMENT_HINT =
-  '[help | settings | set | phone | arm 5h|week|HH:MM [compact] ["reason"] | disarm | disarm-global | adopt]'
+  '[help | settings | set | phone | arm 5h|week|HH:MM [compact] ["reason"] | disarm | disarm-global | lift | ' +
+  'lift-all | adopt]'
 export const HELP = [
   '/usage-guard: pauses a session before a plan window runs out and resumes it after the reset.',
   '  /usage-guard                      the pause status and the wrap-up level',
@@ -145,6 +147,8 @@ export const HELP = [
   '  /usage-guard arm ... "reason"     the same; the wake hands the session the quoted reason',
   '  /usage-guard disarm               drop this session\'s resume, set by hand or by a pause',
   '  /usage-guard disarm-global        drop every session\'s resume, and end the pause',
+  '  /usage-guard lift                 resume now the work this session was armed for by hand',
+  '  /usage-guard lift-all             the same in every session armed by hand, unless a pause holds',
   '  /usage-guard adopt [keep | drop]  run here the work a closed session missed (keep: leave saved work',
   '                                    for that session; drop: forget it)',
   '  /usage-guard settings             open the settings pane',

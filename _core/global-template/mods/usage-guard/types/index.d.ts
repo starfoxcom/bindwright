@@ -48,7 +48,18 @@ export type ArmedWake = {
   root?: string
   /** What the wake is for, as the person quoted it: handed to the session it wakes. */
   reason?: string
+  /**
+   * Why it fires apart from its own reset: held when a switch ended the pause keyed `key` (its wake, or a lift,
+   * resumes that pause's saved work), lifted early by hand, or moved onto a pause's wake (and then the pause decides).
+   */
+  override?: ArmOverride
 }
+
+/**
+ * `switch`: `key` is the claim key (`resetKey`) of the pause the switch ended, so a later pause of the same window is
+ * not it. `pause`: its own time came while a pause held, so it fires at that pause's wake, whatever ends the pause.
+ */
+export type ArmOverride = { by: 'switch'; key: string } | { by: 'lift' } | { by: 'pause' }
 
 /** This session's own resume at a pause's wake (hooks/pausearm.ts), kept apart from the arm set by hand. */
 export type PauseArm = {
@@ -104,6 +115,8 @@ declare module 'claude-code' {
       settings: SettingsView | null
       armed: ArmedWake | null
       pauseArm: PauseArm | null
+      /** The card about an arm set by hand that a switch held back, until answered. */
+      account: { card: { label: string; wakeAt: number } | null } | null
       /** What the last press on the arm card did, shown in its place until dismissed. */
       armNote: string | null
       /** A closed session's arm that never ran, or its saved work, offered here; then what the press did. */
