@@ -224,23 +224,26 @@ export function covers(pause: Pause | undefined, planned: Pause): boolean {
 /**
  * Per limit kind, the latest reset of a window that ended early. A reading of that window or an older one is
  * stale (an idle session keeps its last reading), so it never plans a pause, whatever pause the file holds.
- * A pause made on a known account fences under that account's id, `{ [account]: { [kind]: reset } }`; one made
- * with no login on record fences at the top level, `{ [kind]: reset }`.
+ * Every fence sits at the top level, `{ [kind]: reset }`, the shape every version of this module reads. A pause
+ * made on a known account also fences under that account's id, `{ [account]: { [kind]: reset } }`, and a top-level
+ * entry that mirrors one of those is read by the account rule in `unfenced`.
  */
 export type Fence = Record<string, string | Record<string, string>>
 
+const isLater = (reset: string, than: string | undefined): boolean => !(Date.parse(reset) <= Date.parse(than ?? ''))
+
 /** The fence after `pause` ended early: each of its limits fenced at its paused reset, the later one kept. */
 export function fenceAfter(fence: Fence, pause: Pause): Fence {
-  const own = pause.account ? fence[pause.account] : fence
-  const next: Record<string, string> = {}
-  for (const [kind, reset] of Object.entries(typeof own === 'object' ? own : {})) {
-    if (typeof reset === 'string') next[kind] = reset
-  }
+  const next: Fence = { ...fence }
+  const own = pause.account ? fence[pause.account] : undefined
+  const perAccount: Record<string, string> = typeof own === 'object' ? { ...own } : {}
   for (const kind of pause.kinds) {
     const reset = pause.resets?.[kind] ?? pause.resetsAt
-    if (!(Date.parse(reset) <= Date.parse(next[kind] ?? ''))) next[kind] = reset
+    const flat = next[kind]
+    if (isLater(reset, typeof flat === 'string' ? flat : undefined)) next[kind] = reset
+    if (isLater(reset, perAccount[kind])) perAccount[kind] = reset
   }
-  return pause.account ? { ...fence, [pause.account]: next } : { ...fence, ...next }
+  return pause.account ? { ...next, [pause.account]: perAccount } : next
 }
 
 /**
@@ -255,13 +258,17 @@ export function isSwitchedAway(pause: Pause | undefined, limit: SessionRateLimit
  * The limits a fence leaves: fresh readings, and every limit with no fence. A fence with no account, or one of
  * `account` (the login on record; every account's when none is), drops its window and older ones. Another
  * account's fence drops only its exact window, a stale reading of it, since this account's windows run on
- * their own clock.
+ * their own clock. A top-level entry that mirrors an account's fence is left to that account's entry.
  */
 export function unfenced(limits: readonly SessionRateLimit[], fence: Fence, account?: string): SessionRateLimit[] {
+  const isMirror = (kind: string, reset: string): boolean =>
+    Object.values(fence).some(entry => typeof entry === 'object' && entry[kind] === reset)
   return limits.filter(limit => {
     const reset = Date.parse(limit.resetsAt ?? '')
     return !Object.entries(fence).some(([key, entry]) => {
-      if (typeof entry === 'string') return key === limit.kind && reset <= Date.parse(entry)
+      if (typeof entry === 'string') {
+        return key === limit.kind && !isMirror(key, entry) && reset <= Date.parse(entry)
+      }
       const fenced = Date.parse(entry[limit.kind] ?? '')
       return !account || key === account ? reset <= fenced : reset === fenced
     })
