@@ -545,7 +545,8 @@ async function check($: EngineInterface): Promise<void> {
 
   if (!isLive) {
     const { rateLimits } = await $.session.usage()
-    const fresh = unfenced(rateLimits, await readFence($)).filter(limit => !isSwitchedAway(pause, limit))
+    const fence = await readFence($)
+    const fresh = unfenced(rateLimits, fence, login.account?.id).filter(limit => !isSwitchedAway(pause, limit))
     const hot = hotLimits(fresh, live.wrapUpAt).filter(limit => Date.parse(limit.resetsAt ?? '') > now)
     if (hot.length === 0) return
     const onAccount = login.account ? { account: login.account.id } : {}
