@@ -6,9 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.7.1] — 2026-11-21
+
 ### Fixed
 
 - **A Python-only helper install no longer races another session's.** With Python and no Node, setup and update installed the helper with a plain `pip install`, so two sessions updating at once could write into the same folder together. The Python engine now has `home.py helper-install`, which takes the same install lock the Node helper uses, checks the download against the plugin's pin, and answers ready, busy or error, as the Node install does.
+- **A CI review no longer sits until its timeout waiting for input.** The review workflows started the Claude Code CLI with its standard input left open, so a run could wait on input that never came and hold the job until it timed out. Both review workflows and the account check now start the CLI with its input closed (#1133).
 
 ## [v7.7.0] — 2026-11-21
 
