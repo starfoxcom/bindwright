@@ -932,7 +932,7 @@ jobs:
           # always reviews (review_gate.ALWAYS_REVIEWED and the project's
           # triage.always_review, in any case), the project's deep-review
           # trigger paths (escalate.paths) and every workflow.
-          ARCH = re.compile(r'^\.github/scripts/|^\.github/review-guide\.md$|(^|/)\.claude/|(^|/)CLAUDE(\.local)?\.md$'
+          ARCH = re.compile(r'^\.github/scripts/|^\.github/review-guide\.md$|(^|/)\.claude/|(^|/)(CLAUDE(\.local)?|AGENTS)\.md$'
                             # The CLI's own config, which every later review loads.
                             r'|(^|/)\.mcp\.json$|^\.claude\.json$|^\.husky/|^\.gitmodules$|^\.ripgreprc$', re.I)
           # The project's own checks (prescreen.dir) are part of the gate:
