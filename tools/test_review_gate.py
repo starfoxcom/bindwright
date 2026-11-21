@@ -66,11 +66,12 @@ class Triage(unittest.TestCase):
 
     def test_the_gates_own_paths_need_no_setting(self):
         for path in (".github/scripts/notes.md", ".claude/rules/git.md", "a/.claude/x.md",
-                     "CLAUDE.md", "engine/CLAUDE.local.md", ".github/review-guide.md", ".GitHub/Review-Guide.MD"):
+                     "CLAUDE.md", "engine/CLAUDE.local.md", "AGENTS.md", "engine/agents.md",
+                     ".github/review-guide.md", ".GitHub/Review-Guide.MD"):
             with self.subTest(path=path):
                 self.assertTrue(gate.triage([path]))
         for path in ("_core/x.md", "bundles/x.md", "SETUP.md", "redesign/a.md", "docs/review-guide.md",
-                     ".github/review-guide.md.bak.md", "x/.github/review-guide.md"):
+                     ".github/review-guide.md.bak.md", "x/.github/review-guide.md", "docs/subagents.md"):
             with self.subTest(path=path):
                 self.assertFalse(gate.triage([path]))
 
