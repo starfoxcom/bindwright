@@ -95,10 +95,9 @@ export function armWaitedFor(arm: ArmedWake): string {
   return armFor(arm.kind)
 }
 
-/** The arm moved onto a pause's wake: from there the pause decides why it fires, so any override is dropped. */
+/** The arm moved onto a pause's wake: from there the pause decides why it fires, whatever override it had. */
 export function movedOntoPause(arm: ArmedWake, pause: Pick<Pause, 'resetsAt' | 'wakeAt'>): ArmedWake {
-  const { override, ...rest } = arm
-  return { ...rest, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt }
+  return { ...arm, resetsAt: pause.resetsAt, wakeAt: pause.wakeAt, override: { by: 'pause' } }
 }
 
 // How the texts at a pause's end name what ended it: a window's reset, or a switch to an account with room.

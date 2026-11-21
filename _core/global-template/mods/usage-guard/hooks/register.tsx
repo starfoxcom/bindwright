@@ -486,7 +486,7 @@ async function liftHere($: EngineInterface): Promise<string> {
   if (!arm) return 'No resume set by hand here to lift.'
   // Its own reset, the lift's time: the claim of the reset it waited for stays free for a later arm.
   const now = await $.clock.now()
-  const override = arm.override ?? { by: 'lift' as const }
+  const override = arm.override?.by === 'switch' ? arm.override : { by: 'lift' as const }
   const moved = { ...arm, isQuestioned: false, resetsAt: new Date(now).toISOString(), wakeAt: now, override }
   await setArm($, moved)
   await scheduleArm($, moved)
@@ -520,7 +520,9 @@ async function holdForLift($: EngineInterface, held: ArmedWake, pause: Pause): P
 async function resumeEarly($: EngineInterface, pause: Pause, now: number): Promise<void> {
   if (!(await takePauseArm($, pause))) return
   const held = await read($, armedWake)
-  if (pause.isAccountLift && held) return holdForLift($, held, pause)
+  // After a switch an arm set by hand keeps its own time; one whose time came during the pause stands down with it.
+  const isHeldBySwitch = pause.isAccountLift && held && held.wakeAt > now && held.override?.by !== 'pause'
+  if (isHeldBySwitch) return holdForLift($, held, pause)
   const isStandingDown = held && (held.wakeAt <= now || held.resetsAt === pause.resetsAt)
   const moved = isStandingDown && movedOntoPause(held, pause)
   if (moved) await setArm($, moved).then(() => scheduleArm($, moved))

@@ -50,13 +50,16 @@ export type ArmedWake = {
   reason?: string
   /**
    * Why it fires apart from its own reset: held when a switch ended the pause keyed `key` (its wake, or a lift,
-   * resumes that pause's saved work), or lifted early by hand. Dropped whenever the arm moves onto a pause's wake.
+   * resumes that pause's saved work), lifted early by hand, or moved onto a pause's wake (and then the pause decides).
    */
   override?: ArmOverride
 }
 
-/** `key`: the claim key (`resetKey`) of the pause the switch ended, so a later pause of the same window is not it. */
-export type ArmOverride = { by: 'switch'; key: string } | { by: 'lift' }
+/**
+ * `switch`: `key` is the claim key (`resetKey`) of the pause the switch ended, so a later pause of the same window is
+ * not it. `pause`: its own time came while a pause held, so it fires at that pause's wake, whatever ends the pause.
+ */
+export type ArmOverride = { by: 'switch'; key: string } | { by: 'lift' } | { by: 'pause' }
 
 /** This session's own resume at a pause's wake (hooks/pausearm.ts), kept apart from the arm set by hand. */
 export type PauseArm = {

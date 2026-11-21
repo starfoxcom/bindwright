@@ -129,6 +129,24 @@ test('an arm set by hand waits after a switch, with a card that lifts it', LONG,
   expect(resumes(seen)[0]).toContain('check CI')
 })
 
+test('an arm whose time came during the pause resumes at a switch, with no card to lift it', LONG, async ($, on) => {
+  const seen = world(on)
+  signIn(seen, 'acct-ultra')
+  await start($)
+  // 10:05 in the world's zone, five minutes from now: it comes due while the pause holds, and moves onto its wake.
+  await $.command.run({ command: 'usage-guard', args: 'arm 10:05 "check CI"' } as never)
+  await doWork($)
+  seen.limits = HOT
+  await endTurn($)
+  await seen.clock.advance(6 * 60_000)
+  signIn(seen, 'acct-max', 'Max')
+  seen.limits = ROOMY
+  await endTurn($)
+  await seen.clock.advance(1_000)
+
+  expect(resumes(seen)).toHaveLength(1)
+})
+
 test('a session armed by hand at a time of day still resumes its saved work when lifted after a switch', LONG,
   async ($, on) => {
     const seen = world(on)
@@ -413,3 +431,15 @@ test('a lift of every session wakes this session\'s arm set by hand at its next 
 
   expect(resumes(seen)).toHaveLength(1)
 })
+
+test('a lift of every session pressed long before this session saw it leaves the arm at its own time', LONG,
+  async ($, on) => {
+    const seen = world(on)
+    await start($)
+    await $.command.run({ command: 'usage-guard', args: 'arm 5h' } as never)
+    await seen.clock.advance(10 * 60_000)
+    seen.files.set(LIFT_FILE, JSON.stringify({ at: NOW + 1 }))
+    await seen.clock.advance(61_000)
+
+    expect(resumes(seen)).toEqual([])
+  })

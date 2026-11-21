@@ -38,6 +38,7 @@ export function parseSavedArm(text: string): ArmedWake | undefined {
 function overrideOf(value: unknown): { override?: ArmOverride } {
   const given = value as { by?: unknown; key?: unknown } | null | undefined
   if (given?.by === 'lift') return { override: { by: 'lift' } }
+  if (given?.by === 'pause') return { override: { by: 'pause' } }
   const isSwitch = given?.by === 'switch' && typeof given.key === 'string' && given.key !== ''
   return isSwitch ? { override: { by: 'switch', key: given.key as string } } : {}
 }

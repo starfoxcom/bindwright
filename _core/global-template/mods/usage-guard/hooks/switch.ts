@@ -20,6 +20,8 @@ export type SwitchSeen = { account: Account | undefined; isFresh: boolean; now: 
 // A switch to an account with room ends a pause made on another one, as an early reset does, but without a fence:
 // the old account's windows did not reset, and its readings already plan nothing once they are not fresh.
 export async function endIfSwitched($: EngineInterface, pause: Pause, seen: SwitchSeen): Promise<Pause> {
+  // Most checks see no switch at all: read the plan figures only when one may have happened.
+  if (!pause.account || !seen.account || seen.account.id === pause.account || !seen.isFresh) return pause
   const { rateLimits } = await $.session.usage().catch(() => ({ rateLimits: [] }))
   if (!isLiftedBySwitch(pause, seen.account, rateLimits, { ...seen, wrapUpAt: live.wrapUpAt })) return pause
   const current = await readPause($)
@@ -51,6 +53,9 @@ export async function raiseSwitchCard($: EngineInterface, wakeAt: number): Promi
   await update($, accountView, view => ({ ...view, reading: view?.reading ?? null, card: { label, wakeAt } }))
 }
 
+/** How long a lift of every session counts: every running session checks within a minute. */
+const LIFT_MARK_MS = 5 * 60_000
+
 /** Readings from a turn a /login in another session cut across: tied to no account, so never fresh. */
 const STRADDLED = 'straddled-a-switch'
 
@@ -81,5 +86,7 @@ export async function isLiftAsked($: EngineInterface, pause: Pause | undefined, 
   if (!arm || arm.wakeAt <= now) return false
   const mark = await readMark($, 'lift')
   const isHeld = pause?.status === 'active' && pause.wakeAt > now
-  return mark !== undefined && (arm.setAt ?? 0) < mark.at && !isHeld
+  // Only sessions running when it was pressed: a session opened days later never starts work from an old press.
+  const isRecent = mark !== undefined && now - mark.at <= LIFT_MARK_MS
+  return mark !== undefined && isRecent && (arm.setAt ?? 0) < mark.at && !isHeld
 }
