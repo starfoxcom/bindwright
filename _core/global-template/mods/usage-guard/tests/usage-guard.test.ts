@@ -1,7 +1,7 @@
 import type { SessionRateLimit } from 'claude-code'
 import { type Engine, expect, test } from 'claude-code/testing'
 import type { Pause } from '../hooks/plan'
-import { bringForward, type Fence, fenceAfter, isResetEarly, NO_WORK_REST, planArm } from '../hooks/plan'
+import { bringForward, type Fence, fenceAfter, fenceWith, isResetEarly, NO_WORK_REST, planArm } from '../hooks/plan'
 import { unfenced, WRAP_UP_ARGS } from '../hooks/plan'
 import { stopCommandsFor } from '../hooks/rules'
 import {
@@ -503,6 +503,15 @@ for (const [name, start, ends, hours, account, isFresh] of BY_ACCOUNT) {
     expect(unfenced([weekly(hours)], fenceOf(start, ends), account)).toEqual(isFresh ? [weekly(hours)] : [])
   })
 }
+
+test("fence: a pause an older module ended early keeps its window stale on its account", () => {
+  // A's fence is later, so the older module's early end on B left the file as it was.
+  const file = fenceOf({}, [weeklyEnd(48, 'a')])
+  const endedOnB: Pause = { ...weeklyEnd(47, 'b'), isBroughtForward: true }
+  const switched: Pause = { ...endedOnB, isAccountLift: true }
+  expect(unfenced([weekly(47)], fenceWith(file, endedOnB), 'b')).toEqual([])
+  expect(unfenced([weekly(47)], fenceWith(file, switched), 'b')).toEqual([weekly(47)])
+})
 
 test('fence: the top level keeps the latest reset of each paused kind, the one older modules read', () => {
   const pause: Pause = { ...FIVE_HOUR_PAUSE, ...BOTH, account: 'b' }
