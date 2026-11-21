@@ -33,8 +33,8 @@ import { ARM_TOOL, ARM_TOOL_NAME, type ArmRequest, parseArmArgs, planWake, toolR
 const CHECK_EVERY_MS = 60_000
 // A beat after a command or the wrap-up's turn ends before compacting, so the engine is between turns.
 const COMPACT_DELAY_MS = 1_000
-// How often the card re-reads the shared files, so a Dismiss or a cancel elsewhere shows here.
-const REFRESH_MS = 2_000
+/** How often the card re-reads the shared files, so a Dismiss or a cancel elsewhere shows here. */
+export const REFRESH_MS = 2_000
 const band = atom({ plugin: 'usage-guard', key: 'band' } as const, null)
 // The same state armstore.ts saves: the engine lists what each file reads, so each names it itself.
 const armedWake = atom({ plugin: 'usage-guard', key: 'armed' } as const, null)
