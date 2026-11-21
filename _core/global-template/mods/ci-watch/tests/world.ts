@@ -69,6 +69,10 @@ export type Seen = {
   workflows?: number
   /** The PR has no check at all: `gh pr checks` says so on stderr and exits non-zero. */
   isCheckless?: boolean
+  /** What a shell or Agent call answers instead of an empty result: a background start's text. */
+  toolText?: string
+  /** Each file's size as `fs.stat` reports it; a file without an entry cannot be read. */
+  sizes: Map<string, number>
 }
 
 export function world(on: On) {
@@ -85,6 +89,7 @@ export function world(on: On) {
     statusReads: 0,
     ghCalls: [],
     session: 's1',
+    sizes: new Map(),
   }
   const clock = mock.clock(on, { now: 1_000 })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
@@ -162,11 +167,18 @@ export function world(on: On) {
     return { text: e.text }
   })
   // `gh pr create` prints the new PR's URL.
-  const answer = (_: unknown, e: { command?: string }) => {
-    const stdout = e.command?.includes('pr create') ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
+  const answer = (_: unknown, e: object) => {
+    if (seen.toolText !== undefined) return { result: seen.toolText as never }
+    const command = (e as { command?: string }).command
+    const stdout = command?.includes('pr create') ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
     return { result: { stdout, stderr: '', interrupted: false } as never }
   }
-  on('tool.call', { tool: ['Bash', 'PowerShell'] }, answer)
+  on('tool.call', { tool: ['Bash', 'PowerShell', 'Agent'] }, answer)
+  on('fs.stat', ($, e) => {
+    const size = seen.sizes.get(e.path.replaceAll('\\', '/'))
+    if (size === undefined) throw new Error('ENOENT')
+    return { value: { size } as never }
+  })
   // The engine's own band beneath the plugins: empty.
   on('ui.render', () => ({ type: 'Box', children: [] }) as never)
   return { seen, clock }
