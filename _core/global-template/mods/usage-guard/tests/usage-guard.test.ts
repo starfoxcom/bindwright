@@ -471,6 +471,31 @@ for (const [name, limit, isFresh] of FENCED) {
   })
 }
 
+// Account A's weekly window ended early, fenced at A's paused reset; the readings come under the login named.
+const FENCE_OF_A: Fence = { a: { seven_day: afterReset(48 * HOUR) } }
+const BY_ACCOUNT: [string, SessionRateLimit, string | undefined, boolean][] = [
+  ["on A, a reading of A's fenced window is stale", weekly(48), 'a', false],
+  ["on A, a reading of an older window is stale", weekly(47), 'a', false],
+  ["on B, a stale reading of A's exact window is still dropped", weekly(48), 'b', false],
+  ["on B, B's own window that resets earlier is fresh", weekly(47), 'b', true],
+  ['with no login on record, an older window stays stale', weekly(47), undefined, false],
+]
+for (const [name, limit, account, isFresh] of BY_ACCOUNT) {
+  test(`fence per account: ${name}`, () => {
+    expect(unfenced([limit], FENCE_OF_A, account)).toEqual(isFresh ? [limit] : [])
+  })
+}
+
+test('fence: an early end on an account fences under it and leaves the others', () => {
+  const pause: Pause = { ...FIVE_HOUR_PAUSE, ...BOTH, account: 'b' }
+  const fence = fenceAfter({ five_hour: afterReset(HOUR), a: { five_hour: afterReset(3 * HOUR) } }, pause)
+  expect(fence).toEqual({
+    five_hour: afterReset(HOUR),
+    a: { five_hour: afterReset(3 * HOUR) },
+    b: { five_hour: pause.resets?.five_hour ?? pause.resetsAt, seven_day: afterReset(48 * HOUR) },
+  })
+})
+
 test('fence: an early end fences each paused limit at its own reset and keeps a later fence', () => {
   const pause: Pause = { ...FIVE_HOUR_PAUSE, ...BOTH }
   const fence = fenceAfter({ five_hour: afterReset(HOUR) }, pause)
