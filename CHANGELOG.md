@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
+- **Memory entries carry the date they were written and their source.** The memory format setup teaches adds `written:` and `source:` lines, and the monthly pruning pass also lists entries older than 90 days or with no date, to confirm or drop. The pass is now offered at `/start-session` too, whichever ritual runs first that month, so a session that never closes still gets it.
 - **The security rule names scripts loaded from another party's server.** A web page that loads a script from someone else's CDN runs whatever that server sends, so the rule now says to pin such a script to an exact version with an integrity hash, or serve a copy from the project, under a Content-Security-Policy that names the allowed sources, and to keep scripts their vendor changes on purpose (tag managers, A/B testing) off pages that handle sign-ins or payments.
 
 ## [v7.6.1] — 2026-11-21
