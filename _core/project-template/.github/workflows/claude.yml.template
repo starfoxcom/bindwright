@@ -874,7 +874,7 @@ jobs:
           # subscription steps take over. Without the job's OIDC request
           # values, so nothing the reviewer starts can mint a token and post.
           (cd "$wt" && GH_TOKEN="$bot_token" env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            timeout --kill-after=1m 30m "$CLI" -p "Brief file: $RUNNER_TEMP/deep-brief.md"$'\n\n'"$DEEP_REVIEW_PROMPT" \
+            timeout --kill-after=1m 30m "$CLI" -p "Brief file: $RUNNER_TEMP/deep-brief.md"$'\n\n'"$DEEP_REVIEW_PROMPT" < /dev/null \
             --setting-sources user --strict-mcp-config --permission-mode default \
             --allowedTools "Bash(gh pr view *),Bash(gh pr diff *),Bash(gh pr checks *),Bash(gh issue view *),Bash(gh run view *),Bash(gh run list *),Read$EXTRA_TOOLS" \
             --disallowedTools "Agent,Task,ScheduleWakeup,SendMessage,ListAgents,Edit,Write,MultiEdit,NotebookEdit,Bash(git add*),Bash(git commit*),Bash(git push*),Bash(git rm*),Bash(/*)" \
@@ -1220,7 +1220,7 @@ jobs:
             status=0
             (token="${!var}" && unset ANTHROPIC_API_KEY TOKEN_1 TOKEN_2 TOKEN_3 TOKEN_4 TOKEN_5 \
               && cd "$home" && export HOME="$home" CLAUDE_CONFIG_DIR="$home/.claude" CLAUDE_CODE_OAUTH_TOKEN="$token" \
-              && timeout -k 10 120 "$CLI" -p "Reply with the single word OK." \
+              && timeout -k 10 120 "$CLI" -p "Reply with the single word OK." < /dev/null \
                 --setting-sources user --strict-mcp-config --permission-mode default \
                 --max-turns 1 --model "$MODEL" --effort low --output-format json) > "$out" 2>/dev/null || status=$?
             # 0: the account answered. 2: no room on its plan, or its token was
