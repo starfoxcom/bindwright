@@ -80,7 +80,7 @@ Options are `userConfig` fields in each mod's `.claude-plugin/plugin.json`: thos
 - `usage-guard/hooks/rules.ts`: `STOP_COMMANDS`, the commands that stop a project's background work at wrap-up. Ships empty, with a commented example.
 - `runners/hooks/rules.ts`: `RUNNERS`, each runner set's label, process names, repo, and Start and Stop commands. Ships empty, with a commented example.
 
-`/bindwright:update` keeps an edited list and sets the newer shipped copy beside it as `rules.ts.new`; an unedited one takes the new text.
+`/bindwright:update` brings each list current like the mod's other files (its step 5 has the rule), with one exception: on a mod installed before Bindwright kept an install record, the list is kept either way, and the newer shipped copy goes beside it as `rules.ts.new`.
 
 `skill-check` reads its contracts from `~/.claude/skill-contracts.json`, keyed by project folder name. `/bindwright:setup` writes each project's key from `skill-check/skill-contracts.example.json`, keeping only the steps of the features that project turned on, and `/bindwright:update` refreshes it when the session skills change. A project folder that is renamed needs a setup or update run to move its key.
 
