@@ -114,13 +114,14 @@ def _differences(folder, target, record):
     return files
 
 
-def _state(record, files):
+def _state(record, files, hashes):
     # A copy with no record stays unrecorded even when it matches, so --adopt still writes its record.
     if record is None:
         return "unrecorded"
     if "edited" in files.values():
         return "edited"
-    return "older" if files else "current"
+    # Every update ends with the record at the shipped hashes, so any other record is from one stopped part-way.
+    return "older" if files or record != hashes else "current"
 
 
 def mod_status(home, folder):
@@ -132,7 +133,7 @@ def mod_status(home, folder):
         return {"installed": target, "state": "linked", "files": {}}
     record = _record_of(target)
     files = _differences(folder, target, record)
-    return {"installed": target, "state": _state(record, files), "files": files}
+    return {"installed": target, "state": _state(record, files, _shipped_hashes(folder)), "files": files}
 
 
 def _copy_atomic(source, target):

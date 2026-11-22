@@ -292,6 +292,27 @@ test("a dropped file the user never edited is removed, and a dropped edited one 
   });
 });
 
+test("an update stopped between writing a file and recording it is finished by the next one", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    const rules = join(installed, "hooks", "rules.ts");
+    // The shipped v2 and a new file reached the disk, but the record still holds v1 and lacks the new file.
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
+    writeFileSync(rules, "v2");
+    writeFileSync(join(mod, "hooks", "extra.ts"), "x");
+    writeFileSync(join(installed, "hooks", "extra.ts"), "x");
+    assert.deepEqual(modStatus(dir, mod), { installed, state: "older", files: {} });
+    const r = updateMod(dir, mod);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.out.updated, []);
+    assert.equal(modStatus(dir, mod).state, "current");
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v3");
+    const files = modStatus(dir, mod).files;
+    assert.deepEqual(files, { "hooks/rules.ts": "replace" }, "the unedited file is not taken for an edit");
+  });
+});
+
 test("a user list updates while unedited, gets a .new once edited, and is kept with no record", { skip }, () => {
   withHome((dir) => {
     const mod = shipMod(dir, { "hooks/rules.ts": "v1", "user-files.json": '{"paths": ["hooks/rules.ts"]}' });
