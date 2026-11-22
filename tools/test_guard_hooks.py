@@ -562,6 +562,9 @@ class GuardHookTest(unittest.TestCase):
                 # PowerShell reads `/c/x` from the root of the current drive, as Windows does.
                 ("PowerShell", f'gh pr create --title t --body-file "{git_bash(marked)}"', "PowerShell",
                  "could not read"),
+                # Its folder change runs before the bash it starts, so the bash inside maps nothing.
+                ("bash inside PowerShell", f'Set-Location "{git_bash(folder)}"; bash -c "git commit -F {name}"',
+                 "PowerShell", "could not tell which file holds"),
             ]
         for (label, command, tool, because), result in self.each(
                 rows, lambda label, command, tool, because: self.attr(command, tool=tool)):
