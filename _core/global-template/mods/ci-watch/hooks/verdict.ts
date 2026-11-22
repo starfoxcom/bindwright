@@ -29,8 +29,9 @@ export function isReviewOnly(watch: Watch): boolean {
 }
 
 // Tier results that say nothing about whether a review went out: `error` is also written when the verdict
-// was posted and a later step failed, and `pending` stays when the run was cancelled after posting.
-const UNSURE = new Set(['error', 'pending'])
+// was posted and a later step failed, `pending` stays when the run was cancelled after posting, and
+// `missing` means a review was posted that the gate's read then did not find.
+const UNSURE = new Set(['error', 'pending', 'missing'])
 // The marker each tier writes into every review it posts; its deep-review request and tracking comments
 // carry other markers.
 const REVIEW_MARK = /<!-- (review|deep)-run: \d+-\d+ review -->/g
