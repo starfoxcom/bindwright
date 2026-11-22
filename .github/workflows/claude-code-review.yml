@@ -1318,18 +1318,19 @@ jobs:
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "version=$installed" >> "$GITHUB_OUTPUT"
 
-      # With ANTHROPIC_API_KEY set and no CLAUDE_CODE_OAUTH_TOKEN, the key is
-      # the only payer, so the action attempts below run on it too. Only
-      # whether each secret is set is read here, never its value.
+      # With ANTHROPIC_API_KEY set and no account token at all
+      # (CLAUDE_CODE_OAUTH_TOKEN to _5), the key is the only payer, so the
+      # action attempts below run on it too. Only whether each secret is set
+      # is read here, never its value.
       - name: Pick who pays for the review
         id: payer
         shell: bash
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
-          HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_2 != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_3 != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_4 != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_5 != '' }}
         run: |
           if [ "$HAS_KEY" = true ] && [ "$HAS_TOKEN" != true ]; then
-            echo "::notice::No CLAUDE_CODE_OAUTH_TOKEN secret: every attempt runs on the API key"
+            echo "::notice::No account token secret: every attempt runs on the API key"
             echo "key_only=yes" >> "$GITHUB_OUTPUT"
           fi
 
@@ -1363,7 +1364,7 @@ jobs:
             exit 1
           fi
           if [ -z "$CLI" ]; then
-            echo "::warning::Claude Code was not installed: the review runs on the subscription"
+            echo "::warning::Claude Code was not installed: the review runs on the action's attempts"
             exit 1
           fi
 
