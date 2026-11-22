@@ -6,6 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.1] — 2026-11-22
+
+### Fixed
+
+- **A repo with the API key and only later accounts' tokens gets its first review attempt again.** With an `ANTHROPIC_API_KEY` secret and account tokens only from `CLAUDE_CODE_OAUTH_TOKEN_2` to `_5`, no first `CLAUDE_CODE_OAUTH_TOKEN`, the first review attempt of both tiers (and the deep tier's same-model retry) had no credential at all and failed at once, so only the backup reviewed. Those attempts now run on the key, and the `Review gate` summary names them as on the API credits; the backup still runs on the account it picks.
+- **The key-only notice names the plan-credit limit.** When the API key is the only payer, the run's notice now says that a key holding only a plan's monthly credits pays for the first run alone, since the review action is refused those credits.
+
 ## [v7.11.0] — 2026-11-22
 
 ### Added
