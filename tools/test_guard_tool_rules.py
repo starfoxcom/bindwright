@@ -105,6 +105,24 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
                 self.assertEqual([entry["rule"] for entry in observed(self.hook)[before:]], [want] if want else [])
 
 
+class SecretWriteRowTest(unittest.TestCase):
+    """A `gh secret` write is refused; listing a secret or naming one in a message never is."""
+
+    NAME = "a repo secret write (`gh secret set` or `delete`)"
+
+    def test_a_write_is_refused_and_a_read_passes(self):
+        hook = load_tool_rules()
+        for command in ("gh secret set CLAUDE_CODE_OAUTH_TOKEN -R o/r", "gh secret delete X -R o/r",
+                        "cd x; gh secret set T < t.txt"):
+            with self.subTest(command=command):
+                self.assertEqual(hook.refusal(command, "bash")[0], self.NAME)
+                self.assertEqual(hook.refusal(command, "powershell")[0], self.NAME)
+        for command in ("gh secret list -R o/r", 'git commit -m "docs: say gh secret set needs admin"',
+                        "cmp .github/scripts/set-review-tokens.sh _core/x/set-review-tokens.sh"):
+            with self.subTest(command=command):
+                self.assertIsNone(hook.refusal(command, "bash"))
+
+
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
     a comment or a here-document body, always passes, and the same trigger run as a command is
@@ -113,6 +131,7 @@ class ToolRulesSweepTest(unittest.TestCase):
     TRIGGERS = (("gh run watch 1", "both"), ("python .github/scripts/size_check.py && git commit -m x", "both"),
                 ("git push && gh pr create", "both"), ("git checkout dev -- .", "both"),
                 ("gh pr merge 5 --admin", "both"), ("gh run rerun 5 --failed", "both"),
+                ("gh secret set TOKEN -R o/r", "both"),
                 ("git rebase -i HEAD~3", "both"), ("gh pr create --body x", "both"),
                 ("node -e \"console.log('a\\\\b')\"", "both"),
                 ("@'\nprint('C:\\\\x')\n'@ | python -", "powershell"),
