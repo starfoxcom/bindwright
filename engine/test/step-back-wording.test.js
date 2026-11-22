@@ -1,5 +1,5 @@
-// Every shipped text that tells how many lookups a red-round step back takes says both counts:
-// three, and five from the 8th red round on, as the ci-watch mod enforces (`sourcesNeeded`).
+// Every shipped text that tells how many lookups a red-round step back takes says five, the count the
+// ci-watch mod enforces (`SOURCES_NEEDED`), and none still says three.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,14 +19,11 @@ function shippedFiles() {
     && !/\/tests?\//.test(path));
 }
 
-test("a text naming the step back's three lookups also names the five near the hard stop", () => {
+test("no shipped text says a step back takes three lookups", () => {
   const stale = [];
   for (const path of shippedFiles()) {
-    const paragraphs = readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n").split(/\n\s*\n/);
-    for (const paragraph of paragraphs) {
-      for (const line of paragraph.split("\n")) {
-        if (THREE_LOOKUPS.test(line) && !/\bfive\b/i.test(paragraph)) stale.push(`${path}: ${line.trim()}`);
-      }
+    for (const line of readFileSync(join(root, path), "utf8").split(/\r?\n/)) {
+      if (THREE_LOOKUPS.test(line)) stale.push(`${path}: ${line.trim()}`);
     }
   }
   assert.deepEqual(stale, []);

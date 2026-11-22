@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **Every step back after repeated red review rounds looks up five solutions.** The research a PR owes after its 3rd, 5th and every red round from the 6th took three lookups, and five only from the 8th; it now takes five each time, so the first step back already compares enough options. ci-watch holds edits, commits and pushes until five distinct lookups ran, and `review-tiers.md`, `local-review.md` and the mods README say the same.
+
 ## [v7.11.5] — 2026-11-22
 
 ### Fixed

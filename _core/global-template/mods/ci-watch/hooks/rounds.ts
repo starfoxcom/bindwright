@@ -2,8 +2,8 @@
 // reviews included). At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
 // research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
 // leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
-// also latches it on the watch: the session's edits, commits and pushes wait until three distinct web
-// lookups ran, five from the 8th red round on (`withTopic`), so the fix comes after the research. The
+// also latches it on the watch: the session's edits, commits and pushes wait until five distinct web
+// lookups ran (`withTopic`), so the fix comes after the research. The
 // 10th red round is the hard stop: the PR is closed without merging and rebuilt from its base branch in a
 // new PR, and the session's commits and pushes wait until it is closed. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
@@ -62,8 +62,7 @@ export function researchText(pr: string, red: number): string {
     : `The next step back comes after ${roundsToResearch(red)} more red round(s).`
   return (
     ` ${pr} has had ${red} fix rounds in a row without every check green, both reviews included. Before ` +
-    `the next fix, step back: look up at least ${SOURCE_WORDS[sourcesNeeded(red)]} different ways the ` +
-    'community solves this problem ' +
+    'the next fix, step back: look up at least five different ways the community solves this problem ' +
     '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
     'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
     `apply it and keep going. ${after}`
@@ -77,17 +76,8 @@ export function hardStopRefusal(pr: string, red: number): string {
   )
 }
 
-/** Distinct web lookups a step back takes: one source is a guess, three can be compared, and close to
- * the hard stop five widen the search before the PR has to be rebuilt. */
-export const SOURCES_NEEDED = 3
-export const SOURCES_NEAR_THE_STOP = 5
-/** The red streak from which a step back takes SOURCES_NEAR_THE_STOP lookups. */
-export const NEAR_THE_STOP = 8
-const SOURCE_WORDS: Record<number, string> = { 3: 'three', 5: 'five' }
-
-export function sourcesNeeded(red: number): number {
-  return red >= NEAR_THE_STOP ? SOURCES_NEAR_THE_STOP : SOURCES_NEEDED
-}
+/** Distinct web lookups a step back takes: one source is a guess, and five compared widen the search. */
+export const SOURCES_NEEDED = 5
 
 /** What a tool call looked up, when it is a web lookup of the main session: a WebSearch's query, a WebFetch's
  * URL or a web-fetch agent's brief. A subagent's own calls are not: a web-fetch agent is one lookup, not its
