@@ -178,9 +178,16 @@ jobs:
 
       # The plugin directory listing follows the `plugin` branch, whose root
       # is the packed plugin of the newest release: the same files as the zip,
-      # one commit per release on top of the last.
+      # one commit per release on top of the last. Each push the directory
+      # finds replaces the version under its review, so while the repository
+      # variable DIRECTORY_HOLD is set the branch stays where it is; the release
+      # and the marketplace pin go out as usual.
+      - name: Hold the plugin branch for the directory's review
+        if: steps.market.outputs.present == 'true' && vars.DIRECTORY_HOLD != ''
+        run: echo "::notice::DIRECTORY_HOLD is set, so the plugin branch keeps the version the directory is reviewing"
+
       - name: Publish the packed plugin to the plugin branch
-        if: steps.market.outputs.present == 'true'
+        if: steps.market.outputs.present == 'true' && vars.DIRECTORY_HOLD == ''
         env:
           GH_TOKEN: ${{ github.token }}
           ZIP: ${{ steps.build.outputs.zip }}

@@ -6,6 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The plugin's README says what setup changes and how to get help.** Four example prompts, the parts of setup that change how Claude Code behaves in later sessions (each asked one at a time, all plain text, all removable), where the helper's scripts come from and how they are checked, and how to troubleshoot with `/bindwright:doctor` and `/bindwright:report`.
+- **Releases can leave the plugin directory's copy alone.** While the repository variable `DIRECTORY_HOLD` is set, a release still ships to GitHub and the wrights marketplace, but the `plugin` branch the directory reviews stays put, since each push there restarts the review of the version waiting on it.
+
 ## [v7.10.2] — 2026-11-22
 
 ### Fixed
