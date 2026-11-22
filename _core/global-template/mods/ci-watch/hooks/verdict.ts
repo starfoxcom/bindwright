@@ -1,6 +1,7 @@
-// Whether a red round is a reviewer's verdict. A review that never reached one (no account with room, a
-// refused token or post, a cancelled run) fails the review gate too, but says nothing about the code, so it
-// is no fix round.
+// Whether a red round is a reviewer's verdict. A review run that never got to post its review (no account
+// with room, a refused token or post, a cancelled run) fails the review gate too, but says nothing about the
+// code, so it is no fix round: only the review failed, no tier holds `block`, at least one tier holds
+// `error`, `pending` or `missing`, and none of those tiers has a marked review on the head.
 
 import type { EngineInterface } from 'claude-code'
 

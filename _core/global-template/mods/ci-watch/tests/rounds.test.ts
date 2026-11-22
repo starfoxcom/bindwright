@@ -397,11 +397,11 @@ test("a round adds to the count file as read right before its write", async ($, 
   expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(6)
 })
 
-// A red settle counts only when the code was judged: a tier's 🔴, or any check outside the review's own jobs.
-// A review that gave no verdict (it errored, found no account with room, had its post refused, was cancelled)
-// keeps the count and says why. A gate title that cannot be read counts, as before. An `error` or `pending`
-// tier counts too once a review it marks as its own is on the PR since the head's first gate run, since its
-// verdict may be out.
+// A red settle keeps the count only when a review run never got to post its review: the gate left a tier
+// at `error`, `pending` or `missing`, and no review marked as that tier's is on the PR since the head's
+// first gate run.
+// A tier's 🔴, a check outside the review's own jobs, a posted review of any verdict, a red gate whose tiers
+// all read settled and a gate state that cannot be read all count.
 const ROUTINE = '## Code Review\n<!-- review-run: 11-1 review -->\n\n🟢 LGTM\n'
 const REQUEST = '@claude review this PR — depth pass.\n\n<!-- review-run: 11-1 request -->\n'
 const DEEP = '## Deep review\n<!-- deep-run: 12-1 review -->\n\n- a finding\n\n**Verdict:** 🔴 Blocking\n'

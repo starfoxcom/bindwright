@@ -20,7 +20,8 @@ export function wakeText(watch: Watch, now?: number, red = 0): string {
   return `${outcomeText(watch, now, red)}${research}${finishedAgo(watch, now)}`
 }
 
-// Only the review failed, and no tier posted a 🔴: the code was not judged, so the round is not counted.
+// Only the review failed, because a review run never got to post its review: the code was not judged, so the round is
+// not counted.
 function noVerdictText(pr: string, tiers: string, red: number): string {
   return (
     `[ci-watch] ${pr}: the review gave no verdict (review gate: ${tiers}), so this is no fix round and ` +
