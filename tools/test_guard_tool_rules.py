@@ -115,9 +115,18 @@ class SecretWriteRowTest(unittest.TestCase):
         for command in ("gh secret set CLAUDE_CODE_OAUTH_TOKEN -R o/r", "gh secret delete X -R o/r",
                         "bash .github/scripts/set-review-tokens.sh --accounts 2", "./set-review-tokens.sh",
                         "cd x; sh /p/r/.github/scripts/set-review-tokens.sh",
-                        ".github/scripts/set-review-tokens.sh --repo o/r"):
+                        ".github/scripts/set-review-tokens.sh --repo o/r",
+                        'PATH="$PWD/stub:$PATH" bash .github/scripts/set-review-tokens.sh --accounts 2',
+                        "GH_TOKEN=x ./set-review-tokens.sh", "bash -x set-review-tokens.sh",
+                        "for r in a b; do ./set-review-tokens.sh --repo $r; done",
+                        "sudo bash set-review-tokens.sh", "source set-review-tokens.sh"):
             with self.subTest(command=command):
                 self.assertEqual(hook.refusal(command, "bash")[0], self.NAME)
+        for command in ("bash .github\\scripts\\set-review-tokens.sh",
+                        "bash.exe .github\\scripts\\set-review-tokens.sh",
+                        "& .\\.github\\scripts\\set-review-tokens.sh"):
+            with self.subTest(command=command):
+                self.assertEqual(hook.refusal(command, "powershell")[0], self.NAME)
         for command in ("git add .github/scripts/set-review-tokens.sh", "gh secret list -R o/r",
                         "sed -n 1,40p .github/scripts/set-review-tokens.sh",
                         "sed -n 1,40p /abs/repo/.github/scripts/set-review-tokens.sh",
@@ -125,6 +134,7 @@ class SecretWriteRowTest(unittest.TestCase):
                         "git diff -- /x/set-review-tokens.sh",
                         "git add run-hook.sh .github/scripts/set-review-tokens.sh",
                         "shellcheck lib.sh .github/scripts/set-review-tokens.sh",
+                        "bash -n .github/scripts/set-review-tokens.sh",
                         'git commit -m "fix(scripts): set-review-tokens.sh sweeps orgs"'):
             with self.subTest(command=command):
                 self.assertIsNone(hook.refusal(command, "bash"))
