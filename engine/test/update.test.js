@@ -605,6 +605,11 @@ const STAYS_CONFLICT = {
   "a repo copy that is not valid JSON": (text) => text.replace(/\n\}\n$/, ",\n}\n"),
   "a key repeated in its object": atTop('"//": "one",\n  "//": "two"'),
   "a number the twins print differently": atTop('"ratio": 1.0'),
+  "an integer past 2^53": atTop('"big": 9007199254740993'),
+  "an all-digit key JavaScript moves first": atTop('"10": true'),
+  "an escape of half a surrogate pair": atTop('"s": "\\ud800"'),
+  "an indent longer than 10 characters": (text) => text.replace(/^ +/gm, (spaces) => spaces.repeat(6)),
+  "a line break other than a newline": (text) => text.replace("{\n", "{\r \n"),
   "a kept section the templates change": (text) => text
     .replace('  "hooks": ', '  "//keep": "bindwright:keep",\n  "hooks": ')
     .replace(/\n\}\n$/, ',\n  "//end": "bindwright:end-keep"\n}\n'),

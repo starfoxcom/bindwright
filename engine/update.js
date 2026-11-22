@@ -178,6 +178,7 @@ export function gitMerge(ours, base, theirs) {
 const BOM = "\uFEFF";
 const ABSENT = Symbol("absent");
 const CLASH = Symbol("clash");
+const MAX_INDENT = 10; // JSON.stringify uses at most 10 characters of an indent string
 
 // A key-by-key three-way merge of three JSON objects, for the clashes git's line
 // merge reports when the repo moved keys. Null when a value clashes or a text is
@@ -187,12 +188,19 @@ function mergeJson(ours, base, theirs) {
   if (parsed.includes(null)) return null;
   const merged = mergeValue(...parsed);
   if (merged === CLASH) return null;
-  const body = JSON.stringify(merged, null, indentOf(ours));
+  const indent = indentOf(ours);
+  if (indent.length > MAX_INDENT) return null;
+  const body = JSON.stringify(merged, null, indent);
   return (ours.startsWith(BOM) ? BOM : "") + body + (ours.endsWith("\n") ? "\n" : "");
 }
 
+// Text the twins read or reprint apart: a line break other than \n, and an escape of half
+// a surrogate pair (Python cannot write it back as UTF-8).
+const UNPLAIN = /[\r\u2028\u2029]|\\u[dD][89a-fA-F][0-9a-fA-F]{2}/;
+
 function parseObject(text) {
   const plain = text.replace(/^\uFEFF/, "");
+  if (UNPLAIN.test(plain)) return null;
   let value;
   try {
     value = JSON.parse(plain);

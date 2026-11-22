@@ -147,6 +147,10 @@ _CLASH = object()  # a value every version changed differently
 _INDENT = re.compile(r"^([ \t]+)\S", re.M)
 _INDEX_KEY = re.compile(r"(0|[1-9][0-9]*)\Z")
 _MAX_SAFE_INTEGER = 2 ** 53 - 1
+_MAX_INDENT = 10  # JSON.stringify uses at most 10 characters of an indent string
+# Text the twins read or reprint apart: a line break other than \n, and an escape of half
+# a surrogate pair (this twin cannot write it back as UTF-8).
+_UNPLAIN = re.compile(r"[\r  ]|\\u[dD][89a-fA-F][0-9a-fA-F]{2}")
 
 
 def git_merge(ours, base, theirs):
@@ -175,14 +179,20 @@ def _merge_json(ours, base, theirs):
     merged = _merge_value(*parsed)
     if merged is _CLASH:
         return None
-    body = json.dumps(merged, indent=_indent_of(ours), ensure_ascii=False)
+    indent = _indent_of(ours)
+    if len(indent) > _MAX_INDENT:
+        return None
+    body = json.dumps(merged, indent=indent, ensure_ascii=False)
     return (BOM if ours.startswith(BOM) else "") + body + ("\n" if ours.endswith("\n") else "")
 
 
 def _parse_object(text):
     """The text's object, or None when it is not one both twins read and reprint unchanged."""
+    plain = text[1:] if text.startswith(BOM) else text
+    if _UNPLAIN.search(plain):
+        return None
     try:
-        value = json.loads(text[1:] if text.startswith(BOM) else text, parse_constant=_not_plain,
+        value = json.loads(plain, parse_constant=_not_plain,
                            parse_float=_not_plain, parse_int=_safe_int, object_pairs_hook=_unique_keys)
     except ValueError:
         return None
