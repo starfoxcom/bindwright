@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.9.0] — 2026-11-22
+
 ### Changed
 
 - **PR bodies read like a person explaining the change.** `git.md` § Pull requests, the PR template and the contributing guide no longer ask for 1-3 bullets: a body gives the outcome first in a few plain sentences, says what the change does before naming a file or function, keeps lists for steps and checks, and drops hedges, em dashes and hype, in a professional tone. The reply style points PR bodies at that section (#1160).
