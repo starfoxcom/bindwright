@@ -13,7 +13,8 @@ GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "refl
              "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
 GIT_WORD = re.compile(r"\bgit\b", re.I)  # `$GIT`, `$(command -v git)`
-GIT_BASH_DRIVE = re.compile(r"/([A-Za-z])(?=/|$)")  # `/p/x`, drive P's `x` in Git Bash
+# Drive P's `x`: `/p/x` in Git Bash, `/mnt/p/x` in WSL.
+GIT_BASH_DRIVE = re.compile(r"(?:/mnt)?/([A-Za-z])(?=/|$)")
 FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
 DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
 BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
@@ -182,11 +183,12 @@ def anchored(path):
 
 
 def converted(path):
-    """The file a Git Bash drive path names once Git Bash converts it (`/p/x` is `P:/x`), on
-    Windows. Git Bash leaves some arguments as written (conversion turned off, some spellings,
-    a PowerShell call), and those land on the folder's own drive, so both are read."""
+    """The file a drive path names in the shell that reads it, on Windows: `/p/x` once Git Bash
+    converts it, or `/mnt/p/x` in a WSL `bash`, is `P:/x`. Git Bash leaves some arguments as
+    written (conversion turned off, some spellings, a PowerShell call), and those land on the
+    folder's own drive, so both are read."""
     match = GIT_BASH_DRIVE.match(path) if os.name == "nt" else None
-    return [f"{match.group(1).upper()}:{path[2:] or '/'}"] if match else []
+    return [f"{match.group(1).upper()}:{path[match.end():] or '/'}"] if match else []
 
 
 def resolve(value, places):

@@ -579,9 +579,11 @@ class GuardHookTest(unittest.TestCase):
                  "PowerShell"),
                 ("conversion off", f'MSYS_NO_PATHCONV=1 git commit -F "{git_bash(covered)}"', "Bash"),
                 ("spelling left alone", f'git commit -aF"{git_bash(covered)}"', "Bash"),
+                ("WSL path", f'bash -c "git commit -F /mnt{git_bash(marked)}"', "PowerShell"),
             ]
             rows = [row + ("attribution marker",) for row in rows]
             rows.append(("clean body file", f'gh pr create --title t --body-file "{git_bash(clean)}"', "Bash", None))
+            rows.append(("clean WSL path", f'bash -c "git commit -F /mnt{git_bash(clean)}"', "PowerShell", None))
         for (label, command, tool, because), result in self.each(
                 rows, lambda label, command, tool, because: self.attr(command, tool=tool)):
             with self.subTest(label):

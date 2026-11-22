@@ -13,6 +13,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The attribution guard reads Git Bash drive paths on Windows.** A body file given as `/p/notes/body.md` was looked for at `P:/p/notes/body.md`, so the guard could not read it and refused the commit or PR. It now reads both files such a path can name, drive P's `notes/body.md` and `\p\notes\body.md` on the command's own drive, since Git Bash leaves some arguments unconverted, and refuses the call when either holds an attribution line or neither exists. The same goes for a folder change before a relative body file (#1164).
+- **A WSL `bash` started from PowerShell can name its body file as `/mnt/p/...`.** The guard looked for that path on the current drive and refused the call; it now also reads it as drive P, where WSL finds it (#1166).
 
 ## [v7.8.0] — 2026-11-21
 
