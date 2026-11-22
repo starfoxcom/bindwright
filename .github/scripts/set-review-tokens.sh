@@ -68,23 +68,21 @@ secret_name() {
 # Only GitHub's "not found" means a repository holds no review; any other
 # failure stops the sweep, so a passing outage never skips a repository.
 # A repository an organization owns is swept when the user administers that
-# organization. Listing them needs the read:org scope; without it the sweep
-# says so and goes on with the user's own repositories.
+# organization. Listing them needs the read:org scope, so a failed lookup
+# stops the sweep too, naming the scope and --repo.
 find_repos() {
   local name names err org orgs
   names=$(gh repo list --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
     || die "cannot list your repositories"
-  if orgs=$(gh api --paginate user/memberships/orgs \
-      --jq '.[] | select(.state == "active" and .role == "admin") | .organization.login' 2>&1); then
-    while IFS= read -r org; do
-      [ -n "$org" ] || continue
-      names+=$'\n'$(gh repo list "$org" --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
-        || die "cannot list the repositories of $org"
-    done <<< "$orgs"
-  else
-    echo "warning: cannot list your organizations ($orgs); their repositories are left out." \
-      "Run 'gh auth refresh -s read:org' and try again, or name them with --repo." >&2
-  fi
+  orgs=$(gh api --paginate user/memberships/orgs \
+      --jq '.[] | select(.state == "active" and .role == "admin") | .organization.login' 2>&1) \
+    || die "cannot list your organizations ($orgs). Without the read:org scope, run" \
+      "'gh auth refresh -s read:org' and try again; or name the repositories with --repo."
+  while IFS= read -r org; do
+    [ -n "$org" ] || continue
+    names+=$'\n'$(gh repo list "$org" --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
+      || die "cannot list the repositories of $org"
+  done <<< "$orgs"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     if err=$(gh api "repos/$name/contents/$WORKFLOW" --silent 2>&1); then
