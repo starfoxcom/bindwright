@@ -1023,7 +1023,7 @@ jobs:
           RESULT=$(jq -r '[.[]? | select(.type == "result")] | last // empty
             | "status=\(.api_error_status // "") \(if .is_error == true then .result // "" else "" end)"' \
             "$RUNNER_TEMP/claude-execution-output.json" 2>/dev/null || true)
-          if printf '%s' "$RESULT" | grep -qiE '^status=429|rate_limit_error|usage limit|quota exceeded|resource_exhausted|(hit|reached) your [^.]{0,40}limit'; then
+          if printf '%s' "$RESULT" | grep -qiE '^status=429|rate_limit_error|usage limit|quota exceeded|resource_exhausted|(hit|reached) your [^.]{0,40}limit|(5-hour|weekly|daily|session|opus|sonnet) limit'; then
             echo "::warning::Usage limit detected in attempt 1 — skipping the same-model retry, falling back to the fallback model"
             echo "usage_limit=true" >> "$GITHUB_OUTPUT"
           else
@@ -1179,8 +1179,9 @@ jobs:
       # the fallback model. A spent plan or a refused token moves it to the
       # next account; any other failure keeps it on the account that failed.
       # Only what the CLI writes is read, never a file the PR can write.
-      # Without those secrets, or when every account has no room or refuses
-      # its token, the fallback keeps the first account.
+      # Without those secrets the fallback keeps the first account; when every
+      # account has no room or refuses its token, it tries the first account
+      # that has a token.
       - name: Pick the fallback's account
         id: account
         if: steps.claude-cli-stable.outcome == 'success'
@@ -1208,7 +1209,9 @@ jobs:
           # CLI starts, and the token goes in through the environment, never a
           # command line. Only what the CLI writes is read: the exit status,
           # the error flag, the API's status and the result text.
-          probe_dir=$(mktemp -d)
+          # Under RUNNER_TEMP, which the runner empties after every job, so a
+          # step its timeout stops before the trap runs leaves nothing behind.
+          probe_dir=$(mktemp -d "$RUNNER_TEMP/probe.XXXXXX")
           trap 'rm -rf "$probe_dir"' EXIT
           picked=""
           for i in 1 2 3 4 5; do
@@ -1241,7 +1244,7 @@ jobs:
           api = r.get('api_error_status')
           text = r.get('result') if isinstance(r.get('result'), str) else ''
           # The same limit texts the deep review's failure class reads.
-          limit = r"rate_limit_error|usage limit|quota exceeded|resource_exhausted|(hit|reached) your [^.]{0,40}limit"
+          limit = r"rate_limit_error|usage limit|quota exceeded|resource_exhausted|(hit|reached) your [^.]{0,40}limit|(5-hour|weekly|daily|session|opus|sonnet) limit"
           if api == 429 or re.search(limit, text, re.IGNORECASE):
               print(f"::notice::Account {i} has no room left (exit {status}, API status {api})")
               sys.exit(2)
@@ -1256,8 +1259,11 @@ jobs:
             break
           done
           if [ -z "$picked" ]; then
-            echo "::warning::No account can take the fallback (each has no room or refused its token): the fallback tries the first account"
-            picked=1
+            for i in 1 2 3 4 5; do
+              var="TOKEN_$i"
+              if [ -n "${!var}" ]; then picked=$i; break; fi
+            done
+            echo "::warning::No account can take the fallback (each has no room or refused its token): the fallback tries account $picked, the first one with a token"
           elif [ "$picked" != 1 ] && [ -z "$TOKEN_1" ]; then
             echo "::notice::The first account's token is not set: the fallback runs on account $picked"
           elif [ "$picked" != 1 ]; then
