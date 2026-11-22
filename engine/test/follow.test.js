@@ -228,6 +228,16 @@ test("a file the user put where the helper now ships one, or a linked package fo
   });
 });
 
+test("a hooks folder that is itself a link is left alone", () => {
+  hookScene({ installed: ["guard.py"], shipped: { "guard.py": "new\n" } }, ({ helperHome, hooks, read }) => {
+    const real = join(hooks, "..", "hooks-real");
+    renameSync(hooks, real);
+    symlinkSync(real, hooks, "junction");
+    assert.deepEqual(refreshHooks(helperHome), { refreshed: [], kept: [] });
+    assert.equal(read("guard.py"), "old\n", "nothing is written through the linked folder");
+  });
+});
+
 test("a swap that fails partway puts the swapped files back; a refresh cut short is finished next time", () => {
   const shipped = { "guard.py": "new\n", "guard/rules.py": "new\n" };
   hookScene({ installed: ["guard.py", "guard/rules.py"], shipped }, ({ helperHome, hooks, read, recorded }) => {

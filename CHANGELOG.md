@@ -6,6 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `~/.claude/hooks` folder that is itself a link is left alone.** When the whole hooks folder links into a dotfiles repo, `home.py hook-status` reported every hook in it as not linked, so `/bindwright:update` recorded them and the helper then refreshed them through the link. Such a folder now counts as linked: `hook-status` says so, `adopt-hook` refuses it and the helper writes nothing through it.
+- **`home.py hook-status` finds the hooks under a home folder spelled with `..` or a doubled separator.** It compared the settings entries against the hooks folder as given, while `install-hook` writes them from the normalised path, so such a home listed none of the hooks Bindwright installed.
+
 ## [v7.13.0] — 2026-11-22
 
 ### Added

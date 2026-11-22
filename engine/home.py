@@ -415,10 +415,10 @@ def _is_under(path, folder):
 
 
 def _hook_linked(folder, installed, name):
-    """True when the hook file, its package folder or one of its shipped modules is installed as a link the
-    user keeps, such as into a dotfiles folder."""
+    """True when the hooks folder itself, the hook file, its package folder or one of its shipped modules is
+    installed as a link the user keeps, such as into a dotfiles folder."""
     paths = [_package_name(name)] + _hook_rels(folder, name)
-    paths = [os.path.join(installed, *rel.split("/")) for rel in paths]
+    paths = [installed] + [os.path.join(installed, *rel.split("/")) for rel in paths]
     return any(os.path.lexists(p) and _is_link(os.lstat(p)) for p in paths)
 
 

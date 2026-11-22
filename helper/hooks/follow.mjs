@@ -242,7 +242,8 @@ export function refreshHooks(helperHome, { rename } = {}) {
   const recordFile = join(bindwrightHome, "hooks.json");
   const files = readJson(recordFile)?.files;
   const out = { refreshed: [], kept: [] };
-  if (!files || typeof files !== "object") return out;
+  // A hooks folder that is itself a link, such as into a dotfiles repo, is the user's: nothing is written through it.
+  if (!files || typeof files !== "object" || isLink(hooksDir)) return out;
   const context = {
     files, recorded: Object.keys(files).filter((rel) => HOOK_PATH.test(rel)),
     copyOf: (rel) => join(hooksDir, ...rel.split("/")), sources: hookSources(helperHome), rename,
