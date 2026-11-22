@@ -35,6 +35,11 @@ export type Watch = {
   stepBackTopics?: string[]
   /** The distinct lookups the latched step back takes, fixed when it latched: three, or five near the hard stop. */
   stepBackNeeded?: number
+  /**
+   * Set on a red settle where only the review failed and no tier posted a 🔴: the review gate's title. Such a
+   * round is not counted, and its wake says why.
+   */
+  noVerdict?: string
 }
 
 /** A background run (a shell or a subagent) this session started and has not heard back from. */

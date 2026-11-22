@@ -15,11 +15,21 @@ function finishedAgo(watch: Watch, now?: number): string {
 
 export function wakeText(watch: Watch, now?: number, red = 0): string {
   const pr = `${watch.repo}#${watch.number}`
-  const research = watch.outcome === 'failed' && isResearchDue(red) ? researchText(pr, red) : ''
-  return `${outcomeText(watch, now)}${research}${finishedAgo(watch, now)}`
+  const isCounted = watch.outcome === 'failed' && watch.noVerdict === undefined
+  const research = isCounted && isResearchDue(red) ? researchText(pr, red) : ''
+  return `${outcomeText(watch, now, red)}${research}${finishedAgo(watch, now)}`
 }
 
-function outcomeText(watch: Watch, now?: number): string {
+// Only the review failed, and no tier posted a 🔴: the code was not judged, so the round is not counted.
+function noVerdictText(pr: string, title: string, red: number): string {
+  return (
+    `[ci-watch] ${pr}: the review gave no verdict (review gate: "${title}"), so this is no fix round and ` +
+    `the count stays at ${red}. A review that cannot run (no account with room, a refused token or post, a ` +
+    `cancelled run) is infrastructure: read the failing log, and re-run the review once its cause is gone.`
+  )
+}
+
+function outcomeText(watch: Watch, now: number | undefined, red: number): string {
   const entries = Object.entries(watch.checks)
   const pr = `PR ${watch.repo}#${watch.number}`
   // Not settled: the wake names GitHub's incident while the checks wait.
@@ -28,6 +38,7 @@ function outcomeText(watch: Watch, now?: number): string {
     return incidentText(pr, minutes, watch.incident)
   }
   const failed = entries.filter(([, bucket]) => FAILED.has(bucket)).map(([name]) => name)
+  if (watch.outcome === 'failed' && watch.noVerdict !== undefined) return noVerdictText(pr, watch.noVerdict, red)
   if (watch.outcome === 'failed') {
     return (
       `[ci-watch] ${pr}: all checks settled; failed: ${failed.join(', ')}. Fetch the failing logs (gh run ` +
