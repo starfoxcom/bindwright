@@ -114,6 +114,10 @@ write_secrets() {
 
 main() {
   parse_args "$@"
+  # Claude Code sets CLAUDECODE=1 in every shell it starts. The secrets are the
+  # maintainer's, so an assistant never writes them, however it spells the call.
+  [ "${CLAUDECODE:-}" != 1 ] \
+    || die "this writes repository secrets, so it runs only in your own terminal, not from a Claude Code session"
   command -v gh > /dev/null || die "the gh CLI is not installed"
   [ ${#REPOS[@]} -gt 0 ] || find_repos
   echo "Repositories: ${REPOS[*]}" >&2

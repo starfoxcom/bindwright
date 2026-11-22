@@ -909,12 +909,16 @@ class SetupScript(unittest.TestCase):
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args, script=SETUP, stdin=None):
+    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
                    PATH=self.dir + os.pathsep + os.environ["PATH"])
+        # These tests may run inside a Claude Code session, which the token script refuses.
+        env.pop("CLAUDECODE", None)
+        if in_claude_code:
+            env["CLAUDECODE"] = "1"
         repo = ["--repo", "acme/game"] if script == SETUP else []
         # The full path: on Windows a bare "bash" can start WSL's instead.
         run = subprocess.run([tool("bash"), script, *repo, *args], env=env, input=stdin or "",
@@ -1051,6 +1055,14 @@ class SetupScript(unittest.TestCase):
             ["acme/site", "CLAUDE_CODE_OAUTH_TOKEN_2", "sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"]])
         self.assertFalse([c for c in calls if any("sk-ant" in a for a in c)])
         self.assertNotIn("sk-ant", run.stdout + run.stderr)
+
+    def test_the_sweep_refuses_to_run_inside_claude_code(self):
+        run, after, calls = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
+                                           stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n", in_claude_code=True)
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("runs only in your own terminal", run.stderr)
+        self.assertNotIn("written", after)
+        self.assertEqual(calls, [])
 
     def test_the_sweep_writes_nothing_for_a_bad_or_repeated_token(self):
         for name, tokens in (("not a token", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\npassword\n"),

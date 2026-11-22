@@ -106,36 +106,19 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
 
 
 class SecretWriteRowTest(unittest.TestCase):
-    """Writing a repo secret is refused; reading, staging or listing never is."""
+    """A `gh secret` write is refused; listing a secret or naming one in a message never is."""
 
-    NAME = "a repo secret write (`gh secret set`, `set-review-tokens.sh`)"
+    NAME = "a repo secret write (`gh secret set` or `delete`)"
 
     def test_a_write_is_refused_and_a_read_passes(self):
         hook = load_tool_rules()
         for command in ("gh secret set CLAUDE_CODE_OAUTH_TOKEN -R o/r", "gh secret delete X -R o/r",
-                        "bash .github/scripts/set-review-tokens.sh --accounts 2", "./set-review-tokens.sh",
-                        "cd x; sh /p/r/.github/scripts/set-review-tokens.sh",
-                        ".github/scripts/set-review-tokens.sh --repo o/r",
-                        'PATH="$PWD/stub:$PATH" bash .github/scripts/set-review-tokens.sh --accounts 2',
-                        "GH_TOKEN=x ./set-review-tokens.sh", "bash -x set-review-tokens.sh",
-                        "for r in a b; do ./set-review-tokens.sh --repo $r; done",
-                        "sudo bash set-review-tokens.sh", "source set-review-tokens.sh"):
+                        "cd x; gh secret set T < t.txt"):
             with self.subTest(command=command):
                 self.assertEqual(hook.refusal(command, "bash")[0], self.NAME)
-        for command in ("bash .github\\scripts\\set-review-tokens.sh",
-                        "bash.exe .github\\scripts\\set-review-tokens.sh",
-                        "& .\\.github\\scripts\\set-review-tokens.sh"):
-            with self.subTest(command=command):
                 self.assertEqual(hook.refusal(command, "powershell")[0], self.NAME)
-        for command in ("git add .github/scripts/set-review-tokens.sh", "gh secret list -R o/r",
-                        "sed -n 1,40p .github/scripts/set-review-tokens.sh",
-                        "sed -n 1,40p /abs/repo/.github/scripts/set-review-tokens.sh",
-                        "git add ./.github/scripts/set-review-tokens.sh", "cat ../scripts/set-review-tokens.sh",
-                        "git diff -- /x/set-review-tokens.sh",
-                        "git add run-hook.sh .github/scripts/set-review-tokens.sh",
-                        "shellcheck lib.sh .github/scripts/set-review-tokens.sh",
-                        "bash -n .github/scripts/set-review-tokens.sh",
-                        'git commit -m "fix(scripts): set-review-tokens.sh sweeps orgs"'):
+        for command in ("gh secret list -R o/r", 'git commit -m "docs: say gh secret set needs admin"',
+                        "cmp .github/scripts/set-review-tokens.sh _core/x/set-review-tokens.sh"):
             with self.subTest(command=command):
                 self.assertIsNone(hook.refusal(command, "bash"))
 
@@ -148,7 +131,7 @@ class ToolRulesSweepTest(unittest.TestCase):
     TRIGGERS = (("gh run watch 1", "both"), ("python .github/scripts/size_check.py && git commit -m x", "both"),
                 ("git push && gh pr create", "both"), ("git checkout dev -- .", "both"),
                 ("gh pr merge 5 --admin", "both"), ("gh run rerun 5 --failed", "both"),
-                ("gh secret set TOKEN -R o/r", "both"), ("bash .github/scripts/set-review-tokens.sh", "both"),
+                ("gh secret set TOKEN -R o/r", "both"),
                 ("git rebase -i HEAD~3", "both"), ("gh pr create --body x", "both"),
                 ("node -e \"console.log('a\\\\b')\"", "both"),
                 ("@'\nprint('C:\\\\x')\n'@ | python -", "powershell"),

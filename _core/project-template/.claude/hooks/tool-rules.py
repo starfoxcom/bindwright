@@ -366,45 +366,6 @@ def cased(pattern):
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = Followed(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b", r"\n|;&", r"\s[\w./@~^-]+:\.[^/\s.]")
 
-# A repo secret write: `gh secret set` or `delete`, or a run of the script that sets the review tokens.
-SECRET_WRITE = re.compile(r"\bgh\s+secret\s+(?:set|delete|remove)\b", re.I)
-TOKEN_SCRIPT = "set-review-tokens.sh"
-# The tools that only read, copy or check a file. A command part naming the token script passes only when it
-# starts with one of them, or with a shell's `-n` (read the script, never run it): any other start runs it.
-SCRIPT_READERS = frozenset((
-    "cat", "less", "more", "head", "tail", "sed", "awk", "grep", "rg", "git", "shellcheck", "bat", "cp",
-    "mv", "chmod", "ls", "wc", "diff", "stat", "file", "test", "[", "echo", "printf", "code", "vi", "vim",
-    "nano", "get-content", "gc", "type", "select-string", "copy-item", "move-item", "test-path"))
-COMMAND_PARTS = re.compile(r"[;&|()\n`]")
-ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
-
-
-def reads_only(part):
-    """Whether a command part (no separators in it) only reads what it names: its first word, after any
-    `NAME=value` words, is a reader, or a shell given `-n` before anything else."""
-    words = part.split()
-    while words and ASSIGNMENT.match(words[0]):
-        words.pop(0)
-    if not words:
-        return True
-    name = re.split(r"[\\/]", words[0])[-1].lower()
-    name = name[:-4] if name.endswith(".exe") else name
-    if name in SCRIPT_READERS:
-        return True
-    options = []
-    for word in words[1:]:
-        if not word.startswith("-"):
-            break
-        options.append(word)
-    return name in ("sh", "bash", "zsh") and any(re.fullmatch(r"-[a-z]*n[a-z]*", o) for o in options)
-
-
-def runs_token_script(text, shell):
-    """Whether any part of the command names the token script outside quotes and does more than read it."""
-    parts = COMMAND_PARTS.split(bare(text, shell))
-    return any(TOKEN_SCRIPT in part.lower() and not reads_only(part) for part in parts)
-
-
 ENFORCE = "enforce"
 OBSERVE = "observe"
 OBSERVED_LOG = os.path.join(os.path.expanduser("~"), ".bindwright", "tool-rules", "observed.jsonl")
@@ -434,8 +395,8 @@ RULES = [
      ENFORCE),
     ("`gh pr merge --admin`", both(Followed(r"\bgh\s+pr\s+merge\b", r"\n", r"\s--admin\b")),
      "it skips the required checks. Fix what blocks the merge.", ENFORCE),
-    ("a repo secret write (`gh secret set`, `set-review-tokens.sh`)",
-     lambda text, shell: bool(SECRET_WRITE.search(bare(text, shell))) or runs_token_script(text, shell),
+    ("a repo secret write (`gh secret set` or `delete`)",
+     both(r"\bgh\s+secret\s+(?:set|delete|remove)\b"),
      "secrets are the maintainer's, and a test run can overwrite the real ones. Give the user the command.",
      ENFORCE),
     ("`<rev>:.<path>` in Git Bash",

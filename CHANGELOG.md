@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **The guard refuses repository secret writes from a session.** `gh secret set`, `gh secret delete` and running `set-review-tokens.sh` are refused with a note to hand the user the command, since a test run can overwrite the real secrets and that cannot be undone. Reading, listing, staging or committing the script still pass. Being irreversible, this rule enforces from the start instead of observing first.
+- **A session can no longer write repository secrets.** The guard refuses `gh secret set` and `gh secret delete` with a note to hand the user the command, since a test run can overwrite the real secrets and that cannot be undone; being irreversible, this rule enforces from the start instead of observing first. `set-review-tokens.sh` itself stops when Claude Code started its shell (`CLAUDECODE=1`), however the call is spelled, so it runs only in the user's own terminal.
 
 ## [v7.7.1] — 2026-11-21
 
