@@ -7,7 +7,8 @@ type Shell = 'bash' | 'powershell'
 // What the reader is inside: a quote (Bash's `$'` too), a PowerShell here-string, a `$(...)` within a
 // quote, or `((...))` arithmetic. Each open parenthesis inside the last two adds a frame.
 type Frame = "'" | '"' | "$'" | "@'" | '@"' | 'sub' | 'arith'
-type Reader = { frames: Frame[]; hereDocs: string[]; shell: Shell }
+// `lines` is the whole command and `at` the line being read, for a look ahead past the line.
+type Reader = { frames: Frame[]; hereDocs: string[]; shell: Shell; lines: string[]; at: number }
 // How a step's text shows: as it is, hidden, as spaces, or as an escape (kept, the escaped one hidden).
 type Shown = 'kept' | 'hidden' | 'blank' | 'escape'
 type Step = [length: number, shown: Shown]
@@ -16,6 +17,18 @@ type Step = [length: number, shown: Shown]
 const HERE_DOC = /^<<(?!<)-?\s*(?:'([^']*)'|"([^"]*)"|\\?([A-Za-z_][\w.-]*))/
 const innermost = (reader: Reader) => reader.frames.at(-1)
 const hide = (text: string) => '_'.repeat(text.length)
+
+// Bash reads `((` at `from` as arithmetic only when the `)` closing its second `(` comes right before
+// another `)`; otherwise it is a subshell in a subshell, as in `((cd a); git push)`.
+function isArithmetic(line: string, from: number, reader: Reader): boolean {
+  const text = [line.slice(from), ...reader.lines.slice(reader.at + 1)].join('\n')
+  let depth = 0
+  for (let j = 0; j < text.length; j++) {
+    if (text[j] === '(') depth++
+    else if (text[j] === ')' && --depth === 1) return text[j + 1] === ')'
+  }
+  return false
+}
 
 // A Bash quote, arithmetic or here-doc starting here, or one plain character.
 function bashStep(line: string, i: number, reader: Reader): Step {
@@ -27,8 +40,11 @@ function bashStep(line: string, i: number, reader: Reader): Step {
   }
   const opener = /^(?:\$\(\(|\(\(|\$'|'|")/.exec(rest)?.[0]
   if (!opener) return [1, 'kept']
-  if (opener.endsWith('((')) reader.frames.push('arith', 'arith')
-  else reader.frames.push(opener as Frame)
+  if (opener.endsWith('((')) {
+    // Not arithmetic: the first `(` is grouping, and the next step reads on from the second.
+    if (!isArithmetic(line, i + opener.length - 2, reader)) return [1, 'kept']
+    reader.frames.push('arith', 'arith')
+  } else reader.frames.push(opener as Frame)
   return [opener.length, 'kept']
 }
 
@@ -51,8 +67,8 @@ function codeStep(line: string, i: number, reader: Reader): Step {
   if (c === (reader.shell === 'bash' ? '\\' : '`')) return [2, 'escape']
   if (c === '#' && (i === 0 || /[\s;&|(]/.test(line[i - 1] ?? ''))) return [line.length - i, 'blank']
   // `((` is arithmetic here too, so it is read before a `(` counts as a nested parenthesis.
-  const isArithmetic = reader.shell === 'bash' && line.startsWith('((', i)
-  if (innermost(reader) === 'sub' && !isArithmetic && (c === '(' || c === ')')) {
+  const isMath = reader.shell === 'bash' && line.startsWith('((', i) && isArithmetic(line, i, reader)
+  if (innermost(reader) === 'sub' && !isMath && (c === '(' || c === ')')) {
     if (c === '(') reader.frames.push('sub')
     else reader.frames.pop()
     return [1, 'kept']
@@ -87,7 +103,7 @@ function quotedStep(line: string, i: number, reader: Reader): Step {
     return [1, 'hidden']
   }
   if (!isDouble || !line.startsWith('$(', i)) return [1, 'hidden']
-  if (reader.shell === 'bash' && line[i + 2] === '(') {
+  if (reader.shell === 'bash' && line[i + 2] === '(' && isArithmetic(line, i + 1, reader)) {
     reader.frames.push('arith', 'arith')
     return [3, 'hidden']
   }
@@ -117,8 +133,10 @@ function maskLine(line: string, reader: Reader): string {
 }
 
 export function maskCommand(command: string, isPowerShell = false): string {
-  const reader: Reader = { frames: [], hereDocs: [], shell: isPowerShell ? 'powershell' : 'bash' }
-  const lines = command.split('\n').map(line => {
+  const all = command.split('\n')
+  const reader: Reader = { frames: [], hereDocs: [], shell: isPowerShell ? 'powershell' : 'bash', lines: all, at: 0 }
+  const lines = all.map((line, at) => {
+    reader.at = at
     if (reader.hereDocs.length === 0) return maskLine(line, reader)
     if (line.trim() === reader.hereDocs[0]) reader.hereDocs.shift()
     return ' '.repeat(line.length)

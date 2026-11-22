@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.10.2] — 2026-11-22
+
+### Fixed
+
+- **A subshell inside a subshell is no longer read as arithmetic.** The command reader the ci-watch and tasks mods share took every `((` as the start of arithmetic and hid what followed it, so in `((cd sub); git commit -m x)` the commit was not held, and in `((cd sub); git push)` no watch started. It now reads `((` the way bash does: as arithmetic only when the parenthesis that closes the second `(` is followed straight away by another `)`.
+
 ## [v7.10.1] — 2026-11-22
 
 ### Fixed
