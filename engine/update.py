@@ -81,6 +81,15 @@ def _owned_old_path(path, pristine, owned, read_repo):
                  and (o in pristine["files"] or read_repo(o) is not None) and read_repo(path) is None), None)
 
 
+def _base_for(pristine, path, ours):
+    """The base a file is decided against; see baseFor in update.js."""
+    held = pristine.get("held")
+    held_text = held.get(path) if isinstance(held, dict) else None
+    if isinstance(held_text, str) and held_text == ours:
+        return held_text
+    return pristine["files"].get(path)
+
+
 def plan_update(rendered, pristine, read_repo, owned, merge, version):
     theirs_all = repo_files(rendered)
     paths = sorted(set(pristine["files"]) | set(theirs_all), key=_code_units)
@@ -93,7 +102,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
         if path in moved_from:
             continue
         old = moves.get(path)
-        base, theirs = pristine["files"].get(old or path), theirs_all.get(path)
+        theirs = theirs_all.get(path)
         owned_old = _owned_old_path(path, pristine, owned, read_repo)
         if owned_old is not None or is_owned(path, owned):
             result["owned"].append(path)
@@ -104,6 +113,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
                 files[path] = theirs
             continue
         ours = read_repo(old or path)
+        base = _base_for(pristine, old or path, ours)
         decided = _decide(path, ours, base, theirs, merge)
         outcome = decided[0]
         result[outcome].append(path)
@@ -288,7 +298,7 @@ def _before_path(root):
 
 
 def keep_base(root, paths, state_json):
-    """See keepBase in update.js: each path's base goes back to the record the last update replaced."""
+    """See keepBase in update.js: bases go back to the last record's, and the text they replace is held."""
     bad = [p for p in paths if not _safe(p)]
     if bad:
         raise ValueError("Refusing paths outside the repo: %s" % ", ".join(bad))
@@ -306,8 +316,12 @@ def keep_base(root, paths, state_json):
         raise ValueError("%s is not UTF-8 text" % what)
     before = _record_of(text.replace("\r\n", "\n"), what)["files"]
     state = _record_of(current, PRISTINE)
+    held = state.get("held")
+    held = dict(held) if isinstance(held, dict) else {}
     result = {"kept": [], "dropped": []}
     for path in paths:
+        if path in state["files"]:
+            held[path] = state["files"][path]
         if path in before:
             state["files"][path] = before[path]
             result["kept"].append(path)
@@ -316,6 +330,10 @@ def keep_base(root, paths, state_json):
             result["dropped"].append(path)
     # Sorted as plan_update writes them, so a base put back lands at its place, not at the end.
     state["files"] = {p: state["files"][p] for p in sorted(state["files"], key=_code_units)}
+    if held:
+        state["held"] = {p: held[p] for p in sorted(held, key=_code_units)}
+    else:
+        state.pop("held", None)
     refuse_links(root, [PRISTINE])
     _put(root, PRISTINE, state_json(state))
     return result
