@@ -21,6 +21,8 @@ export type Seen = {
   duringMkdir?: () => unknown
   /** The newest review gate run's state on the head, as the checks API answers it; unset, that read fails. */
   gateState?: string
+  /** How many bot comments holding a 🔴 the PR shows since the push. */
+  postedBlocks?: number
   /** `gh pr checks` fails (network, auth) with nothing on stdout. */
   isChecksDown?: boolean
   /** Folder makes, file writes and reads of the rounds file, in order. */
@@ -163,9 +165,11 @@ export function world(on: On) {
       ? JSON.stringify([{ name: 'build', bucket: seen.bucket }, ...seen.rows])
       : args.includes('/check-runs')
         ? `${seen.gateState}\n`
-        : args.includes('/actions/workflows')
-          ? String(seen.workflows ?? 1)
-          : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))
+        : args.includes('/comments')
+          ? `${seen.postedBlocks ?? 0}\n`
+          : args.includes('/actions/workflows')
+            ? String(seen.workflows ?? 1)
+            : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('prompt.submit', ($, e) => {
