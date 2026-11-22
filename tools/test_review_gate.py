@@ -1122,14 +1122,15 @@ class SetupScript(unittest.TestCase):
             self.assertEqual(run.returncode, 2, name)
             self.assertNotIn("written", after, name)
 
-    def test_an_api_key_stands_in_for_the_token_only_with_no_account_token(self):
+    def test_an_api_key_stands_in_for_the_first_token(self):
         run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY"]), "--check")
         self.assertIn("ok       secret ANTHROPIC_API_KEY, with no account token", run.stdout)
         self.assertNotIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN", run.stdout)
-        # A later account's token left behind keeps the workflows off the key alone.
+        # With a later account's token, the key pays for the first attempts only.
         run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN_2"]), "--check")
-        self.assertIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN (", run.stdout)
-        self.assertNotIn("with no account token", run.stdout)
+        self.assertIn("ok       secret ANTHROPIC_API_KEY, with no first account token", run.stdout)
+        self.assertIn("ok       secret CLAUDE_CODE_OAUTH_TOKEN_2 (account 2)", run.stdout)
+        self.assertNotIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN (", run.stdout)
 
     def test_names_that_could_break_out_of_a_string_are_refused(self):
         for args in (["--branch", 'ma"in'], ["--require", "a\\b"], ["--approvals", "11"],
