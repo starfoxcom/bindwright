@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planUpdate, MERGE_LABELS, RENAMES } from "../update.js";
+import { planUpdate, gitMerge, MERGE_LABELS, RENAMES } from "../update.js";
 import { PRISTINE, STAGING, makeRepo } from "./bound-repo.js";
 import { python } from "./python.js";
 
@@ -21,6 +21,7 @@ const RULE = ".claude/rules/task-tracking.md";
 const OTHER = ".claude/rules/testing.md";
 const THIRD = ".claude/rules/git.md";
 const LICENSE = "LICENSE";
+const SETTINGS = ".claude/settings.json";
 
 const needsPython = { skip: !python && "needs Python 3.8+" };
 const engines = [[process.execPath, [join(engine, "cli.js")]], [python, [join(engine, "bind.py")]]];
@@ -35,7 +36,7 @@ async function update(change) {
   }
   if (runs.length === 2) {
     assert.deepEqual(runs[1].out, runs[0].out, "the two engines report alike");
-    for (const p of [PRISTINE, RULE, OTHER, THIRD, `.bindwright/incoming/${RULE}`]) {
+    for (const p of [PRISTINE, RULE, OTHER, THIRD, SETTINGS, `.bindwright/incoming/${RULE}`]) {
       assert.equal(runs[1].repo.peek(p), runs[0].repo.peek(p), `${p} is the same from both engines`);
     }
   }
@@ -568,4 +569,49 @@ test("a held text the repo has changed is not taken as the base", needsPython, a
     assert.deepEqual(withHeld.out, withoutHeld.out, `${cmd}: the same outcome as before the held text`);
     assert.equal(withHeld.license, withoutHeld.license, cmd);
   }
+});
+
+// The settings with the first hook's timeout at a value the templates no longer have.
+const olderTimeout = (text) => text.replace(/"timeout": \d+/, '"timeout": 5');
+const firstTimeout = (text) => JSON.parse(text).hooks.PreToolUse[0].hooks[0].timeout;
+
+// The same settings with the hooks key moved to the end, and nothing else changed.
+function reordered(text) {
+  const { hooks, ...rest } = JSON.parse(text);
+  return `${JSON.stringify({ ...rest, hooks }, null, 2)}\n`;
+}
+
+test("a repo that moved its hooks key merges key by key", needsPython, async () => {
+  let base, ours, theirs;
+  const { out, repo } = await update((r) => {
+    theirs = r.read(SETTINGS);
+    base = olderTimeout(theirs);
+    ours = reordered(base);
+    r.pristine.files[SETTINGS] = base;
+    r.write(SETTINGS, ours);
+  });
+  assert.ok(gitMerge(ours, base, theirs).conflicts > 0, "git's line merge clashes on these texts");
+  assert.deepEqual(out.merged, [SETTINGS]);
+  const merged = repo.read(SETTINGS);
+  assert.deepEqual(Object.keys(JSON.parse(merged)), Object.keys(JSON.parse(ours)));
+  assert.equal(firstTimeout(merged), firstTimeout(theirs));
+  assert.equal(merged.match(/^ {2}"hooks": /gm).length, 1);
+});
+
+test("a key both sides changed differently stays a conflict", needsPython, async () => {
+  const { out } = await update((r) => {
+    const theirs = r.read(SETTINGS);
+    r.pristine.files[SETTINGS] = olderTimeout(theirs);
+    r.write(SETTINGS, theirs.replace(/"timeout": \d+/, '"timeout": 99'));
+  });
+  assert.deepEqual(out.conflict, [SETTINGS]);
+});
+
+test("a repo copy that is not valid JSON stays a conflict", needsPython, async () => {
+  const { out } = await update((r) => {
+    const base = olderTimeout(r.read(SETTINGS));
+    r.pristine.files[SETTINGS] = base;
+    r.write(SETTINGS, reordered(base).replace(/\n\}\n$/, ",\n}\n"));
+  });
+  assert.deepEqual(out.conflict, [SETTINGS]);
 });

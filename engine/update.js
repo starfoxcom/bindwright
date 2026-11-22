@@ -85,6 +85,11 @@ function decide(path, { ours, base, theirs }, merge) {
   if (ours === theirs || base === theirs) return ["unchanged"];
   if (ours === base) return ["updated", theirs];
   const { text, conflicts } = merge(ours, base, theirs);
+  // Git's line merge cannot place a key the repo moved; a key-by-key merge can.
+  if (conflicts && path.endsWith(".json")) {
+    const merged = mergeJson(ours, base, theirs);
+    if (merged !== null) return ["merged", merged];
+  }
   if (conflicts || !keepsSections(ours, text, path)) return ["conflict", text];
   return ["merged", text];
 }
@@ -168,6 +173,75 @@ export function gitMerge(ours, base, theirs) {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+const BOM = "\uFEFF";
+const ABSENT = Symbol("absent");
+const CLASH = Symbol("clash");
+
+// A key-by-key three-way merge of three JSON objects, for the clashes git's line
+// merge reports when the repo moved keys. Null when a value clashes or a text is
+// not a JSON object.
+function mergeJson(ours, base, theirs) {
+  const parsed = [ours, base, theirs].map(parseObject);
+  if (parsed.includes(null)) return null;
+  const merged = mergeValue(...parsed);
+  if (merged === CLASH) return null;
+  const eol = ours.includes("\r\n") ? "\r\n" : "\n";
+  const body = JSON.stringify(merged, null, indentOf(ours)).replace(/\n/g, eol);
+  return (ours.startsWith(BOM) ? BOM : "") + body + (ours.endsWith("\n") ? eol : "");
+}
+
+function parseObject(text) {
+  try {
+    const value = JSON.parse(text.replace(/^\uFEFF/, ""));
+    return isObject(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+// The indent the repo's copy uses: the leading whitespace of its first indented line.
+function indentOf(text) {
+  const match = /^([ \t]+)\S/m.exec(text);
+  return match ? match[1] : "  ";
+}
+
+// ABSENT stands for a key a version does not have. A value that every version
+// changed differently is CLASH. Objects merge key by key first, so the repo's
+// key order holds even where it changed nothing else.
+function mergeValue(o, b, t) {
+  if (isObject(o) && isObject(b) && isObject(t)) return mergeObject(o, b, t);
+  if (same(o, t)) return o;
+  if (same(o, b)) return t;
+  if (same(t, b)) return o;
+  return CLASH;
+}
+
+// The repo's keys in its order, then the keys only the templates have.
+function mergeObject(o, b, t) {
+  const keys = [...Object.keys(o), ...Object.keys(t).filter((key) => !Object.hasOwn(o, key))];
+  const entries = [];
+  for (const key of keys) {
+    const value = mergeValue(member(o, key), member(b, key), member(t, key));
+    if (value === CLASH) return CLASH;
+    if (value !== ABSENT) entries.push([key, value]);
+  }
+  return Object.fromEntries(entries);
+}
+
+const member = (object, key) => (isObject(object) && Object.hasOwn(object, key) ? object[key] : ABSENT);
+
+// Objects compare without regard to key order, arrays in order.
+function same(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, i) => same(item, b[i]));
+  }
+  if (!isObject(a) || !isObject(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length
+    && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
 }
 
 // Strict UTF-8 that keeps a byte order mark, as Python's decoder does: a file
