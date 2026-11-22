@@ -806,7 +806,7 @@ jobs:
       # backup on the account it picks. It also names the first account whose
       # token is set, which the first attempt and its retry take when the key
       # does not pay for them, and the backup and its label take when "Pick
-      # the backup's account" leaves no index. Only whether each secret is set
+      # the fallback's account" leaves no index. Only whether each secret is set
       # is read here, never its value.
       - name: Pick who pays for the review
         id: payer
@@ -916,7 +916,7 @@ jobs:
             https://api.anthropic.com/api/github/github-app-token-exchange \
             | python3 -I -c 'import json, sys; d = json.load(sys.stdin); print(d.get("token") or d.get("app_token") or "")')
           if [ -z "$bot_token" ]; then
-            echo "::warning::The bot token exchange returned no token: the deep review runs on the subscription"
+            echo "::warning::The bot token exchange returned no token: the deep review runs on the action's attempts"
             exit 1
           fi
           echo "::add-mask::$bot_token"
@@ -924,7 +924,7 @@ jobs:
           out="$RUNNER_TEMP/claude-credits-output.json"
           status=0
           # A time limit, so a release that hangs ends as a broken run and the
-          # subscription steps take over. Without the job's OIDC request
+          # action's attempts take over. Without the job's OIDC request
           # values, so nothing the reviewer starts can mint a token and post.
           (cd "$wt" && GH_TOKEN="$bot_token" env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             timeout --kill-after=1m 30m "$CLI" -p "Brief file: $RUNNER_TEMP/deep-brief.md"$'\n\n'"$DEEP_REVIEW_PROMPT" < /dev/null \

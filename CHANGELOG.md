@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.6] — 2026-11-22
+
+### Fixed
+
+- **The deep review's run log says where a review goes when its credits run cannot start.** When the review app's token exchange returned no token, the warning said the deep review ran on the subscription, but with the API key set the next attempts run on the key. It now says the review runs on the action's attempts, as the warning for a failed Claude Code install already did, and the comments beside it name the deep workflow's own "Pick the fallback's account" step. Only the wording changed. A repo takes it with `/bindwright:update`.
+
 ## [v7.11.5] — 2026-11-22
 
 ### Fixed
