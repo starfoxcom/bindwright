@@ -26,6 +26,7 @@ function world(on: On): void {
   on('session.id', () => ({ value: 'sess-a' }))
   on('session.root', () => ({ value: 'C:/Repos/x' }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('session.end', ($, e) => ({ sessionId: e.sessionId }))
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('tool.call', { tool: 'TaskCreate' }, () => ({ result: {} }) as never)
   on('tool.call', { tool: 'TaskUpdate' }, () => ({ result: {} }) as never)
@@ -87,6 +88,14 @@ test('the first edit after a list change names the task in progress, the next on
   expect((first.context ?? []).join(' ')).toContain('record it on #1 "ship the fix"')
   const second = await call($, { tool: 'Edit', file_path: 'a.ts', old_string: 'b', new_string: 'c' })
   expect((second.context ?? []).join(' ')).not.toContain('Code changed')
+})
+
+test('a /clear starts the next session with its first commit held', async ($, on) => {
+  world(on)
+  await started($)
+  await $.session.end({ reason: 'clear', sessionId: 'sess-a' } as never)
+  const answer = await call($, { tool: 'Bash', command: 'git commit -m first' })
+  expect(answer.deny).toContain('before this commit')
 })
 
 test("a subagent's commit is not held", async ($, on) => {

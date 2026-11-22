@@ -56,6 +56,12 @@ export function noteListChanged(): void {
   state.isEditNoted = false
 }
 
+/** The session ended (a /clear goes on in this process): the next session starts with its commit held. */
+export function resetReview(): void {
+  state.isListChanged = false
+  state.isEditNoted = false
+}
+
 /** A commit went through: the one after it waits for the next change to the list. */
 export function noteCommitted(): void {
   state.isListChanged = false

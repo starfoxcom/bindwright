@@ -5,7 +5,7 @@ import {
   nearCompactionText, workable,
 } from './keepgoing'
 import { builtInName, registerOwnTools } from './owntools'
-import { commitRefusal, EDIT_TOOLS, editNote, isCommit, noteCommitted, noteListChanged } from './review'
+import { commitRefusal, EDIT_TOOLS, editNote, isCommit, noteCommitted, noteListChanged, resetReview } from './review'
 import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { PANE, phoneText } from './view'
 import type { EngineTask, Mirror, TaskArgs } from './mirror'
@@ -389,6 +389,7 @@ function registerLifecycle(on: On): void {
   on('session.end', async ($, e, next) => {
     await markEnded($).catch(() => undefined)
     live.mirror = undefined
+    resetReview()
     return next(e)
   })
 }
