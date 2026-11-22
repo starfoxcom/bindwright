@@ -652,6 +652,18 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
   });
 });
 
+test("hook-status finds a hook installed under a home given with a .. in its path", { skip }, () => {
+  withHome((dir) => {
+    // Node's join would fold the .. away, so the path is spelled out.
+    mkdirSync(join(dir, "x"));
+    const roundabout = `${dir}/x/..`;
+    const file = hookFile(dir, "push-guard.py", "push\n");
+    assert.equal(home(roundabout, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const status = home(roundabout, "hook-status", join(dir, "src")).out.hooks;
+    assert.deepEqual(status, { "push-guard.py": { recorded: true, matches: true, linked: false } });
+  });
+});
+
 test("a null hook event is skipped, so a guard beside it still lists and removes", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "push-guard.py");

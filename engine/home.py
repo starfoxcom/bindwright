@@ -367,7 +367,7 @@ def hook_status(home, folder):
     if not os.path.isdir(folder):
         raise HomeError("Not a hooks folder: " + folder)
     recorded = _hook_record(home)
-    installed = os.path.join(_claude(home), "hooks")
+    installed = os.path.normpath(os.path.join(_claude(home), "hooks"))
     run_here = _names_run_from(home, installed)
     found = {}
     for name in list_hooks(home)["hooks"]:
@@ -426,7 +426,7 @@ def adopt_hook(home, file):
     """Records a hook installed with the text of `file`, its package included, so the helper keeps it current.
     Its entry in ~/.claude/settings.json stays as it is; a linked or differing copy is refused."""
     name = os.path.basename(file)
-    installed = os.path.join(_claude(home), "hooks")
+    installed = os.path.normpath(os.path.join(_claude(home), "hooks"))
     if not name.endswith(".py") or not os.path.isfile(file):
         raise HomeError("A hook is a .py file: " + file)
     if _hook_linked(os.path.dirname(os.path.abspath(file)), installed, name):
