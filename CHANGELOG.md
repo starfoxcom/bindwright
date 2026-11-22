@@ -6,6 +6,17 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.0] — 2026-11-22
+
+### Added
+
+- **Setup asks how the AI reviews are paid for.** Your Claude subscription only (recommended), API credits first and then the subscription, or an API key only, each with what it costs you. Many plans come with monthly API credits, so the reviews can spend those before your plan's usage.
+- **The reviews run on an API key alone.** With an `ANTHROPIC_API_KEY` secret and no account token at all (`CLAUDE_CODE_OAUTH_TOKEN` to `_5`), every attempt of both review tiers, backups included, runs on the key, and the `Review gate` summary names those runs as on the API credits. Before, every attempt after the first needed a subscription token.
+- **`set-review-tokens.sh --api-key`** asks for the API key with the input hidden, like the account tokens, and sets it as `ANTHROPIC_API_KEY` in the same sweep; `--accounts 0 --api-key` sets the key alone. A key typed where an account token belongs is refused.
+- **`setup-review-gate.sh --check`** takes an API key with no account token at all as a complete setup instead of reporting the token missing.
+- **The plugin's README says what setup changes and how to get help.** Four example prompts, the parts of setup that change how Claude Code behaves in later sessions (each asked one at a time, all plain text) and what `/bindwright:remove` leaves in place, where the helper's scripts come from and how they are checked, and how to troubleshoot with `/bindwright:doctor` and `/bindwright:report`.
+- **Releases can leave the plugin directory's copy alone.** While the repository variable `DIRECTORY_HOLD` is set, a release still ships to GitHub and the wrights marketplace, but the `plugin` branch the directory reviews stays put, since each push there restarts the review of the version waiting on it.
+
 ## [v7.10.2] — 2026-11-22
 
 ### Fixed
