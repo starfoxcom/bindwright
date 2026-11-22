@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.4] — 2026-11-22
+
+### Fixed
+
+- **An update merges a JSON file whose keys the repo reordered.** When a repo keeps the keys of `.claude/settings.json` in another order than the templates (its `hooks` block last, say), the line merge read the moved block as deleted, so every change to the hooks came back as a conflict, and taking the templates' side wrote the `hooks` key twice. When the line merge clashes on a `.json` file whose three versions are JSON objects, the update now merges them key by key: the repo's key order and indentation stay, keys only the templates add go at the end of their object, and a key both sides changed differently is still a conflict.
+
 ## [v7.11.3] — 2026-11-22
 
 ### Fixed
