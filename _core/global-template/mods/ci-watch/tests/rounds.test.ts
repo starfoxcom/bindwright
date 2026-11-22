@@ -400,8 +400,28 @@ test("a round adds to the count file as read right before its write", async ($, 
 // A red settle counts only when the code was judged: a tier's 🔴, or any check outside the review's own jobs.
 // A review that gave no verdict (it errored, found no account with room, had its post refused, was cancelled)
 // keeps the count and says why. A gate title that cannot be read counts, as before.
-type VerdictRow = { name: string; state?: string; posted?: number; build: string; counted: boolean }
+// Comments as the review bot posts them: the deep-review request quotes the verdict rules, and a 🟢 review
+// may name a 🔴 in backticks; only a verdict line opening with 🔴 is a posted block.
+const REQUEST = '@claude review this PR — depth pass on the whole diff.\n\n- 🔴 Blocking when ANY real finding exists.\n'
+const CLEAN_REVIEW = '## Routine review\n\nNo line opens with `🔴` here.\n\n🟢 LGTM\n'
+const BLOCK_REVIEW = '## Routine review\n\n- `verdict.ts:12` reads the wrong field.\n\n🔴 Blocking — must fix\n'
+type Comment = { type?: string; at?: string; body: string }
+type VerdictRow = { name: string; state?: string; comments?: Comment[]; build: string; counted: boolean }
 const VERDICT_ROWS: VerdictRow[] = [
+  {
+    name: 'a deep run that errored after the bot asked for it',
+    state: 'routine=pass;escalated=yes;deep=error',
+    comments: [{ body: CLEAN_REVIEW }, { body: REQUEST }],
+    build: 'pass',
+    counted: false,
+  },
+  {
+    name: 'an errored review with a 🔴 from before the push',
+    state: 'routine=error',
+    comments: [{ body: BLOCK_REVIEW, at: '1969-12-31T23:59:00Z' }],
+    build: 'pass',
+    counted: false,
+  },
   { name: 'a review that errored', state: 'routine=error;deep=none', build: 'pass', counted: false },
   { name: 'a deep run with no verdict line', state: 'routine=pass;deep=missing', build: 'pass', counted: false },
   { name: 'a cancelled review run', state: 'triage=reviewable;routine=pending', build: 'pass', counted: false },
@@ -411,7 +431,13 @@ const VERDICT_ROWS: VerdictRow[] = [
   { name: 'a gate state with no tier', state: '', build: 'pass', counted: true },
   { name: 'a gate state that cannot be read', build: 'pass', counted: true },
   { name: 'a failed test beside an errored review', state: 'routine=error;deep=none', build: 'fail', counted: true },
-  { name: 'a job that errored after its 🔴 went out', state: 'routine=error', posted: 1, build: 'pass', counted: true },
+  {
+    name: 'a job that errored after its 🔴 went out',
+    state: 'routine=error',
+    comments: [{ body: BLOCK_REVIEW }],
+    build: 'pass',
+    counted: true,
+  },
 ]
 for (const row of VERDICT_ROWS) {
   test(`a red settle from ${row.name} ${row.counted ? 'counts' : 'keeps the count'}`, async ($, on) => {
@@ -421,7 +447,7 @@ for (const row of VERDICT_ROWS) {
     seen.bucket = row.build
     seen.rows = [{ name: 'Review gate', bucket: 'fail' }, { name: 'Claude On-Demand', bucket: 'fail' }]
     seen.gateState = row.state
-    seen.postedBlocks = row.posted
+    seen.comments = row.comments
     await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
     for (let i = 0; i < 6; i++) await clock.advance(30_000)
     expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(row.counted ? 3 : 2)

@@ -44,21 +44,37 @@ async function gateState($: EngineInterface, watch: Watch): Promise<string | und
   }
 }
 
+// A deep-review request or the review action's tracking comment, which quote the verdict rules, not a verdict.
+const NOT_VERDICT = /^(?:@claude review this PR|\*\*Claude |Claude Code is working)/i
+// A verdict line that blocks: a 🔴 after list, quote, heading or emphasis markup, as the gate reads one.
+const RED_VERDICT = /^(?:\[[ xX]\]|[^\p{L}`🔴🟢])*🔴/u
+
+/** Whether a comment body is a review whose verdict line, its last non-empty line, opens with 🔴. */
+function isBlockVerdict(body: string): boolean {
+  if (NOT_VERDICT.test(body.trimStart())) return false
+  const lines = body.split('\n').filter(line => line.trim())
+  return RED_VERDICT.test(lines.at(-1)?.trim() ?? '')
+}
+
 /**
- * Whether a bot posted a comment holding a 🔴 on the PR since the watch's push; `undefined` when the comments
- * cannot be read. A review job can fail after its verdict went out, and the gate then holds `error`.
+ * Whether a bot posted a 🔴 verdict on the PR since the watch's push; `undefined` when the comments cannot be
+ * read. A review job can fail after its verdict went out, and the gate then holds `error`.
  */
 async function hasPostedBlock($: EngineInterface, watch: Watch): Promise<boolean | undefined> {
   try {
-    const since = new Date(watch.pushedAt ?? watch.startedAt).toISOString()
-    const isBlock = `.user.type == "Bot" and .created_at >= "${since}" and (.body | contains("🔴"))`
-    const blocks = `[.[] | select(${isBlock})] | length`
+    const since = Date.parse(new Date(watch.pushedAt ?? watch.startedAt).toISOString())
+    // One JSON line per comment: [author type, created_at, body].
+    const rows = '.[] | [.user.type, .created_at, .body] | @json'
     const path = `repos/${watch.repo}/issues/${watch.number}/comments?per_page=100`
-    const { stdout, exitCode } = await $.process.run(['gh', 'api', '--paginate', path, '--jq', blocks], {
+    const { stdout, exitCode } = await $.process.run(['gh', 'api', '--paginate', path, '--jq', rows], {
       timeoutMs: 30_000,
     })
     if (exitCode !== 0) return undefined
-    return stdout.split('\n').some(count => Number(count) > 0)
+    return stdout
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line) as [string, string, string])
+      .some(([type, at, body]) => type === 'Bot' && Date.parse(at) >= since && isBlockVerdict(body))
   } catch {
     return undefined
   }
@@ -66,7 +82,7 @@ async function hasPostedBlock($: EngineInterface, watch: Watch): Promise<boolean
 
 /**
  * The settled watch with `noVerdict` set (`routine error, deep none`) when only the review failed, neither
- * tier blocked, and no review posted a 🔴 since the push. Anything that cannot be read counts the round, as
+ * tier blocked, and no review posted a 🔴 verdict since the push. Anything that cannot be read counts the round, as
  * a real failure would.
  */
 export async function withVerdict($: EngineInterface, watch: Watch): Promise<Watch> {
