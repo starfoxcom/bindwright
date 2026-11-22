@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.3] — 2026-11-22
+
+### Fixed
+
+- **The attribution guard reads a command on a busy computer instead of letting it through.** When the guard's parser took more than 6 s, a git call whose subcommand is built at run time (`git "$@"`, PowerShell's `git @args`) passed unread. Each parse now has 20 s and every parse of one command 27 s, and the guard's hook is stopped at 30 s instead of 10 s, as the version check already is. The version check's own parse has 20 s too. A repo takes the new limits with `/bindwright:update`; a guard installed in `~/.claude` takes the 30 s the next time setup installs it.
+
 ## [v7.11.2] — 2026-11-22
 
 ### Fixed
