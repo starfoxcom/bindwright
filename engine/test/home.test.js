@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync,
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync,
+  writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -260,14 +261,17 @@ test("update-mod keeps an edited file and sets the shipped text beside it as .ne
     const installed = home(dir, "add-mod", mod).out.installed;
     const rules = join(installed, "hooks", "rules.ts");
     writeFileSync(rules, "mine");
-    assert.equal(modStatus(dir, mod).state, "edited");
+    assert.equal(modStatus(dir, mod).state, "current", "an edit with nothing newer shipped");
     writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
+    assert.equal(modStatus(dir, mod).state, "edited");
     const r = updateMod(dir, mod);
     assert.deepEqual(r.out.kept, ["hooks/rules.ts"]);
     assert.deepEqual(r.out.updated, []);
     assert.equal(readFileSync(rules, "utf8"), "mine");
     assert.equal(readFileSync(rules + ".new", "utf8"), "v2");
-    assert.equal(modStatus(dir, mod).state, "edited");
+    assert.equal(modStatus(dir, mod).state, "current", "the offered text is not offered again");
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v3");
+    assert.equal(modStatus(dir, mod).state, "edited", "a newer shipped text is offered");
   });
 });
 
@@ -304,6 +308,32 @@ test("a user file that differs is never replaced, and it does not make the mod o
     assert.deepEqual(r.out.updated, ["hooks/other.ts"]);
     assert.equal(readFileSync(rules, "utf8"), "mine");
   });
+});
+
+test("a record key outside the mod folder is refused before anything is removed", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    const outside = join(dir, "outside.txt");
+    writeFileSync(outside, "keep");
+    const hash = createHash("sha256").update("keep").digest("hex");
+    for (const key of ["../../outside.txt", outside.replaceAll("\\", "/"), "hooks\\rules.ts", "hooks//rules.ts"]) {
+      writeFileSync(recordPath(installed), JSON.stringify({ sha256: { [key]: hash } }));
+      const r = updateMod(dir, mod);
+      assert.equal(r.status, 1, key);
+      assert.match(r.out.error, /Not an install record/, key);
+    }
+    assert.equal(readFileSync(outside, "utf8"), "keep");
+  });
+});
+
+test("every shipped mod that keeps a rules.ts list names it as the user's", () => {
+  const mods = join(engine, "..", "_core", "global-template", "mods");
+  for (const name of readdirSync(mods)) {
+    if (!existsSync(join(mods, name, "hooks", "rules.ts"))) continue;
+    const listed = JSON.parse(readFileSync(join(mods, name, "user-files.json"), "utf8")).paths;
+    assert.ok(listed.includes("hooks/rules.ts"), name);
+  }
 });
 
 test("an unrecorded copy is left alone until --adopt, which replaces it and writes the record", { skip }, () => {

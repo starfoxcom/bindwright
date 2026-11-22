@@ -55,6 +55,8 @@ import sys
 
 from apply import _is_link
 from helper_install import helper_install
+from home_files import HomeError, _atomic_write, _claude, _is_str_list, _json_field, _style_fingerprint
+from mod_update import _check_mod_folder, _mod_target, _save_record, _shipped_hashes, mod_status, update_mod
 
 # Its front-matter reader names an output style here too, so both find the same style.
 _REPLY_STYLE_HOOK = os.path.join(
@@ -95,10 +97,6 @@ WORK_LANGUAGE_RULE = (
 )
 
 
-class HomeError(Exception):
-    pass
-
-
 def _run(cmd, code):
     try:
         r = subprocess.run(cmd + ["-c", code], capture_output=True, text=True, timeout=20)
@@ -127,10 +125,6 @@ def find_python():
     raise HomeError("No system Python found: " + reason)
 
 
-def _claude(home):
-    return os.path.join(home, ".claude")
-
-
 def _read_settings(path):
     """The JSON object in a settings file, {} when the file is missing."""
     if not os.path.exists(path):
@@ -157,21 +151,6 @@ def _section(data, key, kind, path):
     if not isinstance(data[key], kind):
         raise HomeError("%s: %s is not a %s; fix it by hand first" % (path, key, kind.__name__))
     return data[key]
-
-
-def _atomic_write(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(text)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except OSError:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
 
 
 def _save(path, data):
@@ -491,173 +470,6 @@ def add_mod(home, folder):
     return {"installed": target, "kept_existing": kept, "env_set": turned_on}
 
 
-# The install record a mod keeps beside its installed files: the SHA-256 each file had when it was installed or updated.
-MOD_RECORD = ".bindwright-installed.json"
-# A mod's own list of the paths the user owns (its user-files.json): never replaced, never removed.
-MOD_USER_FILES = "user-files.json"
-
-
-def _check_mod_folder(folder):
-    if not os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
-        raise HomeError("Not a mod folder (no .claude-plugin/plugin.json): " + folder)
-
-
-def _mod_target(home, folder):
-    name = os.path.basename(os.path.normpath(folder))
-    return os.path.normpath(os.path.join(_claude(home), "mods", name))
-
-
-def _shipped_files(folder):
-    """Every file of a mod folder as a forward-slash path, except node_modules and the install record."""
-    found = []
-    for root, dirs, files in os.walk(folder):
-        dirs[:] = [d for d in dirs if d != "node_modules"]
-        found += [os.path.relpath(os.path.join(root, f), folder).replace(os.sep, "/") for f in files]
-    return sorted(rel for rel in found if rel != MOD_RECORD)
-
-
-def _shipped_hashes(folder):
-    return {rel: _style_fingerprint(os.path.join(folder, rel)) for rel in _shipped_files(folder)}
-
-
-def _user_paths(folder):
-    file = os.path.join(folder, MOD_USER_FILES)
-    if not os.path.isfile(file):
-        return set()
-    return set(_json_field(file, "paths", _is_str_list, 'Not a list of user paths ({"paths": [...]})'))
-
-
-def _record_of(target):
-    """The install record of the installed mod at `target`, or None when it has none."""
-    file = os.path.join(target, MOD_RECORD)
-    if not os.path.isfile(file):
-        return None
-    return _json_field(file, "sha256", _is_str_map, 'Not an install record ({"sha256": {...}})')
-
-
-def _save_record(target, hashes):
-    _atomic_write(os.path.join(target, MOD_RECORD), json.dumps({"sha256": hashes}, indent=2) + "\n")
-
-
-def _file_label(folder, target, rel, record, is_user):
-    """How one shipped file differs from its installed copy, or None when they match."""
-    installed = os.path.join(target, rel)
-    if not os.path.isfile(installed):
-        return "add"
-    installed_hash = _style_fingerprint(installed)
-    if installed_hash == _style_fingerprint(os.path.join(folder, rel)):
-        return None
-    if is_user:
-        return "user"
-    # Without a record, nothing says the user edited the file, so the shipped copy replaces it.
-    if record is None or record.get(rel) == installed_hash:
-        return "replace"
-    return "edited"
-
-
-def _dropped_label(target, rel, record):
-    """A recorded file the mod no longer ships: removed while it is as installed, else kept as the user's edit."""
-    installed = os.path.join(target, rel)
-    if not os.path.isfile(installed):
-        return None
-    return "remove" if _style_fingerprint(installed) == record[rel] else "edited"
-
-
-def _differences(folder, target, record):
-    """Each file that differs from the shipped mod, labelled add, replace, edited, remove or user."""
-    shipped = set(_shipped_files(folder))
-    user = _user_paths(folder)
-    files = {}
-    for rel in sorted(shipped):
-        label = _file_label(folder, target, rel, record, rel in user)
-        if label:
-            files[rel] = label
-    for rel in (record or {}):
-        if rel not in shipped and rel not in user:
-            label = _dropped_label(target, rel, record)
-            if label:
-                files[rel] = label
-    return files
-
-
-def _state(record, files):
-    """A differing user file does not count, since an update never touches it."""
-    # A copy with no record stays unrecorded even when it matches, so --adopt still writes its record.
-    if record is None:
-        return "unrecorded"
-    changes = [label for label in files.values() if label != "user"]
-    if "edited" in changes:
-        return "edited"
-    return "older" if changes else "current"
-
-
-def mod_status(home, folder):
-    _check_mod_folder(folder)
-    target = _mod_target(home, folder)
-    if not os.path.lexists(target):
-        return {"installed": target, "state": "missing", "files": {}}
-    if _is_link(os.lstat(target)):
-        return {"installed": target, "state": "linked", "files": {}}
-    record = _record_of(target)
-    files = _differences(folder, target, record)
-    return {"installed": target, "state": _state(record, files), "files": files}
-
-
-def _copy_atomic(source, target):
-    """Copies a file byte for byte under a temporary name, then renames it into place."""
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    shutil.copyfile(source, target + ".tmp")
-    os.replace(target + ".tmp", target)
-
-
-def _apply(folder, target, files, shipped):
-    """Writes, removes and sets aside the files `files` lists; returns the updated, kept and removed paths."""
-    updated, kept, removed = [], [], []
-    for rel, label in files.items():
-        source, installed = os.path.join(folder, rel), os.path.join(target, rel)
-        if label in ("add", "replace"):
-            _copy_atomic(source, installed)
-            updated.append(rel)
-        elif label == "remove":
-            os.remove(installed)
-            removed.append(rel)
-        elif label == "edited" and rel in shipped:
-            _copy_atomic(source, installed + ".new")
-            kept.append(rel)
-    return updated, kept, removed
-
-
-def _next_record(record, files, shipped, user):
-    """The record after an update: the shipped hash of each file now current, the old hash where an edit is kept."""
-    old = record or {}
-    hashes = {}
-    for rel, shipped_hash in shipped.items():
-        if files.get(rel) in ("edited", "user"):
-            if rel in old:
-                hashes[rel] = old[rel]
-        else:
-            hashes[rel] = shipped_hash
-    # A dropped file the user edited stays on disk but leaves the record, so later updates no longer list it.
-    for rel, old_hash in old.items():
-        if rel not in shipped and rel in user:
-            hashes[rel] = old_hash
-    return hashes
-
-
-def update_mod(home, folder, adopt=False):
-    """Brings an installed mod up to the shipped one. The status is the one found before the update."""
-    status = mod_status(home, folder)
-    state = status["state"]
-    if state in ("missing", "linked", "current") or (state == "unrecorded" and not adopt):
-        return dict(status, updated=[], kept=[], removed=[])
-    target = status["installed"]
-    shipped = _shipped_hashes(folder)
-    hashes = _next_record(_record_of(target), status["files"], shipped, _user_paths(folder))
-    updated, kept, removed = _apply(folder, target, status["files"], shipped)
-    _save_record(target, hashes)
-    return dict(status, updated=updated, kept=kept, removed=removed)
-
-
 def add_agent(home, file):
     name = os.path.basename(file)
     if not (name.endswith(".md") and os.path.isfile(file)):
@@ -706,40 +518,9 @@ def add_style(home, file):
     return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
 
 
-def _style_fingerprint(file):
-    """The SHA-256 of a style file's bytes with a UTF-8 BOM and CRLF line endings taken out. The bytes are
-    never decoded, so a copy in any other encoding reads as edited instead of failing."""
-    with open(file, "rb") as fh:
-        data = fh.read()
-    if data.startswith(b"\xef\xbb\xbf"):
-        data = data[3:]
-    return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
-
-
 def _read_style(file):
     with open(file, encoding="utf-8-sig") as fh:
         return fh.read()
-
-
-def _is_str_list(value):
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
-
-
-def _is_str_map(value):
-    return isinstance(value, dict) and all(isinstance(item, str) for item in value.values())
-
-
-def _json_field(file, key, is_valid, message):
-    """The `key` of the JSON object in `file`, which must pass `is_valid`; otherwise HomeError with `message`."""
-    try:
-        with open(file, encoding="utf-8") as fh:
-            listed = json.load(fh)
-    except ValueError:
-        listed = None
-    value = listed.get(key) if isinstance(listed, dict) else None
-    if not is_valid(value):
-        raise HomeError("%s: %s" % (message, file))
-    return value
 
 
 def _retired_fingerprints(file):
