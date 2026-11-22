@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.5] — 2026-11-22
+
+### Fixed
+
+- **A review runs its main model on a later account when the repo has neither the API key nor the first account's token.** With only `CLAUDE_CODE_OAUTH_TOKEN_2` to `_5` set, as when the first account's token comes off to keep reviews off a spent plan, the main attempts of both review tiers ran with no credential, so every review fell to the backup model. They now run on the first account whose token is set, the account the backup also starts from, and the run says so in a notice. `setup-review-gate.sh --check` now counts that setup as complete instead of reporting the first token missing. A repo takes the fix with `/bindwright:update`.
+
 ## [v7.11.4] — 2026-11-22
 
 ### Fixed
