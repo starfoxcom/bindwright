@@ -33,7 +33,7 @@ export type Watch = {
    * `/ci-watch stop`.
    */
   stepBackTopics?: string[]
-  /** The distinct lookups the latched step back takes, fixed when it latched: three, or five near the hard stop. */
+  /** The distinct lookups the latched step back takes, fixed when it latched: five. */
   stepBackNeeded?: number
   /**
    * Set on a red settle where only the review failed, because a review run never got to post its
