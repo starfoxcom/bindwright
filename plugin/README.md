@@ -27,6 +27,31 @@ Then open a session in your project's folder and run `/bindwright:setup`. The fi
 
 When a session starts with `/start-session`, a notice says at most once a day when the repo or the plugin is behind.
 
+## Examples
+
+- "Set this repo up for agentic coding." Runs `/bindwright:setup`: it asks about the project (language, how releases are numbered, whether pull requests get an AI review), shows every file it will write and every change outside the repo, and writes them on your yes.
+- "Bring this repo's setup up to date." Runs `/bindwright:update`: it rebuilds the files from your saved answers with the current templates, keeps the edits you made, and stages any file where both changed the same lines for you to settle.
+- "Something in the setup isn't working." Runs `/bindwright:doctor`: it checks the repo and the computer and says in plain words what is wrong and how to fix each thing, changing nothing.
+- "Take Bindwright back out of this repo." Runs `/bindwright:remove`: it removes what setup wrote, keeps every file you changed, and ends with how to uninstall the plugin.
+
+## What setup changes
+
+Setup shows the full list before it writes anything, and writes nothing without your yes. In the repo, it writes the files you picked: rules and session skills under `.claude/`, guard hooks, and, for GitHub, the review workflows and their scripts under `.github/`.
+
+Some of what you pick changes how Claude Code behaves in later sessions, which is the point of it, so each piece is asked one at a time:
+
+- **Rules and session skills** in the repo, which Claude Code reads in every session there.
+- **Guard hooks**, small scripts Claude Code runs before some commands, such as one that refuses a commit carrying an AI-attribution line.
+- **Extras for your whole computer**, in `~/.claude`: global instructions in `CLAUDE.md`, a push guard for every project, session titles, the builder agent, a code-style profile, a plain reply style, and mods (small add-ons that show the time and context use, watch CI, keep the task list current and similar).
+
+All of it is plain text you can read and edit, and `/bindwright:remove` takes it back out. The scripts come from the helper, which is installed from this plugin's own GitHub release and checked against the SHA-256 the plugin pins; when the plugin updates, the helper follows to the version the new plugin pins, checked the same way. Nothing else is downloaded to change how Claude Code behaves.
+
+## Troubleshooting
+
+- Run `/bindwright:doctor` first: it names what is wrong and how to fix it.
+- When the doctor points at Bindwright itself, `/bindwright:report` drafts a bug report, takes out paths, names, emails and tokens, shows it to you in full, and files it on GitHub only on your yes.
+- Questions and bugs also go to the issues at https://github.com/starfoxcom/bindwright/issues.
+
 ## Privacy
 
 The plugin sends nothing about you or your code. It makes five kinds of network call of its own:
