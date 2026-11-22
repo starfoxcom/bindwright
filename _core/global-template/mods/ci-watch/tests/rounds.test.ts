@@ -406,6 +406,8 @@ type VerdictRow = {
   comments?: { at?: string; body: string }[]
   deepWorkflow?: string
   build: string
+  // The bucket of the review jobs that failed: 'fail' unless the row says otherwise.
+  failed?: string
   counted: boolean
 }
 const VERDICT_ROWS: VerdictRow[] = [
@@ -449,6 +451,7 @@ const VERDICT_ROWS: VerdictRow[] = [
   { name: 'a routine 🔴 then an errored deep run', state: 'routine=block;deep=error', build: 'pass', counted: true },
   { name: "a deep 🔴", state: 'routine=pass;escalated=yes;deep=block', build: 'pass', counted: true },
   { name: 'a gate state with no tier', state: '', build: 'pass', counted: true },
+  { name: 'a review run cancelled before the gate wrote', state: '', build: 'pass', failed: 'cancel', counted: false },
   { name: 'a failed gate whose tiers all passed', state: 'routine=pass;deep=none', build: 'pass', counted: true },
   { name: 'a gate state that cannot be read', build: 'pass', counted: true },
   { name: 'a failed test beside an errored review', state: 'routine=error;deep=none', build: 'fail', counted: true },
@@ -480,7 +483,8 @@ for (const row of VERDICT_ROWS) {
     await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
     seed(seen, reds(2))
     seen.bucket = row.build
-    seen.rows = [{ name: 'Review gate', bucket: 'fail' }, { name: 'Claude On-Demand', bucket: 'fail' }]
+    const failed = row.failed ?? 'fail'
+    seen.rows = [{ name: 'Review gate', bucket: failed }, { name: 'Claude On-Demand', bucket: failed }]
     seen.gateState = row.state
     seen.comments = row.comments
     seen.deepWorkflow = row.deepWorkflow

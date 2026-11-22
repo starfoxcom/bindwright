@@ -108,6 +108,11 @@ export async function withVerdict($: EngineInterface, watch: Watch): Promise<Wat
   const since = gate?.startedAt
   const found = [...(gate?.state ?? '').matchAll(TIER)]
   const tiers = new Map(found.map(([, tier = '', result = '']) => [tier, result]))
+  // A run cancelled before the gate wrote its tiers judged nothing, while no review of it went out.
+  const isCancelled = failedChecks(watch).every(name => watch.checks[name] === 'cancel')
+  if (since && tiers.size === 0 && isCancelled && (await isUnposted($, watch, since, ['routine', 'deep']))) {
+    return { ...watch, noVerdict: 'routine cancelled, deep none' }
+  }
   if (!since || !tiers.has('routine') || [...tiers.values()].includes('block')) return watch
   const unsure = [...tiers].filter(([, result]) => UNSURE.has(result)).map(([tier]) => tier)
   // A failed gate whose tiers all read settled is unexplained, so it counts like a failure.

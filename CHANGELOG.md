@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **ci-watch no longer counts a cancelled review run as a red round.** A review run cancelled before the gate wrote its result, by a newer push or by hand, failed the gate with no tiers named, which counted as a fix round although nothing was reviewed; on one PR it became the 10th red round and set off the hard stop. Such a run now counts as no round while no review of it was posted.
+
 ## [v7.13.1] — 2026-11-22
 
 ### Fixed
