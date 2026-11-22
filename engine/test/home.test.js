@@ -609,6 +609,8 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     const old = { matcher: "Grep", hooks: [{ type: "command", command: `py "${dir}/.claude/hooks/ctags-first.py"` }] };
     const elsewhere = { matcher: "Bash", hooks: [{ type: "command", command: `py "${dir}/mine/tool-rules.py"` }] };
     hookFile(dir, "tool-rules.py", "rules\n");
+    // A leftover copy in the hooks folder does not make the entry that runs another file Bindwright's.
+    writeFileSync(join(dir, ".claude", "hooks", "tool-rules.py"), "rules\n");
     const entries = [...settings(dir).hooks.PreToolUse, old, elsewhere];
     writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: entries } });
     const status = () => home(dir, "hook-status", shipped).out.hooks;

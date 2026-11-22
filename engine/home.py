@@ -368,12 +368,50 @@ def hook_status(home, folder):
         raise HomeError("Not a hooks folder: " + folder)
     recorded = _hook_record(home)
     installed = os.path.join(_claude(home), "hooks")
+    run_here = _names_run_from(home, installed)
     found = {}
     for name in list_hooks(home)["hooks"]:
-        if os.path.isfile(os.path.join(folder, name)) and os.path.lexists(os.path.join(installed, name)):
+        here = name in run_here and os.path.lexists(os.path.join(installed, name))
+        if here and os.path.isfile(os.path.join(folder, name)):
             found[name] = {"recorded": name in recorded, "matches": _hook_matches(folder, installed, name),
                            "linked": _hook_linked(folder, installed, name)}
     return {"hooks": found}
+
+
+def _names_run_from(home, installed):
+    """The hook file names some settings entry runs from the folder `installed`."""
+    path, data = _load(home)
+    names = set()
+    for entries in _event_lists(data, path):
+        for entry in entries:
+            for hook in (entry.get("hooks") or []) if isinstance(entry, dict) else []:
+                names.update(n for n in _hook_files(hook) if _runs_from(hook, os.path.join(installed, n), home))
+    return names
+
+
+def _runs_from(hook, path, home):
+    """True when one hook runs the file at `path`, written in full or from `~` or `$HOME`, in the exec or the
+    shell form."""
+    ends = [path.replace("\\", "/")]
+    rel = os.path.relpath(path, home).replace("\\", "/") if _is_under(path, home) else None
+    if rel:
+        ends += [start + "/" + rel for start in ("~", "$HOME", "${HOME}")]
+    ends = [os.path.normcase(end) for end in ends]
+    words = [hook.get("command") or ""] + [a for a in hook.get("args") or [] if isinstance(a, str)]
+    for word in words:
+        word = os.path.normcase(word.replace("\\", "/").rstrip("\"'")) if isinstance(word, str) else ""
+        for end in ends:
+            before = word[:-len(end)]
+            if word.endswith(end) and (not before or before[-1] in " \"'="):
+                return True
+    return False
+
+
+def _is_under(path, folder):
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(folder)]) == os.path.abspath(folder)
+    except ValueError:
+        return False
 
 
 def _hook_linked(folder, installed, name):
