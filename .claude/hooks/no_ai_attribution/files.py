@@ -13,6 +13,7 @@ GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "refl
              "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
 GIT_WORD = re.compile(r"\bgit\b", re.I)  # `$GIT`, `$(command -v git)`
+GIT_BASH_DRIVE = re.compile(r"/([A-Za-z])(?=/|$)")  # `/p/x` is drive P's `x` in Git Bash
 FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
 DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
 BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
@@ -174,7 +175,14 @@ def get_content_files(words):
     return files or positional[:1]
 
 
-def resolve(value, places):
+def drive_path(path, shell):
+    """The path a shell means: on Windows, Git Bash reads `/p/x` as `P:/x`, where Python
+    would read it from the root of the current drive."""
+    match = GIT_BASH_DRIVE.match(path) if shell == "bash" and os.name == "nt" else None
+    return f"{match.group(1).upper()}:{path[2:] or '/'}" if match else path
+
+
+def resolve(value, places, shell):
     """(path, error) for each file a body flag's value may name, or an error saying why it
     cannot be told before the command runs. A relative file is read in each of `places`
     that holds it, or in the first when none does; `places` is None after a folder change
@@ -182,7 +190,7 @@ def resolve(value, places):
     if isinstance(value, dict):
         yield None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
         return
-    path = os.path.expanduser(value)
+    path = drive_path(os.path.expanduser(value), shell)
     if os.path.isabs(path):
         yield path, None
     elif places is None:
@@ -290,21 +298,21 @@ def is_run_time_git(word):
     return isinstance(word, dict) and GIT_WORD.search(text_of(word)) is not None
 
 
-def folder_places(commands, cwd):
+def folder_places(commands, cwd, shell):
     """Every folder a command may run in: the start folder, and each folder a folder change
     in the command names, reached from any folder found before it in the text, since a `cd`
     may run in a child shell or fail, so the shell may be in any of them. The changes are then
     applied again until no folder is added, since a loop or a function may run a `cd` again.
     None when a target cannot be placed: one built at run time, or one this computer cannot
-    find, such as a saved folder (`cd -`, `~-`), a Git Bash path (`/c/...`) or a folder made
-    later, or when the folders pass MAX_PLACES."""
+    find, such as a saved folder (`cd -`, `~-`) or a folder made later, or when the folders
+    pass MAX_PLACES."""
     targets = [target for words in commands for target in folder_targets(words)]
     if not all(isinstance(target, str) for target in targets):
         return None
     places, seen, first = [cwd], {os.path.realpath(cwd)}, True
     while True:
         count = len(places)
-        for target in map(os.path.expanduser, targets):
+        for target in (drive_path(os.path.expanduser(target), shell) for target in targets):
             reached = [target] if os.path.isabs(target) else [os.path.join(place, target) for place in places]
             found = [place for place in reached if os.path.isdir(place)]
             if first and not found:
@@ -326,11 +334,11 @@ def parsed_files(groups, cwd):
     """(path, error) for every body file the parsed commands name, in order, each group of
     `with_nested` read as its shell reads it, a relative file in every folder it may run in."""
     for commands, placing, shell in groups:
-        places = folder_places(placing, cwd)
+        places = folder_places(placing, cwd, shell)
         for words in commands:
             for value in command_files(words, shell):
                 if value != "-":
-                    yield from resolve(value, places)
+                    yield from resolve(value, places, shell)
 
 
 def abbreviates(word, option, shortest):
