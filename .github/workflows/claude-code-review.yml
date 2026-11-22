@@ -1349,7 +1349,8 @@ jobs:
       # reads and "Post the review" posts. No answer the gate can read (no
       # key, credits or the workspace cap spent, an API error, a broken run)
       # leaves the review to the action steps below, which run on the
-      # subscription, or on the key when it is the only payer.
+      # subscription: the first of them on the key when no first account
+      # token is set, and the backup too when the key is the only payer.
       - name: Run Claude Code Review on the API credits
         id: claude-review-credits
         continue-on-error: true
