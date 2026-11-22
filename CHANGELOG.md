@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.13.1] — 2026-11-22
+
 ### Fixed
 
 - **A `~/.claude/hooks` folder that is itself a link is left alone.** When the whole hooks folder links into a dotfiles repo, `home.py hook-status` reported every hook in it as not linked, so `/bindwright:update` recorded them and the helper then refreshed them through the link. Such a folder now counts as linked: `hook-status` says so, `adopt-hook` refuses it and the helper writes nothing through it.
