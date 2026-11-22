@@ -4,8 +4,10 @@ import { expect, mock, test } from 'claude-code/testing'
 
 type Answer = { deny?: string; context?: string[] }
 
-// Just enough engine for the task list to save and for shell and edit calls to answer.
-function world(on: On): void {
+// Just enough engine for the task list to save and for shell and edit calls to answer. `offered` is the
+// session's tool list.
+function world(on: On, offered = ['TaskCreate', 'TaskUpdate', 'Bash']): void {
+  on('tool.list', () => ({ value: offered.map(name => ({ name })) }) as never)
   const files = new Map<string, string>()
   const key = (path: string) => path.replaceAll('\\', '/')
   mock.clock(on, { now: Date.UTC(2026, 10, 22, 9, 0, 0) })
@@ -73,11 +75,39 @@ test('only a git commit waits', async ($, on) => {
     ['git commit-graph write --reachable', false],
     ['gh pr comment 5 --body "tests pass; git commit is next"', false],
     ["cat > steps.md <<'EOF'\ngit commit -m x\nEOF", false],
+    // Claude Code's own commit form, after a comment whose apostrophe opens no quote.
+    ["# don't skip the hooks\ngit commit -m \"$(cat <<'EOF'\nfix: x\nEOF\n)\"", true],
+    ["echo it\\'s; git commit -m 'x'", true],
+    ["echo $'it\\'s'; git commit -m x", true],
+    // A quote spanning lines, or a shift, opens no here-doc; a body's own quotes stay text.
+    ['gh pr comment 5 --body "notes\nuse cat <<EOF here"\ngit commit -m x', true],
+    ['echo $((1<<n))\ngit commit -m x', true],
+    ["git commit -F - <<'EOF'\nfix: the \"quoted\" word\nEOF\ngit log", true],
+    ['cat <<EOF\nit\'s "half\nEOF\necho "git commit"', false],
+    // A long run of options answers at once.
+    [`git${' --x'.repeat(200)} log`, false],
   ]
   for (const [command, isRefused] of rows) {
     const answer = await call($, { tool: 'Bash', command })
     expect([command, answer.deny !== undefined]).toEqual([command, isRefused])
   }
+  const powerShell: [string, boolean][] = [
+    ["# don't skip the hooks\ngit commit -m x", true],
+    ["@'\nsee <<EOF\n'@ | Out-File n.md\ngit commit -m x", true],
+    ["@'\ngit commit -m x\n'@ | Out-File n.md", false],
+    ['git log --grep "a `"commit`" word"', false],
+  ]
+  for (const [command, isRefused] of powerShell) {
+    const answer = await call($, { tool: 'PowerShell', command })
+    expect([command, answer.deny !== undefined]).toEqual([command, isRefused])
+  }
+})
+
+test('a session with no task tool lets every commit through', async ($, on) => {
+  world(on, ['Bash'])
+  await $.turn.start({ turnId: 't' } as never)
+  expect((await call($, { tool: 'Bash', command: 'git commit -m first' })).deny).toBe(undefined)
+  expect((await call($, { tool: 'Bash', command: 'git commit -m second' })).deny).toBe(undefined)
 })
 
 test('the first edit after a list change names the task in progress, the next one says nothing', async ($, on) => {
