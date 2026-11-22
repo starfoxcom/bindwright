@@ -320,7 +320,8 @@ def keep_base(root, paths, state_json):
     held = dict(held) if isinstance(held, dict) else {}
     result = {"kept": [], "dropped": []}
     for path in paths:
-        if path in state["files"]:
+        # Only the first hold counts: a repeat would read the base already put back.
+        if path in state["files"] and path not in held:
             held[path] = state["files"][path]
         if path in before:
             state["files"][path] = before[path]

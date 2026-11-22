@@ -521,8 +521,9 @@ test("a file held back for a later PR keeps its old base, so the next update off
 // One later-PR round for LICENSE on one engine. The update moves the file to this year's text and
 // --keep-base holds that text back. The repo then holds edit(this year's text), and the saved year
 // moves on to 2027, so the next update renders a new text. `dropHeld` removes the held text before
-// that update, as a record from before the held text existed would.
-async function heldRound(cmd, args, { edit = (text) => text, dropHeld = false } = {}) {
+// that update, as a record from before the held text existed would. `holds` lists the path sets of
+// each --keep-base call.
+async function heldRound(cmd, args, { edit = (text) => text, dropHeld = false, holds = [[LICENSE]] } = {}) {
   const run = (flags, input) => JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
   let today;
   const repo = await makeRepo((r) => {
@@ -531,7 +532,7 @@ async function heldRound(cmd, args, { edit = (text) => text, dropHeld = false } 
     r.write(LICENSE, r.pristine.files[LICENSE]);
   });
   assert.ok(run(["--update", repo.at("")]).updated.includes(LICENSE), cmd);
-  run(["--keep-base", repo.at("")], JSON.stringify({ paths: [LICENSE] }));
+  for (const paths of holds) run(["--keep-base", repo.at("")], JSON.stringify({ paths }));
   const kept = JSON.parse(repo.read(PRISTINE));
   repo.write(LICENSE, edit(today));
   const next = { ...kept, year: 2027 };
@@ -546,7 +547,8 @@ async function heldRound(cmd, args, { edit = (text) => text, dropHeld = false } 
 test("a file held back for a later PR takes its held text as the base once the repo has it", needsPython, async () => {
   const rounds = [];
   for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
-    const round = await heldRound(cmd, args);
+    // Listed twice in one call, then held again: the first hold's text stays.
+    const round = await heldRound(cmd, args, { holds: [[LICENSE, LICENSE], [LICENSE]] });
     assert.equal(round.kept.held[LICENSE], round.today, `${cmd}: the newer text is held`);
     assert.equal(round.kept.files[LICENSE], round.today.replaceAll("2026", "2025"), `${cmd}: the old base is back`);
     assert.ok(round.out.updated.includes(LICENSE), `${cmd}: ${JSON.stringify(round.out)}`);

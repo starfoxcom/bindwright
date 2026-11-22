@@ -342,7 +342,8 @@ export function keepBase(root, paths) {
   const files = new Map(Object.entries(state.files));
   const held = new Map(Object.entries(isObject(state.held) ? state.held : {}));
   for (const path of paths) {
-    if (files.has(path)) held.set(path, files.get(path));
+    // Only the first hold counts: a repeat would read the base already put back.
+    if (files.has(path) && !held.has(path)) held.set(path, files.get(path));
     if (Object.hasOwn(before, path)) {
       files.set(path, before[path]);
       result.kept.push(path);
