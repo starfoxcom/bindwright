@@ -20,6 +20,7 @@ const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RULE = ".claude/rules/task-tracking.md";
 const OTHER = ".claude/rules/testing.md";
 const THIRD = ".claude/rules/git.md";
+const LICENSE = "LICENSE";
 
 const needsPython = { skip: !python && "needs Python 3.8+" };
 const engines = [[process.execPath, [join(engine, "cli.js")]], [python, [join(engine, "bind.py")]]];
@@ -515,4 +516,56 @@ test("a file held back for a later PR keeps its old base, so the next update off
   assert.deepEqual(outs[0].inherited, { kept: [], dropped: ["constructor", "__proto__"] });
   assert.match(outs[0].broken.error, /holds no record of the files setup wrote/);
   if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report and write alike");
+});
+
+// One later-PR round for LICENSE on one engine. The update moves the file to this year's text and
+// --keep-base holds that text back. The repo then holds edit(this year's text), and the saved year
+// moves on to 2027, so the next update renders a new text. `dropHeld` removes the held text before
+// that update, as a record from before the held text existed would. `holds` lists the path sets of
+// each --keep-base call.
+async function heldRound(cmd, args, { edit = (text) => text, dropHeld = false, holds = [[LICENSE]] } = {}) {
+  const run = (flags, input) => JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
+  let today;
+  const repo = await makeRepo((r) => {
+    today = r.read(LICENSE);
+    r.pristine.files[LICENSE] = today.replaceAll("2026", "2025");
+    r.write(LICENSE, r.pristine.files[LICENSE]);
+  });
+  assert.ok(run(["--update", repo.at("")]).updated.includes(LICENSE), cmd);
+  for (const paths of holds) run(["--keep-base", repo.at("")], JSON.stringify({ paths }));
+  const kept = JSON.parse(repo.read(PRISTINE));
+  repo.write(LICENSE, edit(today));
+  const next = { ...kept, year: 2027 };
+  if (dropHeld) delete next.held;
+  repo.write(PRISTINE, JSON.stringify(next));
+  const out = run(["--update", repo.at("")]);
+  const round = { today, kept, out, license: repo.read(LICENSE), record: repo.read(PRISTINE) };
+  rmSync(repo.at(""), { recursive: true, force: true });
+  return round;
+}
+
+test("a file held back for a later PR takes its held text as the base once the repo has it", needsPython, async () => {
+  const rounds = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    // Listed twice in one call, then held again: the first hold's text stays.
+    const round = await heldRound(cmd, args, { holds: [[LICENSE, LICENSE], [LICENSE]] });
+    assert.equal(round.kept.held[LICENSE], round.today, `${cmd}: the newer text is held`);
+    assert.equal(round.kept.files[LICENSE], round.today.replaceAll("2026", "2025"), `${cmd}: the old base is back`);
+    assert.ok(round.out.updated.includes(LICENSE), `${cmd}: ${JSON.stringify(round.out)}`);
+    assert.equal(round.license, round.today.replaceAll("2026", "2027"), cmd);
+    assert.equal(JSON.parse(round.record).held, undefined, `${cmd}: the new record holds nothing back`);
+    rounds.push(round);
+  }
+  if (rounds.length === 2) assert.deepEqual(rounds[1], rounds[0], "the two engines report and write alike");
+});
+
+test("a held text the repo has changed is not taken as the base", needsPython, async () => {
+  const edit = (text) => `${text}Our own line.\n`;
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const withHeld = await heldRound(cmd, args, { edit });
+    const withoutHeld = await heldRound(cmd, args, { edit, dropHeld: true });
+    assert.ok(!withHeld.out.updated.includes(LICENSE), cmd);
+    assert.deepEqual(withHeld.out, withoutHeld.out, `${cmd}: the same outcome as before the held text`);
+    assert.equal(withHeld.license, withoutHeld.license, cmd);
+  }
 });
