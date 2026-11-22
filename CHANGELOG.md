@@ -11,9 +11,9 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - **Setup asks how the AI reviews are paid for.** Your Claude subscription only (recommended), API credits first and then the subscription, or an API key only, each with what it costs you. Many plans come with monthly API credits, so the reviews can spend those before your plan's usage.
-- **The reviews run on an API key alone.** With an `ANTHROPIC_API_KEY` secret and no `CLAUDE_CODE_OAUTH_TOKEN`, every attempt of both review tiers, backups included, runs on the key, and the `Review gate` summary names those runs as on the API credits. Before, every attempt after the first needed a subscription token.
+- **The reviews run on an API key alone.** With an `ANTHROPIC_API_KEY` secret and no account token at all (`CLAUDE_CODE_OAUTH_TOKEN` to `_5`), every attempt of both review tiers, backups included, runs on the key, and the `Review gate` summary names those runs as on the API credits. Before, every attempt after the first needed a subscription token.
 - **`set-review-tokens.sh --api-key`** asks for the API key with the input hidden, like the account tokens, and sets it as `ANTHROPIC_API_KEY` in the same sweep; `--accounts 0 --api-key` sets the key alone. A key typed where an account token belongs is refused.
-- **`setup-review-gate.sh --check`** takes an API key with no subscription token as a complete setup instead of reporting the token missing.
+- **`setup-review-gate.sh --check`** takes an API key with no account token at all as a complete setup instead of reporting the token missing.
 
 ## [v7.10.2] — 2026-11-22
 

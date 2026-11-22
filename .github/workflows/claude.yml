@@ -22,7 +22,8 @@
 #
 # The review runs on the API credits first (ANTHROPIC_API_KEY, optional) and
 # on the subscription when that run leaves no verdict. With the key alone and
-# no CLAUDE_CODE_OAUTH_TOKEN, every attempt runs on the key.
+# no account token at all (CLAUDE_CODE_OAUTH_TOKEN to _5), every attempt runs
+# on the key.
 #
 # Requires: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in repo secrets.
 # Optional: CLAUDE_CODE_OAUTH_TOKEN_2 to CLAUDE_CODE_OAUTH_TOKEN_5, more accounts' tokens

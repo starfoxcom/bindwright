@@ -199,8 +199,8 @@ step_secrets() {
   names=$(gh secret list -R "$REPO" --json name --jq '.[].name')
   if grep -qxF "$TOKEN_SECRET" <<< "$names"; then
     ok "secret $TOKEN_SECRET"
-  elif grep -qxF "$KEY_SECRET" <<< "$names"; then
-    ok "secret $KEY_SECRET, with no $TOKEN_SECRET: every review runs on the API key"
+  elif grep -qxF "$KEY_SECRET" <<< "$names" && ! grep -qE "^${TOKEN_SECRET}_[2-5]$" <<< "$names"; then
+    ok "secret $KEY_SECRET, with no account token: every review runs on the API key"
     step_account_secrets "$names"
     return
   elif [ "$MODE" = setup ] && [ -t 0 ]; then

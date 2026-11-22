@@ -11,9 +11,10 @@
 #
 # With --api-key it also reads an Anthropic API key and writes it as
 # ANTHROPIC_API_KEY: the reviews then try the key's credits first, and with
-# --accounts 0 the key is the only payer. A repository that still holds
-# CLAUDE_CODE_OAUTH_TOKEN keeps the subscription for the attempts after the
-# first, so remove that secret there to run every attempt on the key.
+# --accounts 0 the key is the only payer. A repository that still holds any
+# account token (CLAUDE_CODE_OAUTH_TOKEN to _5) keeps the subscription for the
+# attempts after the first, so remove each one there to run every attempt on
+# the key.
 #
 # Get each token with `claude setup-token`, signed in to that account. Tokens
 # reach gh on standard input, never on a command line. Secrets of accounts
