@@ -12,6 +12,7 @@ import {
   dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
 } from './store'
 import { isSameRun, PENDING, reconcile, settle } from './settle'
+import { withVerdict } from './verdict'
 import { wakeText } from './wake'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isNothingToWatch, readChecks, withWorkflows } from './checks'
@@ -466,7 +467,7 @@ async function poll($: EngineInterface): Promise<void> {
       continue
     }
     const polled = checks
-      ? settle(asked, checks, now, live.timeoutMs, live.pollMs)
+      ? await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs))
       : now - asked.startedAt > live.timeoutMs
         ? { ...asked, outcome: 'timeout' as const, settledAt: now }
         : asked
