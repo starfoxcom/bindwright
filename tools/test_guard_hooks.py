@@ -542,20 +542,27 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result)
 
-    @unittest.skipUnless(os.name == "nt", "Git Bash drive paths exist only on Windows")
     def test_git_bash_drive_paths_name_the_drive(self):
-        def git_bash(path):
-            return "/" + path[0].lower() + path[2:].replace("\\", "/")
-        marked = self.body_file(f"## What\n- x\n\n{GENERATED_LINE}\n")
-        clean = self.body_file("## What\n- Ships the guard\n")
-        folder, name = os.path.split(marked)
-        rows = [
-            ("body file", f'gh pr create --title t --body-file "{git_bash(marked)}"', "Bash", "attribution marker"),
-            ("body file after cd", f'cd "{git_bash(folder)}"; git commit -F "{name}"', "Bash", "attribution marker"),
-            ("clean body file", f'gh pr create --title t --body-file "{git_bash(clean)}"', "Bash", None),
-            # PowerShell reads `/c/x` from the root of the current drive, as Windows does.
-            ("PowerShell", f'gh pr create --title t --body-file "{git_bash(marked)}"', "PowerShell", "could not read"),
-        ]
+        """On Windows, Git Bash reads `/c/x` as drive C; elsewhere `/c/x` is a plain path."""
+        if os.name != "nt":
+            rows = [("plain path", "gh pr create --title t --body-file /c/no-such/body.md", "Bash",
+                     "could not read message/body file /c/no-such/body.md")]
+        else:
+            def git_bash(path):
+                return "/" + path[0].lower() + path[2:].replace("\\", "/")
+            marked = self.body_file(f"## What\n- x\n\n{GENERATED_LINE}\n")
+            clean = self.body_file("## What\n- Ships the guard\n")
+            folder, name = os.path.split(marked)
+            rows = [
+                ("body file", f'gh pr create --title t --body-file "{git_bash(marked)}"', "Bash",
+                 "attribution marker"),
+                ("body file after cd", f'cd "{git_bash(folder)}"; git commit -F "{name}"', "Bash",
+                 "attribution marker"),
+                ("clean body file", f'gh pr create --title t --body-file "{git_bash(clean)}"', "Bash", None),
+                # PowerShell reads `/c/x` from the root of the current drive, as Windows does.
+                ("PowerShell", f'gh pr create --title t --body-file "{git_bash(marked)}"', "PowerShell",
+                 "could not read"),
+            ]
         for (label, command, tool, because), result in self.each(
                 rows, lambda label, command, tool, because: self.attr(command, tool=tool)):
             with self.subTest(label):
