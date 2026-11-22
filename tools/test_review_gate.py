@@ -729,7 +729,7 @@ import json, os, subprocess, sys
 
 STATE, LOG = os.environ["FAKE_GH_STATE"], os.environ["FAKE_GH_LOG"]
 VALUED = {"-X", "--jq", "--input", "-F", "-f", "-H", "-R", "--json", "--color",
-          "--description", "--body"}
+          "--description", "--body", "--limit"}
 
 
 def parse(argv):
@@ -810,6 +810,9 @@ def api(path, opts, st):
         return {"forbidden": PermissionError, "absent": KeyError}.get(st.get("gate_script"), {})
     if path.startswith("orgs/"):
         return {"installations": st.get("installations", [])}
+    if path == "user/memberships/orgs":
+        memberships = st.get("memberships", [])
+        return PermissionError if memberships == "forbidden" else memberships
     return KeyError
 
 
@@ -832,7 +835,8 @@ def main():
     elif cmd == ["secret", "list"]:
         data = [{"name": n} for n in st["secrets"]]
     elif cmd == ["repo", "list"]:
-        data = [{"nameWithOwner": n} for n in st.get("owned", [])]
+        names = st.get("org_repos", {}).get(pos[2], []) if len(pos) > 2 else st.get("owned", [])
+        data = [{"nameWithOwner": n} for n in names]
     elif cmd == ["secret", "set"]:
         st["secrets"].append(pos[2])
         value = "" if sys.stdin.isatty() else sys.stdin.read()
@@ -1063,6 +1067,33 @@ class SetupScript(unittest.TestCase):
         self.assertIn("runs only in your own terminal", run.stderr)
         self.assertNotIn("written", after)
         self.assertEqual(calls, [])
+
+    def test_the_sweep_reaches_only_the_organizations_the_user_administers(self):
+        member = lambda org, state, role: {"state": state, "role": role, "organization": {"login": org}}
+        state = fresh_repo(owned=["acme/game"], with_workflow=["acme/game", "studio/app", "club/x", "guild/y"],
+                           memberships=[member("studio", "active", "admin"), member("club", "active", "member"),
+                                        member("guild", "pending", "admin")],
+                           org_repos={"studio": ["studio/app"], "club": ["club/x"], "guild": ["guild/y"]})
+        run, after, _ = self.run_setup(state, "--accounts", "1", "--orgs", script=SWEEP,
+                                       stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(sorted(repo for repo, _, _ in after["written"]), ["acme/game", "studio/app"])
+
+    def test_a_plain_sweep_leaves_organizations_alone(self):
+        state = fresh_repo(owned=["acme/game"], with_workflow=["acme/game"], memberships="forbidden")
+        run, after, calls = self.run_setup(state, "--accounts", "1", script=SWEEP,
+                                           stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual([repo for repo, _, _ in after["written"]], ["acme/game"])
+        self.assertFalse([c for c in calls if "user/memberships/orgs" in c])
+
+    def test_a_failed_organization_lookup_stops_the_sweep_before_any_write(self):
+        state = fresh_repo(owned=["acme/game"], with_workflow=["acme/game"], memberships="forbidden")
+        run, after, _ = self.run_setup(state, "--accounts", "1", "--orgs", script=SWEEP,
+                                       stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")
+        self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+        self.assertIn("cannot list your organizations", run.stderr)
+        self.assertNotIn("written", after)
 
     def test_the_sweep_writes_nothing_for_a_bad_or_repeated_token(self):
         for name, tokens in (("not a token", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\npassword\n"),
