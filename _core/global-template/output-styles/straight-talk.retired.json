@@ -1,6 +1,7 @@
 {
   "_note": "The SHA-256 of each earlier shipped straight-talk.md, read with no byte-order mark and LF line endings. `home.py update-style` replaces an installed copy that matches one, since it holds no edits of the user's. When straight-talk.md changes, add the fingerprint of the text it replaces.",
   "sha256": [
-    "2359d428e6bc5839d3f922c7302c69034ce00bc9b457495235c5bdce8645b23a"
+    "2359d428e6bc5839d3f922c7302c69034ce00bc9b457495235c5bdce8645b23a",
+    "6dd4491689f3a9dc7210148d8d6074899a784bc0c37858a31a0d12c1c88e12d1"
   ]
 }
