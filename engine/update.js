@@ -88,7 +88,7 @@ function decide(path, { ours, base, theirs }, merge) {
   // Git's line merge cannot place a key the repo moved; a key-by-key merge can.
   if (conflicts && path.endsWith(".json")) {
     const merged = mergeJson(ours, base, theirs);
-    if (merged !== null) return ["merged", merged];
+    if (merged !== null && keepsSections(ours, merged, path)) return ["merged", merged];
   }
   if (conflicts || !keepsSections(ours, text, path)) return ["conflict", text];
   return ["merged", text];
@@ -181,24 +181,50 @@ const CLASH = Symbol("clash");
 
 // A key-by-key three-way merge of three JSON objects, for the clashes git's line
 // merge reports when the repo moved keys. Null when a value clashes or a text is
-// not a JSON object.
+// not a JSON object both twins reprint alike.
 function mergeJson(ours, base, theirs) {
   const parsed = [ours, base, theirs].map(parseObject);
   if (parsed.includes(null)) return null;
   const merged = mergeValue(...parsed);
   if (merged === CLASH) return null;
-  const eol = ours.includes("\r\n") ? "\r\n" : "\n";
-  const body = JSON.stringify(merged, null, indentOf(ours)).replace(/\n/g, eol);
-  return (ours.startsWith(BOM) ? BOM : "") + body + (ours.endsWith("\n") ? eol : "");
+  const body = JSON.stringify(merged, null, indentOf(ours));
+  return (ours.startsWith(BOM) ? BOM : "") + body + (ours.endsWith("\n") ? "\n" : "");
 }
 
 function parseObject(text) {
+  const plain = text.replace(/^\uFEFF/, "");
+  let value;
   try {
-    const value = JSON.parse(text.replace(/^\uFEFF/, ""));
-    return isObject(value) ? value : null;
+    value = JSON.parse(plain);
   } catch {
     return null;
   }
+  return isObject(value) && printsAlike(plain) ? value : null;
+}
+
+const INTEGER = /^-?(0|[1-9]\d*)$/;
+const INDEX_KEY = /^(0|[1-9]\d*)$/;
+
+// Whether both twins read and reprint the text unchanged: every number a safe integer, no key
+// repeated within its object, and no key JavaScript moves to the front of its object.
+function printsAlike(text) {
+  const objects = [];
+  let previous = null;
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|[{}[\]:]/g)) {
+    if (token === "{") objects.push(new Set());
+    else if (token === "[") objects.push(null);
+    else if (token === "}" || token === "]") objects.pop();
+    else if (token === ":") {
+      const key = JSON.parse(previous);
+      const keys = objects.at(-1);
+      if (INDEX_KEY.test(key) || keys.has(key)) return false;
+      keys.add(key);
+    } else if (!token.startsWith('"') && !(INTEGER.test(token) && Number.isSafeInteger(Number(token)))) {
+      return false;
+    }
+    previous = token;
+  }
+  return true;
 }
 
 // The indent the repo's copy uses: the leading whitespace of its first indented line.

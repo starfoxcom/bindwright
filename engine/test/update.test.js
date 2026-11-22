@@ -598,20 +598,25 @@ test("a repo that moved its hooks key merges key by key", needsPython, async () 
   assert.equal(merged.match(/^ {2}"hooks": /gm).length, 1);
 });
 
-test("a key both sides changed differently stays a conflict", needsPython, async () => {
-  const { out } = await update((r) => {
-    const theirs = r.read(SETTINGS);
-    r.pristine.files[SETTINGS] = olderTimeout(theirs);
-    r.write(SETTINGS, theirs.replace(/"timeout": \d+/, '"timeout": 99'));
-  });
-  assert.deepEqual(out.conflict, [SETTINGS]);
-});
+// Each row turns the moved-hooks copy into one the key merge must leave a conflict.
+const atTop = (line) => (text) => text.replace("{\n", `{\n  ${line},\n`);
+const STAYS_CONFLICT = {
+  "a key both sides changed differently": (text) => text.replace(/"timeout": \d+/, '"timeout": 99'),
+  "a repo copy that is not valid JSON": (text) => text.replace(/\n\}\n$/, ",\n}\n"),
+  "a key repeated in its object": atTop('"//": "one",\n  "//": "two"'),
+  "a number the twins print differently": atTop('"ratio": 1.0'),
+  "a kept section the templates change": (text) => text
+    .replace('  "hooks": ', '  "//keep": "bindwright:keep",\n  "hooks": ')
+    .replace(/\n\}\n$/, ',\n  "//end": "bindwright:end-keep"\n}\n'),
+};
 
-test("a repo copy that is not valid JSON stays a conflict", needsPython, async () => {
-  const { out } = await update((r) => {
-    const base = olderTimeout(r.read(SETTINGS));
-    r.pristine.files[SETTINGS] = base;
-    r.write(SETTINGS, reordered(base).replace(/\n\}\n$/, ",\n}\n"));
-  });
-  assert.deepEqual(out.conflict, [SETTINGS]);
+test("a JSON file the key merge cannot take whole stays a conflict", needsPython, async () => {
+  for (const [name, change] of Object.entries(STAYS_CONFLICT)) {
+    const { out } = await update((r) => {
+      const base = olderTimeout(r.read(SETTINGS));
+      r.pristine.files[SETTINGS] = base;
+      r.write(SETTINGS, change(reordered(base)));
+    });
+    assert.deepEqual(out.conflict, [SETTINGS], name);
+  }
 });

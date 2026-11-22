@@ -64,7 +64,7 @@ def _decide(path, ours, base, theirs, merge):
     # Git's line merge cannot place a key the repo moved; a key-by-key merge can.
     if conflicts and path.endswith(".json"):
         merged = _merge_json(ours, base, theirs)
-        if merged is not None:
+        if merged is not None and _keeps_sections(ours, merged, path):
             return ("merged", merged)
     if conflicts or not _keeps_sections(ours, text, path):
         return ("conflict", text)
@@ -145,6 +145,8 @@ BOM = "\ufeff"
 _ABSENT = object()  # a key a version does not have
 _CLASH = object()  # a value every version changed differently
 _INDENT = re.compile(r"^([ \t]+)\S", re.M)
+_INDEX_KEY = re.compile(r"(0|[1-9][0-9]*)\Z")
+_MAX_SAFE_INTEGER = 2 ** 53 - 1
 
 
 def git_merge(ours, base, theirs):
@@ -173,21 +175,36 @@ def _merge_json(ours, base, theirs):
     merged = _merge_value(*parsed)
     if merged is _CLASH:
         return None
-    eol = "\r\n" if "\r\n" in ours else "\n"
-    body = json.dumps(merged, indent=_indent_of(ours), ensure_ascii=False).replace("\n", eol)
-    return (BOM if ours.startswith(BOM) else "") + body + (eol if ours.endswith("\n") else "")
+    body = json.dumps(merged, indent=_indent_of(ours), ensure_ascii=False)
+    return (BOM if ours.startswith(BOM) else "") + body + ("\n" if ours.endswith("\n") else "")
 
 
 def _parse_object(text):
+    """The text's object, or None when it is not one both twins read and reprint unchanged."""
     try:
-        value = json.loads(text[1:] if text.startswith(BOM) else text, parse_constant=_no_constant)
+        value = json.loads(text[1:] if text.startswith(BOM) else text, parse_constant=_not_plain,
+                           parse_float=_not_plain, parse_int=_safe_int, object_pairs_hook=_unique_keys)
     except ValueError:
         return None
     return value if isinstance(value, dict) else None
 
 
-def _no_constant(name):
-    raise ValueError("not JSON: " + name)
+def _not_plain(literal):
+    raise ValueError("a number JavaScript prints differently: " + literal)
+
+
+def _safe_int(literal):
+    if abs(int(literal)) > _MAX_SAFE_INTEGER:
+        raise ValueError("an integer JavaScript cannot hold exactly: " + literal)
+    return int(literal)
+
+
+def _unique_keys(pairs):
+    """An object with no key repeated and none JavaScript moves to the front."""
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys) or any(_INDEX_KEY.match(key) for key in keys):
+        raise ValueError("a key the twins would print differently")
+    return dict(pairs)
 
 
 def _indent_of(text):
