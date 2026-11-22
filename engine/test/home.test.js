@@ -214,6 +214,117 @@ test("a mod is copied once, listed once, and an installed copy keeps its edits",
   });
 });
 
+// A mod folder as the plugin ships it: a manifest plus the given files, by relative path.
+function shipMod(dir, files) {
+  const mod = join(dir, "pack", "usage-guard");
+  for (const [rel, text] of Object.entries({ ".claude-plugin/plugin.json": "{}", ...files })) {
+    mkdirSync(dirname(join(mod, rel)), { recursive: true });
+    writeFileSync(join(mod, rel), text);
+  }
+  return mod;
+}
+
+const modStatus = (dir, mod) => home(dir, "mod-status", mod).out;
+const updateMod = (dir, mod, ...flags) => home(dir, "update-mod", mod, ...flags);
+const recordPath = (installed) => join(installed, ".bindwright-installed.json");
+
+test("an installed mod reads back as current, and a mod never installed as missing", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1", "user-files.json": '{"paths": []}' });
+    assert.equal(modStatus(dir, mod).state, "missing");
+    const installed = home(dir, "add-mod", mod).out.installed;
+    const record = JSON.parse(readFileSync(recordPath(installed), "utf8"));
+    assert.deepEqual(Object.keys(record.sha256), [".claude-plugin/plugin.json", "hooks/rules.ts", "user-files.json"]);
+    assert.deepEqual(modStatus(dir, mod), { installed, state: "current", files: {} });
+  });
+});
+
+test("a changed shipped file makes the installed copy older, and update-mod replaces it", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
+    assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "replace" });
+    assert.equal(modStatus(dir, mod).state, "older");
+    const r = updateMod(dir, mod);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.out.updated, ["hooks/rules.ts"]);
+    assert.equal(readFileSync(join(installed, "hooks", "rules.ts"), "utf8"), "v2");
+    assert.equal(modStatus(dir, mod).state, "current");
+  });
+});
+
+test("update-mod keeps an edited file and sets the shipped text beside it as .new", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    const rules = join(installed, "hooks", "rules.ts");
+    writeFileSync(rules, "mine");
+    assert.equal(modStatus(dir, mod).state, "edited");
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
+    const r = updateMod(dir, mod);
+    assert.deepEqual(r.out.kept, ["hooks/rules.ts"]);
+    assert.deepEqual(r.out.updated, []);
+    assert.equal(readFileSync(rules, "utf8"), "mine");
+    assert.equal(readFileSync(rules + ".new", "utf8"), "v2");
+    assert.equal(modStatus(dir, mod).state, "edited");
+  });
+});
+
+test("a dropped file the user never edited is removed, and a dropped edited one stays", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/old.ts": "old", "hooks/kept.ts": "kept" });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    writeFileSync(join(installed, "hooks", "kept.ts"), "mine");
+    rmSync(join(mod, "hooks", "old.ts"));
+    rmSync(join(mod, "hooks", "kept.ts"));
+    assert.deepEqual(modStatus(dir, mod).files, { "hooks/old.ts": "remove", "hooks/kept.ts": "edited" });
+    const r = updateMod(dir, mod);
+    assert.deepEqual(r.out.removed, ["hooks/old.ts"]);
+    assert.deepEqual(r.out.kept, []);
+    assert.equal(existsSync(join(installed, "hooks", "old.ts")), false);
+    assert.equal(readFileSync(join(installed, "hooks", "kept.ts"), "utf8"), "mine");
+    assert.equal(modStatus(dir, mod).state, "current");
+  });
+});
+
+test("a user file that differs is never replaced, and it does not make the mod older", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, {
+      "hooks/rules.ts": "v1", "hooks/other.ts": "v1", "user-files.json": '{"paths": ["hooks/rules.ts"]}',
+    });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    const rules = join(installed, "hooks", "rules.ts");
+    writeFileSync(rules, "mine");
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
+    writeFileSync(join(mod, "hooks", "other.ts"), "v2");
+    assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "user", "hooks/other.ts": "replace" });
+    assert.equal(modStatus(dir, mod).state, "older");
+    const r = updateMod(dir, mod);
+    assert.deepEqual(r.out.updated, ["hooks/other.ts"]);
+    assert.equal(readFileSync(rules, "utf8"), "mine");
+  });
+});
+
+test("an unrecorded copy is left alone until --adopt, which replaces it and writes the record", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
+    const installed = home(dir, "add-mod", mod).out.installed;
+    rmSync(recordPath(installed));
+    assert.deepEqual(modStatus(dir, mod), { installed, state: "unrecorded", files: {} });
+    writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
+    assert.equal(modStatus(dir, mod).state, "unrecorded");
+    assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "replace" });
+    assert.deepEqual(updateMod(dir, mod).out.updated, []);
+    assert.equal(readFileSync(join(installed, "hooks", "rules.ts"), "utf8"), "v1");
+    assert.equal(existsSync(recordPath(installed)), false);
+    assert.deepEqual(updateMod(dir, mod, "--adopt").out.updated, ["hooks/rules.ts"]);
+    assert.equal(readFileSync(join(installed, "hooks", "rules.ts"), "utf8"), "v2");
+    assert.equal(existsSync(recordPath(installed)), true);
+    assert.equal(modStatus(dir, mod).state, "current");
+  });
+});
+
 test("the tasks mod turns on the task tools it answers and leaves them on; other mods set nothing", { skip }, () => {
   withHome((dir) => {
     const add = (name) => {

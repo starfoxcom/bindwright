@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:update` brings the installed mods current.** Setup copied each mod into `~/.claude/mods/` once, and nothing after that touched the copy, so a plugin update never reached it and every computer kept the mods of the day it was set up. Setup now records a hash of each file it installs, and the update compares the installed copy with the plugin's: a file the user never edited takes the new text, a file the template dropped goes, and a file the user edited stays as it is, with the new text written beside it as `<file>.new`. A mod's own lists of the user's (usage-guard's and shared-pc's `hooks/rules.ts`) are never replaced. A mod installed before the record existed is listed file by file and updated on one yes, its user lists kept. `home.py` gains `mod-status DIR` and `update-mod DIR [--adopt]`.
+
 ## [v7.11.5] — 2026-11-22
 
 ### Fixed
