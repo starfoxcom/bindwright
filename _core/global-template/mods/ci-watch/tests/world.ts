@@ -54,6 +54,8 @@ export type Seen = {
   mergedPrs?: number[]
   /** The head commit `gh pr view` reports (default `a1`). */
   head?: string
+  /** Whether `gh pr view` reports the PR mergeable (default `MERGEABLE`). */
+  mergeable?: string
   /** The mod's manifest, read as any plugin.json (default: none). */
   manifest?: string
   /** `gh pr checks` calls so far: one per watch per poll. */
@@ -217,7 +219,9 @@ function prView(seen: Seen, repo: string, number: number): string {
   const state = seen.mergedPrs?.includes(number) ? 'MERGED' : seen.prState
   const url = `https://github.com/${repo}/pull/${number}`
   const commits = (seen.prCommits ?? ['c0ffee0', 'a1a1a1a']).map(oid => ({ oid }))
-  return JSON.stringify({ number, url, headRefOid: seen.head ?? 'a1', headRefName: 'feature/x', commits, state })
+  const mergeable = seen.mergeable ?? 'MERGEABLE'
+  const head = seen.head ?? 'a1'
+  return JSON.stringify({ number, url, headRefOid: head, headRefName: 'feature/x', commits, state, mergeable })
 }
 
 // git in a folder, as the hold asks it: the branch checked out, whether the clone is shallow, whether the

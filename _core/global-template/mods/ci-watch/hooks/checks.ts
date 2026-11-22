@@ -27,6 +27,25 @@ export async function readChecks($: EngineInterface, watch: Watch): Promise<Reco
   }
 }
 
+/**
+ * A watch that settled with no failure, marked `isConflicting` when GitHub reports its PR conflicting with
+ * its base. Any failed read leaves the watch as it is.
+ */
+export async function withMergeable($: EngineInterface, watch: Watch): Promise<Watch> {
+  if (watch.outcome !== 'passed') return watch
+  try {
+    const args = ['gh', 'pr', 'view', String(watch.number), '--repo', watch.repo, '--json', 'mergeable']
+    const { stdout, exitCode } = await $.process.run(args, { timeoutMs: 30_000 })
+    const view = exitCode === 0 ? (JSON.parse(stdout) as { mergeable?: string }) : {}
+    return view.mergeable === 'CONFLICTING' ? { ...watch, isConflicting: true } : watch
+  } catch {
+    return watch
+  }
+}
+
+/** A watch whose checks passed on a PR that can merge: a round that judged the code. */
+export const isJudgedPass = (watch: Watch) => watch.outcome === 'passed' && !watch.isConflicting
+
 // GitHub answered that the PR has no check, none was ever seen on this head, and the grace time is up.
 const isChecklessSince = (watch: Watch, checks: Record<string, string> | undefined, now: number) =>
   checks !== undefined &&

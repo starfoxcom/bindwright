@@ -36,6 +36,11 @@ export type Watch = {
   /** The distinct lookups the latched step back takes, fixed when it latched: five. */
   stepBackNeeded?: number
   /**
+   * Set on a settle with no failure while GitHub reports the PR conflicting with its base: GitHub starts
+   * only some checks on such a PR, so the pass judged nothing and is no round.
+   */
+  isConflicting?: boolean
+  /**
    * Set on a red settle where only the review failed, because a review run never got to post its
    * review (`verdict.ts` has the rule): each tier's result, as the review gate holds it
    * (`routine error, deep none`). Such a round is not counted, and its wake says why.
