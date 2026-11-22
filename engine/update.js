@@ -13,6 +13,7 @@ import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
 import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
+import { parsePlainObject } from "./propose.js";
 
 // The file in git's folder that holds the pristine record the last update replaced.
 const BEFORE = "bindwright-pristine-before.json";
@@ -85,6 +86,11 @@ function decide(path, { ours, base, theirs }, merge) {
   if (ours === theirs || base === theirs) return ["unchanged"];
   if (ours === base) return ["updated", theirs];
   const { text, conflicts } = merge(ours, base, theirs);
+  // Git's line merge cannot place a key the repo moved; a key-by-key merge can.
+  if (conflicts && path.endsWith(".json")) {
+    const merged = mergeJson(ours, base, theirs);
+    if (merged !== null && keepsSections(ours, merged, path)) return ["merged", merged];
+  }
   if (conflicts || !keepsSections(ours, text, path)) return ["conflict", text];
   return ["merged", text];
 }
@@ -168,6 +174,97 @@ export function gitMerge(ours, base, theirs) {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+const BOM = "\uFEFF";
+const ABSENT = Symbol("absent");
+const CLASH = Symbol("clash");
+const MAX_INDENT = 10; // JSON.stringify uses at most 10 characters of an indent string
+
+// A key-by-key three-way merge of three JSON objects, for the clashes git's line
+// merge reports when the repo moved keys. Null when a value clashes or a text is
+// not a JSON object both twins reprint alike.
+function mergeJson(ours, base, theirs) {
+  const parsed = [ours, base, theirs].map(parseObject);
+  if (parsed.includes(null)) return null;
+  const merged = mergeValue(...parsed);
+  if (merged === CLASH) return null;
+  const indent = indentOf(ours);
+  if (indent.length > MAX_INDENT) return null;
+  const body = JSON.stringify(merged, null, indent);
+  return (ours.startsWith(BOM) ? BOM : "") + body + (ours.endsWith("\n") ? "\n" : "");
+}
+
+// The object of a text the twins both read and reprint alike (propose.js holds those rules),
+// with no key repeated.
+function parseObject(text) {
+  const plain = text.startsWith(BOM) ? text.slice(1) : text;
+  const value = parsePlainObject(plain);
+  return value !== null && !repeatsAKey(plain) ? value : null;
+}
+
+// Whether an object in the text, already read as plain JSON, holds a key twice: JSON.parse
+// keeps only the last copy, so the reprint would drop the others.
+function repeatsAKey(text) {
+  const objects = [];
+  let previous = null;
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]:]/g)) {
+    if (token === "{") objects.push(new Set());
+    else if (token === "[") objects.push(null);
+    else if (token === "}" || token === "]") objects.pop();
+    else if (token === ":") {
+      const keys = objects.at(-1);
+      const key = JSON.parse(previous);
+      if (keys.has(key)) return true;
+      keys.add(key);
+    }
+    previous = token;
+  }
+  return false;
+}
+
+// The indent the repo's copy uses: the leading whitespace of its first indented line, found
+// after a \n only, as the Python twin finds it.
+function indentOf(text) {
+  const match = /\n([ \t]+)\S/.exec(text);
+  return match ? match[1] : "  ";
+}
+
+// ABSENT stands for a key a version does not have. A value that every version
+// changed differently is CLASH. Objects merge key by key first, so the repo's
+// key order holds even where it changed nothing else.
+function mergeValue(o, b, t) {
+  if (isObject(o) && isObject(b) && isObject(t)) return mergeObject(o, b, t);
+  if (same(o, t)) return o;
+  if (same(o, b)) return t;
+  if (same(t, b)) return o;
+  return CLASH;
+}
+
+// The repo's keys in its order, then the keys only the templates have.
+function mergeObject(o, b, t) {
+  const keys = [...Object.keys(o), ...Object.keys(t).filter((key) => !Object.hasOwn(o, key))];
+  const entries = [];
+  for (const key of keys) {
+    const value = mergeValue(member(o, key), member(b, key), member(t, key));
+    if (value === CLASH) return CLASH;
+    if (value !== ABSENT) entries.push([key, value]);
+  }
+  return Object.fromEntries(entries);
+}
+
+const member = (object, key) => (isObject(object) && Object.hasOwn(object, key) ? object[key] : ABSENT);
+
+// Objects compare without regard to key order, arrays in order.
+function same(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, i) => same(item, b[i]));
+  }
+  if (!isObject(a) || !isObject(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length
+    && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
 }
 
 // Strict UTF-8 that keeps a byte order mark, as Python's decoder does: a file
