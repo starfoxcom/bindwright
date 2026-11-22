@@ -9,6 +9,12 @@
 # CLAUDE_CODE_OAUTH_TOKEN_2, and so on up to 5; the workflows try them in
 # that order when an account has no room left.
 #
+# With --api-key it also reads an Anthropic API key and writes it as
+# ANTHROPIC_API_KEY: the reviews then try the key's credits first, and with
+# --accounts 0 the key is the only payer. A repository that still holds
+# CLAUDE_CODE_OAUTH_TOKEN keeps the subscription for the attempts after the
+# first, so remove that secret there to run every attempt on the key.
+#
 # Get each token with `claude setup-token`, signed in to that account. Tokens
 # reach gh on standard input, never on a command line. Secrets of accounts
 # above --accounts stay as they are: `gh secret delete NAME -R OWNER/NAME`
@@ -19,21 +25,27 @@
 set -euo pipefail
 
 readonly TOKEN_SECRET="CLAUDE_CODE_OAUTH_TOKEN"
+readonly KEY_SECRET="ANTHROPIC_API_KEY"
 readonly WORKFLOW=".github/workflows/claude-code-review.yml"
 readonly REPO_RE='^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
 
 ACCOUNTS=""
 ORGS=0
+WITH_KEY=0
 REPOS=()
 TOKENS=()
+KEY=""
 
 usage() {
   cat << 'EOF'
-Usage: set-review-tokens.sh --accounts N [--orgs | --repo OWNER/NAME...]
+Usage: set-review-tokens.sh --accounts N [--api-key] [--orgs | --repo OWNER/NAME...]
 
-  --accounts N         How many Claude accounts the reviews use, 1 to 5.
+  --accounts N         How many Claude accounts the reviews use, 0 to 5.
                        The script asks for each one's token, from
                        'claude setup-token' signed in to that account.
+                       0 needs --api-key: the reviews run on the key alone.
+  --api-key            Also ask for an Anthropic API key (from the Claude
+                       Console) and set it as ANTHROPIC_API_KEY.
   --repo OWNER/NAME    A repository to set them in; repeat for more
                        (default: every repository you own whose default
                        branch holds .github/workflows/claude-code-review.yml).
@@ -55,12 +67,15 @@ parse_args() {
       --accounts) ACCOUNTS=${2:?--accounts needs a number}; shift ;;
       --repo) REPOS+=("${2:?--repo needs OWNER/NAME}"); shift ;;
       --orgs) ORGS=1 ;;
+      --api-key) WITH_KEY=1 ;;
       -h | --help) usage; exit 0 ;;
       *) usage >&2; die "unknown option: $1" ;;
     esac
     shift
   done
-  [[ $ACCOUNTS =~ ^[1-5]$ ]] || die "--accounts takes a number from 1 to 5"
+  [[ $ACCOUNTS =~ ^[0-5]$ ]] || die "--accounts takes a number from 0 to 5"
+  [ "$ACCOUNTS" != 0 ] || [ "$WITH_KEY" = 1 ] \
+    || die "--accounts 0 needs --api-key: with no account and no key the reviews cannot run"
   [ "$ORGS" = 0 ] || [ ${#REPOS[@]} -eq 0 ] || die "--orgs sweeps; it does not go with --repo"
   for repo in ${REPOS[@]+"${REPOS[@]}"}; do
     [[ $repo =~ $REPO_RE ]] || die "--repo takes OWNER/NAME: $repo"
@@ -108,6 +123,8 @@ read_tokens() {
     IFS= read -rs token \
       || die "no token for account $i: run this in a terminal of your own, where it can ask for each one"
     echo >&2
+    [[ $token != sk-ant-api* ]] \
+      || die "account $i: that is an API key, not an account token; --api-key asks for the key on its own"
     [[ $token =~ ^sk-ant-[A-Za-z0-9_-]{20,}$ ]] \
       || die "account $i: that is not a token from 'claude setup-token' (those start with sk-ant-)"
     for ((j = 0; j < ${#TOKENS[@]}; j++)); do
@@ -117,18 +134,41 @@ read_tokens() {
   done
 }
 
+read_key() {
+  [ "$WITH_KEY" = 1 ] || return 0
+  printf "API key (input hidden): " >&2
+  IFS= read -rs KEY \
+    || die "no API key: run this in a terminal of your own, where it can ask for it"
+  echo >&2
+  [[ $KEY =~ ^sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{20,}$ ]] \
+    || die "that is not an Anthropic API key (those start with sk-ant-api)"
+}
+
+# One secret into one repository, from standard input so the value never
+# reaches a command line.
+set_secret() {
+  printf '%s' "$3" | gh secret set "$2" -R "$1" > /dev/null
+}
+
 write_secrets() {
-  local repo i name failed=0
+  local repo i name failed=0 what
+  what="$ACCOUNTS account(s)"
+  [ "$WITH_KEY" = 0 ] || what+=" and the API key"
   for repo in "${REPOS[@]}"; do
     for ((i = 1; i <= ACCOUNTS; i++)); do
       name=$(secret_name "$i")
-      if ! printf '%s' "${TOKENS[i - 1]}" | gh secret set "$name" -R "$repo" > /dev/null; then
+      if ! set_secret "$repo" "$name" "${TOKENS[i - 1]}"; then
         printf '  FAILED   %s: %s (setting a secret needs admin access)\n' "$repo" "$name"
         failed=1
         continue 2
       fi
     done
-    printf '  set      %s: %s account(s)\n' "$repo" "$ACCOUNTS"
+    if [ "$WITH_KEY" = 1 ] && ! set_secret "$repo" "$KEY_SECRET" "$KEY"; then
+      printf '  FAILED   %s: %s (setting a secret needs admin access)\n' "$repo" "$KEY_SECRET"
+      failed=1
+      continue
+    fi
+    printf '  set      %s: %s\n' "$repo" "$what"
   done
   return "$failed"
 }
@@ -143,6 +183,7 @@ main() {
   [ ${#REPOS[@]} -gt 0 ] || find_repos
   echo "Repositories: ${REPOS[*]}" >&2
   read_tokens
+  read_key
   write_secrets
 }
 

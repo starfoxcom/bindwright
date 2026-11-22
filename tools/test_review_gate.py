@@ -1098,11 +1098,34 @@ class SetupScript(unittest.TestCase):
     def test_the_sweep_writes_nothing_for_a_bad_or_repeated_token(self):
         for name, tokens in (("not a token", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\npassword\n"),
                              ("same token twice", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\nsk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n"),
-                             ("too few tokens", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")):
+                             ("too few tokens", "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n"),
+                             ("an API key as a token", "sk-ant-api03-aaaaaaaaaaaaaaaaaaaa\nsk-ant-oat01-bbbbbbbbbbbbbbbbbbbb\n")):
             run, after, _ = self.run_setup(fresh_repo(), "--accounts", "2", "--repo", "acme/game",
                                            script=SWEEP, stdin=tokens)
             self.assertEqual(run.returncode, 2, name)
             self.assertNotIn("written", after, name)
+
+    def test_the_sweep_sets_the_api_key_alone_with_no_account(self):
+        state = fresh_repo(owned=["acme/game"], with_workflow=["acme/game"])
+        run, after, calls = self.run_setup(state, "--accounts", "0", "--api-key", script=SWEEP,
+                                           stdin="sk-ant-api03-aaaaaaaaaaaaaaaaaaaa\n")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(after["written"], [["acme/game", "ANTHROPIC_API_KEY", "sk-ant-api03-aaaaaaaaaaaaaaaaaaaa"]])
+        self.assertFalse([c for c in calls if any("sk-ant" in a for a in c)])
+        self.assertNotIn("sk-ant", run.stdout + run.stderr)
+
+    def test_the_sweep_writes_nothing_without_an_account_or_a_real_key(self):
+        for name, args, key in (("no account and no key", ["--accounts", "0"], ""),
+                                ("a token as the key", ["--accounts", "0", "--api-key"],
+                                 "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")):
+            run, after, _ = self.run_setup(fresh_repo(), *args, "--repo", "acme/game", script=SWEEP, stdin=key)
+            self.assertEqual(run.returncode, 2, name)
+            self.assertNotIn("written", after, name)
+
+    def test_an_api_key_alone_stands_in_for_the_token(self):
+        run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY"]), "--check")
+        self.assertIn("ok       secret ANTHROPIC_API_KEY, with no CLAUDE_CODE_OAUTH_TOKEN", run.stdout)
+        self.assertNotIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN", run.stdout)
 
     def test_names_that_could_break_out_of_a_string_are_refused(self):
         for args in (["--branch", 'ma"in'], ["--require", "a\\b"], ["--approvals", "11"],
