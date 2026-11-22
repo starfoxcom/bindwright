@@ -84,6 +84,10 @@ test('only a git commit waits', async ($, on) => {
     ['echo $((1<<n))\ngit commit -m x', true],
     ["cat > notes.md <<\\EOF\nDon't merge yet\nEOF\ngit commit -m x", true],
     ['echo "$( (( n = a<<b )) )"\ngit commit -m x', true],
+    // `((` that closes on `) …` with no second `)` is a subshell in a subshell, not arithmetic.
+    ['((cd sub); git commit -m x)', true],
+    ['echo "$((cd sub); git commit -m x)"', false],
+    ['(( n = 1 ))\ngit commit -m x', true],
     ["git commit -F - <<'EOF'\nfix: the \"quoted\" word\nEOF\ngit log", true],
     ['cat <<EOF\nit\'s "half\nEOF\necho "git commit"', false],
     // A long run of options answers at once.

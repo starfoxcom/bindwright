@@ -878,6 +878,10 @@ test('a push or a new PR is the subcommand, never words inside a message', () =>
   expect(isPushOrPr("cat > notes.md <<\\EOF\nDon't merge yet\nEOF\ngit push")).toBe(true)
   expect(isPushOrPr("cat > notes.md <<\\EOF\ngit push\nEOF")).toBe(false)
   expect(isPushOrPr('echo "$( (( n = a<<b )) )"\ngit push')).toBe(true)
+  // `((` that closes on `) …` with no second `)` is a subshell in a subshell, not arithmetic.
+  expect(isPushOrPr('((cd sub); git push)')).toBe(true)
+  expect(isPushOrPr('$((cd sub); git push)')).toBe(true)
+  expect(isPushOrPr('echo $((1<<n)) "(cd a); git push"')).toBe(false)
   expect(isPushOrPr("git commit -F - <<'EOF'\nfix: the \"quoted\" word\nEOF\ngit push")).toBe(true)
   expect(isPushOrPr("@'\nsee <<EOF\n'@ | Out-File n.md\ngit push", true)).toBe(true)
   expect(isPushOrPr("@'\ngit push\n'@ | Out-File n.md", true)).toBe(false)
