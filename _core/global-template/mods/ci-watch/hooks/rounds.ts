@@ -9,7 +9,8 @@
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
 // else pushed, which ci-watch follows silently): what ci-watch itself saw, never rebuilt from the
 // branch's history (a merge, amend or rebase reshapes that), so pushes from another machine are not
-// counted. Pure, no engine access.
+// counted. Nor is a settle whose only failure is a review run that never got to post its review (`verdict.ts`): the
+// code was not judged. Pure, no engine access.
 
 import type { Watch } from '../types'
 

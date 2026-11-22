@@ -6,6 +6,18 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.8.0] — 2026-11-21
+
+### Added
+
+- **A session can no longer write repository secrets.** The guard refuses `gh secret set` and `gh secret delete` with a note to hand the user the command, since a test run can overwrite the real secrets and that cannot be undone; being irreversible, this rule enforces from the start instead of observing first. `set-review-tokens.sh` itself stops when Claude Code started its shell (`CLAUDECODE=1`), however the call is spelled, so it runs only in the user's own terminal.
+
+- **The review-token sweep can reach your organizations' repositories.** `set-review-tokens.sh --orgs` also sets the tokens in every repository with the review of each organization you administer, beside your own. It needs the `read:org` scope, and any failed lookup stops it before anything is written, naming `gh auth refresh -s read:org` and `--repo`. A run without `--orgs` works as before.
+
+### Fixed
+
+- **A review that never got to post no longer counts as a red round.** The ci-watch mod counted every failed review gate as a fix round, so a review run that errored, found no account with room, had its post refused or was cancelled pushed a PR toward the research step and the hard stop with nothing to fix. Now such a round keeps the count where it was, and the wake says the review never got to post and asks to watch the re-run. A review that was posted counts, whatever it says, as does every other red round and any round the mod cannot read (#1150).
+
 ## [v7.7.1] — 2026-11-21
 
 ### Fixed
