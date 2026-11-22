@@ -44,52 +44,22 @@ async function gateState($: EngineInterface, watch: Watch): Promise<string | und
   }
 }
 
-// A deep-review request or the review action's tracking comment, which quote the verdict rules, not a verdict.
-const NOT_VERDICT = /^(?:@claude review this PR|\*\*Claude |Claude Code is working)/i
-// A verdict line that blocks: a 🔴 after list, quote, heading or emphasis markup, as the gate reads one.
-const RED_VERDICT = /^(?:\[[ xX]\]|[^\p{L}`🔴🟢])*🔴/u
+// The job that posts the routine review. The gate holds `error` whenever it fails, also after its 🔴 went
+// out, so a run can have given no verdict only when that job was reported and did not fail. The deep tier
+// records `error` only when its run posted nothing, and reads any posted review as the gate does.
+const POST_JOB = 'Post review'
 
-/** Whether a comment body is a review whose verdict line, its last non-empty line, opens with 🔴. */
-function isBlockVerdict(body: string): boolean {
-  if (NOT_VERDICT.test(body.trimStart())) return false
-  const lines = body.split('\n').filter(line => line.trim())
-  return RED_VERDICT.test(lines.at(-1)?.trim() ?? '')
-}
-
-/**
- * Whether a bot posted a 🔴 verdict on the PR since the watch's push; `undefined` when the comments cannot be
- * read. A review job can fail after its verdict went out, and the gate then holds `error`.
- */
-async function hasPostedBlock($: EngineInterface, watch: Watch): Promise<boolean | undefined> {
-  try {
-    const since = Date.parse(new Date(watch.pushedAt ?? watch.startedAt).toISOString())
-    // One JSON line per comment: [author type, created_at, body].
-    const rows = '.[] | [.user.type, .created_at, .body] | @json'
-    const path = `repos/${watch.repo}/issues/${watch.number}/comments?per_page=100`
-    const { stdout, exitCode } = await $.process.run(['gh', 'api', '--paginate', path, '--jq', rows], {
-      timeoutMs: 30_000,
-    })
-    if (exitCode !== 0) return undefined
-    return stdout
-      .split('\n')
-      .filter(line => line.trim())
-      .map(line => JSON.parse(line) as [string, string, string])
-      .some(([type, at, body]) => type === 'Bot' && Date.parse(at) >= since && isBlockVerdict(body))
-  } catch {
-    return undefined
-  }
-}
+const isPostClean = (watch: Watch) => POST_JOB in watch.checks && !FAILED.has(watch.checks[POST_JOB] ?? '')
 
 /**
  * The settled watch with `noVerdict` set (`routine error, deep none`) when only the review failed, neither
- * tier blocked, and no review posted a 🔴 verdict since the push. Anything that cannot be read counts the round, as
- * a real failure would.
+ * tier blocked, and the routine review's post job did not fail. Anything that cannot be read counts the
+ * round, as a real failure would.
  */
 export async function withVerdict($: EngineInterface, watch: Watch): Promise<Watch> {
-  if (watch.outcome !== 'failed' || watch.isSilent || !isReviewOnly(watch)) return watch
+  if (watch.outcome !== 'failed' || watch.isSilent || !isReviewOnly(watch) || !isPostClean(watch)) return watch
   const state = (await gateState($, watch)) ?? ''
   const tiers = new Map([...state.matchAll(TIER)].map(([, tier, result]) => [tier, result]))
   if (!tiers.has('routine') || [...tiers.values()].includes('block')) return watch
-  if ((await hasPostedBlock($, watch)) !== false) return watch
   return { ...watch, noVerdict: `routine ${tiers.get('routine')}, deep ${tiers.get('deep') ?? 'none'}` }
 }
