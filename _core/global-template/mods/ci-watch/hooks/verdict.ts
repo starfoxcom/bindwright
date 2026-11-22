@@ -1,6 +1,7 @@
-// Whether a red round is a reviewer's verdict. A review that never reached one (no account with room, a
-// refused token or post, a cancelled run) fails the review gate too, but says nothing about the code, so it
-// is no fix round.
+// Whether a red round is a reviewer's verdict. A review run that never got to post its review (no account
+// with room, a refused token or post, a cancelled run) fails the review gate too, but says nothing about the
+// code, so it is no fix round. Whatever this cannot tell for sure counts the round. The case table in
+// tests/rounds.test.ts (`VERDICT_ROWS`) pins which settles count.
 
 import type { EngineInterface } from 'claude-code'
 
@@ -28,9 +29,8 @@ export function isReviewOnly(watch: Watch): boolean {
   return failed.includes(GATE) && failed.every(name => REVIEW_JOBS.has(name))
 }
 
-// Tier results that say nothing about whether a review went out: `error` is also written when the verdict
-// was posted and a later step failed, and `pending` stays when the run was cancelled after posting.
-const UNSURE = new Set(['error', 'pending'])
+// Tier results the gate can write whether or not a review went out, so the reviews' marks decide.
+const UNSURE = new Set(['error', 'pending', 'missing'])
 // The marker each tier writes into every review it posts; its deep-review request and tracking comments
 // carry other markers.
 const REVIEW_MARK = /<!-- (review|deep)-run: \d+-\d+ review -->/g
@@ -110,6 +110,7 @@ export async function withVerdict($: EngineInterface, watch: Watch): Promise<Wat
   const tiers = new Map(found.map(([, tier = '', result = '']) => [tier, result]))
   if (!since || !tiers.has('routine') || [...tiers.values()].includes('block')) return watch
   const unsure = [...tiers].filter(([, result]) => UNSURE.has(result)).map(([tier]) => tier)
-  if (unsure.length > 0 && !(await isUnposted($, watch, since, unsure))) return watch
+  // A failed gate whose tiers all read settled is unexplained, so it counts like a failure.
+  if (unsure.length === 0 || !(await isUnposted($, watch, since, unsure))) return watch
   return { ...watch, noVerdict: `routine ${tiers.get('routine')}, deep ${tiers.get('deep') ?? 'none'}` }
 }
