@@ -1122,13 +1122,18 @@ class SetupScript(unittest.TestCase):
             self.assertEqual(run.returncode, 2, name)
             self.assertNotIn("written", after, name)
 
-    def test_an_api_key_stands_in_for_the_first_token(self):
+    def test_an_api_key_or_a_later_token_stands_in_for_the_first_token(self):
         run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY"]), "--check")
         self.assertIn("ok       secret ANTHROPIC_API_KEY, with no account token", run.stdout)
         self.assertNotIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN", run.stdout)
         # With a later account's token, the key pays for the first attempts only.
         run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN_2"]), "--check")
         self.assertIn("ok       secret ANTHROPIC_API_KEY, with no first account token", run.stdout)
+        self.assertIn("ok       secret CLAUDE_CODE_OAUTH_TOKEN_2 (account 2)", run.stdout)
+        self.assertNotIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN (", run.stdout)
+        # With no key, every attempt runs on the first later account.
+        run, _, _ = self.run_setup(fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN_2"]), "--check")
+        self.assertIn("ok       no CLAUDE_CODE_OAUTH_TOKEN, with a later account's token", run.stdout)
         self.assertIn("ok       secret CLAUDE_CODE_OAUTH_TOKEN_2 (account 2)", run.stdout)
         self.assertNotIn("MISSING  secret CLAUDE_CODE_OAUTH_TOKEN (", run.stdout)
 
