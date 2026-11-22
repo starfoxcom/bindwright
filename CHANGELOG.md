@@ -10,6 +10,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **Every step back after repeated red review rounds looks up five solutions.** The research a PR owes after its 3rd, 5th and every red round from the 6th took three lookups, and five only from the 8th; it now takes five each time, so the first step back already compares enough options. ci-watch holds edits, commits and pushes until five distinct lookups ran, and `review-tiers.md`, `local-review.md` and the mods README say the same.
 
+### Fixed
+
+- **ci-watch no longer reports a PR that conflicts with its base as passed.** GitHub starts only some checks on such a PR, so the watch saw the one that ran pass and woke the session with "all 1 checks settled with no failure". When a watch settles with no failure, it now asks GitHub whether the PR can merge, and on a conflict its wake says to merge the base branch in and push. That pass counts as no review round, and it no longer lifts a step back.
+
 ## [v7.11.6] — 2026-11-22
 
 ### Fixed

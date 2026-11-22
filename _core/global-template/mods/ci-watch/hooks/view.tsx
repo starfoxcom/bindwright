@@ -37,6 +37,7 @@ export function summary(watch: Watch): { text: string; color: 'green' | 'red' | 
   const failed = states.filter(([, bucket]) => FAILED.has(bucket)).map(([name]) => name)
   const done = states.filter(([, bucket]) => bucket !== PENDING).length
   const pr = `PR ${watch.number}`
+  if (watch.isConflicting) return { text: `⚠️ ${pr} · conflicts with its base`, color: 'yellow' }
   if (watch.outcome === 'passed') return { text: `✅ ${pr} · all ${states.length} passed`, color: 'green' }
   // A check failed while others still run: red for the failure, the hourglass and count for the rest.
   if (failed.length > 0 && !watch.outcome && done < states.length) {
