@@ -6,7 +6,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
-## [v7.9.0] — 2026-11-21
+## [v7.9.0] — 2026-11-22
 
 ### Changed
 
