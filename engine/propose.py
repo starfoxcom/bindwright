@@ -119,8 +119,8 @@ def _normalise(text):
 
 def _json_proposal(path, repo, incoming):
     """JSON: both sides parse as objects, merged key by key. None when either side is not one."""
-    repo_object = _parse_object(repo)
-    incoming_object = _parse_object(incoming)
+    repo_object = parse_plain_object(repo)
+    incoming_object = parse_plain_object(incoming)
     if repo_object is None or incoming_object is None:
         return None
     clashes = []
@@ -133,7 +133,7 @@ def _refuse_constant(name):
     raise ValueError(name)
 
 
-def _parse_object(text):
+def parse_plain_object(text):
     """The parsed object, or None when the text is not plain JSON: an object both engines read
     and print alike (see _is_plain), nested at most MAX_DEPTH deep."""
     if _depth(text) > MAX_DEPTH:

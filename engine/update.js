@@ -13,6 +13,7 @@ import { STAGING, ANSWERS, PRISTINE, stateJson } from "./bind.js";
 import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
+import { parsePlainObject } from "./propose.js";
 
 // The file in git's folder that holds the pristine record the last update replaced.
 const BEFORE = "bindwright-pristine-before.json";
@@ -194,50 +195,38 @@ function mergeJson(ours, base, theirs) {
   return (ours.startsWith(BOM) ? BOM : "") + body + (ours.endsWith("\n") ? "\n" : "");
 }
 
-// Text the twins read or reprint apart: a line break other than \n, and an escape of half
-// a surrogate pair (Python cannot write it back as UTF-8).
-const UNPLAIN = /[\r\u2028\u2029]|\\u[dD][89a-fA-F][0-9a-fA-F]{2}/;
-
+// The object of a text the twins both read and reprint alike (propose.js holds those rules),
+// with no key repeated.
 function parseObject(text) {
-  const plain = text.replace(/^\uFEFF/, "");
-  if (UNPLAIN.test(plain)) return null;
-  let value;
-  try {
-    value = JSON.parse(plain);
-  } catch {
-    return null;
-  }
-  return isObject(value) && printsAlike(plain) ? value : null;
+  const plain = text.startsWith(BOM) ? text.slice(1) : text;
+  const value = parsePlainObject(plain);
+  return value !== null && !repeatsAKey(plain) ? value : null;
 }
 
-const INTEGER = /^-?(0|[1-9]\d*)$/;
-const INDEX_KEY = /^(0|[1-9]\d*)$/;
-
-// Whether both twins read and reprint the text unchanged: every number a safe integer, no key
-// repeated within its object, and no key JavaScript moves to the front of its object.
-function printsAlike(text) {
+// Whether an object in the text, already read as plain JSON, holds a key twice: JSON.parse
+// keeps only the last copy, so the reprint would drop the others.
+function repeatsAKey(text) {
   const objects = [];
   let previous = null;
-  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|[{}[\]:]/g)) {
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]:]/g)) {
     if (token === "{") objects.push(new Set());
     else if (token === "[") objects.push(null);
     else if (token === "}" || token === "]") objects.pop();
     else if (token === ":") {
-      const key = JSON.parse(previous);
       const keys = objects.at(-1);
-      if (INDEX_KEY.test(key) || keys.has(key)) return false;
+      const key = JSON.parse(previous);
+      if (keys.has(key)) return true;
       keys.add(key);
-    } else if (!token.startsWith('"') && !(INTEGER.test(token) && Number.isSafeInteger(Number(token)))) {
-      return false;
     }
     previous = token;
   }
-  return true;
+  return false;
 }
 
-// The indent the repo's copy uses: the leading whitespace of its first indented line.
+// The indent the repo's copy uses: the leading whitespace of its first indented line, found
+// after a \n only, as the Python twin finds it.
 function indentOf(text) {
-  const match = /^([ \t]+)\S/m.exec(text);
+  const match = /\n([ \t]+)\S/.exec(text);
   return match ? match[1] : "  ";
 }
 

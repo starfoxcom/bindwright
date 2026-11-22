@@ -12,6 +12,7 @@ import tempfile
 from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
 from model import expand_answers
+from propose import parse_plain_object
 
 STAGING = ".bindwright/incoming/"
 ANSWERS = ".bindwright/project.json"
@@ -144,13 +145,9 @@ MERGE_LABELS = ["this repo", "last setup or update", "today's templates"]
 BOM = "\ufeff"
 _ABSENT = object()  # a key a version does not have
 _CLASH = object()  # a value every version changed differently
-_INDENT = re.compile(r"^([ \t]+)\S", re.M)
-_INDEX_KEY = re.compile(r"(0|[1-9][0-9]*)\Z")
-_MAX_SAFE_INTEGER = 2 ** 53 - 1
+# The first indented line's indent, found after a \n only, as the JS twin finds it.
+_INDENT = re.compile(r"\n([ \t]+)\S")
 _MAX_INDENT = 10  # JSON.stringify uses at most 10 characters of an indent string
-# Text the twins read or reprint apart: a line break other than \n, and an escape of half
-# a surrogate pair (this twin cannot write it back as UTF-8).
-_UNPLAIN = re.compile(r"[\r  ]|\\u[dD][89a-fA-F][0-9a-fA-F]{2}")
 
 
 def git_merge(ours, base, theirs):
@@ -187,33 +184,25 @@ def _merge_json(ours, base, theirs):
 
 
 def _parse_object(text):
-    """The text's object, or None when it is not one both twins read and reprint unchanged."""
+    """The object of a text the twins both read and reprint alike (propose.py holds those
+    rules), with no key repeated."""
     plain = text[1:] if text.startswith(BOM) else text
-    if _UNPLAIN.search(plain):
+    value = parse_plain_object(plain)
+    if value is None:
         return None
     try:
-        value = json.loads(plain, parse_constant=_not_plain,
-                           parse_float=_not_plain, parse_int=_safe_int, object_pairs_hook=_unique_keys)
+        json.loads(plain, object_pairs_hook=_unique_keys)
     except ValueError:
         return None
-    return value if isinstance(value, dict) else None
-
-
-def _not_plain(literal):
-    raise ValueError("a number JavaScript prints differently: " + literal)
-
-
-def _safe_int(literal):
-    if abs(int(literal)) > _MAX_SAFE_INTEGER:
-        raise ValueError("an integer JavaScript cannot hold exactly: " + literal)
-    return int(literal)
+    return value
 
 
 def _unique_keys(pairs):
-    """An object with no key repeated and none JavaScript moves to the front."""
+    """An object with no key repeated: json.loads keeps only the last copy, so the reprint would
+    drop the others."""
     keys = [key for key, _ in pairs]
-    if len(set(keys)) != len(keys) or any(_INDEX_KEY.match(key) for key in keys):
-        raise ValueError("a key the twins would print differently")
+    if len(set(keys)) != len(keys):
+        raise ValueError("a repeated key")
     return dict(pairs)
 
 

@@ -604,24 +604,33 @@ const STAYS_CONFLICT = {
   "a key both sides changed differently": (text) => text.replace(/"timeout": \d+/, '"timeout": 99'),
   "a repo copy that is not valid JSON": (text) => text.replace(/\n\}\n$/, ",\n}\n"),
   "a key repeated in its object": atTop('"//": "one",\n  "//": "two"'),
-  "a number the twins print differently": atTop('"ratio": 1.0'),
+  "an object nested past the depth both twins read": atTop(`"deep": ${"[".repeat(65)}${"]".repeat(65)}`),
   "an integer past 2^53": atTop('"big": 9007199254740993'),
   "an all-digit key JavaScript moves first": atTop('"10": true'),
   "an escape of half a surrogate pair": atTop('"s": "\\ud800"'),
   "an indent longer than 10 characters": (text) => text.replace(/^ +/gm, (spaces) => spaces.repeat(6)),
-  "a line break other than a newline": (text) => text.replace("{\n", "{\r \n"),
   "a kept section the templates change": (text) => text
     .replace('  "hooks": ', '  "//keep": "bindwright:keep",\n  "hooks": ')
     .replace(/\n\}\n$/, ',\n  "//end": "bindwright:end-keep"\n}\n'),
 };
 
-test("a JSON file the key merge cannot take whole stays a conflict", needsPython, async () => {
-  for (const [name, change] of Object.entries(STAYS_CONFLICT)) {
+// Text both twins read and reprint alike; update() compares the two engines' bytes.
+const MERGES_ALIKE = {
+  "a number written with a fraction": atTop('"ratio": 1.0'),
+  "a carriage return between tokens": (text) => text.replace("{\n", "{\r \n"),
+};
+
+test("the key merge takes plain JSON and leaves the rest a conflict", needsPython, async () => {
+  const rows = [
+    ...Object.entries(STAYS_CONFLICT).map(([name, change]) => [name, change, "conflict"]),
+    ...Object.entries(MERGES_ALIKE).map(([name, change]) => [name, change, "merged"]),
+  ];
+  for (const [name, change, outcome] of rows) {
     const { out } = await update((r) => {
       const base = olderTimeout(r.read(SETTINGS));
       r.pristine.files[SETTINGS] = base;
       r.write(SETTINGS, change(reordered(base)));
     });
-    assert.deepEqual(out.conflict, [SETTINGS], name);
+    assert.deepEqual(out[outcome], [SETTINGS], name);
   }
 });
