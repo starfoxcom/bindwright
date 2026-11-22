@@ -597,6 +597,31 @@ test("a settings file that is not valid JSON is never written", { skip }, () => 
   });
 });
 
+test("hook-status names the shipped hooks the record lacks and whether each matches", { skip }, () => {
+  withHome((dir) => {
+    const shipped = join(dir, "src");
+    const guard = hookFile(dir, "no-ai-attribution.py", "guard\n");
+    hookFile(dir, "no_ai_attribution/routes.py", "routes\n");
+    hookFile(dir, "push-guard.py", "push\n");
+    for (const file of [guard, join(shipped, "push-guard.py")]) {
+      assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    }
+    const old = { matcher: "Grep", hooks: [{ type: "command", command: `py "${dir}/.claude/hooks/ctags-first.py"` }] };
+    writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: [...settings(dir).hooks.PreToolUse, old] } });
+    const status = () => home(dir, "hook-status", shipped).out.hooks;
+    const both = { recorded: true, matches: true };
+    const all = { "no-ai-attribution.py": both, "push-guard.py": both };
+    assert.deepEqual(status(), all, "a hook not shipped is left out");
+    rmSync(join(dir, ".bindwright", "hooks.json"));
+    rmSync(join(dir, ".claude", "hooks", "no_ai_attribution"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "push\r\n");
+    assert.deepEqual(status(), {
+      "no-ai-attribution.py": { recorded: false, matches: false },
+      "push-guard.py": { recorded: false, matches: true },
+    });
+  });
+});
+
 test("a null hook event is skipped, so a guard beside it still lists and removes", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "push-guard.py");
