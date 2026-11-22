@@ -26,7 +26,8 @@
 # every attempt runs on the key. Optional: CLAUDE_CODE_OAUTH_TOKEN_2 to
 # CLAUDE_CODE_OAUTH_TOKEN_5, more accounts' tokens
 # (`claude setup-token` on each) for the backup when the first account has no
-# room left. Each account has a secret of its own, named here one by one: a
+# room left; with the key and only these, the main review runs on the key.
+# Each account has a secret of its own, named here one by one: a
 # value taken out of a combined secret is no longer hidden in the logs, and a
 # secret name built at run time sends every secret of the repo to the runner.
 #
@@ -1325,8 +1326,10 @@ jobs:
 
       # With ANTHROPIC_API_KEY set and no account token at all
       # (CLAUDE_CODE_OAUTH_TOKEN to _5), the key is the only payer, so the
-      # action attempts below run on it too. Only whether each secret is set
-      # is read here, never its value.
+      # action attempts below run on it too. With the key and only later
+      # accounts' tokens, the attempts on the first account run on it, and the
+      # backup on the account it picks. Only whether each secret is set is
+      # read here, never its value.
       - name: Pick who pays for the review
         id: payer
         shell: bash
@@ -1344,6 +1347,9 @@ jobs:
           # account it picks.
           if [ "$HAS_KEY" = true ] && [ "$HAS_FIRST" != true ]; then
             echo "main_on_key=yes" >> "$GITHUB_OUTPUT"
+            if [ "$HAS_TOKEN" = true ]; then
+              echo "::notice::No first account token: the attempts on the first account run on the API key, and the backup on a later account. A key holding only a plan's monthly credits cannot pay for those attempts, since the review action is refused those credits."
+            fi
           fi
 
       # ── First attempt: the plan's monthly API credits ─────────────────────
@@ -1860,7 +1866,9 @@ jobs:
           # The account the step above picked. Each name is written out (see
           # the header); an index from 2 up is set only for an account whose
           # token is set, so its secret is never empty.
-          claude_code_oauth_token: ${{ steps.account.outputs.index == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || steps.account.outputs.index == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || steps.account.outputs.index == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || steps.account.outputs.index == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Without an index (that step failed or did not run), the first
+          # account that has a token.
+          claude_code_oauth_token: ${{ steps.account.outputs.index == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || steps.account.outputs.index == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || steps.account.outputs.index == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || steps.account.outputs.index == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
           # Empty unless the API key is the only payer ("Pick who pays").
           anthropic_api_key: ${{ steps.payer.outputs.key_only == 'yes' && secrets.ANTHROPIC_API_KEY || '' }}
           # The job's read-only token: with it the action skips its exchange
