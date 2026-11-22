@@ -19,8 +19,8 @@ export type Seen = {
   duringStateRead?: () => unknown
   /** Runs inside each folder make, before it returns (the owner claim makes its folder first). */
   duringMkdir?: () => unknown
-  /** The review gate's title on the head, as the checks API answers it; unset, that read fails. */
-  gateTitle?: string
+  /** The newest review gate run's state on the head, as the checks API answers it; unset, that read fails. */
+  gateState?: string
   /** `gh pr checks` fails (network, auth) with nothing on stdout. */
   isChecksDown?: boolean
   /** Folder makes, file writes and reads of the rounds file, in order. */
@@ -155,14 +155,14 @@ export function world(on: On) {
     }
     const named = /--repo (\S+)/.exec(args)?.[1]
     const repo = named ?? 'o/r'
-    if (args.includes('/check-runs') && seen.gateTitle === undefined) {
+    if (args.includes('/check-runs') && seen.gateState === undefined) {
       const down = { exitCode: 1, stdout: '', stderr: 'HTTP 502' }
       return { value: { ...down, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = args.includes('pr checks')
       ? JSON.stringify([{ name: 'build', bucket: seen.bucket }, ...seen.rows])
       : args.includes('/check-runs')
-        ? `${seen.gateTitle}\n`
+        ? `${seen.gateState}\n`
         : args.includes('/actions/workflows')
           ? String(seen.workflows ?? 1)
           : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))

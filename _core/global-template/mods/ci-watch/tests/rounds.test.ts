@@ -400,13 +400,16 @@ test("a round adds to the count file as read right before its write", async ($, 
 // A red settle counts only when the code was judged: a tier's 🔴, or any check outside the review's own jobs.
 // A review that gave no verdict (it errored, found no account with room, had its post refused, was cancelled)
 // keeps the count and says why. A gate title that cannot be read counts, as before.
-const VERDICT_ROWS: { name: string; title?: string; build: string; counted: boolean }[] = [
-  { name: 'a review that errored', title: 'The deep review errored', build: 'pass', counted: false },
-  { name: 'a review with no verdict line', title: 'No routine verdict', build: 'pass', counted: false },
-  { name: 'a cancelled review run', title: '', build: 'pass', counted: false },
-  { name: "a tier's 🔴", title: 'Blocked by the routine review', build: 'pass', counted: true },
-  { name: 'a gate title that cannot be read', build: 'pass', counted: true },
-  { name: 'a failed test beside an errored review', title: 'The deep review errored', build: 'fail', counted: true },
+const VERDICT_ROWS: { name: string; state?: string; build: string; counted: boolean }[] = [
+  { name: 'a review that errored', state: 'routine=error;deep=none', build: 'pass', counted: false },
+  { name: 'a deep run with no verdict line', state: 'routine=pass;deep=missing', build: 'pass', counted: false },
+  { name: 'a cancelled review run', state: 'triage=reviewable;routine=pending', build: 'pass', counted: false },
+  { name: "a routine 🔴", state: 'routine=block;deep=none', build: 'pass', counted: true },
+  { name: 'a routine 🔴 then an errored deep run', state: 'routine=block;deep=error', build: 'pass', counted: true },
+  { name: "a deep 🔴", state: 'routine=pass;escalated=yes;deep=block', build: 'pass', counted: true },
+  { name: 'a gate state with no tier', state: '', build: 'pass', counted: true },
+  { name: 'a gate state that cannot be read', build: 'pass', counted: true },
+  { name: 'a failed test beside an errored review', state: 'routine=error;deep=none', build: 'fail', counted: true },
 ]
 for (const row of VERDICT_ROWS) {
   test(`a red settle from ${row.name} ${row.counted ? 'counts' : 'keeps the count'}`, async ($, on) => {
@@ -415,7 +418,7 @@ for (const row of VERDICT_ROWS) {
     seed(seen, reds(2))
     seen.bucket = row.build
     seen.rows = [{ name: 'Review gate', bucket: 'fail' }, { name: 'Claude On-Demand', bucket: 'fail' }]
-    seen.gateTitle = row.title
+    seen.gateState = row.state
     await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
     for (let i = 0; i < 6; i++) await clock.advance(30_000)
     expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(row.counted ? 3 : 2)

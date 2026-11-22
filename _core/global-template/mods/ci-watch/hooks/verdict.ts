@@ -10,9 +10,12 @@ import { FAILED } from './settle'
 /** The check both review tiers report into. */
 export const GATE = 'Review gate'
 // The review workflows' own jobs, which fail beside the gate when a review cannot run.
-const REVIEW_JOBS = new Set([GATE, 'Claude On-Demand', 'Auto review', 'Post review', 'Evaluate review outcome'])
-// The gate's title when a tier posted a 🔴; its other failure titles name a review that gave no verdict.
-const BLOCKED = /^Blocked by the /
+const REVIEW_JOBS = new Set([
+  GATE, 'Init review gate', 'Auto review', 'Post review', 'Evaluate review outcome', 'Claude On-Demand',
+  'Check who asked for the deep review', 'On-demand deep review (@claude)',
+])
+// Each tier's result in the gate's state, as the gate script writes it: `routine=block;deep=error;…`.
+const TIER = /(?:^|;)(routine|deep)=(\w+)/g
 
 const failedChecks = (watch: Watch) =>
   Object.entries(watch.checks)
@@ -25,12 +28,16 @@ export function isReviewOnly(watch: Watch): boolean {
   return failed.includes(GATE) && failed.every(name => REVIEW_JOBS.has(name))
 }
 
-/** The gate's title on the watch's head, `''` when it has none, `undefined` when it cannot be read. */
-async function gateTitle($: EngineInterface, watch: Watch): Promise<string | undefined> {
+/**
+ * The state of the newest gate run on the watch's head, picked as the gate script picks it; `undefined` when
+ * it cannot be read.
+ */
+async function gateState($: EngineInterface, watch: Watch): Promise<string | undefined> {
   try {
-    const path = `repos/${watch.repo}/commits/${watch.headSha}/check-runs?check_name=${encodeURIComponent(GATE)}`
-    const argv = ['gh', 'api', path, '--jq', '.check_runs[0].output.title // ""']
-    const { stdout, exitCode } = await $.process.run(argv, { timeoutMs: 30_000 })
+    const query = `check_name=${encodeURIComponent(GATE)}&per_page=100`
+    const path = `repos/${watch.repo}/commits/${watch.headSha}/check-runs?${query}`
+    const newest = `[.check_runs[] | select(.name == "${GATE}")] | max_by(.id) | .external_id // ""`
+    const { stdout, exitCode } = await $.process.run(['gh', 'api', path, '--jq', newest], { timeoutMs: 30_000 })
     return exitCode === 0 ? stdout.trim() : undefined
   } catch {
     return undefined
@@ -38,12 +45,13 @@ async function gateTitle($: EngineInterface, watch: Watch): Promise<string | und
 }
 
 /**
- * The settled watch with `noVerdict` set to the gate's title when only the review failed and no tier posted
- * a 🔴. A title that cannot be read counts the round, as a real failure would.
+ * The settled watch with `noVerdict` set (`routine error, deep none`) when only the review failed and neither
+ * tier blocked. A state that cannot be read, or names no tier, counts the round, as a real failure would.
  */
 export async function withVerdict($: EngineInterface, watch: Watch): Promise<Watch> {
   if (watch.outcome !== 'failed' || watch.isSilent || !isReviewOnly(watch)) return watch
-  const title = await gateTitle($, watch)
-  if (title === undefined || BLOCKED.test(title)) return watch
-  return { ...watch, noVerdict: title || 'no result' }
+  const state = (await gateState($, watch)) ?? ''
+  const tiers = new Map([...state.matchAll(TIER)].map(([, tier, result]) => [tier, result]))
+  if (!tiers.has('routine') || [...tiers.values()].includes('block')) return watch
+  return { ...watch, noVerdict: `routine ${tiers.get('routine')}, deep ${tiers.get('deep') ?? 'none'}` }
 }
