@@ -36,8 +36,9 @@ export type Watch = {
   /** The distinct lookups the latched step back takes, fixed when it latched: three, or five near the hard stop. */
   stepBackNeeded?: number
   /**
-   * Set on a red settle where only the review failed and no tier posted a 🔴: each tier's result, as the
-   * review gate holds it (`routine error, deep none`). Such a round is not counted, and its wake says why.
+   * Set on a red settle where only the review failed, because a review run never got to post its
+   * review (`verdict.ts` has the rule): each tier's result, as the review gate holds it
+   * (`routine error, deep none`). Such a round is not counted, and its wake says why.
    */
   noVerdict?: string
 }
