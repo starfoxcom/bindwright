@@ -399,25 +399,43 @@ test("a round adds to the count file as read right before its write", async ($, 
 
 // A red settle counts only when the code was judged: a tier's 🔴, or any check outside the review's own jobs.
 // A review that gave no verdict (it errored, found no account with room, had its post refused, was cancelled)
-// keeps the count and says why. A gate title that cannot be read counts, as before. `post` is the routine
-// post job's bucket (skipped when not given, unreported when null): once it fails, its 🔴 may be out.
-type VerdictRow = { name: string; state?: string; post?: string | null; build: string; counted: boolean }
+// keeps the count and says why. A gate title that cannot be read counts, as before. An `error` or `pending`
+// tier counts too once a review it marks as its own is on the PR since the head's first gate run, since its
+// verdict may be out.
+const ROUTINE = '## Code Review\n<!-- review-run: 11-1 review -->\n\n🟢 LGTM\n'
+const REQUEST = '@claude review this PR — depth pass.\n\n<!-- review-run: 11-1 request -->\n'
+const DEEP = '## Deep review\n<!-- deep-run: 12-1 review -->\n\n- a finding\n\n**Verdict:** 🔴 Blocking\n'
+type VerdictRow = {
+  name: string
+  state?: string
+  comments?: { at?: string; body: string }[]
+  deepWorkflow?: string
+  build: string
+  counted: boolean
+}
 const VERDICT_ROWS: VerdictRow[] = [
   {
     name: 'a deep run that errored after the routine 🟢',
     state: 'routine=pass;escalated=yes;deep=error',
-    post: 'pass',
+    comments: [{ body: ROUTINE }],
     build: 'pass',
     counted: false,
   },
-  { name: 'a review that errored', state: 'routine=error;deep=none', build: 'pass', counted: false },
   {
-    name: 'a deep run with no verdict line',
-    state: 'routine=pass;deep=missing',
-    post: 'pass',
+    name: 'a review that errored before its post',
+    state: 'routine=error;deep=none',
+    comments: [{ body: REQUEST }],
     build: 'pass',
     counted: false,
   },
+  {
+    name: 'an errored review with a review from an earlier head',
+    state: 'routine=error',
+    comments: [{ body: ROUTINE, at: '1969-12-31T23:59:00Z' }],
+    build: 'pass',
+    counted: false,
+  },
+  { name: 'a deep run with no verdict line', state: 'routine=pass;deep=missing', build: 'pass', counted: false },
   { name: 'a cancelled review run', state: 'triage=reviewable;routine=pending', build: 'pass', counted: false },
   { name: "a routine 🔴", state: 'routine=block;deep=none', build: 'pass', counted: true },
   { name: 'a routine 🔴 then an errored deep run', state: 'routine=block;deep=error', build: 'pass', counted: true },
@@ -425,8 +443,27 @@ const VERDICT_ROWS: VerdictRow[] = [
   { name: 'a gate state with no tier', state: '', build: 'pass', counted: true },
   { name: 'a gate state that cannot be read', build: 'pass', counted: true },
   { name: 'a failed test beside an errored review', state: 'routine=error;deep=none', build: 'fail', counted: true },
-  { name: 'a post job that failed', state: 'routine=error', post: 'fail', build: 'pass', counted: true },
-  { name: 'a run with no post job reported', state: 'routine=error', post: null, build: 'pass', counted: true },
+  {
+    name: 'a routine review posted before its job failed',
+    state: 'routine=error',
+    comments: [{ body: ROUTINE }],
+    build: 'pass',
+    counted: true,
+  },
+  {
+    name: 'a deep review posted before its read failed',
+    state: 'routine=pass;escalated=yes;deep=error',
+    comments: [{ body: ROUTINE }, { body: DEEP }],
+    build: 'pass',
+    counted: true,
+  },
+  {
+    name: 'an errored deep run on a workflow that marks no reviews',
+    state: 'routine=pass;escalated=yes;deep=error',
+    deepWorkflow: 'jobs: {}\n',
+    build: 'pass',
+    counted: true,
+  },
 ]
 for (const row of VERDICT_ROWS) {
   test(`a red settle from ${row.name} ${row.counted ? 'counts' : 'keeps the count'}`, async ($, on) => {
@@ -435,9 +472,9 @@ for (const row of VERDICT_ROWS) {
     seed(seen, reds(2))
     seen.bucket = row.build
     seen.rows = [{ name: 'Review gate', bucket: 'fail' }, { name: 'Claude On-Demand', bucket: 'fail' }]
-    const post = row.post === undefined ? 'skipping' : row.post
-    if (post !== null) seen.rows.push({ name: 'Post review', bucket: post })
     seen.gateState = row.state
+    seen.comments = row.comments
+    seen.deepWorkflow = row.deepWorkflow
     await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
     for (let i = 0; i < 6; i++) await clock.advance(30_000)
     expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(row.counted ? 3 : 2)

@@ -21,6 +21,10 @@ export type Seen = {
   duringMkdir?: () => unknown
   /** The newest review gate run's state on the head, as the checks API answers it; unset, that read fails. */
   gateState?: string
+  /** The PR's bot comments: when each was posted (after the push by default) and its body. */
+  comments?: { at?: string; body: string }[]
+  /** The repo's deep workflow file (one that marks its reviews by default). */
+  deepWorkflow?: string
   /** `gh pr checks` fails (network, auth) with nothing on stdout. */
   isChecksDown?: boolean
   /** Folder makes, file writes and reads of the rounds file, in order. */
@@ -77,6 +81,21 @@ export type Seen = {
   sizes: Map<string, number>
   /** Runs inside each `fs.stat`, before it answers: something else acting while a run is measured. */
   duringStat?: () => unknown
+}
+
+// The head's first gate run starts at the test clock's zero.
+const GATE_STARTED = '1970-01-01T00:00:00Z'
+const MARKING_DEEP_WORKFLOW = 'mark="<!-- deep-run: $GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT review -->"\n'
+
+/** The answer to a gh API call the review check makes, or `undefined` for any other call. */
+function reviewAnswer(seen: Seen, args: string): string | undefined {
+  if (args.includes('/check-runs')) return `${seen.gateState}\t${GATE_STARTED}\n`
+  if (args.includes('/comments')) {
+    const rows = (seen.comments ?? []).map(({ at, body }) => ['Bot', at ?? '2999-01-01T00:00:00Z', body])
+    return rows.map(row => `${JSON.stringify(row)}\n`).join('')
+  }
+  if (args.includes('/contents/')) return seen.deepWorkflow ?? MARKING_DEEP_WORKFLOW
+  return undefined
 }
 
 export function world(on: On) {
@@ -161,11 +180,10 @@ export function world(on: On) {
     }
     const stdout = args.includes('pr checks')
       ? JSON.stringify([{ name: 'build', bucket: seen.bucket }, ...seen.rows])
-      : args.includes('/check-runs')
-        ? `${seen.gateState}\n`
-        : args.includes('/actions/workflows')
+      : (reviewAnswer(seen, args) ??
+        (args.includes('/actions/workflows')
           ? String(seen.workflows ?? 1)
-          : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))
+          : prView(seen, repo, Number(/pr view (\d+)/.exec(args)?.[1] ?? seen.branchPr ?? 7))))
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('prompt.submit', ($, e) => {

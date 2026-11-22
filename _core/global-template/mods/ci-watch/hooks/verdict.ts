@@ -28,38 +28,88 @@ export function isReviewOnly(watch: Watch): boolean {
   return failed.includes(GATE) && failed.every(name => REVIEW_JOBS.has(name))
 }
 
+// Tier results that say nothing about whether a review went out: `error` is also written when the verdict
+// was posted and a later step failed, and `pending` stays when the run was cancelled after posting.
+const UNSURE = new Set(['error', 'pending'])
+// The marker each tier writes into every review it posts; its deep-review request and tracking comments
+// carry other markers.
+const REVIEW_MARK = /<!-- (review|deep)-run: \d+-\d+ review -->/g
+const MARK_TIER: Record<string, string> = { review: 'routine', deep: 'deep' }
+
+function run($: EngineInterface, args: string[]) {
+  return $.process.run(['gh', 'api', ...args], { timeoutMs: 30_000 })
+}
+
 /**
- * The state of the newest gate run on the watch's head, picked as the gate script picks it; `undefined` when
- * it cannot be read.
+ * The newest gate run's state on the watch's head, picked as the gate script picks it, and when the first
+ * gate run on that head started, by GitHub's clock; `undefined` when they cannot be read.
  */
-async function gateState($: EngineInterface, watch: Watch): Promise<string | undefined> {
+async function readGate($: EngineInterface, watch: Watch) {
   try {
     const query = `check_name=${encodeURIComponent(GATE)}&per_page=100`
     const path = `repos/${watch.repo}/commits/${watch.headSha}/check-runs?${query}`
-    const newest = `[.check_runs[] | select(.name == "${GATE}")] | max_by(.id) | .external_id // ""`
-    const { stdout, exitCode } = await $.process.run(['gh', 'api', path, '--jq', newest], { timeoutMs: 30_000 })
-    return exitCode === 0 ? stdout.trim() : undefined
+    const runs = `[.check_runs[] | select(.name == "${GATE}")]`
+    const fields = `${runs} | [(max_by(.id) | .external_id) // "", (map(.started_at) | min) // ""] | @tsv`
+    const { stdout, exitCode } = await run($, [path, '--jq', fields])
+    if (exitCode !== 0) return undefined
+    const [state = '', startedAt = ''] = stdout.replace(/\r?\n$/, '').split('\t')
+    return { state, startedAt }
   } catch {
     return undefined
   }
 }
 
-// The job that posts the routine review. The gate holds `error` whenever it fails, also after its 🔴 went
-// out, so a run can have given no verdict only when that job was reported and did not fail. The deep tier
-// records `error` only when its run posted nothing, and reads any posted review as the gate does.
-const POST_JOB = 'Post review'
+/** The tiers whose marked reviews a bot posted on the PR since `since`; `undefined` when they cannot be read. */
+async function postedTiers($: EngineInterface, watch: Watch, since: string) {
+  try {
+    const path = `repos/${watch.repo}/issues/${watch.number}/comments?per_page=100`
+    // One JSON line per comment: [author type, created_at, body].
+    const rows = '.[] | [.user.type, .created_at, .body] | @json'
+    const { stdout, exitCode } = await run($, ['--paginate', path, '--jq', rows])
+    if (exitCode !== 0) return undefined
+    const posted = new Set<string>()
+    for (const line of stdout.split('\n').filter(text => text.trim())) {
+      const [type, at, body] = JSON.parse(line) as [string, string, string]
+      if (type !== 'Bot' || Date.parse(at) < Date.parse(since)) continue
+      for (const [, mark] of body.matchAll(REVIEW_MARK)) posted.add(MARK_TIER[mark ?? ''] ?? '')
+    }
+    return posted
+  } catch {
+    return undefined
+  }
+}
 
-const isPostClean = (watch: Watch) => POST_JOB in watch.checks && !FAILED.has(watch.checks[POST_JOB] ?? '')
+/** Whether the repo's deep workflow marks the reviews it posts, which workflows older than the mark do not. */
+async function marksDeepReviews($: EngineInterface, watch: Watch): Promise<boolean> {
+  try {
+    const path = `repos/${watch.repo}/contents/.github/workflows/claude.yml`
+    const { stdout, exitCode } = await run($, ['-H', 'Accept: application/vnd.github.raw', path])
+    return exitCode === 0 && stdout.includes('<!-- deep-run: ')
+  } catch {
+    return false
+  }
+}
+
+/** Whether none of `tiers` posted a review on the head since its first gate run, as their marks show. */
+async function isUnposted($: EngineInterface, watch: Watch, since: string, tiers: string[]): Promise<boolean> {
+  if (tiers.includes('deep') && !(await marksDeepReviews($, watch))) return false
+  const posted = await postedTiers($, watch, since)
+  return posted !== undefined && tiers.every(tier => !posted.has(tier))
+}
 
 /**
  * The settled watch with `noVerdict` set (`routine error, deep none`) when only the review failed, neither
- * tier blocked, and the routine review's post job did not fail. Anything that cannot be read counts the
- * round, as a real failure would.
+ * tier blocked, and no tier whose result leaves it open posted a review on the head. Anything that cannot be
+ * read counts the round, as a real failure would.
  */
 export async function withVerdict($: EngineInterface, watch: Watch): Promise<Watch> {
-  if (watch.outcome !== 'failed' || watch.isSilent || !isReviewOnly(watch) || !isPostClean(watch)) return watch
-  const state = (await gateState($, watch)) ?? ''
-  const tiers = new Map([...state.matchAll(TIER)].map(([, tier, result]) => [tier, result]))
-  if (!tiers.has('routine') || [...tiers.values()].includes('block')) return watch
+  if (watch.outcome !== 'failed' || watch.isSilent || !isReviewOnly(watch)) return watch
+  const gate = await readGate($, watch)
+  const since = gate?.startedAt
+  const found = [...(gate?.state ?? '').matchAll(TIER)]
+  const tiers = new Map(found.map(([, tier = '', result = '']) => [tier, result]))
+  if (!since || !tiers.has('routine') || [...tiers.values()].includes('block')) return watch
+  const unsure = [...tiers].filter(([, result]) => UNSURE.has(result)).map(([tier]) => tier)
+  if (unsure.length > 0 && !(await isUnposted($, watch, since, unsure))) return watch
   return { ...watch, noVerdict: `routine ${tiers.get('routine')}, deep ${tiers.get('deep') ?? 'none'}` }
 }
