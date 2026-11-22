@@ -11,7 +11,9 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **A repo with the API key and only later accounts' tokens gets its first review attempt again.** With an `ANTHROPIC_API_KEY` secret and account tokens only from `CLAUDE_CODE_OAUTH_TOKEN_2` to `_5`, no first `CLAUDE_CODE_OAUTH_TOKEN`, the first review attempt of both tiers (and the deep tier's same-model retry) had no credential at all and failed at once, so only the backup reviewed. Those attempts now run on the key, and the `Review gate` summary names them as on the API credits; the backup still runs on the account it picks.
-- **The key-only notice names the plan-credit limit.** When the API key is the only payer, the run's notice now says that a key holding only a plan's monthly credits pays for the first run alone, since the review action is refused those credits.
+- **The key-only notice names the plan-credit limit.** When the API key is the only payer, the run's notice now says that a key holding only a plan's monthly credits pays for the first run alone, since the review action is refused those credits. With the key and only later accounts' tokens, a notice says the same about the attempts on the first account.
+- **The backup finds an account when its account check could not run.** When the step that picks the backup's account fails or is skipped, the backup now runs on the first account that has a token, so a repo with only `CLAUDE_CODE_OAUTH_TOKEN_2` to `_5` no longer sends it out with an empty one.
+- **`setup-review-gate.sh --check`** takes the API key with only later accounts' tokens as a complete setup, instead of reporting `CLAUDE_CODE_OAUTH_TOKEN` missing.
 
 ## [v7.11.0] — 2026-11-22
 
