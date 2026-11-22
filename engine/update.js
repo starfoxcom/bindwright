@@ -89,6 +89,16 @@ function decide(path, { ours, base, theirs }, merge) {
   return ["merged", text];
 }
 
+const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// The base a file is decided against: the text keepBase held back, when the repo holds exactly
+// that text, else the record's base. Only own keys of `held` count.
+function baseFor(pristine, path, ours) {
+  const held = isObject(pristine.held) ? pristine.held : {};
+  const heldText = Object.hasOwn(held, path) ? held[path] : undefined;
+  return typeof heldText === "string" && heldText === ours ? heldText : pristine.files[path];
+}
+
 // Decides every file. `rendered` is the new bind's Map, `pristine` the parsed
 // pristine.json, `readRepo(path)` the repo's text or null, `owned` the
 // patterns from .bindwright/owned, `merge(ours, base, theirs)` gives
@@ -96,6 +106,8 @@ function decide(path, { ours, base, theirs }, merge) {
 // stage, and the new pristine render. A conflicted file is staged as the
 // merge left it, markers and all, and its base still moves on, so once the
 // user settles it the next update does not raise the same clash again.
+// A repo copy equal to the text in `pristine.held` is decided against that
+// text as its base.
 export function planUpdate(rendered, pristine, { readRepo, owned, merge, version }) {
   const theirsAll = repoFiles(rendered);
   const paths = [...new Set([...Object.keys(pristine.files), ...theirsAll.keys()])].sort();
@@ -106,7 +118,6 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
   for (const path of paths) {
     if (movedFrom.has(path)) continue;
     const from = moves.get(path);
-    const base = pristine.files[from ?? path];
     const theirs = theirsAll.get(path);
     const ownedOld = ownedOldPath(path, { pristine, owned, readRepo });
     if (ownedOld !== undefined || isOwned(path, owned)) {
@@ -117,6 +128,7 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
       continue;
     }
     const ours = readRepo(from ?? path);
+    const base = baseFor(pristine, from ?? path, ours);
     const [outcome, text] = decide(path, { ours, base, theirs }, merge);
     result[outcome].push(path);
     if (outcome === "updated" || outcome === "merged" || outcome === "added") result.write.push([path, text]);
@@ -276,7 +288,6 @@ export async function runUpdate(root, { bindWith, version }) {
 // A pristine record parsed from its JSON text, with a files object; anything else is refused,
 // naming `what`.
 function recordOf(text, what) {
-  const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
   let record;
   try {
     record = JSON.parse(text);
@@ -301,10 +312,21 @@ function beforePath(root) {
   }
 }
 
+// An object with the map's keys in sorted order. defineProperty, since a plain assignment to
+// "__proto__" would set the prototype instead.
+function sortedObject(map) {
+  const object = {};
+  for (const key of [...map.keys()].sort()) {
+    Object.defineProperty(object, key, { value: map.get(key), enumerable: true, writable: true });
+  }
+  return object;
+}
+
 // Puts each path's base back to the one in the record the last update replaced, for files it
 // changed that ship in a later PR: a base older than the file reads as unchanged on the next
 // update and moves on, while a base newer than the file would hide the change for good. A path
-// that record lacks loses its base, so the next update adds it again.
+// that record lacks loses its base, so the next update adds it again. The text each path had is
+// also kept under `held`, which planUpdate uses as the base once the repo holds exactly that text.
 export function keepBase(root, paths) {
   const bad = paths.filter((p) => !safe(p));
   if (bad.length) throw new Error(`Refusing paths outside the repo: ${bad.join(", ")}`);
@@ -318,7 +340,10 @@ export function keepBase(root, paths) {
   const state = recordOf(current, PRISTINE);
   const result = { kept: [], dropped: [] };
   const files = new Map(Object.entries(state.files));
+  const held = new Map(Object.entries(isObject(state.held) ? state.held : {}));
   for (const path of paths) {
+    // Only the first hold counts: a repeat would read the base already put back.
+    if (files.has(path) && !held.has(path)) held.set(path, files.get(path));
     if (Object.hasOwn(before, path)) {
       files.set(path, before[path]);
       result.kept.push(path);
@@ -328,11 +353,9 @@ export function keepBase(root, paths) {
     }
   }
   // Sorted as planUpdate writes them, so a base put back lands at its place, not at the end.
-  // defineProperty, since a plain assignment to "__proto__" would set the prototype instead.
-  state.files = {};
-  for (const path of [...files.keys()].sort()) {
-    Object.defineProperty(state.files, path, { value: files.get(path), enumerable: true, writable: true });
-  }
+  state.files = sortedObject(files);
+  if (held.size) state.held = sortedObject(held);
+  else delete state.held;
   refuseLinks(root, [PRISTINE]);
   put(root, PRISTINE, stateJson(state));
   return result;

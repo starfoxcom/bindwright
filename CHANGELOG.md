@@ -6,6 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.11.2] — 2026-11-22
+
+### Fixed
+
+- **The `Review gate` summary names the account the backup ran on.** With the API key and only later accounts' tokens, when the step that picks the backup's account fails, the backup runs on the first account that has a token, but its label said plain "(backup)", which reads as account 1. The step that picks who pays now records that first account, and the backup's token and its label in both review tiers read the same one.
+- **A file held back from an update merges cleanly on the next one.** When an update leaves a file out of its PR with `--keep-base` (the review workflow, which ships in a PR of its own), the record now also keeps the text it held back. Once the repo holds exactly that text, the next update takes it as the file's base, so the file updates instead of coming back as a conflict made of template changes alone.
+
 ## [v7.11.1] — 2026-11-22
 
 ### Fixed
