@@ -10,6 +10,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **`/bindwright:update` brings the installed mods current.** Setup copied each mod into `~/.claude/mods/` once, and nothing after that touched the copy, so a plugin update never reached it and every computer kept the mods of the day it was set up. Setup now records a hash of each file it installs, and the update compares the installed copy with the plugin's: a file the user never edited takes the new text, a file the template dropped goes, and a file the user edited stays as it is, with the new text written beside it as `<file>.new`. A mod's own lists of the user's (the `hooks/rules.ts` of runners, shared-pc and usage-guard) are never replaced. A mod installed before the record existed is listed file by file and updated on one yes, its user lists kept. `home.py` gains `mod-status DIR` and `update-mod DIR [--adopt]`.
 
+### Changed
+
+- **Every step back after repeated red review rounds looks up five solutions.** The research a PR owes after its 3rd, 5th and every red round from the 6th took three lookups, and five only from the 8th; it now takes five each time, so the first step back already compares enough options. ci-watch holds edits, commits and pushes until five distinct lookups ran, and `review-tiers.md`, `local-review.md` and the mods README say the same.
+
 ## [v7.11.5] — 2026-11-22
 
 ### Fixed

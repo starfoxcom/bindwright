@@ -1,7 +1,7 @@
 // Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import { isResearchDue, recordRound, redStreak, ROUNDS_FILE, sourcesNeeded } from './rounds'
+import { isResearchDue, recordRound, redStreak, ROUNDS_FILE, SOURCES_NEEDED } from './rounds'
 import type { PrRounds } from './rounds'
 import { givenDir } from './settings'
 
@@ -58,7 +58,7 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
     const key = `${w.repo}#${w.number}`
     const counted = (pr?: PrRounds) => {
       const next = recordRound(pr, w.headSha, red)
-      if (red && isResearchDue(redStreak(next))) stepBacks.set(key, sourcesNeeded(redStreak(next)))
+      if (red && isResearchDue(redStreak(next))) stepBacks.set(key, SOURCES_NEEDED)
       return next
     }
     await updateRounds($, key, counted).catch(() => stepBacks.delete(key))

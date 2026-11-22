@@ -3,7 +3,7 @@ import { type Engine, expect, test } from 'claude-code/testing'
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import {
-  isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, sourcesNeeded, withTopic,
+  isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic,
 } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
@@ -54,7 +54,7 @@ const failed = (outcome: Watch['outcome']): Watch =>
   ({ repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: { build: 'fail' }, stablePolls: 2, outcome }) as Watch
 
 test('only a red wake at a due count carries the research step', () => {
-  expect(wakeText(failed('failed'), undefined, 3)).toContain('look up at least three different ways the community')
+  expect(wakeText(failed('failed'), undefined, 3)).toContain('look up at least five different ways the community')
   expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 fix rounds in a row')
   expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 fix rounds')
   expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 fix rounds')
@@ -85,21 +85,16 @@ test('the hard stop holds commits and pushes until the PR is closed', async ($, 
   expect(await bash('git commit -m "rebuild"')).not.toHaveProperty('deny')
 })
 
-// A latched step back counts distinct topics and ends at the third.
-test('a step back counts each topic once and ends at three', () => {
+// A latched step back counts distinct topics and ends at the fifth, at every red round that asks for one.
+test('a step back counts each topic once and ends at five', () => {
   expect(withTopic([], ' How Others Solve It ')).toEqual(['how others solve it'])
   expect(withTopic(['a'], 'A')).toEqual(['a'])
   expect(withTopic(['a'], '  ')).toEqual(['a'])
-  expect(withTopic(['a', 'b'], 'c')).toBeUndefined()
-})
-
-// Close to the hard stop, from the 8th red round on, a step back takes five lookups.
-test('a step back from the 8th red round on takes five lookups', () => {
-  expect([3, 5, 7, 8, 10].map(sourcesNeeded)).toEqual([3, 3, 3, 5, 5])
-  expect(withTopic(['a', 'b'], 'c', 5)).toEqual(['a', 'b', 'c'])
-  expect(withTopic(['a', 'b', 'c', 'd'], 'e', 5)).toBeUndefined()
-  expect(wakeText(failed('failed'), undefined, 8)).toContain('look up at least five different ways the community')
-  expect(wakeText(failed('failed'), undefined, 7)).toContain('look up at least three different ways the community')
+  expect(withTopic(['a', 'b'], 'c')).toEqual(['a', 'b', 'c'])
+  expect(withTopic(['a', 'b', 'c', 'd'], 'e')).toBeUndefined()
+  for (const red of [3, 8]) {
+    expect(wakeText(failed('failed'), undefined, red)).toContain('look up at least five different ways')
+  }
 })
 
 type World = ReturnType<typeof world>
@@ -113,9 +108,9 @@ async function redRound($: Engine, { seen, clock }: World, before: number) {
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
 }
 
-// The red wake that asks for a step back latches it: edits, commits and pushes wait for three distinct
+// The red wake that asks for a step back latches it: edits, commits and pushes wait for five distinct
 // lookups, and nothing else does.
-test('a step back holds edits, commits and pushes until three distinct lookups ran', async ($, on) => {
+test('a step back holds edits, commits and pushes until five distinct lookups ran', async ($, on) => {
   const w = world(on)
   const tools = ['Edit', 'Write', 'WebSearch', 'WebFetch', 'Agent'] as const
   on('tool.call', { tool: tools }, async ($, e) =>
@@ -133,7 +128,7 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
     () => call({ tool: 'Write', file_path: 'C:/repo/a.ts', content: 'b' }),
   ]
   for (const attempt of held) expect(await attempt()).toHaveProperty('deny')
-  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('3 more to go')
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('5 more to go')
   const notHeld = ['git log --grep push', 'git stash push', 'echo "then git push"', 'git commit-graph write',
     'git -c commit.gpgsign=false rebase --continue', 'git -c push.default=current status']
   for (const command of notHeld) {
@@ -147,19 +142,22 @@ test('a step back holds edits, commits and pushes until three distinct lookups r
   // A subagent's own lookups (the pages a web-fetch agent reads) are not the main session's.
   await call({ tool: 'WebFetch', url: 'https://example.com/inner', agentId: 'fetcher' })
   await call({ tool: 'WebSearch', query: 'inner search', agentId: 'fetcher' })
-  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('2 more to go')
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('4 more to go')
   // Lookups sent together all count.
   await Promise.all([
     call({ tool: 'Agent', subagent_type: 'web-fetch', prompt: 'read https://example.com/b' }),
     call({ tool: 'WebFetch', url: 'https://example.com/c' }),
+    call({ tool: 'WebSearch', query: 'a third way' }),
   ])
+  expect(String(((await bash('git push')) as { deny?: string }).deny)).toContain('1 more to go')
+  await call({ tool: 'WebSearch', query: 'a fourth way' })
   expect(await call(editInput)).not.toHaveProperty('deny')
   expect(await bash('git push origin feature/x')).not.toHaveProperty('deny')
 })
 
 // The bar is fixed when the step back latches, so a count file another session is rewriting meanwhile
 // cannot lower it.
-test('a step back latched at the 8th red round holds until five lookups ran', async ($, on) => {
+test('a latched step back holds until five lookups ran, whatever the count file says', async ($, on) => {
   const w = world(on)
   on('tool.call', { tool: ['Edit', 'WebSearch'] }, async () => ({ result: 'done' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
