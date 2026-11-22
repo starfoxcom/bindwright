@@ -16,6 +16,8 @@ Standard library, Python 3.8+.
     python engine/home.py add-style FILE      (copies the output style, turns it on)
     python engine/home.py style-status FILE   (missing, linked, current, older or edited)
     python engine/home.py update-style FILE   (replaces an unedited earlier copy)
+    python engine/home.py mod-status DIR      (the installed mod: missing, linked, current, older, edited or unrecorded)
+    python engine/home.py update-mod DIR [--adopt]   (updates an older or edited mod; --adopt includes unrecorded ones)
     python engine/home.py remove-mod NAME     /  remove-agent NAME.md  /  remove-style NAME.md
     python engine/home.py set-language NAME   (the work language: english or spanish)
     python engine/home.py plugin-auto-update on|off [--repo OWNER/NAME]   (the wrights marketplace's auto-update)
@@ -53,6 +55,8 @@ import sys
 
 from apply import _is_link
 from helper_install import helper_install
+from home_files import HomeError, _atomic_write, _claude, _is_str_list, _json_field, _style_fingerprint
+from mod_update import _check_mod_folder, _mod_target, _save_record, _shipped_hashes, mod_status, update_mod
 
 # Its front-matter reader names an output style here too, so both find the same style.
 _REPLY_STYLE_HOOK = os.path.join(
@@ -93,10 +97,6 @@ WORK_LANGUAGE_RULE = (
 )
 
 
-class HomeError(Exception):
-    pass
-
-
 def _run(cmd, code):
     try:
         r = subprocess.run(cmd + ["-c", code], capture_output=True, text=True, timeout=20)
@@ -125,10 +125,6 @@ def find_python():
     raise HomeError("No system Python found: " + reason)
 
 
-def _claude(home):
-    return os.path.join(home, ".claude")
-
-
 def _read_settings(path):
     """The JSON object in a settings file, {} when the file is missing."""
     if not os.path.exists(path):
@@ -155,21 +151,6 @@ def _section(data, key, kind, path):
     if not isinstance(data[key], kind):
         raise HomeError("%s: %s is not a %s; fix it by hand first" % (path, key, kind.__name__))
     return data[key]
-
-
-def _atomic_write(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(text)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except OSError:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
 
 
 def _save(path, data):
@@ -467,16 +448,16 @@ def _listed_mods(env):
 
 
 def add_mod(home, folder):
+    _check_mod_folder(folder)
     name = os.path.basename(os.path.normpath(folder))
-    if not os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
-        raise HomeError("Not a mod folder (no .claude-plugin/plugin.json): " + folder)
     path, data = _load(home)
     env = _section(data, "env", dict, path)
-    target = os.path.normpath(os.path.join(_claude(home), "mods", name))
+    target = _mod_target(home, folder)
     # An installed copy may carry the user's own edits (rules.ts lists), so it stays.
     kept = os.path.exists(target)
     if not kept:
         shutil.copytree(folder, target)
+        _save_record(target, _shipped_hashes(folder))
     changed = False
     listed = _listed_mods(env)
     same = lambda d: os.path.normcase(os.path.normpath(os.path.expanduser(d))) == os.path.normcase(target)
@@ -537,16 +518,6 @@ def add_style(home, file):
     return {"installed": target, "kept_existing": kept, "outputStyle": style, "previous": previous}
 
 
-def _style_fingerprint(file):
-    """The SHA-256 of a style file's bytes with a UTF-8 BOM and CRLF line endings taken out. The bytes are
-    never decoded, so a copy in any other encoding reads as edited instead of failing."""
-    with open(file, "rb") as fh:
-        data = fh.read()
-    if data.startswith(b"\xef\xbb\xbf"):
-        data = data[3:]
-    return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
-
-
 def _read_style(file):
     with open(file, encoding="utf-8-sig") as fh:
         return fh.read()
@@ -557,15 +528,7 @@ def _retired_fingerprints(file):
     sidecar = os.path.splitext(file)[0] + ".retired.json"
     if not os.path.isfile(sidecar):
         return set()
-    try:
-        with open(sidecar, encoding="utf-8") as fh:
-            listed = json.load(fh)
-    except ValueError:
-        listed = None
-    fingerprints = listed.get("sha256") if isinstance(listed, dict) else None
-    if not (isinstance(fingerprints, list) and all(isinstance(f, str) for f in fingerprints)):
-        raise HomeError('Not a list of earlier copies ({"sha256": [...]}): ' + sidecar)
-    return set(fingerprints)
+    return set(_json_field(sidecar, "sha256", _is_str_list, 'Not a list of earlier copies ({"sha256": [...]})'))
 
 
 def style_status(home, file):
@@ -762,6 +725,7 @@ NAMED_COMMANDS = {
     "add-style": add_style,
     "style-status": style_status,
     "update-style": update_style,
+    "mod-status": mod_status,
     "remove-mod": remove_mod,
     "remove-agent": remove_agent,
     "remove-style": remove_style,
@@ -776,6 +740,7 @@ def run(argv):
     python, matcher = _option(argv, "--python"), _option(argv, "--matcher")
     events, repo = _option(argv, "--events"), _option(argv, "--repo")
     block_on_failure = _flag(argv, "--block-on-failure")
+    adopt = _flag(argv, "--adopt")
     cmd, args = (argv[0], argv[1:]) if argv else (None, [])
     one = args[0] if len(args) == 1 else None
     if cmd == "find-python" and not args:
@@ -788,6 +753,8 @@ def run(argv):
         return attribution_off(home)
     if cmd == "plugin-auto-update" and one:
         return set_plugin_auto_update(home, one, repo)
+    if cmd == "update-mod" and one:
+        return update_mod(home, one, adopt)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
     if cmd == "project-mods" and one:
