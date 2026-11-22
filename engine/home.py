@@ -9,7 +9,7 @@ Standard library, Python 3.8+.
     python engine/home.py install-hook FILE --python PATH --matcher Bash --block-on-failure
     python engine/home.py remove-hook NAME.py
     python engine/home.py list-hooks
-    python engine/home.py hook-status DIR     (each hook DIR ships that settings run: recorded, matches, linked)
+    python engine/home.py hook-status DIR     (each hook DIR ships that settings run from ~/.claude/hooks)
     python engine/home.py adopt-hook FILE     (records an unrecorded hook that matches FILE; settings untouched)
     python engine/home.py allow RULE          /  disallow RULE
     python engine/home.py attribution-off
@@ -361,23 +361,26 @@ def list_hooks(home):
 
 
 def hook_status(home, folder):
-    """Each hook `folder` ships that ~/.claude/settings.json runs: whether ~/.bindwright/hooks.json records it,
-    which is what lets the helper keep it current, and whether its installed files match the shipped ones."""
+    """Each hook `folder` ships that ~/.claude/settings.json runs and ~/.claude/hooks holds: whether
+    ~/.bindwright/hooks.json records it, which is what lets the helper keep it current, whether its installed
+    files match the shipped ones, and whether any of them is a link. A hook with no copy there is left out."""
     if not os.path.isdir(folder):
         raise HomeError("Not a hooks folder: " + folder)
     recorded = _hook_record(home)
     installed = os.path.join(_claude(home), "hooks")
     found = {}
     for name in list_hooks(home)["hooks"]:
-        if os.path.isfile(os.path.join(folder, name)):
+        if os.path.isfile(os.path.join(folder, name)) and os.path.lexists(os.path.join(installed, name)):
             found[name] = {"recorded": name in recorded, "matches": _hook_matches(folder, installed, name),
-                           "linked": _hook_linked(installed, name)}
+                           "linked": _hook_linked(folder, installed, name)}
     return {"hooks": found}
 
 
-def _hook_linked(installed, name):
-    """True when the hook file or its package folder is a link the user keeps, such as into a dotfiles folder."""
-    paths = (os.path.join(installed, name), os.path.join(installed, _package_name(name)))
+def _hook_linked(folder, installed, name):
+    """True when the hook file, its package folder or one of its shipped modules is installed as a link the
+    user keeps, such as into a dotfiles folder."""
+    paths = [_package_name(name)] + _hook_rels(folder, name)
+    paths = [os.path.join(installed, *rel.split("/")) for rel in paths]
     return any(os.path.lexists(p) and _is_link(os.lstat(p)) for p in paths)
 
 
@@ -388,20 +391,25 @@ def adopt_hook(home, file):
     installed = os.path.join(_claude(home), "hooks")
     if not name.endswith(".py") or not os.path.isfile(file):
         raise HomeError("A hook is a .py file: " + file)
-    if _hook_linked(installed, name):
+    if _hook_linked(os.path.dirname(os.path.abspath(file)), installed, name):
         raise HomeError("The installed hook is a link, which stays as it is: " + name)
     if not _hook_matches(os.path.dirname(os.path.abspath(file)), installed, name):
         raise HomeError("The installed hook differs from the shipped one; install-hook replaces it: " + name)
     return {"recorded": _write_hook_files(home, file)}
 
 
-def _hook_matches(folder, installed, name):
-    """True when the hook file and every module of its package are installed with the shipped text."""
+def _hook_rels(folder, name):
+    """The hook file and the modules of its package that `folder` ships, as paths under the hooks folder."""
     rels = [name]
     package = os.path.join(folder, _package_name(name))
     if os.path.isdir(package):
         rels += [_package_name(name) + "/" + m for m in sorted(os.listdir(package)) if m.endswith(".py")]
-    for rel in rels:
+    return rels
+
+
+def _hook_matches(folder, installed, name):
+    """True when the hook file and every module of its package are installed with the shipped text."""
+    for rel in _hook_rels(folder, name):
         copy = os.path.join(installed, *rel.split("/"))
         shipped = os.path.join(folder, *rel.split("/"))
         if not os.path.isfile(copy) or _style_fingerprint(copy) != _style_fingerprint(shipped):

@@ -607,11 +607,14 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
       assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
     }
     const old = { matcher: "Grep", hooks: [{ type: "command", command: `py "${dir}/.claude/hooks/ctags-first.py"` }] };
-    writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: [...settings(dir).hooks.PreToolUse, old] } });
+    const elsewhere = { matcher: "Bash", hooks: [{ type: "command", command: `py "${dir}/mine/tool-rules.py"` }] };
+    hookFile(dir, "tool-rules.py", "rules\n");
+    const entries = [...settings(dir).hooks.PreToolUse, old, elsewhere];
+    writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: entries } });
     const status = () => home(dir, "hook-status", shipped).out.hooks;
     const both = { recorded: true, matches: true, linked: false };
     const all = { "no-ai-attribution.py": both, "push-guard.py": both };
-    assert.deepEqual(status(), all, "a hook not shipped is left out");
+    assert.deepEqual(status(), all, "a hook not shipped, or with no copy in the hooks folder, is left out");
     rmSync(join(dir, ".bindwright", "hooks.json"));
     rmSync(join(dir, ".claude", "hooks", "no_ai_attribution"), { recursive: true });
     writeFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "push\r\n");
@@ -634,6 +637,16 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     assert.equal(status()["no-ai-attribution.py"].linked, true);
     assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
     assert.equal(readFileSync(join(kept, "routes.py"), "utf8"), "routes\n");
+    // So is one module linked inside a real package folder, when this machine can make file links.
+    rmSync(link);
+    mkdirSync(link);
+    try {
+      symlinkSync(join(kept, "routes.py"), join(link, "routes.py"), "file");
+    } catch {
+      return; // Windows without developer mode makes no file links.
+    }
+    assert.equal(status()["no-ai-attribution.py"].linked, true);
+    assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
   });
 });
 
