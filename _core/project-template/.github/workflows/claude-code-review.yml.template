@@ -1814,7 +1814,8 @@ jobs:
       # usage limit or otherwise, or a run that ended without one) retries once on
       # the fallback model from the gate settings with the same prompt, so a
       # spent allowance on the main model never blocks every PR. It runs only on
-      # the CLI copy the step above picked.
+      # the CLI copy "Install the stable Claude Code for the backup" picked, on
+      # the account the step above picked.
       - name: Run Claude Code Review (backup model)
         id: claude-review-backup
         timeout-minutes: 30
