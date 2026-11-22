@@ -258,9 +258,10 @@ def _launcher_hook(python, target, block_on_failure=False):
     # The exec form of the CLI's hooks reference: with `args`, `command` is
     # started directly with them, no shell, so paths with spaces need no quoting.
     # A bare name follows PATH, so the hook survives the install it came from moving.
+    # 30 s: the attribution guard's parses may take up to 27 s on a busy computer.
     hook = {
         "type": "command", "command": _hook_command(python),
-        "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 10,
+        "args": ["-I", "-c", LAUNCHER, target.replace("\\", "/")], "timeout": 30,
     }
     if block_on_failure:
         hook["onFailure"] = "block"
