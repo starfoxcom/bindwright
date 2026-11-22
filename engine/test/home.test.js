@@ -609,6 +609,8 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     const old = { matcher: "Grep", hooks: [{ type: "command", command: `py "${dir}/.claude/hooks/ctags-first.py"` }] };
     const elsewhere = { matcher: "Bash", hooks: [{ type: "command", command: `py "${dir}/mine/tool-rules.py"` }] };
     hookFile(dir, "tool-rules.py", "rules\n");
+    // A leftover copy in the hooks folder does not make the entry that runs another file Bindwright's.
+    writeFileSync(join(dir, ".claude", "hooks", "tool-rules.py"), "rules\n");
     const entries = [...settings(dir).hooks.PreToolUse, old, elsewhere];
     writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: entries } });
     const status = () => home(dir, "hook-status", shipped).out.hooks;
@@ -647,6 +649,18 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     }
     assert.equal(status()["no-ai-attribution.py"].linked, true);
     assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
+  });
+});
+
+test("hook-status finds a hook installed under a home given with a .. in its path", { skip }, () => {
+  withHome((dir) => {
+    // Node's join would fold the .. away, so the path is spelled out.
+    mkdirSync(join(dir, "x"));
+    const roundabout = `${dir}/x/..`;
+    const file = hookFile(dir, "push-guard.py", "push\n");
+    assert.equal(home(roundabout, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    const status = home(roundabout, "hook-status", join(dir, "src")).out.hooks;
+    assert.deepEqual(status, { "push-guard.py": { recorded: true, matches: true, linked: false } });
   });
 });
 
