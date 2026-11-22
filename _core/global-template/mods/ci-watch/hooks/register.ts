@@ -467,7 +467,7 @@ async function poll($: EngineInterface): Promise<void> {
       continue
     }
     const polled = checks
-      ? await withMergeable($, await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs)))
+      ? await withMergeable($, await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs)), now)
       : now - asked.startedAt > live.timeoutMs
         ? { ...asked, outcome: 'timeout' as const, settledAt: now }
         : asked

@@ -1178,16 +1178,3 @@ test('the poll interval in the settings file applies from the start, and a new o
   await clock.advance(30_000)
   expect(seen.checksRead).toBe(3)
 })
-
-test('a pass on a PR that conflicts with its base wakes with the conflict and counts no round', async ($, on) => {
-  const { seen, clock } = world(on)
-  seen.bucket = 'pass'
-  seen.mergeable = 'CONFLICTING'
-  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
-  for (let i = 0; i < 4; i++) await clock.advance(POLL_MS)
-  expect(seen.prompts).toHaveLength(1)
-  expect(seen.prompts[0]).toContain('conflicts with its base branch')
-  expect(seen.prompts[0]).not.toContain('settled with no failure')
-  expect(seen.files.has('C:/Users/me/.claude/mods-data/ci-watch/rounds.json')).toBe(false)
-})

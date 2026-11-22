@@ -27,16 +27,22 @@ export async function readChecks($: EngineInterface, watch: Watch): Promise<Reco
   }
 }
 
+/** GitHub answers `mergeable` within seconds of being asked; past this the answer counts as mergeable. */
+export const MERGEABLE_WAIT_MS = 5 * 60_000
+
 /**
  * A watch that settled with no failure, marked `isConflicting` when GitHub reports its PR conflicting with
- * its base. Any failed read leaves the watch as it is.
+ * its base. While GitHub still computes the answer (`UNKNOWN`) the watch stays unsettled for another poll,
+ * for up to `MERGEABLE_WAIT_MS` after its checks went quiet. Any failed read leaves the watch as it is.
  */
-export async function withMergeable($: EngineInterface, watch: Watch): Promise<Watch> {
+export async function withMergeable($: EngineInterface, watch: Watch, now: number): Promise<Watch> {
   if (watch.outcome !== 'passed') return watch
   try {
     const args = ['gh', 'pr', 'view', String(watch.number), '--repo', watch.repo, '--json', 'mergeable']
     const { stdout, exitCode } = await $.process.run(args, { timeoutMs: 30_000 })
     const view = exitCode === 0 ? (JSON.parse(stdout) as { mergeable?: string }) : {}
+    const isWaiting = view.mergeable === 'UNKNOWN' && now - (watch.quietSince ?? now) < MERGEABLE_WAIT_MS
+    if (isWaiting) return { ...watch, outcome: undefined, settledAt: undefined }
     return view.mergeable === 'CONFLICTING' ? { ...watch, isConflicting: true } : watch
   } catch {
     return watch
