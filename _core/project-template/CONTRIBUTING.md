@@ -39,8 +39,8 @@ Examples:
 
 Use the PR template (auto-filled by GitHub). At minimum:
 
-- **What** — 1-3 bullets describing the change
-- **Why** — 1-2 lines explaining the motivation
+- **What** — what the change does, outcome first, in a few plain sentences
+- **Why** — the problem it solves, in a sentence or two
 - **Notes** (optional) — non-obvious decisions, performance implications, manual steps
 
 Keep PRs **scoped to one logical concern**. Cross-cutting changes (touching multiple modules) need to be split.

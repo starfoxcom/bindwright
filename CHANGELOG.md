@@ -6,6 +6,17 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.9.0] — 2026-11-22
+
+### Changed
+
+- **PR bodies read like a person explaining the change.** `git.md` § Pull requests, the PR template and the contributing guide no longer ask for 1-3 bullets: a body gives the outcome first in a few plain sentences, says what the change does before naming a file or function, keeps lists for steps and checks, and drops hedges, em dashes and hype, in a professional tone. The reply style points PR bodies at that section (#1160).
+
+### Fixed
+
+- **The attribution guard reads Git Bash drive paths on Windows.** A body file given as `/p/notes/body.md` was looked for at `P:/p/notes/body.md`, so the guard could not read it and refused the commit or PR. It now reads both files such a path can name, drive P's `notes/body.md` and `\p\notes\body.md` on the command's own drive, since Git Bash leaves some arguments unconverted, and refuses the call when either holds an attribution line or neither exists. The same goes for a folder change before a relative body file (#1164).
+- **A WSL `bash` started from PowerShell can name its body file as `/mnt/p/...`.** The guard looked for that path on the current drive and refused the call; it now also reads it as drive P, where WSL finds it (#1166).
+
 ## [v7.8.0] — 2026-11-21
 
 ### Added

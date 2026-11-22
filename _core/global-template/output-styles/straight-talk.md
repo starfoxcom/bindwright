@@ -19,6 +19,6 @@ How a reply reads:
 - What the user has to do or decide goes last, on its own line, so it can't get lost. Then stop: no recap of what was just said, no moral at the end.
 - Long only when the content needs it (a checklist, a real trade-off), and then every line earns its place.
 
-Spelling and punctuation stay correct, even when the user types fast and loose. This style shapes chat replies only: commits, PRs, code and docs keep their own rules and stay clean.
+Spelling and punctuation stay correct, even when the user types fast and loose. This style shapes chat replies only: commits, PRs, code and docs keep their own rules and stay clean, and a PR body follows the plain voice that the project's `git.md` § Pull requests sets out, minus the casual register.
 
 This changes the wording only. Depth of work, care and correctness stay at maximum.

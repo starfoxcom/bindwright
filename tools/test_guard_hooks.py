@@ -542,6 +542,56 @@ class GuardHookTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assert_denied(result)
 
+    def unconverted_twin(self, path, text):
+        """Writes `text` where `path` in Git Bash form lands when nothing converts it: the
+        `\\<drive letter>\\<rest>` on the drive the command runs on. Removes every folder it made."""
+        twin = os.path.splitdrive(REPO)[0] + "\\" + path[0].lower() + path[2:]
+        top = os.path.dirname(twin)
+        while not os.path.isdir(os.path.dirname(top)):
+            top = os.path.dirname(top)
+        if not os.path.isdir(top):
+            self.addCleanup(shutil.rmtree, top, ignore_errors=True)
+        os.makedirs(os.path.dirname(twin), exist_ok=True)
+        with open(twin, "w", encoding="utf-8") as f:
+            f.write(text)
+        self.addCleanup(lambda: os.path.exists(twin) and os.remove(twin))
+
+    def test_git_bash_drive_paths_name_the_drive(self):
+        """On Windows, `/c/x` is drive C when Git Bash converts it and `\\c\\x` on the command's
+        own drive when nothing does, so the guard reads both; elsewhere it is a plain path."""
+        if os.name != "nt":
+            rows = [("plain path", "gh pr create --title t --body-file /c/no-such/body.md", "Bash",
+                     "could not read message/body file /c/no-such/body.md")]
+        else:
+            def git_bash(path):
+                return "/" + path[0].lower() + path[2:].replace("\\", "/")
+            marking = f"## What\n- x\n\n{GENERATED_LINE}\n"
+            marked = self.body_file(marking)
+            clean = self.body_file("## What\n- Ships the guard\n")
+            covered = self.body_file("## What\n- Ships the guard\n")
+            self.unconverted_twin(covered, marking)  # a clean file where conversion points
+            folder, name = os.path.split(marked)
+            rows = [
+                ("body file", f'gh pr create --title t --body-file "{git_bash(marked)}"', "Bash"),
+                ("body file after cd", f'cd "{git_bash(folder)}"; git commit -F "{name}"', "Bash"),
+                ("PowerShell", f'gh pr create --title t --body-file "{git_bash(marked)}"', "PowerShell"),
+                ("bash inside PowerShell", f'Set-Location "{git_bash(folder)}"; bash -c "git commit -F {name}"',
+                 "PowerShell"),
+                ("conversion off", f'MSYS_NO_PATHCONV=1 git commit -F "{git_bash(covered)}"', "Bash"),
+                ("spelling left alone", f'git commit -aF"{git_bash(covered)}"', "Bash"),
+                ("WSL path", f'bash -c "git commit -F /mnt{git_bash(marked)}"', "PowerShell"),
+            ]
+            rows = [row + ("attribution marker",) for row in rows]
+            rows.append(("clean body file", f'gh pr create --title t --body-file "{git_bash(clean)}"', "Bash", None))
+            rows.append(("clean WSL path", f'bash -c "git commit -F /mnt{git_bash(clean)}"', "PowerShell", None))
+        for (label, command, tool, because), result in self.each(
+                rows, lambda label, command, tool, because: self.attr(command, tool=tool)):
+            with self.subTest(label):
+                if because is None:
+                    self.assert_passes(result)
+                else:
+                    self.assert_denied(result, because)
+
     def test_field_body_file_is_read(self):
         path = self.body_file(f"{GENERATED_LINE}\n")
         for command, result in self.each((f'gh api repos/o/r/issues/5/comments --field body=@"{path}"',
