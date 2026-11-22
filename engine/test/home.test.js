@@ -292,21 +292,26 @@ test("a dropped file the user never edited is removed, and a dropped edited one 
   });
 });
 
-test("a user file that differs is never replaced, and it does not make the mod older", { skip }, () => {
+test("a user list updates while unedited, gets a .new once edited, and is kept with no record", { skip }, () => {
   withHome((dir) => {
-    const mod = shipMod(dir, {
-      "hooks/rules.ts": "v1", "hooks/other.ts": "v1", "user-files.json": '{"paths": ["hooks/rules.ts"]}',
-    });
+    const mod = shipMod(dir, { "hooks/rules.ts": "v1", "user-files.json": '{"paths": ["hooks/rules.ts"]}' });
     const installed = home(dir, "add-mod", mod).out.installed;
     const rules = join(installed, "hooks", "rules.ts");
+    const ship = (text) => writeFileSync(join(mod, "hooks", "rules.ts"), text);
+    ship("v2");
+    assert.deepEqual(updateMod(dir, mod).out.updated, ["hooks/rules.ts"]);
+    assert.equal(readFileSync(rules, "utf8"), "v2");
     writeFileSync(rules, "mine");
-    writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
-    writeFileSync(join(mod, "hooks", "other.ts"), "v2");
-    assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "user", "hooks/other.ts": "replace" });
-    assert.equal(modStatus(dir, mod).state, "older");
-    const r = updateMod(dir, mod);
-    assert.deepEqual(r.out.updated, ["hooks/other.ts"]);
+    ship("v3");
+    assert.deepEqual(updateMod(dir, mod).out.kept, ["hooks/rules.ts"]);
     assert.equal(readFileSync(rules, "utf8"), "mine");
+    assert.equal(readFileSync(rules + ".new", "utf8"), "v3");
+    rmSync(recordPath(installed));
+    ship("v4");
+    assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "edited" });
+    assert.deepEqual(updateMod(dir, mod, "--adopt").out.kept, ["hooks/rules.ts"]);
+    assert.equal(readFileSync(rules, "utf8"), "mine");
+    assert.equal(readFileSync(rules + ".new", "utf8"), "v4");
   });
 });
 

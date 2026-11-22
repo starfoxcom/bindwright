@@ -10,9 +10,11 @@ from apply import _is_link
 from home_files import HomeError, _atomic_write, _claude, _is_str_list, _is_str_map, _json_field, _style_fingerprint
 
 
-# The install record a mod keeps beside its installed files: the SHA-256 each file had when it was installed or updated.
+# The install record a mod keeps beside its installed files: per file, the SHA-256 of the shipped text last
+# written there, or for an edit kept, of the shipped text last set beside it as .new.
 MOD_RECORD = ".bindwright-installed.json"
-# A mod's own list of the paths the user owns (its user-files.json): never replaced, never removed.
+# A mod's own list of the paths that hold the user's entries (its user-files.json): with no record to tell an
+# edit from an older copy, these are kept and the shipped text goes beside them as .new.
 MOD_USER_FILES = "user-files.json"
 
 
@@ -76,10 +78,10 @@ def _file_label(folder, target, rel, record, is_user):
     shipped_hash = _style_fingerprint(os.path.join(folder, rel))
     if installed_hash == shipped_hash:
         return None
-    if is_user:
-        return "user"
-    # Without a record, nothing says the user edited the file, so the shipped copy replaces it.
-    if record is None or record.get(rel) == installed_hash:
+    # Without a record nothing tells an edit from an older copy: a user file is kept, any other is replaced.
+    if record is None:
+        return "edited" if is_user else "replace"
+    if record.get(rel) == installed_hash:
         return "replace"
     # The record holds the shipped text last offered: an edit with nothing newer shipped since is left alone.
     if record.get(rel) == shipped_hash:
@@ -96,7 +98,7 @@ def _dropped_label(target, rel, record):
 
 
 def _differences(folder, target, record):
-    """Each file that differs from the shipped mod, labelled add, replace, edited, remove or user."""
+    """Each file that differs from the shipped mod, labelled add, replace, edited or remove."""
     shipped = set(_shipped_files(folder))
     user = _user_paths(folder)
     files = {}
@@ -105,7 +107,7 @@ def _differences(folder, target, record):
         if label:
             files[rel] = label
     for rel in (record or {}):
-        if rel not in shipped and rel not in user:
+        if rel not in shipped:
             label = _dropped_label(target, rel, record)
             if label:
                 files[rel] = label
@@ -113,14 +115,12 @@ def _differences(folder, target, record):
 
 
 def _state(record, files):
-    """A differing user file does not count, since an update never touches it."""
     # A copy with no record stays unrecorded even when it matches, so --adopt still writes its record.
     if record is None:
         return "unrecorded"
-    changes = [label for label in files.values() if label != "user"]
-    if "edited" in changes:
+    if "edited" in files.values():
         return "edited"
-    return "older" if changes else "current"
+    return "older" if files else "current"
 
 
 def mod_status(home, folder):
@@ -174,22 +174,6 @@ def _set_entry(record, rel, final):
         record.pop(rel, None)
 
 
-def _next_record(record, files, shipped, user):
-    """The record after an update: each shipped file's hash, which for an edit kept is the text set beside it,
-    and the old hash of a user file. A dropped file the user edited stays on disk and leaves the record."""
-    old = record or {}
-    hashes = {}
-    for rel, shipped_hash in shipped.items():
-        if files.get(rel) != "user":
-            hashes[rel] = shipped_hash
-        elif rel in old:
-            hashes[rel] = old[rel]
-    for rel, old_hash in old.items():
-        if rel not in shipped and rel in user:
-            hashes[rel] = old_hash
-    return hashes
-
-
 def update_mod(home, folder, adopt=False):
     """Brings an installed mod up to the shipped one. The status is the one found before the update."""
     status = mod_status(home, folder)
@@ -197,9 +181,10 @@ def update_mod(home, folder, adopt=False):
     if state in ("missing", "linked", "current") or (state == "unrecorded" and not adopt):
         return dict(status, updated=[], kept=[], removed=[])
     target = status["installed"]
-    shipped = _shipped_hashes(folder)
+    # After the update each shipped file is recorded at its shipped text, which for an edit kept is the text set
+    # beside it; a dropped file the user edited stays on disk and leaves the record.
+    hashes = _shipped_hashes(folder)
     record = _record_of(target)
-    hashes = _next_record(record, status["files"], shipped, _user_paths(folder))
     # An adopted copy gets its record only at the end, so one stopped part-way is still unrecorded and adopted again.
     updated, kept, removed = _apply(folder, target, status["files"], hashes, None if record is None else dict(record))
     _save_record(target, hashes)
