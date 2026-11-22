@@ -6,9 +6,9 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- **The review-token sweep also reaches your organizations' repositories.** `set-review-tokens.sh` with no `--repo` now sets the tokens in every repository with the review of each organization you administer, beside your own. Listing them needs the `read:org` scope: without it, or when the lookup fails for any reason, the sweep stops before writing anything and says to run `gh auth refresh -s read:org` or name the repositories with `--repo`.
+- **The review-token sweep can reach your organizations' repositories.** `set-review-tokens.sh --orgs` also sets the tokens in every repository with the review of each organization you administer, beside your own. It needs the `read:org` scope, and any failed lookup stops it before anything is written, naming `gh auth refresh -s read:org` and `--repo`. A run without `--orgs` works as before.
 
 ## [v7.7.1] — 2026-11-21
 

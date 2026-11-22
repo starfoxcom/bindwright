@@ -2,8 +2,9 @@
 # Sets the Claude account tokens the review workflows run on, in one sweep:
 # reads each account's token once, with the input hidden, and writes it as a
 # secret into every repository named with --repo, or else every repository
-# the signed-in GitHub account owns, or owns through an organization it
-# administers, whose default branch holds the routine review workflow.
+# the signed-in GitHub account owns (with --orgs, also those of each
+# organization it administers) whose default branch holds the routine
+# review workflow.
 # Account 1 is CLAUDE_CODE_OAUTH_TOKEN, account 2
 # CLAUDE_CODE_OAUTH_TOKEN_2, and so on up to 5; the workflows try them in
 # that order when an account has no room left.
@@ -22,20 +23,23 @@ readonly WORKFLOW=".github/workflows/claude-code-review.yml"
 readonly REPO_RE='^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
 
 ACCOUNTS=""
+ORGS=0
 REPOS=()
 TOKENS=()
 
 usage() {
   cat << 'EOF'
-Usage: set-review-tokens.sh --accounts N [--repo OWNER/NAME]...
+Usage: set-review-tokens.sh --accounts N [--orgs | --repo OWNER/NAME...]
 
   --accounts N         How many Claude accounts the reviews use, 1 to 5.
                        The script asks for each one's token, from
                        'claude setup-token' signed in to that account.
   --repo OWNER/NAME    A repository to set them in; repeat for more
-                       (default: every repository you own, or that an
-                       organization you administer owns, whose default
+                       (default: every repository you own whose default
                        branch holds .github/workflows/claude-code-review.yml).
+  --orgs               Also sweep the repositories of each organization
+                       you administer. Needs the read:org scope; any
+                       failed lookup stops before anything is written.
 EOF
 }
 
@@ -50,12 +54,14 @@ parse_args() {
     case "$1" in
       --accounts) ACCOUNTS=${2:?--accounts needs a number}; shift ;;
       --repo) REPOS+=("${2:?--repo needs OWNER/NAME}"); shift ;;
+      --orgs) ORGS=1 ;;
       -h | --help) usage; exit 0 ;;
       *) usage >&2; die "unknown option: $1" ;;
     esac
     shift
   done
   [[ $ACCOUNTS =~ ^[1-5]$ ]] || die "--accounts takes a number from 1 to 5"
+  [ "$ORGS" = 0 ] || [ ${#REPOS[@]} -eq 0 ] || die "--orgs sweeps; it does not go with --repo"
   for repo in ${REPOS[@]+"${REPOS[@]}"}; do
     [[ $repo =~ $REPO_RE ]] || die "--repo takes OWNER/NAME: $repo"
   done
@@ -67,21 +73,22 @@ secret_name() {
 
 # Only GitHub's "not found" means a repository holds no review; any other
 # failure stops the sweep, so a passing outage never skips a repository.
-# A repository an organization owns is swept when the user administers that
-# organization. Listing them needs the read:org scope, so a failed lookup
-# stops the sweep too, naming the scope and --repo.
+# With --orgs, a repository an organization owns is swept when the user
+# administers that organization. Listing them needs the read:org scope, so
+# a failed lookup stops the sweep too, naming the scope and --repo.
 find_repos() {
   local name names err org orgs
   names=$(gh repo list --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
     || die "cannot list your repositories"
-  orgs=$(gh api --paginate user/memberships/orgs \
+  [ "$ORGS" = 1 ] || orgs=""
+  [ "$ORGS" = 0 ] || orgs=$(gh api --paginate user/memberships/orgs \
       --jq '.[] | select(.state == "active" and .role == "admin") | .organization.login' 2>&1) \
     || die "cannot list your organizations ($orgs). Without the read:org scope, run" \
       "'gh auth refresh -s read:org' and try again; or name the repositories with --repo."
   while IFS= read -r org; do
     [ -n "$org" ] || continue
     names+=$'\n'$(gh repo list "$org" --limit 1000 --no-archived --source --json nameWithOwner --jq '.[].nameWithOwner') \
-      || die "cannot list the repositories of $org"
+      || die "cannot list the repositories of $org; authorize the token for it, or name repositories with --repo"
   done <<< "$orgs"
   while IFS= read -r name; do
     [ -n "$name" ] || continue

@@ -1062,14 +1062,22 @@ class SetupScript(unittest.TestCase):
                            memberships=[member("studio", "active", "admin"), member("club", "active", "member"),
                                         member("guild", "pending", "admin")],
                            org_repos={"studio": ["studio/app"], "club": ["club/x"], "guild": ["guild/y"]})
-        run, after, _ = self.run_setup(state, "--accounts", "1", script=SWEEP,
+        run, after, _ = self.run_setup(state, "--accounts", "1", "--orgs", script=SWEEP,
                                        stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertEqual(sorted(repo for repo, _, _ in after["written"]), ["acme/game", "studio/app"])
 
+    def test_a_plain_sweep_leaves_organizations_alone(self):
+        state = fresh_repo(owned=["acme/game"], with_workflow=["acme/game"], memberships="forbidden")
+        run, after, calls = self.run_setup(state, "--accounts", "1", script=SWEEP,
+                                           stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual([repo for repo, _, _ in after["written"]], ["acme/game"])
+        self.assertFalse([c for c in calls if "user/memberships/orgs" in c])
+
     def test_a_failed_organization_lookup_stops_the_sweep_before_any_write(self):
         state = fresh_repo(owned=["acme/game"], with_workflow=["acme/game"], memberships="forbidden")
-        run, after, _ = self.run_setup(state, "--accounts", "1", script=SWEEP,
+        run, after, _ = self.run_setup(state, "--accounts", "1", "--orgs", script=SWEEP,
                                        stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n")
         self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
         self.assertIn("cannot list your organizations", run.stderr)
