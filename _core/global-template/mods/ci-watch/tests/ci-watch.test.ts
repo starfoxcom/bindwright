@@ -833,7 +833,8 @@ test('a watch settled long ago asks GitHub about its PR every ten minutes, not e
 
 test('a merge names its PR, or 0 for the branch PR; other commands are not merges', () => {
   expect(mergedNumber('gh pr merge 1278 --merge --delete-branch')).toBe(1278)
-  expect(mergedNumber('gh pr merge --merge #42')).toBe(42)
+  // A word starting with `#` is a comment to the shell, so gh merges the branch's PR.
+  expect(mergedNumber('gh pr merge --merge #42')).toBe(0)
   expect(mergedNumber('gh pr merge --merge --delete-branch')).toBe(0)
   expect(mergedNumber('gh pr view 1278 --json mergeable')).toBeUndefined()
   expect(mergedNumber('git merge origin/develop')).toBeUndefined()
@@ -867,6 +868,18 @@ test('a push or a new PR is the subcommand, never words inside a message', () =>
   // A `<<WORD` inside a message opens no here-doc; a real one, quoted delimiter and all, still does.
   expect(isPushOrPr('git commit -m "pipe it with <<EOF later"\ngit push')).toBe(true)
   expect(isPushOrPr("git commit -F - <<'EOF'\nthen git push\nEOF")).toBe(false)
+  // An apostrophe in a comment or after an escape opens no quote; a quote spanning lines, or a shift,
+  // opens no here-doc; a body's own quotes stay text.
+  expect(isPushOrPr("# don't skip the hooks\ngit commit -m \"$(cat <<'EOF'\nfix: x\nEOF\n)\"\ngit push")).toBe(true)
+  expect(isPushOrPr("echo it\\'s; git push")).toBe(true)
+  expect(isPushOrPr("# don't\ngit push", true)).toBe(true)
+  expect(isPushOrPr('gh pr comment 5 --body "notes\nrun cat <<EOF here"\ngit push')).toBe(true)
+  expect(isPushOrPr('echo $((1<<n))\ngit push')).toBe(true)
+  expect(isPushOrPr("git commit -F - <<'EOF'\nfix: the \"quoted\" word\nEOF\ngit push")).toBe(true)
+  expect(isPushOrPr("@'\nsee <<EOF\n'@ | Out-File n.md\ngit push", true)).toBe(true)
+  expect(isPushOrPr("@'\ngit push\n'@ | Out-File n.md", true)).toBe(false)
+  // A long run of options answers at once.
+  expect(isPushOrPr(`git${' --x'.repeat(200)} log`)).toBe(false)
   // Each shell's own escape: a backtick escapes nothing in Bash, a backslash nothing in PowerShell.
   const twoMessages = 'git commit -m "docs(ci): describe `ci-watch`" -m "The mod watches after git push."'
   expect(isPushOrPr(twoMessages)).toBe(false)

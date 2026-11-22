@@ -1,58 +1,35 @@
 import type { Mirror, MirrorTask } from './mirror'
 import { openTasks } from './mirror'
+import { maskCommand } from './shellmask'
 
 // A commit lands a code change, so it waits until the task list changed since the last commit, and the
 // first file edit after a change names the task it belongs to. Reading or listing the tasks is no change.
 
 export const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
 // `git commit` as a command, after any of git's own options (`git -C dir commit`, `git -c k=v commit`),
-// matched on the command with its quoted text and here-doc bodies blanked, so message text never counts,
-// and on the whole subcommand word, so `git commit-tree` is not a commit. The ci-watch mod reads its
-// commands the same way; each mod carries its own copy.
-const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-(?![Cc](?:\s|$))[\w-]+(?:=\S+)?))*`
+// matched on the masked command (`shellmask.ts`), so message text never counts, and on the whole
+// subcommand word, so `git commit-tree` is not a commit. A `--name` option is read one way only, so a
+// long run of them cannot make the match backtrack.
+const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-(?!-|[Cc](?:\s|$))[\w-]+(?:=\S+)?))*`
 const COMMIT = new RegExp(String.raw`(?:^|[\s;&|({])git(?:\.exe)?${GIT_OPTS}\s+commit(?![\w-])`)
-// Each shell's own escape inside double quotes: a backslash in Bash, a backtick in PowerShell.
-const DOUBLE_QUOTED = {
-  bash: String.raw`"(?:[^"\\]|\\[\s\S])*"`,
-  powershell: '"(?:[^"`]|`[\\s\\S])*"',
-}
 // The characters of a task's description shown when a commit waits; the rest is one TaskGet away.
 const SHOWN = 160
 
 const state = { isListChanged: false, isEditNoted: false }
 
-// Which lines are here-doc bodies (and their end lines): they hold text, never commands.
-function hereDocLines(lines: readonly string[]): Set<number> {
-  const body = new Set<number>()
-  for (let i = 0; i < lines.length; i++) {
-    // `<<` alone: `<<<` feeds one word. Found with the line's quoted text blanked, so a `<<EOF` inside a
-    // message opens nothing.
-    const unquoted = (lines[i] ?? '').replace(/(?<!<<-?\s*)(?:'[^']*'|"(?:[^"\\`]|[\\`].)*")/g, '""')
-    const doc = /(?<!<)<<(?!<)-?\s*(["']?)([A-Za-z_][\w.-]*)\1/.exec(unquoted)
-    if (!doc) continue
-    while (i + 1 < lines.length && (lines[i + 1] ?? '').trim() !== doc[2]) body.add(++i)
-    if (i + 1 < lines.length) body.add(++i)
-  }
-  return body
-}
-
-function commandWords(command: string, isPowerShell: boolean): string {
-  const lines = command.split('\n')
-  const body = hereDocLines(lines)
-  const quoted = String.raw`@'[\s\S]*?'@|@"[\s\S]*?"@|'[^']*'|${DOUBLE_QUOTED[isPowerShell ? 'powershell' : 'bash']}`
-  return lines
-    .filter((_, i) => !body.has(i))
-    .join('\n')
-    .replace(new RegExp(quoted, 'g'), '""')
-}
-
 export function isCommit(command: string, isPowerShell = false): boolean {
-  return COMMIT.test(commandWords(command, isPowerShell))
+  return COMMIT.test(maskCommand(command, isPowerShell))
 }
 
 /** A task call changed the list: the next commit may go, and the next edit is noted again. */
 export function noteListChanged(): void {
   state.isListChanged = true
+  state.isEditNoted = false
+}
+
+/** The session ended (a /clear goes on in this process): the next session starts with its commit held. */
+export function resetReview(): void {
+  state.isListChanged = false
   state.isEditNoted = false
 }
 

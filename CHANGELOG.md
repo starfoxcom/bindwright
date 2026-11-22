@@ -6,9 +6,15 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.10.0] — 2026-11-22
+
 ### Added
 
-- **A commit waits until the task list is current.** With the tasks mod, a `git commit` from the main session is held until the list has changed since the previous commit, so each commit puts what it does on the task it belongs to. The hold lists every open task with its hold and description, so each one is checked against what is true now, and the first file edit after a change names the task in progress. Reading or listing the tasks does not release it. `task-tracking.md` asks for the same before each commit where the mod is not installed.
+- **A commit waits until the task list is current.** With the tasks mod, a `git commit` from the main session is held until the list has changed since the previous commit, so each commit puts what it does on the task it belongs to. The hold lists every open task with its hold and description, so each one is checked against what is true now, and the first file edit after a change names the task in progress. Reading or listing the tasks does not release it. A session with no task tool to release it, and the first commit after a `/clear`, are covered: the first lets every commit through, the second holds like a new session. `task-tracking.md` asks for the same before each commit where the mod is not installed.
+
+### Fixed
+
+- **The ci-watch mod reads pushes and commits the way the shell does.** A `#` comment with an apostrophe in it, an escaped quote, a `<<` inside a quoted message that runs over several lines, and arithmetic such as `$((1<<n))` could hide a real `git push` or `git commit` written after them, so no watch started. The command is now read one character at a time, tracking the quote, here-doc or here-string it is in. A bare `git` followed by a long run of `--flags` no longer slows every shell call: 22 flags took 82 ms and each one more doubled it, and now 200 take under a millisecond.
 
 ## [v7.9.0] — 2026-11-22
 
