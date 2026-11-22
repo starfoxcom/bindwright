@@ -16,7 +16,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **A review that gave no verdict no longer counts as a red round.** The ci-watch mod counted every failed review gate as a fix round, so a review that errored, found no account with room, had its post refused or was cancelled pushed a PR toward the research step and the hard stop with nothing to fix. A failed round now counts unless nothing outside the review's own jobs failed, the review gate recorded no `block` for either tier, and no tier the gate left at `error`, `pending` or `missing` posted a review on the head, as the marker each tier writes into its reviews shows; the wake says the review gave no verdict and that the count stays where it was. Anything the mod cannot read still counts the round (#1150).
+- **A review that gave no verdict no longer counts as a red round.** The ci-watch mod counted every failed review gate as a fix round, so a review that errored, found no account with room, had its post refused or was cancelled pushed a PR toward the research step and the hard stop with nothing to fix. Now a round where only the review failed, because a review run never got to post its verdict, keeps the count where it was, and the wake says the review gave no verdict and asks to watch the re-run. Every other red round counts as before, and so does any round the mod cannot read. The mods README holds the exact rule (#1150).
 
 ## [v7.7.1] — 2026-11-21
 
