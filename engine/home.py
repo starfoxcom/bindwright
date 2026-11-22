@@ -9,7 +9,8 @@ Standard library, Python 3.8+.
     python engine/home.py install-hook FILE --python PATH --matcher Bash --block-on-failure
     python engine/home.py remove-hook NAME.py
     python engine/home.py list-hooks
-    python engine/home.py hook-status DIR     (each hook DIR ships that settings run: recorded, matches)
+    python engine/home.py hook-status DIR     (each hook DIR ships that settings run: recorded, matches, linked)
+    python engine/home.py adopt-hook FILE     (records an unrecorded hook that matches FILE; settings untouched)
     python engine/home.py allow RULE          /  disallow RULE
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
@@ -276,18 +277,9 @@ def _hook_record(home):
     return files if isinstance(files, dict) else {}
 
 
-def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
+def _write_hook_files(home, file):
+    """Copies hook `file` and the modules of its package into ~/.claude/hooks and records them."""
     name = os.path.basename(file)
-    if not name.endswith(".py"):
-        raise HomeError("A hook is a .py file: " + file)
-    if (matcher is None) == (events is None):
-        raise HomeError("install-hook takes exactly one of --matcher or --events")
-    if matcher is not None:
-        placements = [("PreToolUse", matcher)]
-    else:
-        placements = [(event, None) for event in _event_names(events)]
-    path, data = _load(home)
-    sections = [(_event_entries(data, event, path), where) for event, where in placements]
     target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
     written = {}
     with open(file, encoding="utf-8") as fh:
@@ -301,6 +293,22 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
     for rel, text in written.items():
         _atomic_write(os.path.join(os.path.dirname(target), *rel.split("/")), text)
     _record_hooks(home, name, written)
+    return target
+
+
+def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
+    name = os.path.basename(file)
+    if not name.endswith(".py"):
+        raise HomeError("A hook is a .py file: " + file)
+    if (matcher is None) == (events is None):
+        raise HomeError("install-hook takes exactly one of --matcher or --events")
+    if matcher is not None:
+        placements = [("PreToolUse", matcher)]
+    else:
+        placements = [(event, None) for event in _event_names(events)]
+    path, data = _load(home)
+    sections = [(_event_entries(data, event, path), where) for event, where in placements]
+    target = _write_hook_files(home, file)
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
@@ -362,8 +370,29 @@ def hook_status(home, folder):
     found = {}
     for name in list_hooks(home)["hooks"]:
         if os.path.isfile(os.path.join(folder, name)):
-            found[name] = {"recorded": name in recorded, "matches": _hook_matches(folder, installed, name)}
+            found[name] = {"recorded": name in recorded, "matches": _hook_matches(folder, installed, name),
+                           "linked": _hook_linked(installed, name)}
     return {"hooks": found}
+
+
+def _hook_linked(installed, name):
+    """True when the hook file or its package folder is a link the user keeps, such as into a dotfiles folder."""
+    paths = (os.path.join(installed, name), os.path.join(installed, _package_name(name)))
+    return any(os.path.lexists(p) and _is_link(os.lstat(p)) for p in paths)
+
+
+def adopt_hook(home, file):
+    """Records a hook installed with the text of `file`, its package included, so the helper keeps it current.
+    Its entry in ~/.claude/settings.json stays as it is; a linked or differing copy is refused."""
+    name = os.path.basename(file)
+    installed = os.path.join(_claude(home), "hooks")
+    if not name.endswith(".py") or not os.path.isfile(file):
+        raise HomeError("A hook is a .py file: " + file)
+    if _hook_linked(installed, name):
+        raise HomeError("The installed hook is a link, which stays as it is: " + name)
+    if not _hook_matches(os.path.dirname(os.path.abspath(file)), installed, name):
+        raise HomeError("The installed hook differs from the shipped one; install-hook replaces it: " + name)
+    return {"recorded": _write_hook_files(home, file)}
 
 
 def _hook_matches(folder, installed, name):
@@ -754,6 +783,7 @@ def _option(argv, name):
 NAMED_COMMANDS = {
     "remove-hook": remove_hook,
     "hook-status": hook_status,
+    "adopt-hook": adopt_hook,
     "allow": lambda home, rule: set_allow(home, rule, True),
     "disallow": lambda home, rule: set_allow(home, rule, False),
     "add-mod": add_mod,

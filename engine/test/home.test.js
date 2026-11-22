@@ -609,16 +609,31 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     const old = { matcher: "Grep", hooks: [{ type: "command", command: `py "${dir}/.claude/hooks/ctags-first.py"` }] };
     writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: [...settings(dir).hooks.PreToolUse, old] } });
     const status = () => home(dir, "hook-status", shipped).out.hooks;
-    const both = { recorded: true, matches: true };
+    const both = { recorded: true, matches: true, linked: false };
     const all = { "no-ai-attribution.py": both, "push-guard.py": both };
     assert.deepEqual(status(), all, "a hook not shipped is left out");
     rmSync(join(dir, ".bindwright", "hooks.json"));
     rmSync(join(dir, ".claude", "hooks", "no_ai_attribution"), { recursive: true });
     writeFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "push\r\n");
     assert.deepEqual(status(), {
-      "no-ai-attribution.py": { recorded: false, matches: false },
-      "push-guard.py": { recorded: false, matches: true },
+      "no-ai-attribution.py": { recorded: false, matches: false, linked: false },
+      "push-guard.py": { recorded: false, matches: true, linked: false },
     });
+    // A matching copy is only recorded: its settings entry stays, and a differing one is refused.
+    const before = settings(dir);
+    assert.equal(home(dir, "adopt-hook", join(shipped, "push-guard.py")).status, 0);
+    assert.deepEqual(settings(dir), before);
+    assert.equal(status()["push-guard.py"].recorded, true);
+    assert.match(home(dir, "adopt-hook", guard).out.error, /differs from the shipped one/);
+    // A package folder the user keeps as a link is reported, and adopt-hook leaves it.
+    const kept = join(dir, "dotfiles", "no_ai_attribution");
+    mkdirSync(kept, { recursive: true });
+    writeFileSync(join(kept, "routes.py"), "routes\n");
+    const link = join(dir, ".claude", "hooks", "no_ai_attribution");
+    symlinkSync(kept, link, process.platform === "win32" ? "junction" : "dir");
+    assert.equal(status()["no-ai-attribution.py"].linked, true);
+    assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
+    assert.equal(readFileSync(join(kept, "routes.py"), "utf8"), "routes\n");
   });
 });
 
