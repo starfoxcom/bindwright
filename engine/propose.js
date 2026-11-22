@@ -102,8 +102,8 @@ const normalise = (text) => text.replace(/\r\n/g, "\n");
 
 // JSON: both sides parse as objects, merged key by key. Null when either side is not one.
 function jsonProposal(path, repo, incoming) {
-  const repoObject = parseObject(repo);
-  const incomingObject = parseObject(incoming);
+  const repoObject = parsePlainObject(repo);
+  const incomingObject = parsePlainObject(incoming);
   if (repoObject === null || incomingObject === null) return null;
   const clashes = [];
   const merged = mergeObjects(repoObject, incomingObject, [], clashes);
@@ -112,7 +112,7 @@ function jsonProposal(path, repo, incoming) {
 
 // The parsed object, or null when the text is not plain JSON: an object both engines read and
 // print alike (see isPlain), nested at most MAX_DEPTH deep.
-function parseObject(text) {
+export function parsePlainObject(text) {
   if (depthOf(text) > MAX_DEPTH) return null;
   let value;
   try {

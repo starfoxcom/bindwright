@@ -4,6 +4,7 @@
 import errno
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +12,7 @@ import tempfile
 from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
 from model import expand_answers
+from propose import parse_plain_object
 
 STAGING = ".bindwright/incoming/"
 ANSWERS = ".bindwright/project.json"
@@ -60,6 +62,11 @@ def _decide(path, ours, base, theirs, merge):
     if ours == base:
         return ("updated", theirs)
     text, conflicts = merge(ours, base, theirs)
+    # Git's line merge cannot place a key the repo moved; a key-by-key merge can.
+    if conflicts and path.endswith(".json"):
+        merged = _merge_json(ours, base, theirs)
+        if merged is not None and _keeps_sections(ours, merged, path):
+            return ("merged", merged)
     if conflicts or not _keeps_sections(ours, text, path):
         return ("conflict", text)
     return ("merged", text)
@@ -135,6 +142,13 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
 
 MERGE_LABELS = ["this repo", "last setup or update", "today's templates"]
 
+BOM = "\ufeff"
+_ABSENT = object()  # a key a version does not have
+_CLASH = object()  # a value every version changed differently
+# The first indented line's indent, found after a \n only, as the JS twin finds it.
+_INDENT = re.compile(r"\n([ \t]+)\S")
+_MAX_INDENT = 10  # JSON.stringify uses at most 10 characters of an indent string
+
 
 def git_merge(ours, base, theirs):
     """A three-way merge by git: its exit status is the number of conflicts."""
@@ -152,6 +166,84 @@ def git_merge(ours, base, theirs):
         return done.stdout.decode("utf-8"), done.returncode
     finally:
         shutil.rmtree(folder, ignore_errors=True)
+
+
+def _merge_json(ours, base, theirs):
+    """A key-by-key three-way merge of three JSON objects; None on a clash or a text that is not one."""
+    parsed = [_parse_object(text) for text in (ours, base, theirs)]
+    if any(part is None for part in parsed):
+        return None
+    merged = _merge_value(*parsed)
+    if merged is _CLASH:
+        return None
+    indent = _indent_of(ours)
+    if len(indent) > _MAX_INDENT:
+        return None
+    body = json.dumps(merged, indent=indent, ensure_ascii=False)
+    return (BOM if ours.startswith(BOM) else "") + body + ("\n" if ours.endswith("\n") else "")
+
+
+def _parse_object(text):
+    """The object of a text the twins both read and reprint alike (propose.py holds those
+    rules), with no key repeated."""
+    plain = text[1:] if text.startswith(BOM) else text
+    value = parse_plain_object(plain)
+    if value is None:
+        return None
+    try:
+        json.loads(plain, object_pairs_hook=_unique_keys)
+    except ValueError:
+        return None
+    return value
+
+
+def _unique_keys(pairs):
+    """An object with no key repeated: json.loads keeps only the last copy, so the reprint would
+    drop the others."""
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError("a repeated key")
+    return dict(pairs)
+
+
+def _indent_of(text):
+    match = _INDENT.search(text)
+    return match.group(1) if match else "  "
+
+
+def _merge_value(o, b, t):
+    """Objects merge key by key first, so the repo's key order holds even where it changed nothing else."""
+    if isinstance(o, dict) and isinstance(b, dict) and isinstance(t, dict):
+        return _merge_object(o, b, t)
+    if _same(o, t):
+        return o
+    if _same(o, b):
+        return t
+    if _same(t, b):
+        return o
+    return _CLASH
+
+
+def _merge_object(o, b, t):
+    merged = {}
+    for key in list(o) + [key for key in t if key not in o]:
+        value = _merge_value(o.get(key, _ABSENT), b.get(key, _ABSENT), t.get(key, _ABSENT))
+        if value is _CLASH:
+            return _CLASH
+        if value is not _ABSENT:
+            merged[key] = value
+    return merged
+
+
+def _same(a, b):
+    """Deep equality: objects regardless of key order, arrays in order, and true apart from 1."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[key], b[key]) for key in a)
+    return a == b
 
 
 def _unreadable_reason(path, err):
