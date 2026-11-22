@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync,
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -639,6 +640,14 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     assert.equal(status()["no-ai-attribution.py"].linked, true);
     assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
     assert.equal(readFileSync(join(kept, "routes.py"), "utf8"), "routes\n");
+    // A hooks folder that is itself a link counts for every hook in it.
+    const hooks = join(dir, ".claude", "hooks");
+    renameSync(hooks, join(dir, "dotfiles", "hooks"));
+    symlinkSync(join(dir, "dotfiles", "hooks"), hooks, process.platform === "win32" ? "junction" : "dir");
+    assert.equal(status()["push-guard.py"].linked, true);
+    assert.match(home(dir, "adopt-hook", join(shipped, "push-guard.py")).out.error, /is a link/);
+    rmSync(hooks);
+    renameSync(join(dir, "dotfiles", "hooks"), hooks);
     // So is one module linked inside a real package folder, when this machine can make file links.
     rmSync(link);
     mkdirSync(link);
