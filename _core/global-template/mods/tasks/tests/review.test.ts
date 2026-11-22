@@ -82,6 +82,8 @@ test('only a git commit waits', async ($, on) => {
     // A quote spanning lines, or a shift, opens no here-doc; a body's own quotes stay text.
     ['gh pr comment 5 --body "notes\nuse cat <<EOF here"\ngit commit -m x', true],
     ['echo $((1<<n))\ngit commit -m x', true],
+    ["cat > notes.md <<\\EOF\nDon't merge yet\nEOF\ngit commit -m x", true],
+    ['echo "$( (( n = a<<b )) )"\ngit commit -m x', true],
     ["git commit -F - <<'EOF'\nfix: the \"quoted\" word\nEOF\ngit log", true],
     ['cat <<EOF\nit\'s "half\nEOF\necho "git commit"', false],
     // A long run of options answers at once.

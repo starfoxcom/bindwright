@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.10.1] — 2026-11-22
+
+### Fixed
+
+- **A here-doc written `<<\EOF` no longer hides the commands after it.** The command reader the ci-watch and tasks mods share did not take `<<\EOF` as a here-doc, so an apostrophe in its body, such as "don't", read as an open quote and hid every later `git commit` and `git push`: the commit was not held and no watch started. A shift such as `(( a<<b ))` inside a quoted `$(...)` no longer opens a here-doc that is not there.
+
 ## [v7.10.0] — 2026-11-22
 
 ### Added

@@ -12,8 +12,8 @@ type Reader = { frames: Frame[]; hereDocs: string[]; shell: Shell }
 type Shown = 'kept' | 'hidden' | 'blank' | 'escape'
 type Step = [length: number, shown: Shown]
 
-// `<<` alone (`<<<` feeds one word), its delimiter bare or quoted.
-const HERE_DOC = /^<<(?!<)-?\s*(?:'([^']*)'|"([^"]*)"|([A-Za-z_][\w.-]*))/
+// `<<` alone (`<<<` feeds one word), its delimiter bare, quoted, or behind a backslash (`<<\EOF`).
+const HERE_DOC = /^<<(?!<)-?\s*(?:'([^']*)'|"([^"]*)"|\\?([A-Za-z_][\w.-]*))/
 const innermost = (reader: Reader) => reader.frames.at(-1)
 const hide = (text: string) => '_'.repeat(text.length)
 
@@ -50,7 +50,9 @@ function codeStep(line: string, i: number, reader: Reader): Step {
   const c = line[i] ?? ''
   if (c === (reader.shell === 'bash' ? '\\' : '`')) return [2, 'escape']
   if (c === '#' && (i === 0 || /[\s;&|(]/.test(line[i - 1] ?? ''))) return [line.length - i, 'blank']
-  if (innermost(reader) === 'sub' && (c === '(' || c === ')')) {
+  // `((` is arithmetic here too, so it is read before a `(` counts as a nested parenthesis.
+  const isArithmetic = reader.shell === 'bash' && line.startsWith('((', i)
+  if (innermost(reader) === 'sub' && !isArithmetic && (c === '(' || c === ')')) {
     if (c === '(') reader.frames.push('sub')
     else reader.frames.pop()
     return [1, 'kept']
