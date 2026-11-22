@@ -43,8 +43,11 @@ Some of what you pick changes how Claude Code behaves in later sessions, which i
 - **Rules and session skills** in the repo, which Claude Code reads in every session there.
 - **Guard hooks**, small scripts Claude Code runs before some commands, such as one that refuses a commit carrying an AI-attribution line.
 - **Extras for your whole computer**, in `~/.claude`: global instructions in `CLAUDE.md`, a push guard for every project, session titles, the builder agent, a code-style profile, a plain reply style, and mods (small add-ons that show the time and context use, watch CI, keep the task list current and similar).
+- **The code-search tool, FindWright**, a separate plugin from the same wrights marketplace, installed and set up by its own setup. Once it has indexed a repo, its hook sends searches there to its tools instead of Grep and Glob.
 
-All of it is plain text you can read and edit, and `/bindwright:remove` takes it back out. The scripts come from the helper, which is installed from this plugin's own GitHub release and checked against the SHA-256 the plugin pins; when the plugin updates, the helper follows to the version the new plugin pins, checked the same way. Nothing else is downloaded to change how Claude Code behaves.
+Outside those, setup turns on Claude Code's auto-update for the wrights marketplace, so new versions of its plugins arrive by themselves; `/bindwright:setup global` turns it off.
+
+All of it is plain text you can read and edit. `/bindwright:remove` takes it back out, auto-update included, with two exceptions it names as it runs: FindWright stays, since other tools may use it (`/findwright:remove` takes it out), and so does the setting that turns on Claude Code's own task tools, which the tasks mod needs. The scripts come from the helper, which is installed from this plugin's own GitHub release and checked against the SHA-256 the plugin pins; when the plugin updates, the helper follows to the version the new plugin pins, checked the same way. Apart from the helper and FindWright, setup downloads nothing that changes how Claude Code behaves.
 
 ## Troubleshooting
 
