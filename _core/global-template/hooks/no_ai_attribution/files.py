@@ -13,7 +13,7 @@ GIT_READS = {"grep", "log", "show", "whatchanged", "rev-list", "shortlog", "refl
              "status", "config", "clone", "init", "ls-files", "for-each-ref", "cat-file", "check-ignore"}
 GIT_FILE_FLAGS = {"-F", "--file", "--template"}
 GIT_WORD = re.compile(r"\bgit\b", re.I)  # `$GIT`, `$(command -v git)`
-GIT_BASH_DRIVE = re.compile(r"/([A-Za-z])(?=/|$)")  # `/p/x` is drive P's `x` in Git Bash
+GIT_BASH_DRIVE = re.compile(r"/([A-Za-z])(?=/|$)")  # `/p/x`, drive P's `x` in Git Bash
 FORM_FLAGS = {"-F", "--field", "--form"}  # key=value is a field; key=@file reads a file
 DATA_FLAGS = {"-d", "--data", "--data-binary", "--data-raw"}  # only @file reads a file
 BODY_FLAGS = {"--file", "--body-file", "--notes-file", "--input", "--message-file", "--template",
@@ -175,16 +175,21 @@ def get_content_files(words):
     return files or positional[:1]
 
 
-def drive_path(path, tool_shell):
-    """The path the tool call's shell means: on Windows, Git Bash reads `/p/x` as `P:/x`, where
-    Python would read it from the root of the current drive. Under PowerShell nothing is mapped,
-    a `bash` it starts included, since that may be WSL's, and PowerShell's own folder changes
-    run before it."""
-    match = GIT_BASH_DRIVE.match(path) if tool_shell == "bash" and os.name == "nt" else None
-    return f"{match.group(1).upper()}:{path[2:] or '/'}" if match else path
+def anchored(path):
+    """Whether a path names one place from any folder. On Windows a path rooted without a
+    drive (`/x`) is on the drive of the folder the command runs in."""
+    return os.path.isabs(path) and bool(os.name != "nt" or os.path.splitdrive(path)[0])
 
 
-def resolve(value, places, tool_shell):
+def converted(path):
+    """The file a Git Bash drive path names once Git Bash converts it (`/p/x` is `P:/x`), on
+    Windows. Git Bash leaves some arguments as written (conversion turned off, some spellings,
+    a PowerShell call), and those land on the folder's own drive, so both are read."""
+    match = GIT_BASH_DRIVE.match(path) if os.name == "nt" else None
+    return [f"{match.group(1).upper()}:{path[2:] or '/'}"] if match else []
+
+
+def resolve(value, places):
     """(path, error) for each file a body flag's value may name, or an error saying why it
     cannot be told before the command runs. A relative file is read in each of `places`
     that holds it, or in the first when none does; `places` is None after a folder change
@@ -192,15 +197,17 @@ def resolve(value, places, tool_shell):
     if isinstance(value, dict):
         yield None, f"a body file named by text the shell builds at run time ({value.get('dynamic')})"
         return
-    path = drive_path(os.path.expanduser(value), tool_shell)
-    if os.path.isabs(path):
-        yield path, None
+    path = os.path.expanduser(value)
+    if anchored(path):
+        paths = [path]
     elif places is None:
         yield None, (f"a relative body file {value} after a folder change the command text cannot tell"
                      " (such as `cd -`, a target built at run time or a folder this computer cannot find)")
+        return
     else:
         paths = [os.path.join(place, path) for place in places]
-        yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
+    paths += converted(path)
+    yield from ((found, None) for found in [p for p in paths if os.path.isfile(p)] or paths[:1])
 
 
 def is_cmdlet(name):
@@ -300,7 +307,7 @@ def is_run_time_git(word):
     return isinstance(word, dict) and GIT_WORD.search(text_of(word)) is not None
 
 
-def folder_places(commands, cwd, tool_shell):
+def folder_places(commands, cwd):
     """Every folder a command may run in: the start folder, and each folder a folder change
     in the command names, reached from any folder found before it in the text, since a `cd`
     may run in a child shell or fail, so the shell may be in any of them. The changes are then
@@ -314,8 +321,9 @@ def folder_places(commands, cwd, tool_shell):
     places, seen, first = [cwd], {os.path.realpath(cwd)}, True
     while True:
         count = len(places)
-        for target in (drive_path(os.path.expanduser(target), tool_shell) for target in targets):
-            reached = [target] if os.path.isabs(target) else [os.path.join(place, target) for place in places]
+        for target in map(os.path.expanduser, targets):
+            reached = [target] if anchored(target) else [os.path.join(place, target) for place in places]
+            reached += converted(target)
             found = [place for place in reached if os.path.isdir(place)]
             if first and not found:
                 return None
@@ -334,15 +342,13 @@ def folder_places(commands, cwd, tool_shell):
 
 def parsed_files(groups, cwd):
     """(path, error) for every body file the parsed commands name, in order, each group of
-    `with_nested` read as its shell reads it, a relative file in every folder it may run in.
-    The first group is the tool call's own command, so its shell decides how drive paths read."""
-    tool_shell = groups[0][2] if groups else None
+    `with_nested` read as its shell reads it, a relative file in every folder it may run in."""
     for commands, placing, shell in groups:
-        places = folder_places(placing, cwd, tool_shell)
+        places = folder_places(placing, cwd)
         for words in commands:
             for value in command_files(words, shell):
                 if value != "-":
-                    yield from resolve(value, places, tool_shell)
+                    yield from resolve(value, places)
 
 
 def abbreviates(word, option, shortest):
