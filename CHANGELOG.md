@@ -10,6 +10,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **PR bodies read like a person explaining the change.** `git.md` § Pull requests, the PR template and the contributing guide no longer ask for 1-3 bullets: a body gives the outcome first in a few plain sentences, says what the change does before naming a file or function, keeps lists for steps and checks, and drops hedges, em dashes and hype, in a professional tone. The reply style points PR bodies at that section (#1160).
 
+### Fixed
+
+- **The attribution guard reads Git Bash drive paths on Windows.** A body file given as `/p/notes/body.md` was looked for at `P:/p/notes/body.md`, so the guard could not read it and refused the commit or PR. It now reads `/p/...` as drive P, the way Git Bash does, both for a body file and for a folder change before a relative one. PowerShell paths read as before (#1164).
+
 ## [v7.8.0] — 2026-11-21
 
 ### Added
