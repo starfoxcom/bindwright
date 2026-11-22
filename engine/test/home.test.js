@@ -597,6 +597,59 @@ test("a settings file that is not valid JSON is never written", { skip }, () => 
   });
 });
 
+test("hook-status names the shipped hooks the record lacks and whether each matches", { skip }, () => {
+  withHome((dir) => {
+    const shipped = join(dir, "src");
+    const guard = hookFile(dir, "no-ai-attribution.py", "guard\n");
+    hookFile(dir, "no_ai_attribution/routes.py", "routes\n");
+    hookFile(dir, "push-guard.py", "push\n");
+    for (const file of [guard, join(shipped, "push-guard.py")]) {
+      assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    }
+    const old = { matcher: "Grep", hooks: [{ type: "command", command: `py "${dir}/.claude/hooks/ctags-first.py"` }] };
+    const elsewhere = { matcher: "Bash", hooks: [{ type: "command", command: `py "${dir}/mine/tool-rules.py"` }] };
+    hookFile(dir, "tool-rules.py", "rules\n");
+    const entries = [...settings(dir).hooks.PreToolUse, old, elsewhere];
+    writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: entries } });
+    const status = () => home(dir, "hook-status", shipped).out.hooks;
+    const both = { recorded: true, matches: true, linked: false };
+    const all = { "no-ai-attribution.py": both, "push-guard.py": both };
+    assert.deepEqual(status(), all, "a hook not shipped, or with no copy in the hooks folder, is left out");
+    rmSync(join(dir, ".bindwright", "hooks.json"));
+    rmSync(join(dir, ".claude", "hooks", "no_ai_attribution"), { recursive: true });
+    writeFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "push\r\n");
+    assert.deepEqual(status(), {
+      "no-ai-attribution.py": { recorded: false, matches: false, linked: false },
+      "push-guard.py": { recorded: false, matches: true, linked: false },
+    });
+    // A matching copy is only recorded: its settings entry stays, and a differing one is refused.
+    const before = settings(dir);
+    assert.equal(home(dir, "adopt-hook", join(shipped, "push-guard.py")).status, 0);
+    assert.deepEqual(settings(dir), before);
+    assert.equal(status()["push-guard.py"].recorded, true);
+    assert.match(home(dir, "adopt-hook", guard).out.error, /differs from the shipped one/);
+    // A package folder the user keeps as a link is reported, and adopt-hook leaves it.
+    const kept = join(dir, "dotfiles", "no_ai_attribution");
+    mkdirSync(kept, { recursive: true });
+    writeFileSync(join(kept, "routes.py"), "routes\n");
+    const link = join(dir, ".claude", "hooks", "no_ai_attribution");
+    symlinkSync(kept, link, process.platform === "win32" ? "junction" : "dir");
+    assert.equal(status()["no-ai-attribution.py"].linked, true);
+    assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
+    assert.equal(readFileSync(join(kept, "routes.py"), "utf8"), "routes\n");
+    // So is one module linked inside a real package folder, when this machine can make file links.
+    rmSync(link);
+    mkdirSync(link);
+    try {
+      symlinkSync(join(kept, "routes.py"), join(link, "routes.py"), "file");
+    } catch {
+      return; // Windows without developer mode makes no file links.
+    }
+    assert.equal(status()["no-ai-attribution.py"].linked, true);
+    assert.match(home(dir, "adopt-hook", guard).out.error, /is a link/);
+  });
+});
+
 test("a null hook event is skipped, so a guard beside it still lists and removes", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "push-guard.py");

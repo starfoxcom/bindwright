@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **`/bindwright:update` brings the global hooks installed before their record current.** The helper refreshes each hook in `~/.claude/hooks/` that setup recorded, but one installed before that record existed was never refreshed, so an early setup kept its attribution guard and push guard from that day. `home.py hook-status DIR` lists each shipped hook the settings run from `~/.claude/hooks/`, whether it is recorded, whether its files match the shipped ones and whether any is a link. An unrecorded hook that matches is recorded without a question by the new `home.py adopt-hook FILE`, which leaves its settings entry as it is; one that differs is reinstalled with setup's flags on a yes; a linked one stays. From then on the helper keeps each recorded hook current.
+
 ## [v7.12.0] — 2026-11-22
 
 ### Added

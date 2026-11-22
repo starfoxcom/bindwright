@@ -9,6 +9,8 @@ Standard library, Python 3.8+.
     python engine/home.py install-hook FILE --python PATH --matcher Bash --block-on-failure
     python engine/home.py remove-hook NAME.py
     python engine/home.py list-hooks
+    python engine/home.py hook-status DIR     (each hook DIR ships that settings run from ~/.claude/hooks)
+    python engine/home.py adopt-hook FILE     (records an unrecorded hook that matches FILE; settings untouched)
     python engine/home.py allow RULE          /  disallow RULE
     python engine/home.py attribution-off
     python engine/home.py add-mod DIR
@@ -254,12 +256,7 @@ def _record_hooks(home, name, written):
     `written`, by its path under ~/.claude/hooks, so the helper can tell a copy still as installed
     from one the user edited, and refresh only the first kind. An empty `written` forgets the hook."""
     path = os.path.join(home, ".bindwright", "hooks.json")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            record = json.load(fh)
-    except (OSError, ValueError):
-        record = {}
-    files = record.get("files") if isinstance(record, dict) and isinstance(record.get("files"), dict) else {}
+    files = _hook_record(home)
     package = _package_name(name) + "/"
     kept = {rel: sha for rel, sha in files.items() if rel != name and not rel.startswith(package)}
     if kept == files and not written:
@@ -267,6 +264,36 @@ def _record_hooks(home, name, written):
     for rel, text in written.items():
         kept[rel] = hashlib.sha256(text.encode("utf-8")).hexdigest()
     _atomic_write(path, json.dumps({"schema": 1, "files": kept}, indent=2, sort_keys=True) + "\n")
+
+
+def _hook_record(home):
+    """The hook files ~/.bindwright/hooks.json records, by path under ~/.claude/hooks; empty without one."""
+    try:
+        with open(os.path.join(home, ".bindwright", "hooks.json"), encoding="utf-8") as fh:
+            record = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    files = record.get("files") if isinstance(record, dict) else None
+    return files if isinstance(files, dict) else {}
+
+
+def _write_hook_files(home, file):
+    """Copies hook `file` and the modules of its package into ~/.claude/hooks and records them."""
+    name = os.path.basename(file)
+    target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
+    written = {}
+    with open(file, encoding="utf-8") as fh:
+        written[name] = fh.read()
+    package = os.path.join(os.path.dirname(os.path.abspath(file)), _package_name(name))
+    if os.path.isdir(package):
+        for module in sorted(os.listdir(package)):
+            if module.endswith(".py"):
+                with open(os.path.join(package, module), encoding="utf-8") as fh:
+                    written[_package_name(name) + "/" + module] = fh.read()
+    for rel, text in written.items():
+        _atomic_write(os.path.join(os.path.dirname(target), *rel.split("/")), text)
+    _record_hooks(home, name, written)
+    return target
 
 
 def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
@@ -281,19 +308,7 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
         placements = [(event, None) for event in _event_names(events)]
     path, data = _load(home)
     sections = [(_event_entries(data, event, path), where) for event, where in placements]
-    target = os.path.normpath(os.path.join(_claude(home), "hooks", name))
-    written = {}
-    with open(file, encoding="utf-8") as fh:
-        written[name] = fh.read()
-    package = os.path.join(os.path.dirname(os.path.abspath(file)), _package_name(name))
-    if os.path.isdir(package):
-        for module in sorted(os.listdir(package)):
-            if module.endswith(".py"):
-                with open(os.path.join(package, module), encoding="utf-8") as fh:
-                    written[_package_name(name) + "/" + module] = fh.read()
-    for rel, text in written.items():
-        _atomic_write(os.path.join(os.path.dirname(target), *rel.split("/")), text)
-    _record_hooks(home, name, written)
+    target = _write_hook_files(home, file)
     for entries, where in sections:
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
@@ -343,6 +358,63 @@ def list_hooks(home):
             for hook in (entry.get("hooks") or []) if isinstance(entry, dict) else []:
                 names += _hook_files(hook)
     return {"hooks": list(dict.fromkeys(names))}
+
+
+def hook_status(home, folder):
+    """Each hook `folder` ships that ~/.claude/settings.json runs and ~/.claude/hooks holds: whether
+    ~/.bindwright/hooks.json records it, which is what lets the helper keep it current, whether its installed
+    files match the shipped ones, and whether any of them is a link. A hook with no copy there is left out."""
+    if not os.path.isdir(folder):
+        raise HomeError("Not a hooks folder: " + folder)
+    recorded = _hook_record(home)
+    installed = os.path.join(_claude(home), "hooks")
+    found = {}
+    for name in list_hooks(home)["hooks"]:
+        if os.path.isfile(os.path.join(folder, name)) and os.path.lexists(os.path.join(installed, name)):
+            found[name] = {"recorded": name in recorded, "matches": _hook_matches(folder, installed, name),
+                           "linked": _hook_linked(folder, installed, name)}
+    return {"hooks": found}
+
+
+def _hook_linked(folder, installed, name):
+    """True when the hook file, its package folder or one of its shipped modules is installed as a link the
+    user keeps, such as into a dotfiles folder."""
+    paths = [_package_name(name)] + _hook_rels(folder, name)
+    paths = [os.path.join(installed, *rel.split("/")) for rel in paths]
+    return any(os.path.lexists(p) and _is_link(os.lstat(p)) for p in paths)
+
+
+def adopt_hook(home, file):
+    """Records a hook installed with the text of `file`, its package included, so the helper keeps it current.
+    Its entry in ~/.claude/settings.json stays as it is; a linked or differing copy is refused."""
+    name = os.path.basename(file)
+    installed = os.path.join(_claude(home), "hooks")
+    if not name.endswith(".py") or not os.path.isfile(file):
+        raise HomeError("A hook is a .py file: " + file)
+    if _hook_linked(os.path.dirname(os.path.abspath(file)), installed, name):
+        raise HomeError("The installed hook is a link, which stays as it is: " + name)
+    if not _hook_matches(os.path.dirname(os.path.abspath(file)), installed, name):
+        raise HomeError("The installed hook differs from the shipped one; install-hook replaces it: " + name)
+    return {"recorded": _write_hook_files(home, file)}
+
+
+def _hook_rels(folder, name):
+    """The hook file and the modules of its package that `folder` ships, as paths under the hooks folder."""
+    rels = [name]
+    package = os.path.join(folder, _package_name(name))
+    if os.path.isdir(package):
+        rels += [_package_name(name) + "/" + m for m in sorted(os.listdir(package)) if m.endswith(".py")]
+    return rels
+
+
+def _hook_matches(folder, installed, name):
+    """True when the hook file and every module of its package are installed with the shipped text."""
+    for rel in _hook_rels(folder, name):
+        copy = os.path.join(installed, *rel.split("/"))
+        shipped = os.path.join(folder, *rel.split("/"))
+        if not os.path.isfile(copy) or _style_fingerprint(copy) != _style_fingerprint(shipped):
+            return False
+    return True
 
 
 def set_allow(home, rule, on):
@@ -718,6 +790,8 @@ def _option(argv, name):
 # The commands that take one name, each run as command(home, name).
 NAMED_COMMANDS = {
     "remove-hook": remove_hook,
+    "hook-status": hook_status,
+    "adopt-hook": adopt_hook,
     "allow": lambda home, rule: set_allow(home, rule, True),
     "disallow": lambda home, rule: set_allow(home, rule, False),
     "add-mod": add_mod,
