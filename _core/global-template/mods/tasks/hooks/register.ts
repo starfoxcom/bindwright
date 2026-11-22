@@ -4,7 +4,8 @@ import {
   hasEngineWake, hasPendingWake, isNearCompaction, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS,
   nearCompactionText, workable,
 } from './keepgoing'
-import { builtInName, registerOwnTools } from './owntools'
+import { builtInName, hasListTool, registerOwnTools } from './owntools'
+import { commitRefusal, EDIT_TOOLS, editNote, isCommit, noteCommitted, noteListChanged, resetReview } from './review'
 import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import { PANE, phoneText } from './view'
 import type { EngineTask, Mirror, TaskArgs } from './mirror'
@@ -388,6 +389,7 @@ function registerLifecycle(on: On): void {
   on('session.end', async ($, e, next) => {
     await markEnded($).catch(() => undefined)
     live.mirror = undefined
+    resetReview()
     return next(e)
   })
 }
@@ -479,9 +481,21 @@ async function answerTaskCall($: EngineInterface, tool: string, args: TaskArgs, 
   }
   if (JSON.stringify(mirror) !== before) {
     mirror.changedAt = now
+    noteListChanged()
     await saveMirror($, mirror)
   }
   return { result: isStandIn ? JSON.stringify(output) : output }
+}
+
+// The command a shell call runs, or '' for any other tool.
+function shellCommand(e: { tool: string }): string {
+  return e.tool === 'Bash' || e.tool === 'PowerShell' ? String((e as { command?: unknown }).command) : ''
+}
+
+// Why a main-session commit waits, if it does. It waits only where a task tool can release it, since
+// without one it would wait for good.
+async function commitHold($: EngineInterface): Promise<string | undefined> {
+  return (await hasListTool($)) ? commitRefusal(await mirrorOf($)) : undefined
 }
 
 // Registers the task tools' answers, the tool-call checks and the hold description.
@@ -494,8 +508,14 @@ function registerTools(on: On): void {
     if (TASK_TOOLS.has(tool) && !e.agentId) {
       return (await answerTaskCall($, tool, e as unknown as TaskArgs, tool !== e.tool)) as never
     }
-    const result = await next(e)
-    if (e.agentId) return result
+    const isCommitCall = !e.agentId && isCommit(shellCommand(e), e.tool === 'PowerShell')
+    const refusal = isCommitCall ? await commitHold($) : undefined
+    if (refusal) return { deny: refusal } as never
+    const answered = await next(e)
+    if (e.agentId) return answered
+    const isDone = !('deny' in answered) && !(answered as { isError?: boolean }).isError
+    if (isDone && isCommitCall) noteCommitted()
+    const result = isDone && EDIT_TOOLS.has(e.tool) ? withContext(answered, editNote(await mirrorOf($))) : answered
     if (!TASK_TOOLS.has(tool)) {
       if (UNCOUNTED_TOOLS.has(e.tool)) return result
       if (live.checkOverlap) {

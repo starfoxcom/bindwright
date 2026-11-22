@@ -74,6 +74,12 @@ export function builtInName(tool: string): string {
   return BUILT_IN_OF.get(tool) ?? tool
 }
 
+/** Whether the session offers a tool that changes the list: the built-in TaskCreate or the own tools. */
+export async function hasListTool($: EngineInterface): Promise<boolean> {
+  const tools = await $.tool.list().catch(() => undefined)
+  return Boolean(tools?.some(tool => tool.name === 'TaskCreate' || BUILT_IN_OF.has(tool.name)))
+}
+
 /**
  * Registers the own list tools when the session offers no TaskCreate, and says whether it did. A tool
  * list that cannot be read registers nothing, so the model never sees two sets.
