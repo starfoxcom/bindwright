@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **PR bodies read like a person explaining the change.** `git.md` § Pull requests, the PR template and the contributing guide no longer ask for 1-3 bullets: a body gives the outcome first in a few plain sentences, says what the change does before naming a file or function, keeps lists for steps and checks, and drops hedges, em dashes and hype, in a professional tone. The reply style points PR bodies at that section (#1160).
+
 ### Added
 
 - **A session can no longer write repository secrets.** The guard refuses `gh secret set` and `gh secret delete` with a note to hand the user the command, since a test run can overwrite the real secrets and that cannot be undone; being irreversible, this rule enforces from the start instead of observing first. `set-review-tokens.sh` itself stops when Claude Code started its shell (`CLAUDECODE=1`), however the call is spelled, so it runs only in the user's own terminal.

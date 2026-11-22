@@ -2,14 +2,11 @@
 
 ## What
 
-<!-- 1-3 bullets describing the change -->
-
--
--
+<!-- What the change does, outcome first, in a few plain sentences, the way you would explain it to a colleague. Name a file or function only where the reader has to go there. -->
 
 ## Why
 
-<!-- 1-2 lines explaining the motivation -->
+<!-- The problem it solves, in a sentence or two. -->
 
 ## Notes (optional)
 
