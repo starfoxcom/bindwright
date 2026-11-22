@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.10.0] — 2026-11-22
+
 ### Added
 
 - **A commit waits until the task list is current.** With the tasks mod, a `git commit` from the main session is held until the list has changed since the previous commit, so each commit puts what it does on the task it belongs to. The hold lists every open task with its hold and description, so each one is checked against what is true now, and the first file edit after a change names the task in progress. Reading or listing the tasks does not release it. `task-tracking.md` asks for the same before each commit where the mod is not installed.
