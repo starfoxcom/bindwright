@@ -69,6 +69,9 @@ test('only a git commit waits', async ($, on) => {
     ['git push origin main', false],
     ['cd P:/repo; git add -u && git commit -m x', true],
     ['echo "git commit later"', false],
+    ['git commit-graph write --reachable', false],
+    ['gh pr comment 5 --body "tests pass; git commit is next"', false],
+    ["cat > steps.md <<'EOF'\ngit commit -m x\nEOF", false],
   ]
   for (const [command, isRefused] of rows) {
     const answer = await call($, { tool: 'Bash', command })

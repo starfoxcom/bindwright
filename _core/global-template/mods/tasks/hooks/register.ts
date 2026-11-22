@@ -497,7 +497,7 @@ function registerTools(on: On): void {
       return (await answerTaskCall($, tool, e as unknown as TaskArgs, tool !== e.tool)) as never
     }
     const command = e.tool === 'Bash' || e.tool === 'PowerShell' ? String((e as { command?: unknown }).command) : ''
-    const isCommitCall = !e.agentId && isCommit(command)
+    const isCommitCall = !e.agentId && isCommit(command, e.tool === 'PowerShell')
     const refusal = isCommitCall ? commitRefusal(await mirrorOf($)) : undefined
     if (refusal) return { deny: refusal } as never
     const answered = await next(e)
