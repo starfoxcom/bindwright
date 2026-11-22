@@ -6,6 +6,20 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.12.0] — 2026-11-22
+
+### Added
+
+- **`/bindwright:update` brings the installed mods current.** Setup copied each mod into `~/.claude/mods/` once, and nothing after that touched the copy, so a plugin update never reached it and every computer kept the mods of the day it was set up. Setup now records a hash of each file it installs, and the update compares the installed copy with the plugin's: a file the user never edited takes the new text, a file the template dropped goes, and a file the user edited stays as it is, with the new text written beside it as `<file>.new`. A mod installed before the record existed is listed file by file and updated on one yes, except its lists of the user's own entries (the `hooks/rules.ts` of runners, shared-pc and usage-guard), which stay with the new text beside them. `home.py` gains `mod-status DIR` and `update-mod DIR [--adopt]`.
+
+### Changed
+
+- **Every step back after repeated red review rounds looks up five solutions.** The research a PR owes after its 3rd, 5th and every red round from the 6th took three lookups, and five only from the 8th; it now takes five each time, so the first step back already compares enough options. ci-watch holds edits, commits and pushes until five distinct lookups ran, and `review-tiers.md`, `local-review.md` and the mods README say the same.
+
+### Fixed
+
+- **ci-watch no longer reports a PR that conflicts with its base as passed.** GitHub starts only some checks on such a PR, so the watch saw the one that ran pass and woke the session with "all 1 checks settled with no failure". When a watch settles with no failure, it now asks GitHub whether the PR can merge, and on a conflict its wake says to merge the base branch in and push. That pass counts as no review round, and it no longer lifts a step back.
+
 ## [v7.11.6] — 2026-11-22
 
 ### Fixed

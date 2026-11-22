@@ -1,4 +1,5 @@
 import type { Watch } from '../types'
+import { isJudgedPass } from './checks'
 import { stepBackOf } from './rounds'
 import type { EngineInterface } from 'claude-code'
 
@@ -70,7 +71,7 @@ export async function followId($: EngineInterface, folder: string, memory: Memor
     const there = savedByPr.get(prOf(w))
     if (!there || there.headSha !== w.headSha || !there.outcome || w.outcome) return w
     // A step back latched in memory stays unless the saved copy went green, which ends it.
-    if (there.outcome === 'passed') return there
+    if (isJudgedPass(there)) return there
     return w.stepBackTopics ? { ...there, ...stepBackOf(w) } : there
   })
   const ownPrs = new Set(own.map(prOf))

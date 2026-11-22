@@ -1,5 +1,5 @@
 // The machine's local CI runners. It ships empty, so the band stays hidden until you add your own,
-// here or, to keep them through template updates, as a JSON array of the same entries in
+// here or as a JSON array of the same entries in
 // ~/.claude/mods-data/runners/runners.json (read at session start, after this list). Each entry:
 //   label      what the band calls it
 //   processes  process names that all run while the runners are up (tasklist on Windows, pgrep -f

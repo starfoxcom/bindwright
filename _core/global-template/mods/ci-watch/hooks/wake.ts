@@ -54,6 +54,13 @@ function outcomeText(watch: Watch, now: number | undefined, red: number): string
       `Look at why before waiting longer.`
     )
   }
+  if (watch.isConflicting) {
+    return (
+      `[ci-watch] ${pr}: the ${entries.length} checks that ran passed, but the PR conflicts with its base ` +
+      `branch, so GitHub starts no other check until that is fixed and this is no fix round. Merge the base ` +
+      `branch in, settle the conflicts and push; the watch restarts on the new commit.`
+    )
+  }
   return (
     `[ci-watch] ${pr}: all ${entries.length} checks settled with no failure. Verify it is mergeable and ` +
     `finish it per the project rules.`

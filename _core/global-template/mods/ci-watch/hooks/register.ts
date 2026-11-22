@@ -15,7 +15,7 @@ import { isSameRun, PENDING, reconcile, settle } from './settle'
 import { withVerdict } from './verdict'
 import { wakeText } from './wake'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
-import { isNothingToWatch, readChecks, withWorkflows } from './checks'
+import { isJudgedPass, isNothingToWatch, readChecks, withMergeable, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
 import { HELP, HINT } from './help'
 import { checkRuns, noteRun, registerRuns, takeRunNotes } from './runs'
@@ -467,7 +467,7 @@ async function poll($: EngineInterface): Promise<void> {
       continue
     }
     const polled = checks
-      ? await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs))
+      ? await withMergeable($, await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs)), now)
       : now - asked.startedAt > live.timeoutMs
         ? { ...asked, outcome: 'timeout' as const, settledAt: now }
         : asked
@@ -484,7 +484,7 @@ async function poll($: EngineInterface): Promise<void> {
   // watch as it is now decides whether it is silent. One stopped or restarted meanwhile is not found.
   const toWake = live.watches.filter(w => w.outcome && !w.isSilent && settled.some(s => isSameRun(s, w)))
   // A green round ends the step back latched on its watch: the problem it asked about is fixed.
-  const isGreen = (w: Watch) => w.outcome === 'passed' && w.stepBackTopics && settled.some(s => isSameRun(s, w))
+  const isGreen = (w: Watch) => isJudgedPass(w) && w.stepBackTopics && settled.some(s => isSameRun(s, w))
   const ended = (w: Watch): Watch => ({ ...w, stepBackTopics: undefined, stepBackNeeded: undefined })
   live.watches = live.watches.map(w => (isGreen(w) ? ended(w) : w))
   // GitHub's status is read before the retirement check: the read can take seconds, and a load retired
