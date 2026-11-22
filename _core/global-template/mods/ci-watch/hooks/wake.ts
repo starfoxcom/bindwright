@@ -25,7 +25,8 @@ function noVerdictText(pr: string, tiers: string, red: number): string {
   return (
     `[ci-watch] ${pr}: the review gave no verdict (review gate: ${tiers}), so this is no fix round and ` +
     `the count stays at ${red}. A review that cannot run (no account with room, a refused token or post, a ` +
-    `cancelled run) is infrastructure: read the failing log, and re-run the review once its cause is gone.`
+    `cancelled run) is infrastructure: read the failing log, re-run the review once its cause is gone, then ` +
+    `call the watch tool on this PR, so the re-run's verdict counts as this head's round.`
   )
 }
 

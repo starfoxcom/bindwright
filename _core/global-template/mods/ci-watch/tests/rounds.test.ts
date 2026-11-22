@@ -454,6 +454,7 @@ const VERDICT_ROWS: VerdictRow[] = [
   { name: 'a routine 🔴 then an errored deep run', state: 'routine=block;deep=error', build: 'pass', counted: true },
   { name: "a deep 🔴", state: 'routine=pass;escalated=yes;deep=block', build: 'pass', counted: true },
   { name: 'a gate state with no tier', state: '', build: 'pass', counted: true },
+  { name: 'a failed gate whose tiers all passed', state: 'routine=pass;deep=none', build: 'pass', counted: true },
   { name: 'a gate state that cannot be read', build: 'pass', counted: true },
   { name: 'a failed test beside an errored review', state: 'routine=error;deep=none', build: 'fail', counted: true },
   {
