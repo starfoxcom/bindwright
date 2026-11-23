@@ -16,7 +16,9 @@ function finishedAgo(watch: Watch, now?: number): string {
 export function wakeText(watch: Watch, now?: number, red = 0): string {
   const pr = `${watch.repo}#${watch.number}`
   const isCounted = watch.outcome === 'failed' && watch.noVerdict === undefined
-  const research = isCounted && isResearchDue(red) ? researchText(pr, red) : ''
+  // A latched step back asks for research too: a streak that jumped past the 3rd round never lands on it.
+  const isStepBack = isResearchDue(red) || watch.stepBackTopics !== undefined
+  const research = isCounted && isStepBack ? researchText(pr, red) : ''
   return `${outcomeText(watch, now, red)}${research}${finishedAgo(watch, now)}`
 }
 

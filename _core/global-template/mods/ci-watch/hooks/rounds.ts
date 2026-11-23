@@ -1,5 +1,6 @@
-// The fix-round count: how many pushed rounds in a row a PR has had whose checks did not all pass (both
-// reviews included). At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
+// The fix-round count: how many pushed rounds in a row a PR has had that did not merge: their checks did
+// not all pass (both reviews included), or they passed and another push followed instead of the merge.
+// At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
 // research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
 // leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
 // also latches it on the watch: the session's edits, commits and pushes wait until five distinct web
@@ -22,10 +23,12 @@ export type PrRounds = { rounds: Round[] }
 const KEPT = 50
 
 /** The PR's rounds with one more settled watch. A watch of a head already on the list (a re-run) replaces
- * that round. */
+ * that round. A round is green only when the PR merges at its head, so a new head turns every earlier
+ * round red: one that passed was still followed by another push, for a conflict or any other reason. */
 export function recordRound(pr: PrRounds | undefined, sha: string, red: boolean): PrRounds {
-  const rounds = (Array.isArray(pr?.rounds) ? pr.rounds : []).filter(r => r.sha !== sha)
-  return { rounds: [...rounds, { sha, red }].slice(-KEPT) }
+  const earlier = (Array.isArray(pr?.rounds) ? pr.rounds : []).filter(r => r.sha !== sha)
+  const unmerged = earlier.map(r => ({ sha: r.sha, red: true }))
+  return { rounds: [...unmerged, { sha, red }].slice(-KEPT) }
 }
 
 /** The rounds in a row, newest first, that had a failed check, back to the last one that passed. */
@@ -42,6 +45,13 @@ export const ROUNDS_FILE = 'rounds.json'
 
 /** Whether a red streak this long calls for the research step: at 3, 5, then every round from 6. */
 export const isResearchDue = (red: number) => red === 3 || red >= 5
+
+/** Whether recording a round crossed a research step. A round that passed turns red once another head
+ * follows it, so the streak can jump (0 to 4) and step over the 3rd without landing on it. */
+export function crossedResearch(before: PrRounds | undefined, after: PrRounds): boolean {
+  for (let red = redStreak(before) + 1; red <= redStreak(after); red++) if (isResearchDue(red)) return true
+  return false
+}
 
 /** How many more red rounds until the next research step: to 3, then to 5, then the next one. */
 export const roundsToResearch = (red: number) => (red < 3 ? 3 : red < 5 ? 5 : red + 1) - red

@@ -30,7 +30,7 @@ Each reviewer ends with one line: `🟢 LGTM` only when the review is fully clea
 
 ## After a 🔴
 
-Sort each finding against the bar before touching code. Fix what passes it, plus every other copy of the same mistake, with the smallest change and no new features, commit, and run both reviewers again on the new head. After 3 red rounds in a row, look up at least five ways others solved the same problem, compare them and take the simplest one that removes the whole class, then continue; again after 2 more red rounds, then after every red round from the 6th on. The 10th red round in a row is the hard stop: drop the change and rebuild it from the base branch on a new branch, with that round's findings fixed in the rebuild; the new branch starts its own count.
+A round is green only when the change merges at that head; two 🟢 followed by another commit instead count red. Sort each finding against the bar before touching code. Fix what passes it, plus every other copy of the same mistake, with the smallest change and no new features, commit, and run both reviewers again on the new head. After 3 red rounds in a row, look up at least five ways others solved the same problem, compare them and take the simplest one that removes the whole class, then continue; again after 2 more red rounds, then after every red round from the 6th on. The 10th red round in a row is the hard stop: drop the change and rebuild it from the base branch on a new branch, with that round's findings fixed in the rebuild; the new branch starts its own count.
 
 ## Merging
 

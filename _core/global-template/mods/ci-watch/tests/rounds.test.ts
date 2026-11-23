@@ -3,7 +3,7 @@ import { type Engine, expect, test } from 'claude-code/testing'
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import {
-  isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic,
+  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic,
 } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
@@ -21,15 +21,25 @@ function seed(seen: Seen, results: string[]) {
   seen.files.set(path, JSON.stringify({ 'o/r#7': { rounds } }))
 }
 
-// Newest first, back to the last round that passed.
-test('red rounds count back to a green round', () => {
-  const of = (results: boolean[]) =>
-    results.reduce<PrRounds>((pr, red, i) => recordRound(pr, `c${i}`, red), { rounds: [] })
+const of = (results: boolean[]) =>
+  results.reduce<PrRounds>((pr, red, i) => recordRound(pr, `c${i}`, red), { rounds: [] })
+
+// A round is green only when the PR merges at its head: one that passed and was followed by another push counts red.
+test('a round that passed but did not merge counts red once another head follows', () => {
   expect(redStreak(undefined)).toBe(0)
   expect(redStreak(of([true, true, true, true, true, true]))).toBe(6)
-  expect(redStreak(of([true, true, true, false, true, true]))).toBe(2)
+  expect(redStreak(of([true, true, true, false, true, true]))).toBe(6)
   expect(redStreak(of([true, false]))).toBe(0)
   expect(redStreak({ rounds: [] })).toBe(0)
+})
+
+// Red, red, passed, red: the streak jumps from 0 to 4 and steps over the 3rd, which still owes its step back.
+test('a streak that jumps past a research step still asks for it', () => {
+  const step = (results: boolean[]) => crossedResearch(of(results.slice(0, -1)), of(results))
+  expect(step([true, true, false, true])).toBe(true)
+  expect(step([true, true, true])).toBe(true)
+  expect(step([true, true, true, true])).toBe(false)
+  expect(step([true, true])).toBe(false)
 })
 
 // A re-run of a head already counted replaces its round; the list keeps the newest fifty.
