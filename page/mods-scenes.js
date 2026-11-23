@@ -228,6 +228,16 @@ export const SCENES = {
     ["band", [PC_FREE]],
     ["wait", 1000],
   ],
+  "chat-sync": [
+    ["out", "mods.scene.chat-sync.in", "okt"],
+    ["wait", 1400],
+    ["type", "/resume"],
+    ["out", "mods.scene.chat-sync.resume", "mute"],
+    ["wait", 1200],
+    ["tool", "Update", "src/coupons.js", 600],
+    ["out", "mods.scene.chat-sync.out", "mute"],
+    ["wait", 2000],
+  ],
   "skill-check": [
     ["tool", "Skill", "close-session", 600],
     ["out", "mods.scene.skill-check.missing", "badt"],

@@ -1,0 +1,5 @@
+{
+  "name": "chat-sync",
+  "version": "0.1.0",
+  "description": "Keeps chats in step across computers through a sync folder (Google Drive, OneDrive, Dropbox, iCloud Drive, Syncthing) or a private GitHub repo, so /resume finds a chat started on another computer once Claude Code starts in the project."
+}
