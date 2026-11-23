@@ -1,0 +1,19 @@
+name: A question
+description: Not sure how something works, or whether Bindwright fits what you need
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask away. The website's settings page lists every question setup asks and what each answer changes, which may answer it sooner: https://starfoxcom.github.io/bindwright/page/settings/
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you tried so far?
+      description: What you read or ran, and what happened. Leave it empty if you have not started yet.

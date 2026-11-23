@@ -1050,7 +1050,9 @@ test("the repo URL is used whole, and git.md names review-tiers.md only with AI 
   const on = await run(a);
   const readme = on.get("README.md") ?? on.get(`${STAGING}README.md`);
   assert.ok(readme.includes("git clone https://github.com/me/thing.git"), readme);
-  assert.ok(on.get(".github/ISSUE_TEMPLATE/config.yml").includes("url: https://github.com/me/thing/discussions"));
+  // Discussions is off on a new repo, so the forms never link a page that may not exist.
+  assert.ok(!on.get(".github/ISSUE_TEMPLATE/config.yml").includes("discussions"));
+  assert.ok(on.has(".github/ISSUE_TEMPLATE/question.yml"));
   for (const [path, text] of on) assert.ok(!text.includes("github.com/https:"), path);
   assert.ok(on.get(".claude/rules/git.md").includes("`review-tiers.md`"));
   a.advanced.aiReview = false;
