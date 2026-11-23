@@ -9,7 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The update says when the review guide lacks the template-text section.** The pre-screen check that lists files still matching Bindwright's template text only helps when `.github/review-guide.md` tells the reviewer what to do with that list. A project that keeps its own copy of the guide never got that section, and the update did not mention it. The update now names the gap, shows the section and adds it on a yes.
-- **Upstream findings no longer turn the verdict red.** The review guide tells the reviewer to put findings in Bindwright's own template text under an "Upstream" heading, but a line there that opened with 🔴 or "Blocking" still blocked the gate, and a project's own rule that every written finding is blocking turned the list red. The guide now says to write those lines as plain text and that a review with only upstream findings is 🟢, and the update quotes a project's own blocking-on-any-finding rule and offers one sentence that leaves the upstream list out of it.
+- **Upstream findings no longer turn the verdict red.** The review guide tells the reviewer to put findings in Bindwright's own template text under an "Upstream" heading, but a line there that opened with 🔴 or "Blocking" still blocked the gate, and a project's own rule that every written finding is blocking turned the list red. The guide now says to write those lines as plain text and that a review with only upstream findings is 🟢, the verdict rule in `review-tiers.md` says the same, and the update quotes a blocking-on-any-finding rule the project wrote itself and offers one sentence that leaves the upstream list out of it.
 
 ## [v7.15.0] — 2026-11-23
 
