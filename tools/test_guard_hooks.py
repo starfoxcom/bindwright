@@ -239,14 +239,14 @@ class GuardHookTest(unittest.TestCase):
         rev_dot_path = (("git show origin/develop:.claude/settings.json", "Bash"),)
         refused += rev_dot_path if os.name == "nt" else ()
         passing += () if os.name == "nt" else rev_dot_path
-        for command, tool in refused:
+        run = lambda command, tool: self.run_hook("tool-rules", command, tool=tool)  # noqa: E731
+        for (command, _), result in self.each(refused, run):
             with self.subTest(command=command):
-                result = self.run_hook("tool-rules", command, tool=tool)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(b"BLOCKED (tool rule)", result.stdout)
-        for command, tool in passing:
+        for (command, _), result in self.each(passing, run):
             with self.subTest(command=command):
-                self.assert_passes(self.run_hook("tool-rules", command, tool=tool))
+                self.assert_passes(result)
 
     def test_skipped_when_home_registers_a_working_copy(self):
         self.home_settings('{"command": "python \\"C:/Users/me/.claude/hooks/push-guard.py\\""}',
@@ -1268,37 +1268,41 @@ class GuardHookTest(unittest.TestCase):
                 self.assert_passes(result)
 
     def test_cmdlet_parameters_stay_whole_and_unknown_names_stay_unread(self):
-        # A PowerShell parameter (`-Force`, `-Format`) is a whole name, never `-F` with a file.
-        for command in ('Stop-Process -Name app -Force; gh api repos/o/r/actions/runners',
-                        'Get-Date -Format "dddd"; gh issue list --repo o/r --json number'):
+        ps, sh = "PowerShell", "Bash"
+        # Rows of (command, tool, refusal text it names, or None when it passes).
+        rows = (
+            # A PowerShell parameter (`-Force`, `-Format`) is a whole name, never `-F` with a file.
+            ('Stop-Process -Name app -Force; gh api repos/o/r/actions/runners', ps, None),
+            ('Get-Date -Format "dddd"; gh issue list --repo o/r --json number', ps, None),
+            # A program a cmdlet runs still reads a file through a flag written onto its value, and
+            # a declaration whose name is built at run time stays unreadable.
+            ('Start-Process curl.exe -ArgumentList "-Fbody=@notes.md" https://api.github.com/x', ps, "notes.md"),
+            *((command, sh, "could not read this command") for command in (
+                'export "$KV" && git push', 'export "A"=$X && git commit -m x',
+                'export "A=$@" && git commit -m x', 'export "A=${U:-$@}" && git commit -m x')),
+            # An `env` bundle whose letters are built at run time may take the next word or not,
+            # each bundle on its own.
+            *((command, sh, "lefthook") for command in (
+                "env -${Q}u FOO LEFTHOOK=0 git commit -m x",
+                "env --unset=${V} -${Q}u FOO LEFTHOOK=0 git commit -m x",
+                "env -${A}u FOO -${B}i LEFTHOOK=0 git commit -m x", "env -$Qu LEFTHOOK=0 git commit -m x",
+                'env -"$Q"u LEFTHOOK=0 git commit -m x', "env -$(echo u) FOO LEFTHOOK=0 git commit -m x",
+                "env -`echo u` FOO LEFTHOOK=0 git commit -m x")),
+            # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
+            *((command, ps, "no-verify") for command in (
+                'git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$éam" -n')),
+            # A hyphenated native program (no approved verb) keeps getopt's attached read, and git
+            # run through a cmdlet under a Windows wrapper name is still git.
+            ('ssh-agent $GIT commit "-Fnotes.txt"', ps, "notes.txt"),
+            ('Start-Process git.cmd commit "-Fnotes.txt"', ps, "notes.txt"),
+        )
+        run = lambda command, tool, _: self.attr(command, tool=tool)  # noqa: E731
+        for (command, _, names), result in self.each(rows, run):
             with self.subTest(command=command):
-                self.assert_passes(self.attr(command, tool="PowerShell"))
-        # A program a cmdlet runs still reads a file through a flag written onto its value, and a
-        # declaration whose name is built at run time stays unreadable.
-        self.assert_denied(self.attr('Start-Process curl.exe -ArgumentList "-Fbody=@notes.md"'
-                                     ' https://api.github.com/x', tool="PowerShell"), "notes.md")
-        for command in ('export "$KV" && git push', 'export "A"=$X && git commit -m x',
-                        'export "A=$@" && git commit -m x', 'export "A=${U:-$@}" && git commit -m x'):
-            with self.subTest(command=command):
-                self.assert_denied(self.attr(command), "could not read this command")
-        # An `env` bundle whose letters are built at run time may take the next word or not, each
-        # bundle on its own.
-        for command in ("env -${Q}u FOO LEFTHOOK=0 git commit -m x",
-                        "env --unset=${V} -${Q}u FOO LEFTHOOK=0 git commit -m x",
-                        "env -${A}u FOO -${B}i LEFTHOOK=0 git commit -m x", "env -$Qu LEFTHOOK=0 git commit -m x",
-                        'env -"$Q"u LEFTHOOK=0 git commit -m x', "env -$(echo u) FOO LEFTHOOK=0 git commit -m x",
-                        "env -`echo u` FOO LEFTHOOK=0 git commit -m x"):
-            with self.subTest(command=command):
-                self.assert_denied(self.attr(command), "lefthook")
-        # Any PowerShell variable makes a bundle's letters unknown, so none takes the next word.
-        for command in ('git commit "-$^m" -n', 'git commit "-$$n" -m x', 'git commit "-$éam" -n'):
-            with self.subTest(command=command):
-                self.assert_denied(self.attr(command, tool="PowerShell"), "no-verify")
-        # A hyphenated native program (no approved verb) keeps getopt's attached read, and git run
-        # through a cmdlet under a Windows wrapper name is still git.
-        for command in ('ssh-agent $GIT commit "-Fnotes.txt"', 'Start-Process git.cmd commit "-Fnotes.txt"'):
-            with self.subTest(command=command):
-                self.assert_denied(self.attr(command, tool="PowerShell"), "notes.txt")
+                if names is None:
+                    self.assert_passes(result)
+                else:
+                    self.assert_denied(result, names)
 
     def test_shapes_the_grammars_reject_are_read_as_the_shell_reads_them(self):
         # A here-doc with a redirect or a command on its first line, a redirect target in several
