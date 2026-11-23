@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **ci-watch no longer counts a review run cancelled during triage as a red round.** A cancel early in the review run, by a newer push or by hand, leaves its triage, trigger and pre-screen jobs cancelled beside the failed gate, and ci-watch did not know those jobs as the review's own, so it counted a fix round although nothing was reviewed; on one PR it became the 10th red round and set off the hard stop. They now count as review jobs, so such a run keeps the count while no review of it was posted, as an errored run already did.
+- **The review rules say what to do after a review-workflow PR merges.** An open PR whose routine review started before that merge still holds the old copy of the workflow, so its review cannot post ("The bot token exchange failed three times"), and a re-run fails the same way. `review-tiers.md` now says to merge the default branch into the PR and push, which starts a run on the new copy.
 
 ## [v7.13.1] — 2026-11-22
 
