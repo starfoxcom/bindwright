@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The skill contracts step runs on one engine command.** `/bindwright:setup` and `/bindwright:update` build the project's skill-check contracts with `home.py skill-contracts <repo>` instead of asking the session to filter the template's example file by hand. It prints the new steps, the project's current ones and which case holds, and `accept` or `decline` writes the answer, keeping every other project's key and a turned-down offer under `_offered`.
+
 ## [v7.15.4] — 2026-11-23
 
 ### Fixed
