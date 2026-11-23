@@ -9,8 +9,9 @@ const MINUTE = 60_000
 
 type World = { runs: string[][]; toasts: string[]; clock: ReturnType<typeof mock.clock> }
 
-// The helper answers each command with the JSON line given for it.
-function world(on: On, answers: Record<string, unknown> = {}): World {
+// The helper answers each command with the JSON line given for it, or, for a
+// command named in `stops`, exits with that code and prints nothing.
+function world(on: On, answers: Record<string, unknown> = {}, stops: Record<string, number> = {}): World {
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 23, 12, 0, 0) })
   const seen: World = { runs: [], toasts: [], clock }
   on('session.id', () => ({ value: 'sess-1' }))
@@ -27,8 +28,10 @@ function world(on: On, answers: Record<string, unknown> = {}): World {
   on('process.run', ($, e) => {
     const args = e.argv.slice(2)
     seen.runs.push([...args])
-    const stdout = `${JSON.stringify(answers[args[0] ?? ''] ?? {})}\n`
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const stop = stops[args[0] ?? '']
+    const stdout = stop === undefined ? `${JSON.stringify(answers[args[0] ?? ''] ?? {})}\n` : ''
+    const exitCode = stop ?? 0
+    return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   return seen
 }
@@ -51,11 +54,14 @@ test('a session start brings newer chats in, and says how to load the open chat 
   expect(seen.toasts[0]).toContain('start a new session in this project, then /resume this chat')
 })
 
-test('a push that fails at session start says so', async ($, on) => {
-  const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['other'], pushError: 'rejected' } })
+test('a push that fails at session start says so, and so does a helper that stops', async ($, on) => {
+  const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['other'], pushError: 'rejected' } },
+    { out: 1 })
   await start($)
-
   expect(seen.toasts).toEqual(['Chat sync: could not push the chat repo: rejected.'])
+
+  await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
+  expect(seen.toasts.at(-1)).toContain('the helper stopped (exit code 1)')
 })
 
 test('turns copy the chat out at most once a minute, and a copy that fails says so', async ($, on) => {

@@ -285,6 +285,22 @@ test('a chat deleted on this computer stays deleted until another computer conti
   assert.strictEqual(readChat(b, 's1')[1].message.content, `two in ${b.root}`)
 })
 
+test('a chat deleted here whose copy went missing from the sync place comes back', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  b.sync('in', b.chatDir, b.root, 'other')
+  b.sync('in', b.chatDir, b.root, 'other')
+  const folder = path.join(store, 'shop', 's1')
+  assert.strictEqual(fs.readdirSync(folder).length, 2, 'both computers sent a copy')
+  fs.rmSync(path.join(b.chatDir, 's1.jsonl'))
+  const own = JSON.parse(fs.readFileSync(path.join(b.dataDir, 'machine.json'), 'utf8')).id
+  fs.rmSync(path.join(folder, `${own}.jsonl`))
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+})
+
 test('a chat naming the other computer\'s home as text goes back and forth without splitting', () => {
   const store = tempDir('store')
   const laptop = computer('l', store, { root: '/Users/sam/work/shop', home: '/Users/sam' })

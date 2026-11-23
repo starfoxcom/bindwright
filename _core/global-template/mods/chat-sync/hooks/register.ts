@@ -34,7 +34,10 @@ let hasEnded = false
 async function runSync($: EngineInterface, args: string[], timeoutMs = 120_000): Promise<Answer> {
   try {
     const run = await $.process.run(['node', `${$.plugin.root}/${SCRIPT}`, ...args], { timeoutMs })
-    const last = run.stdout.trim().split('\n').pop() || '{}'
+    const last = run.stdout.trim().split('\n').pop()
+    if (run.exitCode !== 0 || !last) {
+      return { error: `the helper stopped (exit code ${run.exitCode}) ${run.stderr.trim().slice(-200)}`.trim() }
+    }
     return JSON.parse(last) as Answer
   } catch (error) {
     return { error: String(error) }

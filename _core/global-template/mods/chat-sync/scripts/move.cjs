@@ -28,11 +28,10 @@ function checkPrivate(repo) {
   return `${repo} is ${visibility.toLowerCase() || 'not confirmed private'}, and chats go only to a private repo.`
 }
 
-// The clone keeps chat files byte for byte, whatever git's line-end setting is
-// on this computer, and checks a committed link out as a plain file.
+// The clone gets the mod's own git settings from its first checkout on.
 function clone(repo, folder) {
   fs.rmSync(folder, { recursive: true, force: true })
-  const args = ['repo', 'clone', repo, folder, '--', '-c', 'core.autocrlf=false', '-c', 'core.symlinks=false']
+  const args = ['repo', 'clone', repo, folder, '--', ...base.gitSettings()]
   const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000, env: base.quietEnv() })
   return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim()}`
 }

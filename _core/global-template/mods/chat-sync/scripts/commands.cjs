@@ -202,12 +202,6 @@ function privateRepoError(repo) {
   return refused
 }
 
-// An empty folder of the mod's, where git finds no hook to run.
-function noHooksFolder() {
-  const folder = path.join(base.dataDir(), 'no-hooks')
-  fs.mkdirSync(folder, { recursive: true })
-  return folder
-}
 
 // The clone's own ignore list (never committed) leaves temporary copies out.
 function keepTempsOutOfGit(store) {
@@ -218,10 +212,8 @@ function keepTempsOutOfGit(store) {
   fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.*.tmp\n`)
 }
 
-// Where the chats go now, or a reason nothing can be copied. A clone keeps chat
-// files byte for byte on every computer, whatever git's line-end setting is,
-// and its machine-made commits run none of the user's hooks or signing, which
-// could ask for a passphrase or a key touch with no one there.
+// Where the chats go now, or a reason nothing can be copied. Every git call
+// in the clone runs with the mod's own settings (`gitSettings` in sync.cjs).
 function openStore() {
   const place = base.readPlace()
   const store = base.storeRoot(place)
@@ -230,10 +222,6 @@ function openStore() {
     if (!fs.existsSync(path.join(store, '.git'))) {
       return { error: 'The chat repo is not cloned here. Run /chat-sync move git <owner/repo> again.' }
     }
-    base.git(store, 'config', 'core.autocrlf', 'false')
-    base.git(store, 'config', 'core.symlinks', 'false')
-    base.git(store, 'config', 'commit.gpgsign', 'false')
-    base.git(store, 'config', 'core.hooksPath', noHooksFolder())
     keepTempsOutOfGit(store)
   }
   return { place, store }
@@ -384,9 +372,13 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
   const copies = otherCopies(storeChat)
   const hasLocal = sizeOf(local) >= 0
   const wasDeleted = !hasLocal && seen[`sent:${key}`] !== undefined
-  if (wasDeleted && !isContinuedElsewhere(storeChat, root)) return { verdict: 'kept' }
   const isUnchanged = copies.every(copy => seen[`${key}/${path.basename(copy)}`] === stampOf(copy))
-  if (hasLocal && isUnchanged) return { verdict: 'kept' }
+  const isSentHere = isPlainFile(path.join(storeChat, ownName()))
+  if ((hasLocal || (wasDeleted && isSentHere)) && isUnchanged) return { verdict: 'kept' }
+  if (wasDeleted && !isContinuedElsewhere(storeChat, root)) {
+    markSeen(copies, seen, key)
+    return { verdict: 'kept' }
+  }
   const before = hasLocal ? stampOf(local) : null
   return inWorkFolder(work => {
     const found = behindCopy(storeChat, local, root, work)
@@ -396,17 +388,23 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
       return { ...answer, verdict: 'kept' }
     }
     // Marked as looked at only once done, so an import given up on is tried again.
-    for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
+    markSeen(copies, seen, key)
     return answer
   })
 }
 
+// Records each copy's stamp, so an unchanged one is not read again.
+function markSeen(copies, seen, key) {
+  for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
+}
+
 // True when another computer's copy holds lines after the ones this computer
-// last sent, read in this computer's own paths.
+// last sent, read in this computer's own paths. Without this computer's copy
+// there is nothing to measure against, so any other copy counts.
 function isContinuedElsewhere(storeChat, root) {
   return inWorkFolder(work => {
     const sent = path.join(work, 'sent')
-    if (!copyPlainFile(path.join(storeChat, ownName()), sent)) return false
+    if (!copyPlainFile(path.join(storeChat, ownName()), sent)) return otherCopies(storeChat).length > 0
     const asLocal = path.join(work, 'sent-here')
     transformFile(sent, asLocal, expand(root, os.homedir()), true)
     return behindCopy(storeChat, asLocal, root, work).read !== undefined

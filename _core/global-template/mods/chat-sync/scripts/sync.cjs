@@ -80,8 +80,20 @@ function quietEnv() {
   return env
 }
 
+// Settings every git call of the mod runs with, the clone included: chat files
+// byte for byte whatever the user's line-end setting is, a committed link
+// checked out as a plain file, and none of the user's hooks or commit signing,
+// which could ask for a passphrase or a key touch with no one there. The hooks
+// folder is never made, so git finds no hook in it.
+function gitSettings() {
+  const settings = ['core.autocrlf=false', 'core.symlinks=false', 'commit.gpgsign=false',
+    `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`]
+  return settings.flatMap(setting => ['-c', setting])
+}
+
 function git(cwd, ...args) {
-  const run = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv() })
+  const run = spawnSync('git', [...gitSettings(), '-C', cwd, ...args],
+    { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv() })
   return { ok: run.status === 0, out: `${run.stdout || ''}${run.stderr || ''}`.trim() }
 }
 
@@ -109,7 +121,8 @@ function safeName(text) {
 }
 
 module.exports = {
-  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, git, projectKey, safeName,
+  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git, projectKey,
+  safeName,
 }
 
 if (require.main === module) {
