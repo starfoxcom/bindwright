@@ -47,7 +47,7 @@ body:
     id: version
     attributes:
       label: Bindwright version
-      description: Shown by `/plugin` in Claude Code, and in the website's footer. Leave it empty if you cannot find it.
+      description: Shown by `/plugin` in Claude Code. Leave it empty if you cannot find it.
       placeholder: "7.14.1"
   - type: input
     id: system

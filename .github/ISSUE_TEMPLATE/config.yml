@@ -1,4 +1,6 @@
-blank_issues_enabled: false
+# Blank issues stay on: /bindwright:report without the GitHub CLI opens a prefilled
+# new-issue link, which GitHub sends to the form chooser, dropping the report, when they are off.
+blank_issues_enabled: true
 contact_links:
   - name: Report a security problem privately
     url: https://github.com/starfoxcom/bindwright/security/advisories/new
