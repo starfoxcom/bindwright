@@ -101,7 +101,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
     theirs_all = repo_files(rendered)
     paths = sorted(set(pristine["files"]) | set(theirs_all), key=_code_units)
     result = {o: [] for o in OUTCOMES}
-    result.update({"write": [], "stage": [], "renamed": [], "remove": []})
+    result.update({"write": [], "stage": [], "renamed": [], "remove": [], "owned_changed": []})
     files = {}
     moves = _moves_for(theirs_all, pristine, read_repo, owned)
     moved_from = set(moves.values())
@@ -118,6 +118,11 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
                     files[owned_old] = pristine["files"][owned_old]
             elif theirs is not None:
                 files[path] = theirs
+                # The templates changed a file the project owns: the project's copy never gets it by itself,
+                # so the new text waits in the staging folder until someone settles it.
+                if pristine["files"].get(path) != theirs:
+                    result["owned_changed"].append(path)
+                    result["stage"].append((STAGING + path, theirs))
             continue
         ours = read_repo(old or path)
         base = _base_for(pristine, old or path, ours)
@@ -358,6 +363,7 @@ def run_update(root, bind_with, version, state_json):
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
     out["renamed"] = plan["renamed"]
+    out["owned_changed"] = plan["owned_changed"]
     out["skipped"] = skipped
     return out
 

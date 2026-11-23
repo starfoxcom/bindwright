@@ -2,10 +2,12 @@
 // the setup with the release the head's record names and the base's answers,
 // lists only the changed files equal to that render, and lists nothing, with
 // its reason, when the record names no release, the release is older than the
-// base's, or the download fails.
+// base's, the download fails, or the wheel does not match the hash the base's
+// helper pin records, which a PR cannot change.
 
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -69,13 +71,23 @@ function render() {
   return rendering;
 }
 
-async function pullRequest(folder, { headVersion = VERSION, baseVersion = VERSION } = {}) {
+// A helper pin as setup writes it; `null` leaves the file out.
+const putPin = (root, pin) => {
+  if (!pin) return;
+  put(root, ".bindwright/helper.json", JSON.stringify({ version: pin.version, python: { sha256: pin.sha256 } }));
+};
+
+async function pullRequest(folder, digest, row) {
+  const { headVersion = VERSION, baseVersion = VERSION } = row;
+  const pin = { version: VERSION, sha256: digest };
+  const { basePin = pin, headPin = basePin } = row;
   const rendered = await render();
   const root = join(folder, "repo");
   mkdirSync(root);
   git(root, "init", "-q", "-b", "main");
   put(root, ".bindwright/project.json", JSON.stringify(ANSWERS));
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: baseVersion, year: 2026, files: {} }));
+  putPin(root, basePin);
   put(root, "README.md", "base\n");
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "base");
@@ -83,6 +95,7 @@ async function pullRequest(folder, { headVersion = VERSION, baseVersion = VERSIO
   put(root, UNEDITED, rendered.get(UNEDITED).replace(/\n/g, "\r\n"));
   put(root, EDITED, rendered.get(EDITED) + "\nA line of the project's own.\n");
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: headVersion, year: 2026, files: {} }));
+  putPin(root, headPin);
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "update");
   git(root, "checkout", "-q", "main");
@@ -131,6 +144,28 @@ const CASES = [
     baseVersion: "999.0.0",
     reason: `the head records Bindwright ${VERSION}, older than the base's 999.0.0`,
   },
+  {
+    name: "a wheel that does not match the pin lists nothing",
+    basePin: { version: VERSION, sha256: "0".repeat(64) },
+    reason: "the downloaded wheel does not match the hash in .bindwright/helper.json",
+  },
+  {
+    name: "a base with no pin lists nothing",
+    basePin: null,
+    reason: "the base has no .bindwright/helper.json",
+  },
+  {
+    name: "the base's pin wins over the head's",
+    headPin: { version: VERSION, sha256: "0".repeat(64) },
+    listed: [UNEDITED],
+  },
+  {
+    name: "a PR that moves the release lists nothing, whatever its own pin says",
+    baseVersion: "0.1.0",
+    basePin: { version: "0.1.0", sha256: "0".repeat(64) },
+    headPin: "real",
+    reason: `the base's .bindwright/helper.json records no wheel hash for Bindwright ${VERSION}`,
+  },
 ];
 
 // One wheel for every row: packing the templates is the slow part.
@@ -138,7 +173,8 @@ let shared;
 function sharedWheel() {
   if (!shared) {
     const folder = mkdtempSync(join(tmpdir(), "template-wheel-"));
-    shared = { folder, wheel: buildWheel(folder) };
+    const wheel = buildWheel(folder);
+    shared = { folder, wheel, digest: createHash("sha256").update(readFileSync(wheel)).digest("hex") };
   }
   return shared;
 }
@@ -148,8 +184,9 @@ for (const row of CASES) {
   test(`template check: ${row.name}`, { skip: !python && "needs Python 3.8+" }, async () => {
     const folder = mkdtempSync(join(tmpdir(), "template-check-"));
     try {
-      const { wheel } = sharedWheel();
-      const root = await pullRequest(folder, row);
+      const { wheel, digest } = sharedWheel();
+      const headPin = row.headPin === "real" ? { version: VERSION, sha256: digest } : row.headPin;
+      const root = await pullRequest(folder, digest, { ...row, headPin });
       const out = runCheck(root, folder, row.missingWheel ? join(folder, "missing.whl") : wheel);
       const listed = out.split(/\r?\n/).filter((l) => l.startsWith("- ")).map((l) => l.slice(2));
       assert.deepEqual(listed, row.listed ?? [], out);

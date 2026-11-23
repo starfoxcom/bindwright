@@ -36,7 +36,7 @@ async function update(change) {
   }
   if (runs.length === 2) {
     assert.deepEqual(runs[1].out, runs[0].out, "the two engines report alike");
-    for (const p of [PRISTINE, RULE, OTHER, THIRD, SETTINGS, `.bindwright/incoming/${RULE}`]) {
+    for (const p of [PRISTINE, RULE, OTHER, THIRD, SETTINGS, STAGING + RULE, STAGING + OTHER]) {
       assert.equal(runs[1].repo.peek(p), runs[0].repo.peek(p), `${p} is the same from both engines`);
     }
   }
@@ -119,19 +119,29 @@ test("a conflict the user settled by keeping their line does not come back", nee
   }
 });
 
+// THIRD is owned too, with no template change since the last update, so only OTHER is reported as changed.
 test("owned files and kept sections stay the project's", needsPython, async () => {
   const kept = "<!-- bindwright:keep -->\nOURS ONLY\n<!-- bindwright:end-keep -->\n";
+  let theirs;
   const { out, repo } = await update((r) => {
-    r.write(".bindwright/owned", `${OTHER}\n`);
-    r.pristine.files[OTHER] = older(r.read(OTHER));
+    r.write(".bindwright/owned", `${OTHER}\n${THIRD}\n`);
+    theirs = r.read(OTHER);
+    r.pristine.files[OTHER] = older(theirs);
     r.write(OTHER, "project's own\n");
     clash(r);
     r.write(RULE, `${r.pristine.files[RULE]}${kept}`);
   });
-  assert.deepEqual(out.owned, [OTHER]);
+  assert.deepEqual([...out.owned].sort(), [OTHER, THIRD].sort());
+  assert.deepEqual(out.owned_changed, [OTHER]);
   assert.equal(repo.read(OTHER), "project's own\n");
+  assert.equal(repo.peek(STAGING + OTHER), theirs, "the new text waits to be settled");
+  assert.equal(repo.peek(STAGING + THIRD), null);
   assert.deepEqual(out.merged, [RULE]);
   assert.ok(repo.read(RULE).endsWith(kept));
+  // A second update before anyone settles it leaves the waiting copy where it is.
+  spawnSync(engines[0][0], [...engines[0][1], "--update", repo.at("")], { encoding: "utf8" });
+  assert.equal(repo.peek(STAGING + OTHER), theirs);
+  assert.equal(repo.read(OTHER), "project's own\n");
 });
 
 test("new, dropped and deleted files each get their own outcome", needsPython, async () => {
