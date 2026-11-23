@@ -51,7 +51,7 @@ Run it with `--update <repo root>`. It prints one line of JSON:
 | `unchanged` | Already up to date | Nothing |
 | `skipped` | A staged copy from an earlier run was already there, so the new one was not written; the file keeps its old base | Settle the old copy, then run the update again: it stages the newer text |
 
-When the repo has `.github/workflows/claude-code-review.yml`, `advanced.localOnly` is not true, and the repo has `.claude/hooks/no-ai-attribution.py` or already has `.bindwright/helper.json`, copy `${CLAUDE_PLUGIN_ROOT}/helper.json` over `.bindwright/helper.json` (create it when missing). The CI review jobs read that pin from the PR's base and install the helper it names, so the attribution guard can read commands there, and a pin the repo already has stays at the plugin's version even when the guard hook lives in the home folder.
+When the repo has `.github/workflows/claude-code-review.yml` or `.github/review-checks/bindwright_templates.py` and `advanced.localOnly` is not true, copy `${CLAUDE_PLUGIN_ROOT}/helper.json` over `.bindwright/helper.json` (create it when missing). The CI review jobs read that pin from the PR's base: they install the helper it names, so the attribution guard can read commands there when it ships in the repo, and the template-text check runs a release's engine only when its download matches the pin's hash, so the pin stays at the plugin's version wherever the guard hook lives.
 
 Edits inside `.claude/` ask the user for permission even when edits are otherwise accepted. Before the first one, say that the next steps change the repo's agent settings and rules.
 

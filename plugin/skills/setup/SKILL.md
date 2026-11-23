@@ -313,7 +313,7 @@ Run the engine with `--write <repo root>`, passing the answers on standard input
   - `staged`: files the repo already had. The repo's copy is untouched; the new text is at `.bindwright/incoming/<path>`.
   - `skipped`: files whose staged copy already existed from an earlier run. Nothing was written for them.
 
-When the written `.bindwright/project.json` keeps both `advanced.attributionGuard` and `advanced.aiReview` on, has `advanced.hookLocation` set to `"repo"` (so the guard hook ships in the repo, where the review jobs load it) and `advanced.localOnly` not true, copy `${CLAUDE_PLUGIN_ROOT}/helper.json` over `.bindwright/helper.json` (create it when missing). The CI review jobs read that pin from the PR's base and install the helper it names, so the attribution guard can read commands there.
+When the bind wrote the review gate (`.github/review-checks/bindwright_templates.py` is among its files) and `advanced.localOnly` is not true, copy `${CLAUDE_PLUGIN_ROOT}/helper.json` over `.bindwright/helper.json` (create it when missing). The CI review jobs read that pin from the PR's base: they install the helper it names, so the attribution guard can read commands there when it ships in the repo, and the template-text check runs a release's engine only when its download matches the pin's hash.
 
 Edits inside `.claude/` ask the user for permission even when edits are otherwise accepted. Before the first one, say that the next steps change the repo's agent settings and rules.
 
