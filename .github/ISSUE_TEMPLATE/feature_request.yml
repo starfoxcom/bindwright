@@ -1,0 +1,27 @@
+name: An idea or a wish
+description: Something Bindwright could do, do better or explain more clearly
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Telling us what you were trying to do matters more than how it should work, so start there.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What were you trying to do?
+      description: The situation you were in, and where Bindwright got in the way or fell short.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Your idea, in as much or as little detail as you like.
+    validations:
+      required: true
+  - type: textarea
+    id: elsewhere
+    attributes:
+      label: Anything else?
+      description: Screenshots, a tool that already does this well, or links.
