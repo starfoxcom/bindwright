@@ -5,7 +5,7 @@ import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './br
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsToResearch, stepBackOf, withTopic,
+  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsText, stepBackOf, withTopic,
 } from './rounds'
 import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
@@ -314,10 +314,7 @@ async function roundsCommand($: EngineInterface, args: string): Promise<string> 
   const pr = await prOfBranch($, undefined, number, repo)
   if (!pr && number) return repo ? `No PR ${repo}#${number}.` : `No PR #${number} in this folder's repo.`
   if (!pr) return "This folder's branch has no PR."
-  const red = await redRoundsOf($, pr)
-  const count = `${pr.repo}#${pr.number}: ${red} fix round(s) in a row without every check green`
-  if (isHardStop(red)) return `${count}; that is the hard stop: close it and rebuild it in a new PR.`
-  return `${count}; the next step back is due in ${roundsToResearch(red)}.`
+  return roundsText(`${pr.repo}#${pr.number}`, (await readRounds($))[`${pr.repo}#${pr.number}`])
 }
 
 // A push that moves no commit (tags, "Everything up-to-date") keeps the watch on that head, settled or

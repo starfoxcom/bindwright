@@ -3,7 +3,7 @@ import { type Engine, expect, test } from 'claude-code/testing'
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import {
-  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundsToResearch, withTopic,
+  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundsText, roundsToResearch, withTopic,
 } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
@@ -62,9 +62,23 @@ test('a jumped streak latches the step back and its wake asks for the research',
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
   expect(seen.prompts).toHaveLength(1)
-  expect(seen.prompts[0]).toContain('has had 4 fix rounds in a row')
+  expect(seen.prompts[0]).toContain('has had 4 rounds in a row that did not merge')
   expect(seen.prompts[0]).toContain('look up at least five different ways the community')
   expect(await $.tool.call(editInput as never)).toHaveProperty('deny')
+})
+
+// While the newest round passed it waits for its merge, so the rounds answer forecasts the red round after it.
+test('the rounds answer forecasts a red round after a passed one', () => {
+  expect(roundsText('o/r#7', of([true, true, false]))).toBe(
+    'o/r#7: the newest round passed and waits for its merge. If the next round is red instead, that makes ' +
+      '4 round(s) in a row that did not merge; that red round asks for a step back.',
+  )
+  expect(roundsText('o/r#7', of([true, true, true, false]))).toContain('makes 5 round(s)')
+  expect(roundsText('o/r#7', of([...Array(8).fill(true), false]))).toContain('that is the hard stop')
+  expect(roundsText('o/r#7', of([false]))).toContain('no step back is due then')
+  expect(roundsText('o/r#7', undefined)).toBe(
+    'o/r#7: 0 round(s) in a row that did not merge; the next step back is due in 3.',
+  )
 })
 
 // A re-run of a head already counted replaces its round; the list keeps the newest fifty.
@@ -90,9 +104,9 @@ const failed = (outcome: Watch['outcome']): Watch =>
 
 test('only a red wake at a due count carries the research step', () => {
   expect(wakeText(failed('failed'), undefined, 3)).toContain('look up at least five different ways the community')
-  expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 fix rounds in a row')
-  expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 fix rounds')
-  expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 fix rounds')
+  expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 rounds in a row')
+  expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 rounds')
+  expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 rounds')
   for (const red of [0, 2, 4]) expect(wakeText(failed('failed'), undefined, red)).not.toContain('research')
   expect(wakeText(failed('passed'), undefined, 3)).not.toContain('research')
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
@@ -363,7 +377,7 @@ test('the wake of the third red round in a row asks for the research step', asyn
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
   expect(seen.prompts).toHaveLength(1)
   expect(seen.prompts[0]).toContain('all checks settled; failed')
-  expect(seen.prompts[0]).toContain('has had 3 fix rounds in a row')
+  expect(seen.prompts[0]).toContain('has had 3 rounds in a row')
 })
 
 test('/ci-watch rounds tells the count and when the next step back is due', async ($, on) => {
@@ -374,12 +388,12 @@ test('/ci-watch rounds tells the count and when the next step back is due', asyn
     ((await $.command.run({ command: 'ci-watch', args, origin: { kind: 'composer' } } as never)) as { text: string })
       .text
   expect(await ask('rounds')).toBe(
-    'o/r#7: 7 fix round(s) in a row without every check green; the next step back is due in 1.',
+    'o/r#7: 7 round(s) in a row that did not merge; the next step back is due in 1.',
   )
   seed(seen, reds(10))
   expect(await ask('rounds')).toContain('that is the hard stop')
   seed(seen, reds(7))
-  expect(await ask('rounds 7')).toContain('o/r#7: 7 fix round(s) in a row')
+  expect(await ask('rounds 7')).toContain('o/r#7: 7 round(s) in a row')
   expect(await ask('rounds reset 7')).toContain('/ci-watch rounds')
   expect(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'].rounds).toHaveLength(7)
 })
@@ -537,7 +551,7 @@ for (const row of VERDICT_ROWS) {
     for (let i = 0; i < 6; i++) await clock.advance(30_000)
     expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(row.counted ? 3 : 2)
     expect(seen.prompts).toHaveLength(1)
-    expect(seen.prompts[0]?.includes('has had 3 fix rounds in a row')).toBe(row.counted)
+    expect(seen.prompts[0]?.includes('has had 3 rounds in a row')).toBe(row.counted)
     expect(seen.prompts[0]?.includes('the count stays at 2')).toBe(!row.counted)
   })
 }

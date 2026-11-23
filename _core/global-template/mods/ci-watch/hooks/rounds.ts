@@ -67,6 +67,25 @@ export const HARD_STOP = 10
 
 export const isHardStop = (red: number) => red >= HARD_STOP
 
+/** `/ci-watch rounds`' answer for PR `pr`. While the newest round passed it waits for its merge, and the
+ * forecast is for a red round after it, which counts every stored round as well as itself. */
+export function roundsText(pr: string, stored: PrRounds | undefined): string {
+  const red = redStreak(stored)
+  const rounds = Array.isArray(stored?.rounds) ? stored.rounds : []
+  if (red === 0 && rounds.length > 0) {
+    const next = recordRound(stored, '', true)
+    const count = redStreak(next)
+    const then = isHardStop(count)
+      ? 'that is the hard stop: close it and rebuild it in a new PR.'
+      : crossedResearch(stored, '', next) ? 'that red round asks for a step back.' : 'no step back is due then.'
+    return `${pr}: the newest round passed and waits for its merge. If the next round is red instead, that ` +
+      `makes ${count} round(s) in a row that did not merge; ${then}`
+  }
+  const count = `${pr}: ${red} round(s) in a row that did not merge`
+  if (isHardStop(red)) return `${count}; that is the hard stop: close it and rebuild it in a new PR.`
+  return `${count}; the next step back is due in ${roundsToResearch(red)}.`
+}
+
 const REBUILD =
   'close it without merging (`gh pr close` with a comment that says why), then rebuild the change from its ' +
   "base branch in a new PR, with this round's findings fixed in the rebuild and a `Rebuilds #<old number>` " +
@@ -77,7 +96,8 @@ export function researchText(pr: string, red: number): string {
     ? `That is the hard stop: ${REBUILD} Commits and pushes wait until ${pr} is closed.`
     : `The next step back comes after ${roundsToResearch(red)} more red round(s).`
   return (
-    ` ${pr} has had ${red} fix rounds in a row without every check green, both reviews included. Before ` +
+    ` ${pr} has had ${red} rounds in a row that did not merge: a check failed, both reviews included, or ` +
+    'they all passed and another push followed instead of the merge. Before ' +
     'the next fix, step back: look up at least five different ways the community solves this problem ' +
     '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
     'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
