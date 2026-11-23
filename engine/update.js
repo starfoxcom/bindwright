@@ -432,8 +432,9 @@ function sortedObject(map) {
   return object;
 }
 
-// Puts each path's base back to the one in the record the last update replaced, for files it
-// changed that ship in a later PR: a base older than the file reads as unchanged on the next
+// Puts each path's base back to the one the last update decided it against (the replaced record's
+// base, or the text that record held when the repo still holds it), for files it changed that
+// ship in a later PR: a base older than the file reads as unchanged on the next
 // update and moves on, while a base newer than the file would hide the change for good. A path
 // that record lacks loses its base, so the next update adds it again. The text each path had is
 // also kept under `held`, which planUpdate uses as the base once the repo holds exactly that text.
@@ -446,7 +447,8 @@ export function keepBase(root, paths) {
   const previous = saved === null ? null : readState(saved, "the record the last update replaced");
   if (previous === null) throw new Error("No record from before the last update: run /bindwright:update first");
   const what = "the record the last update replaced";
-  const before = recordOf(decode(previous, what).replace(/\r\n/g, "\n"), what).files;
+  const before = recordOf(decode(previous, what).replace(/\r\n/g, "\n"), what);
+  const read = reader(root);
   const state = recordOf(current, PRISTINE);
   const result = { kept: [], dropped: [] };
   const files = new Map(Object.entries(state.files));
@@ -454,8 +456,13 @@ export function keepBase(root, paths) {
   for (const path of paths) {
     // Only the first hold counts: a repeat would read the base already put back.
     if (files.has(path) && !held.has(path)) held.set(path, files.get(path));
-    if (Object.hasOwn(before, path)) {
-      files.set(path, before[path]);
+    // The base the last update decided against: that record's held text when the repo still
+    // holds it, since a file shipped after an earlier hold has moved past the record's base. A
+    // copy still at the text the update wrote (now held) is not restored yet, so it takes the record's.
+    const ours = read(path);
+    const prior = ours === held.get(path) ? before.files[path] : baseFor(before, path, ours);
+    if (typeof prior === "string" && (prior === ours || Object.hasOwn(before.files, path))) {
+      files.set(path, prior);
       result.kept.push(path);
     } else {
       files.delete(path);
