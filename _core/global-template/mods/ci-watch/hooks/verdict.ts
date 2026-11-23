@@ -12,7 +12,8 @@ import { FAILED } from './settle'
 export const GATE = 'Review gate'
 // The review workflows' own jobs, which fail beside the gate when a review cannot run.
 const REVIEW_JOBS = new Set([
-  GATE, 'Init review gate', 'Auto review', 'Post review', 'Evaluate review outcome', 'Claude On-Demand',
+  GATE, 'Init review gate', 'Diff triage', 'Project triggers', 'Project pre-screen', 'Auto review', 'Post review',
+  'Evaluate review outcome', 'Claude On-Demand',
   'Check who asked for the deep review', 'On-demand deep review (@claude)',
 ])
 // Each tier's result in the gate's state, as the gate script writes it: `routine=block;deep=error;…`.

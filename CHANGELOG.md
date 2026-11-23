@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **ci-watch no longer counts a review run cancelled during triage as a red round.** A cancel early in the review run, by a newer push or by hand, leaves its triage, trigger and pre-screen jobs cancelled beside the failed gate, and ci-watch did not know those jobs as the review's own, so it counted a fix round although nothing was reviewed; on one PR it became the 10th red round and set off the hard stop. They now count as review jobs, so such a run keeps the count while no review of it was posted, as an errored run already did.
+
 ## [v7.13.1] — 2026-11-22
 
 ### Fixed
