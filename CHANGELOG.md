@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.16.1] — 2026-11-23
+
 ### Fixed
 
 - **The update lists project docs that still name an old action pin.** When an updated workflow moves a `uses:` pin, the update now searches the repo's other tracked files for the old pin and lists each hit for the user to update, the way it already lists docs that name the old Bindwright version. A project that records its CI setup in a doc found the stale pin only when the review flagged it after the push.
