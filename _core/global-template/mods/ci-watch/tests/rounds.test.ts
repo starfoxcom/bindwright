@@ -44,6 +44,12 @@ test('a streak that jumps past a research step still asks for it', () => {
   // The same head recorded again, by a second session or after a restart, still owes the step it crossed.
   const three = of([true, true, true])
   expect(crossedResearch(three, 'c2', recordRound(three, 'c2', true))).toBe(true)
+  const jumped = of([true, true, false, true])
+  expect(crossedResearch(jumped, 'c3', recordRound(jumped, 'c3', true))).toBe(true)
+  // Past the fifty rounds kept, every red round is still due.
+  let full: PrRounds = { rounds: [] }
+  for (let i = 0; i < 50; i++) full = recordRound(full, `r${i}`, true)
+  expect(crossedResearch(full, 'next', recordRound(full, 'next', true))).toBe(true)
 })
 
 // Red, red, passed, then a red push: the count jumps to 4, and the wake both asks for the research and holds edits.

@@ -22,21 +22,19 @@ export type PrRounds = { rounds: Round[] }
 
 const KEPT = 50
 
-/** The PR's rounds with one more settled watch. A watch of a head already on the list (a re-run) replaces
- * that round. A round is green only when the PR merges at its head, so a new head turns every earlier
- * round red: one that passed was still followed by another push, for a conflict or any other reason. */
+/** The PR's rounds with one more settled watch, each kept as its checks ended. A watch of a head already
+ * on the list (a re-run) replaces that round. */
 export function recordRound(pr: PrRounds | undefined, sha: string, red: boolean): PrRounds {
   const earlier = (Array.isArray(pr?.rounds) ? pr.rounds : []).filter(r => r.sha !== sha)
-  const unmerged = earlier.map(r => ({ sha: r.sha, red: true }))
-  return { rounds: [...unmerged, { sha, red }].slice(-KEPT) }
+  return { rounds: [...earlier, { sha, red }].slice(-KEPT) }
 }
 
-/** The rounds in a row, newest first, that had a failed check, back to the last one that passed. */
+/** The red rounds in a row. A round is green only when the PR merges at its head, so while the newest
+ * round failed, every earlier one counts red too: one that passed was still followed by another push, for
+ * a conflict or any other reason. A newest round that passed is green until another head follows it. */
 export function redStreak(pr: PrRounds | undefined): number {
   const rounds = Array.isArray(pr?.rounds) ? pr.rounds : []
-  let red = 0
-  for (let i = rounds.length - 1; i >= 0 && rounds[i]?.red; i--) red++
-  return red
+  return rounds.at(-1)?.red ? rounds.length : 0
 }
 
 /** The count's file, `{ "<owner/name>#<number>": PrRounds }`, written by the mod as watches settle and
@@ -48,11 +46,14 @@ export const isResearchDue = (red: number) => red === 3 || red >= 5
 
 /** Whether recording the round of head `sha` crossed a research step. A round that passed turns red once
  * another head follows it, so the streak can jump (0 to 4) and step over the 3rd without landing on it.
- * The rounds before are read without `sha`, so a head recorded again (a re-read, a second session) crosses
- * the same step again. */
+ * The rounds before are read without `sha`, and every round is stored as its checks ended, so a head
+ * recorded again (a re-read, a second session) crosses the same step again. From the 5th on every red
+ * round is due. */
 export function crossedResearch(before: PrRounds | undefined, sha: string, after: PrRounds): boolean {
   const others = (Array.isArray(before?.rounds) ? before.rounds : []).filter(r => r.sha !== sha)
-  for (let red = redStreak({ rounds: others }) + 1; red <= redStreak(after); red++) {
+  const streak = redStreak(after)
+  if (streak >= 5) return true
+  for (let red = redStreak({ rounds: others }) + 1; red <= streak; red++) {
     if (isResearchDue(red)) return true
   }
   return false
