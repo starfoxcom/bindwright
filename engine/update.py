@@ -396,7 +396,7 @@ def _before_path(root):
 
 
 def keep_base(root, paths, state_json):
-    """See keepBase in update.js: bases go back to the last record's, and the text they replace is held."""
+    """See keepBase in update.js: bases go back to the ones the last update used, and the text they replace is held."""
     bad = [p for p in paths if not _safe(p)]
     if bad:
         raise ValueError("Refusing paths outside the repo: %s" % ", ".join(bad))
@@ -412,7 +412,8 @@ def keep_base(root, paths, state_json):
         text = previous.decode("utf-8")
     except UnicodeDecodeError:
         raise ValueError("%s is not UTF-8 text" % what)
-    before = _record_of(text.replace("\r\n", "\n"), what)["files"]
+    before = _record_of(text.replace("\r\n", "\n"), what)
+    read = _reader(root)
     state = _record_of(current, PRISTINE)
     held = state.get("held")
     held = dict(held) if isinstance(held, dict) else {}
@@ -421,8 +422,14 @@ def keep_base(root, paths, state_json):
         # Only the first hold counts: a repeat would read the base already put back.
         if path in state["files"] and path not in held:
             held[path] = state["files"][path]
-        if path in before:
-            state["files"][path] = before[path]
+        # The base the last update decided against; see keepBase in update.js.
+        ours = read(path)
+        if ours == held.get(path):
+            prior = before["files"].get(path)
+        else:
+            prior = _base_for(before, path, ours)
+        if isinstance(prior, str) and (prior == ours or path in before["files"]):
+            state["files"][path] = prior
             result["kept"].append(path)
         else:
             state["files"].pop(path, None)
