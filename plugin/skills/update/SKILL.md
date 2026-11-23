@@ -90,7 +90,7 @@ Then bring the installed mods current, since setup copies each mod into `~/.clau
 
 ## 6. Skill contracts
 
-When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, build this project's contracts from the example file the way setup's "Mods in this project" says, and compare them with this repo folder's key in `~/.claude/skill-contracts.json`. When the key is missing or its steps differ, show what changes and write it on a yes, keeping every other key.
+When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, build this project's contracts from the example file the way setup's "Mods in this project" says, and compare them with this repo folder's key in `~/.claude/skill-contracts.json`. Ask only when the key is missing, or when the new steps differ both from the key's own steps and from the ones it keeps under `"_offered"`: the template's steps a no turned down, which skill-check never reads, since it looks a contract up by skill name. Show what changes, and on a yes write the new steps over the key, without `_offered`. On a no, keep the key's steps and save the new ones under its `_offered`, so later updates ask again only once the template's steps change. Keep every other key either way.
 
 ## 7. Review counts
 
