@@ -231,6 +231,37 @@ test('through a git repo, a closed chat is free elsewhere at once, and both copi
   assert.ok(!b.sync('in', b.chatDir, b.root, 'other').error, 'the other clone still pulls')
 })
 
+test('a copy left uncommitted in the clone never reaches the repo as a merge of two chats', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const b = gitComputer('b', origin)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  b.sync('in', b.chatDir, b.root, 'other')
+  writeChat(b, 's1', ['one', 'two from b'])
+  b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root, 'release')
+  fs.appendFileSync(path.join(a.dataDir, 'repo', 'shop', 's1.jsonl'), '{"cut":"short"}\n')
+  writeChat(a, 's1', ['one', 'two from a'])
+  const fromA = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  assert.deepStrictEqual([fromA.conflict, fromA.pushed], ['s1', true])
+  const stored = execFileSync('git', ['--git-dir', origin, 'show', 'main:shop/s1.jsonl'], { encoding: 'utf8' })
+  assert.ok(!stored.includes('<<<<<<<') && !stored.includes('cut'), 'the repo keeps the clean copy')
+})
+
+test('a chat cut off mid-line here takes the newer copy\'s lines whole', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  b.sync('in', b.chatDir, b.root, 'other')
+  fs.appendFileSync(path.join(b.chatDir, 's1.jsonl'), '{"cut":')
+  writeChat(a, 's1', ['one', 'two'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+  assert.deepStrictEqual(readChat(b, 's1').map(r => r.message.content), [`one in ${b.root}`, `two in ${b.root}`])
+})
+
 test('with no place chosen, nothing is copied', () => {
   const a = computer('a')
   writeChat(a, 's1', ['one'])

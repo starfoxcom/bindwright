@@ -77,3 +77,13 @@ test('the session end copies the chat out and releases its lock', async ($, on) 
   expect(seen.runs.at(-1)).toEqual(['out', TRANSCRIPT, ROOT, 'release'])
   expect(seen.toasts).toEqual([])
 })
+
+test('a copy queued by the last turn does not run after the session end released the chat', async ($, on) => {
+  const seen = world(on, { out: { same: 'sess-1' } })
+  await start($)
+  await endTurn($)
+  await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
+  await seen.clock.advance(MINUTE)
+
+  expect(seen.runs.filter(args => args[0] === 'out')).toEqual([['out', TRANSCRIPT, ROOT, 'release']])
+})

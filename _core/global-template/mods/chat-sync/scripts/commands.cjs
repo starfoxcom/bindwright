@@ -67,6 +67,14 @@ function commitAndPush(store, label) {
   return push.ok ? { pushed: true } : { pushError: push.out }
 }
 
+// A clone with no commit yet has nothing to reset to, and git refuses to pull
+// into it while its index holds anything, so its index goes instead.
+function dropUncommitted(store) {
+  if (base.git(store, 'rev-parse', '--verify', '-q', 'HEAD').ok) base.git(store, 'reset', '--hard', '-q')
+  else removeQuietly(path.join(store, '.git', 'index'))
+  base.git(store, 'clean', '-fdq')
+}
+
 // The repo's default branch, or null while nothing has been pushed to it.
 function remoteBranch(store) {
   const head = base.git(store, 'ls-remote', '--symref', 'origin', 'HEAD')
@@ -75,14 +83,16 @@ function remoteBranch(store) {
 }
 
 // Brings the clone up to the repo, naming the branch, so a clone made while the
-// repo was empty catches up too. A commit of this computer's that cannot be
-// replayed on top (another computer changed the same chat meanwhile) is
-// dropped: every chat it held is still in this computer's chat folder, and the
-// next copy out compares it against the repo's newer copy.
+// repo was empty catches up too. Every file in the clone can be rebuilt from
+// this computer's chat folder, so changes never committed (a copy cut short, a
+// push refused) are dropped first, and a commit of this computer's that cannot
+// be replayed on top (another computer changed the same chat meanwhile) is
+// dropped too: the next copy out compares the chat against the repo's copy.
 function pull(store) {
+  dropUncommitted(store)
   const branch = remoteBranch(store)
   if (!branch) return {}
-  const run = base.git(store, 'pull', '--rebase', '--autostash', 'origin', branch)
+  const run = base.git(store, 'pull', '--rebase', 'origin', branch)
   if (run.ok) return { branch }
   base.git(store, 'rebase', '--abort')
   const reset = base.git(store, 'reset', '--hard', `origin/${branch}`)
@@ -119,13 +129,13 @@ function out([transcript, root, release]) {
   const lockFile = path.join(dir, `${id}.lock`)
   const lock = base.lockOf(lockFile)
   if (base.isHeldElsewhere(lock, me)) return { held: id, by: lock.machine }
+  const refused = isGit ? privateRepoError(place.repo) : null
+  if (refused) return { pushError: refused }
   fs.mkdirSync(dir, { recursive: true })
   const result = placeCopy(transcript, path.join(dir, `${id}.jsonl`), root, { id, me })
   if (release === 'release') removeQuietly(lockFile)
   else base.writeJson(lockFile, { machine: me, at: Date.now() })
-  if (!isGit) return result
-  const refused = privateRepoError(place.repo)
-  return Object.assign(result, refused ? { pushError: refused } : commitAndPush(store, `${id} from ${me}`))
+  return isGit ? Object.assign(result, commitAndPush(store, `${id} from ${me}`)) : result
 }
 
 const VISIBILITY_FRESH_MS = 60 * 60_000
@@ -206,8 +216,9 @@ function bringIn([chatDir, root, openId]) {
   return result
 }
 
-// Brings one stored chat in. A local chat that is behind keeps its own lines
-// and gains only the stored ones it lacks.
+// Brings one stored chat in. A local chat that is behind keeps its own complete
+// lines and gains only the stored ones it lacks; a last line cut off mid-write
+// is dropped, since the stored copy's next line takes its place.
 function bringOne(theirs, local, root, isOpen) {
   const hasLocal = sizeOf(local) >= 0
   const { verdict, localLines } = hasLocal ? compareChat(local, theirs, root) : { verdict: 'behind', localLines: 0 }
@@ -215,7 +226,7 @@ function bringOne(theirs, local, root, isOpen) {
   if (verdict === 'diverged') return 'conflict'
   if (isOpen) return 'open'
   const incoming = `${local}.chat-sync.in`
-  if (hasLocal) fs.copyFileSync(local, incoming)
+  if (hasLocal) transformFile(local, incoming, text => text, true)
   else removeQuietly(incoming)
   appendLines(theirs, localLines, incoming, expand(root, os.homedir()))
   fs.renameSync(incoming, local)

@@ -97,6 +97,12 @@ function settleClone(place) {
   return repo
 }
 
+// A git place whose clone is gone (deleted, or a move cut short) is cloned
+// again by a move to the same repo.
+function isCloneMissing(place) {
+  return place.kind === 'git' && !fs.existsSync(path.join(base.storeRoot(place), '.git'))
+}
+
 function move([kind, where]) {
   const old = base.readPlace()
   const placeFile = path.join(base.dataDir(), 'place.json')
@@ -106,7 +112,9 @@ function move([kind, where]) {
   }
   const ready = prepare(kind, where)
   if (ready.error) return ready
-  if (describe(ready.place) === describe(old)) return { error: `The chats already sync through ${describe(old)}.` }
+  if (describe(ready.place) === describe(old) && !isCloneMissing(old)) {
+    return { error: `The chats already sync through ${describe(old)}.` }
+  }
   const copied = copyChats(base.storeRoot(old), ready.store)
   if (copied.missing.length) return { error: `These chats did not arrive: ${copied.missing.join(', ')}` }
   const store = settleClone(ready.place)

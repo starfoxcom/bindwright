@@ -27,6 +27,9 @@ type Answer = Record<string, unknown> & { error?: string }
 
 let lastOutAt = 0
 let isOutQueued = false
+// Set by the session's end, so a copy queued after the last turn does not write
+// the lock back once the end has released it; the next turn clears it.
+let hasEnded = false
 
 async function runSync($: EngineInterface, args: string[], timeoutMs = 120_000): Promise<Answer> {
   try {
@@ -117,17 +120,19 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    hasEnded = false
     if (isOutQueued) return result
     isOutQueued = true
     const wait = Math.max(0, OUT_EVERY_MS - (Date.now() - lastOutAt))
     $.clock.after(wait, async () => {
       isOutQueued = false
-      await copyOut($, false)
+      if (!hasEnded) await copyOut($, false)
     })
     return result
   })
 
   on('session.end', async ($, e, next) => {
+    hasEnded = true
     await copyOut($, true)
     return next(e)
   })
