@@ -48,12 +48,14 @@ fallback:
 # A check that runs the PR's code can fake its own report, and on a
 # self-hosted runner that is not wiped between jobs it can leave files or
 # processes behind for the review; keep such checks on hosted or one-job
-# runners. Empty: none.
+# runners. Empty: none. Setup ships `bindwright_templates.py` into
+# .github/review-checks, which lists the changed files that are Bindwright's
+# template text, unedited; a project that names another folder copies it there.
 # attribution: on scans the lines a PR adds for AI-attribution markers
 # (co-author lines, "generated with" footers, session links), and the
 # reviewer checks the commits and the PR body for them; off skips both.
 prescreen:
-  dir:
+  dir: .github/review-checks
 <!-- TOGGLE:attribution_guard START -->
   attribution: on
 <!-- TOGGLE:attribution_guard END -->

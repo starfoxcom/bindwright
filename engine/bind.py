@@ -80,7 +80,7 @@ PRISTINE = ".bindwright/pristine.json"
 # Guard hooks and the review gate's scripts ship byte for byte: they are
 # code, not templates, and the render step's blank-line folding would still
 # change them.
-VERBATIM = (".claude/hooks/", ".github/scripts/")
+VERBATIM = (".claude/hooks/", ".github/scripts/", ".github/review-checks/")
 
 # Files GitHub reads, left out when the code lives elsewhere.
 GITHUB_ONLY = (".github/ISSUE_TEMPLATE/", ".github/PULL_REQUEST_TEMPLATE.md", ".github/CODEOWNERS.template")
@@ -135,6 +135,7 @@ def _included(path, a, flags):
         ".github/scripts/setup-review-gate.sh": gate,
         ".github/scripts/set-review-tokens.sh": gate,
         ".github/scripts/pin_check.py": gate,
+        ".github/review-checks/bindwright_templates.py": gate,
         ".github/workflows/pin-check.yml": gate,
         ".github/review-gate.yml.template": gate,
         ".github/review-guide.md.template": gate,
