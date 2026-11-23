@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The update says when the review guide lacks the template-text section.** The pre-screen check that lists files still matching Bindwright's template text only helps when `.github/review-guide.md` tells the reviewer what to do with that list. A project that keeps its own copy of the guide never got that section, and the update did not mention it. The update now names the gap, shows the section and adds it on a yes.
+
 ## [v7.15.0] — 2026-11-23
 
 ### Added
