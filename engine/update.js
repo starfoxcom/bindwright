@@ -117,7 +117,7 @@ function baseFor(pristine, path, ours) {
 export function planUpdate(rendered, pristine, { readRepo, owned, merge, version }) {
   const theirsAll = repoFiles(rendered);
   const paths = [...new Set([...Object.keys(pristine.files), ...theirsAll.keys()])].sort();
-  const result = { write: [], stage: [], pristine: {}, renamed: [], remove: [] };
+  const result = { write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [] };
   for (const outcome of OUTCOMES) result[outcome] = [];
   const moves = movesFor(theirsAll, pristine, { readRepo, owned });
   const movedFrom = new Set(moves.values());
@@ -130,7 +130,15 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
       result.owned.push(path);
       if (ownedOld !== undefined) {
         if (ownedOld in pristine.files) result.pristine[ownedOld] = pristine.files[ownedOld];
-      } else if (theirs !== undefined) result.pristine[path] = theirs;
+      } else if (theirs !== undefined) {
+        result.pristine[path] = theirs;
+        // The templates changed a file the project owns: the project's copy never gets it by itself,
+        // so the new text waits in the staging folder until someone settles it.
+        if (pristine.files[path] !== theirs) {
+          result.owned_changed.push(path);
+          result.stage.push([STAGING + path, theirs]);
+        }
+      }
       continue;
     }
     const ours = readRepo(from ?? path);
@@ -379,7 +387,12 @@ export async function runUpdate(root, { bindWith, version }) {
   }
   for (const path of plan.remove) removeMoved(root, path);
   put(root, PRISTINE, stateJson(plan.pristine));
-  return { ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])), renamed: plan.renamed, skipped };
+  return {
+    ...Object.fromEntries(OUTCOMES.map((o) => [o, plan[o]])),
+    renamed: plan.renamed,
+    owned_changed: plan.owned_changed,
+    skipped,
+  };
 }
 
 // A pristine record parsed from its JSON text, with a files object; anything else is refused,
