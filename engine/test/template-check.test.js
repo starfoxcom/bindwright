@@ -1,12 +1,12 @@
 // The pre-screen check that lists a PR's unedited template files: it renders
-// the setup with the wheel the head pins and the base's answers, lists only the
-// changed files equal to that render, and lists nothing, with its reason, when
-// the pin names no release or the wheel does not match it.
+// the setup with the release the head's record names and the base's answers,
+// lists only the changed files equal to that render, and lists nothing, with
+// its reason, when the record names no release, the release is older than the
+// base's, or the download fails.
 
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -69,7 +69,7 @@ function render() {
   return rendering;
 }
 
-async function pullRequest(folder, pin, { basePin, baseVersion = VERSION } = {}) {
+async function pullRequest(folder, { headVersion = VERSION, baseVersion = VERSION } = {}) {
   const rendered = await render();
   const root = join(folder, "repo");
   mkdirSync(root);
@@ -77,31 +77,35 @@ async function pullRequest(folder, pin, { basePin, baseVersion = VERSION } = {})
   put(root, ".bindwright/project.json", JSON.stringify(ANSWERS));
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: baseVersion, year: 2026, files: {} }));
   put(root, "README.md", "base\n");
-  if (basePin) put(root, ".bindwright/helper.json", JSON.stringify({ python: basePin }));
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "base");
   git(root, "checkout", "-q", "-b", "pr");
   put(root, UNEDITED, rendered.get(UNEDITED).replace(/\n/g, "\r\n"));
   put(root, EDITED, rendered.get(EDITED) + "\nA line of the project's own.\n");
-  put(root, ".bindwright/helper.json", JSON.stringify({ python: pin }));
+  put(root, ".bindwright/pristine.json", JSON.stringify({ version: headVersion, year: 2026, files: {} }));
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "update");
   git(root, "checkout", "-q", "main");
   git(root, "merge", "-q", "--no-ff", "pr", "-m", "merge");
-  put(folder, "files.txt", [UNEDITED, EDITED, ".bindwright/helper.json"].join("\n") + "\n");
+  put(folder, "files.txt", [UNEDITED, EDITED, ".bindwright/pristine.json"].join("\n") + "\n");
   return root;
 }
 
+// The download is swapped for the local wheel, and refuses any URL but the release's own.
 function runCheck(root, folder, wheel) {
   const script = [
     "import sys",
     "sys.path.insert(0, sys.argv[1])",
     "import bindwright_templates as check",
-    "check.download = lambda url: open(sys.argv[3], 'rb').read()",
+    "def download(url):",
+    "    if url != sys.argv[4]:",
+    "        raise OSError('asked for ' + url)",
+    "    return open(sys.argv[3], 'rb').read()",
+    "check.download = download",
     "sys.exit(check.main([sys.argv[2]]))",
   ].join("\n");
   // -B: importing the check from the template folder must leave no bytecode cache there.
-  const args = ["-B", "-c", script, CHECK, join(folder, "files.txt"), wheel];
+  const args = ["-B", "-c", script, CHECK, join(folder, "files.txt"), wheel, URL];
   const r = spawnSync(python, args, { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout;
@@ -109,31 +113,23 @@ function runCheck(root, folder, wheel) {
 
 const CASES = [
   {
-    name: "a pinned release lists only the unedited file",
-    pin: (sum) => ({ url: URL, sha256: sum }),
+    name: "the recorded release lists only the unedited file",
     listed: [UNEDITED],
   },
   {
-    name: "a pin outside the release downloads lists nothing",
-    pin: (sum) => ({ url: URL.replace("starfoxcom", "someone"), sha256: sum }),
-    reason: "names no Bindwright release wheel",
+    name: "a head record naming no release lists nothing",
+    headVersion: "dev",
+    reason: "the head's .bindwright/pristine.json records no Bindwright release",
   },
   {
-    name: "a wheel that does not match its pin lists nothing",
-    pin: () => ({ url: URL, sha256: "0".repeat(64) }),
-    reason: "does not match the SHA-256",
+    name: "a failed download lists nothing",
+    missingWheel: true,
+    reason: "the wheel download failed",
   },
   {
-    name: "a pin older than the base's lists nothing",
-    pin: (sum) => ({ url: URL, sha256: sum }),
-    basePin: { url: `${RELEASES}/v999.0.0/bindwright-999.0.0-py3-none-any.whl`, sha256: "0".repeat(64) },
-    reason: `the head pins Bindwright ${VERSION}, older than the base's 999.0.0`,
-  },
-  {
-    name: "a pin older than the base's record lists nothing when the base has no pin",
-    pin: (sum) => ({ url: URL, sha256: sum }),
+    name: "a release older than the base's record lists nothing",
     baseVersion: "999.0.0",
-    reason: `the head pins Bindwright ${VERSION}, older than the base's 999.0.0`,
+    reason: `the head records Bindwright ${VERSION}, older than the base's 999.0.0`,
   },
 ];
 
@@ -142,8 +138,7 @@ let shared;
 function sharedWheel() {
   if (!shared) {
     const folder = mkdtempSync(join(tmpdir(), "template-wheel-"));
-    const wheel = buildWheel(folder);
-    shared = { folder, wheel, sum: createHash("sha256").update(readFileSync(wheel)).digest("hex") };
+    shared = { folder, wheel: buildWheel(folder) };
   }
   return shared;
 }
@@ -153,12 +148,12 @@ for (const row of CASES) {
   test(`template check: ${row.name}`, { skip: !python && "needs Python 3.8+" }, async () => {
     const folder = mkdtempSync(join(tmpdir(), "template-check-"));
     try {
-      const { wheel, sum } = sharedWheel();
-      const root = await pullRequest(folder, row.pin(sum), row);
-      const out = runCheck(root, folder, wheel);
+      const { wheel } = sharedWheel();
+      const root = await pullRequest(folder, row);
+      const out = runCheck(root, folder, row.missingWheel ? join(folder, "missing.whl") : wheel);
       const listed = out.split(/\r?\n/).filter((l) => l.startsWith("- ")).map((l) => l.slice(2));
       assert.deepEqual(listed, row.listed ?? [], out);
-      if (row.reason) assert.match(out, new RegExp(row.reason), out);
+      if (row.reason) assert.ok(out.includes(row.reason), out);
     } finally {
       rmSync(folder, { recursive: true, force: true });
     }

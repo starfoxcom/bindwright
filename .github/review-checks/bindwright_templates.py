@@ -1,13 +1,14 @@
 """Pre-screen check: which changed files are Bindwright's template text, unedited.
 
-It renders the Bindwright setup the way the pinned release writes it and lists
-each changed file whose text equals that render, so the review can send a
-finding in such a file upstream instead of blocking this repo on text it does
+It renders the Bindwright setup the way the recorded release writes it and
+lists each changed file whose text equals that render, so the review can send
+a finding in such a file upstream instead of blocking this repo on text it does
 not own. The render uses:
 
-- the Python helper the head's `.bindwright/helper.json` pins, taken only from a
-  starfoxcom/bindwright release download that matches the pinned SHA-256, so
-  the pin can name a published release and nothing else;
+- the Bindwright release the head's `.bindwright/pristine.json` records, which
+  every setup and update writes, downloaded only from starfoxcom/bindwright's
+  release page, so the record can name a published release and nothing else,
+  and never one older than the base's record;
 - the base's `.bindwright/project.json` answers and `.bindwright/pristine.json`
   year, so a PR cannot steer what the render fills in.
 
@@ -19,7 +20,6 @@ Run by the gate's Project pre-screen job from the base branch:
     bindwright_templates.py FILES DIFF
 """
 
-import hashlib
 import json
 import os
 import re
@@ -30,13 +30,10 @@ import threading
 import urllib.request
 import zipfile
 
-PIN = ".bindwright/helper.json"
 ANSWERS = ".bindwright/project.json"
 PRISTINE = ".bindwright/pristine.json"
 STAGING = ".bindwright/incoming/"
-RELEASE = re.compile(
-    r"https://github\.com/starfoxcom/bindwright/releases/download/"
-    r"v([0-9]+\.[0-9]+\.[0-9]+)/bindwright-\1-py3-none-any\.whl")
+RELEASES = "https://github.com/starfoxcom/bindwright/releases/download"
 # Together well under the pre-screen job's 300 s limit, which would fail the job.
 DOWNLOAD_SECONDS = 60
 RENDER_SECONDS = 120
@@ -63,53 +60,27 @@ def base_commit():
 
 
 def read_json(rev, path):
+    """The JSON object in `path` at `rev`."""
+    side = "the head" if rev == "HEAD" else "the base"
     data = git_show(rev, path)
     if data is None:
-        raise Skip("%s has no %s" % ("the base" if rev != "HEAD" else "the head", path))
+        raise Skip("%s has no %s" % (side, path))
     try:
-        return json.loads(data.decode("utf-8"))
+        value = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
-        raise Skip("%s is not valid JSON" % path)
+        raise Skip("%s's %s is not valid JSON" % (side, path))
+    if not isinstance(value, dict):
+        raise Skip("%s's %s is not an object" % (side, path))
+    return value
 
 
-def pinned_wheel(pin):
-    """The pinned wheel's URL and SHA-256, refused unless it is a Bindwright release."""
-    python = pin.get("python") if isinstance(pin, dict) else None
-    url = python.get("url") if isinstance(python, dict) else None
-    digest = python.get("sha256") if isinstance(python, dict) else None
-    if not isinstance(url, str) or not RELEASE.fullmatch(url):
-        raise Skip("%s names no Bindwright release wheel" % PIN)
-    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
-        raise Skip("%s gives no SHA-256 for the wheel" % PIN)
-    return url, digest
-
-
-def version_of(text):
-    """`1.2.3` or `v1.2.3` as a tuple of numbers, or None."""
+def recorded_release(record, side):
+    """The release a pristine record names, as `x.y.z` and as a tuple of numbers."""
+    text = record.get("version")
     match = re.fullmatch(r"v?([0-9]+)\.([0-9]+)\.([0-9]+)", text) if isinstance(text, str) else None
-    return tuple(int(part) for part in match.groups()) if match else None
-
-
-def base_version(base, pristine):
-    """The newest release the base is known to hold: its record's version or its pin's."""
-    versions = [version_of(pristine.get("version"))]
-    try:
-        base_url, _ = pinned_wheel(json.loads((git_show(base, PIN) or b"").decode("utf-8")))
-        versions.append(version_of(RELEASE.fullmatch(base_url).group(1)))
-    except (Skip, UnicodeDecodeError, ValueError):
-        pass
-    versions = [v for v in versions if v]
-    if not versions:
-        raise Skip("the base records no Bindwright version to compare the pin with")
-    return max(versions)
-
-
-def refuse_older_pin(release, base, pristine):
-    """Refuses a head pin older than the base, so a PR cannot exempt text it reverts."""
-    floor = base_version(base, pristine)
-    if version_of(release) < floor:
-        raise Skip("the head pins Bindwright %s, older than the base's %s"
-                   % (release, ".".join(str(part) for part in floor)))
+    if not match:
+        raise Skip("%s's %s records no Bindwright release" % (side, PRISTINE))
+    return ".".join(match.groups()), tuple(int(part) for part in match.groups())
 
 
 def download(url):
@@ -117,8 +88,9 @@ def download(url):
         return response.read()
 
 
-def fetch(url):
-    """The wheel's bytes within DOWNLOAD_SECONDS in all, so the job's time limit is never hit."""
+def fetch(release):
+    """The release's wheel within DOWNLOAD_SECONDS in all, so the job's time limit is never hit."""
+    url = "%s/v%s/bindwright-%s-py3-none-any.whl" % (RELEASES, release, release)
     result = {}
 
     def worker():
@@ -137,10 +109,8 @@ def fetch(url):
     return result["data"]
 
 
-def unpack(data, digest, folder):
-    """Checks the wheel against its pin and unpacks it; returns the engine's bind.py."""
-    if hashlib.sha256(data).hexdigest() != digest:
-        raise Skip("the downloaded wheel does not match the SHA-256 in %s" % PIN)
+def unpack(data, folder):
+    """Unpacks the wheel; returns the engine's bind.py."""
     path = os.path.join(folder, "helper.whl")
     with open(path, "wb") as fh:
         fh.write(data)
@@ -166,9 +136,9 @@ def render(engine, answers, year):
                            capture_output=True, timeout=RENDER_SECONDS)
         out = json.loads(r.stdout.decode("utf-8"))
     except (subprocess.TimeoutExpired, UnicodeDecodeError, ValueError):
-        raise Skip("the pinned engine gave no render")
+        raise Skip("the recorded engine gave no render")
     if not isinstance(out, dict) or "files" not in out:
-        raise Skip("the pinned engine refused the base's answers: %s" % (out or {}).get("error", "no reason"))
+        raise Skip("the recorded engine refused the base's answers: %s" % (out or {}).get("error", "no reason"))
     files = {}
     for path, text in out["files"]:
         if path.startswith(STAGING):
@@ -207,15 +177,14 @@ def changed_files(path):
 
 def run(files_path):
     base = base_commit()
-    url, digest = pinned_wheel(read_json("HEAD", PIN))
-    release = RELEASE.fullmatch(url).group(1)
-    pristine = read_json(base, PRISTINE)
-    if not isinstance(pristine, dict):
-        raise Skip("%s is not an object" % PRISTINE)
-    refuse_older_pin(release, base, pristine)
+    release, version = recorded_release(read_json("HEAD", PRISTINE), "the head")
+    record = read_json(base, PRISTINE)
+    floor, floor_version = recorded_release(record, "the base")
+    if version < floor_version:
+        raise Skip("the head records Bindwright %s, older than the base's %s" % (release, floor))
     answers = read_json(base, ANSWERS)
     with tempfile.TemporaryDirectory() as folder:
-        rendered = render(unpack(fetch(url), digest, folder), answers, pristine.get("year"))
+        rendered = render(unpack(fetch(release), folder), answers, record.get("year"))
     return release, unedited(changed_files(files_path), rendered)
 
 
