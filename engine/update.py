@@ -118,9 +118,11 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
                     files[owned_old] = pristine["files"][owned_old]
             elif theirs is not None:
                 files[path] = theirs
-                # The templates changed a file the project owns: the project's copy never gets it by itself.
+                # The templates changed a file the project owns: the project's copy never gets it by itself,
+                # so the new text waits in the staging folder until someone settles it.
                 if pristine["files"].get(path) != theirs:
                     result["owned_changed"].append(path)
+                    result["stage"].append((STAGING + path, theirs))
             continue
         ours = read_repo(old or path)
         base = _base_for(pristine, old or path, ours)

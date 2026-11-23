@@ -132,8 +132,12 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
         if (ownedOld in pristine.files) result.pristine[ownedOld] = pristine.files[ownedOld];
       } else if (theirs !== undefined) {
         result.pristine[path] = theirs;
-        // The templates changed a file the project owns: the project's copy never gets it by itself.
-        if (pristine.files[path] !== theirs) result.owned_changed.push(path);
+        // The templates changed a file the project owns: the project's copy never gets it by itself,
+        // so the new text waits in the staging folder until someone settles it.
+        if (pristine.files[path] !== theirs) {
+          result.owned_changed.push(path);
+          result.stage.push([STAGING + path, theirs]);
+        }
       }
       continue;
     }
