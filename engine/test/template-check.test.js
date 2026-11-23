@@ -82,7 +82,8 @@ const putPin = (root, pin) => {
 
 async function pullRequest(folder, digest, row) {
   const { headVersion = VERSION, baseVersion = VERSION, headEnding = "lf", baseEnding = null } = row;
-  const ending = (text, kind) => (kind === "crlf" ? text.replace(/\r?\n/g, "\r\n") : text);
+  const ending = (text, kind) =>
+    kind === "crlf" ? text.replace(/\r?\n/g, "\r\n") : kind === "mixed" ? text.replace("\n", "\r\n") : text;
   const pin = { version: VERSION, sha256: digest };
   const { basePin = pin, headPin = basePin } = row;
   const rendered = await render();
@@ -143,6 +144,11 @@ const CASES = [
   {
     name: "a PR that only adds carriage returns lists nothing",
     baseEnding: "lf",
+    headEnding: "crlf",
+  },
+  {
+    name: "a base copy with one CRLF line does not license a CRLF head",
+    baseEnding: "mixed",
     headEnding: "crlf",
   },
   {

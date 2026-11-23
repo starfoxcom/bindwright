@@ -185,12 +185,13 @@ def text_at(rev, path):
 
 
 def matches(text, render, base_text):
-    """Whether the head's text is the render, in the render's line endings or in CRLF ones the base
-    copy already used, so a PR that only adds carriage returns is never listed."""
+    """Whether the head's text is the render, in the render's line endings or in the CRLF ones the
+    base copy already used on every line, so a PR that only adds carriage returns is never listed."""
     if text == render:
         return True
     crlf = render.replace("\r\n", "\n").replace("\n", "\r\n")
-    return base_text is not None and "\r\n" in base_text and text == crlf
+    base_is_crlf = base_text is not None and "\r\n" in base_text and "\n" not in base_text.replace("\r\n", "")
+    return base_is_crlf and text == crlf
 
 
 def unedited(changed, rendered, base):
