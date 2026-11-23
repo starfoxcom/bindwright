@@ -30,7 +30,9 @@ const EDITED = ".claude/rules/testing.md";
 const NO_HOOKS = mkdtempSync(join(tmpdir(), "template-hooks-"));
 after(() => rmSync(NO_HOOKS, { recursive: true, force: true }));
 const git = (cwd, ...args) => {
-  const config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", `core.hooksPath=${NO_HOOKS}`];
+  // autocrlf off: the line-ending rows need each file committed byte for byte.
+  const config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", `core.hooksPath=${NO_HOOKS}`,
+    "-c", "core.autocrlf=false"];
   const r = spawnSync("git", [...config, ...args], { cwd, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
@@ -62,7 +64,8 @@ function buildWheel(folder) {
 }
 
 // A PR's merge commit: the base holds the answers, the head changes two rendered
-// files (one left as rendered, one edited) and pins the wheel.
+// files (one left as rendered, one edited) and pins the wheel. `baseEnding` gives the
+// base an older copy of the unedited file; `headEnding` sets the head copy's line endings.
 let rendering;
 function render() {
   const readFile = async (p) => readFileSync(join(repo, p), "utf8");
@@ -78,7 +81,9 @@ const putPin = (root, pin) => {
 };
 
 async function pullRequest(folder, digest, row) {
-  const { headVersion = VERSION, baseVersion = VERSION } = row;
+  const { headVersion = VERSION, baseVersion = VERSION, headEnding = "lf", baseEnding = null } = row;
+  const ending = (text, kind) =>
+    kind === "crlf" ? text.replace(/\r?\n/g, "\r\n") : kind === "mixed" ? text.replace("\n", "\r\n") : text;
   const pin = { version: VERSION, sha256: digest };
   const { basePin = pin, headPin = basePin } = row;
   const rendered = await render();
@@ -89,10 +94,11 @@ async function pullRequest(folder, digest, row) {
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: baseVersion, year: 2026, files: {} }));
   putPin(root, basePin);
   put(root, "README.md", "base\n");
+  if (baseEnding) put(root, UNEDITED, ending(rendered.get(UNEDITED) + "An older line.\n", baseEnding));
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "base");
   git(root, "checkout", "-q", "-b", "pr");
-  put(root, UNEDITED, rendered.get(UNEDITED).replace(/\n/g, "\r\n"));
+  put(root, UNEDITED, ending(rendered.get(UNEDITED), headEnding));
   put(root, EDITED, rendered.get(EDITED) + "\nA line of the project's own.\n");
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: headVersion, year: 2026, files: {} }));
   putPin(root, headPin);
@@ -128,6 +134,22 @@ const CASES = [
   {
     name: "the recorded release lists only the unedited file",
     listed: [UNEDITED],
+  },
+  {
+    name: "a copy in the CRLF endings the base already used is listed",
+    baseEnding: "crlf",
+    headEnding: "crlf",
+    listed: [UNEDITED],
+  },
+  {
+    name: "a PR that only adds carriage returns lists nothing",
+    baseEnding: "lf",
+    headEnding: "crlf",
+  },
+  {
+    name: "a base copy with one CRLF line does not license a CRLF head",
+    baseEnding: "mixed",
+    headEnding: "crlf",
   },
   {
     name: "a head record naming no release lists nothing",
