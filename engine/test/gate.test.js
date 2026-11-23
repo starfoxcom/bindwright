@@ -63,9 +63,11 @@ test("this repo's choices bind the live workflows and scripts byte for byte", as
   }
 });
 
+// Every default but the check folder, which names the folder setup ships its own check into.
 test("the bound settings hold the gate's defaults", { skip: !python && "needs Python 3.8+" }, async () => {
   const out = await bound(OWN);
-  assert.equal(settings(out.get(".github/review-gate.yml")), settings(""));
+  const shipped = settings("").replace("prescreen_dir=", "prescreen_dir=.github/review-checks");
+  assert.equal(settings(out.get(".github/review-gate.yml")), shipped);
 });
 
 test("the escalation and attribution choices map to the two switches", { skip: !python && "needs Python 3.8+" }, async () => {

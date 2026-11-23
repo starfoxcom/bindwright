@@ -155,14 +155,14 @@ def changed_files(path):
         return [line for line in fh.read().splitlines() if line]
 
 
-def run(files_path, fetch=download):
+def run(files_path):
     base = base_commit()
     url, digest = pinned_wheel(read_json("HEAD", PIN))
     answers = read_json(base, ANSWERS)
     year = read_json(base, PRISTINE).get("year")
     with tempfile.TemporaryDirectory() as folder:
         try:
-            data = fetch(url)
+            data = download(url)
         except OSError as e:
             raise Skip("the wheel download failed: %s" % e)
         rendered = render(unpack(data, digest, folder), answers, year)

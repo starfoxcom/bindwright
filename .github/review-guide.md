@@ -27,6 +27,10 @@ Mistakes this repo has made more than once. Each item names a trigger the diff s
 | Rule, README or CHANGELOG text states how many of something there are (checks, counts, rows, tests) | The number matches the code after this diff | #940 |
 | A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says it does with input it cannot read, whether that is to block with what to fix or to let the call through | #350, #740 |
 
+## Bindwright template text
+
+The pre-screen's `bindwright_templates.py` lists the changed files whose text equals what the pinned Bindwright release writes for this project, unedited. Their text is reviewed in Bindwright's own repo, so a finding in the content of a listed file does not count toward this verdict: put it under a heading of its own, "Upstream: Bindwright template text", with the file and line, and the author reports it with `/bindwright:report`. How this project's own files fit a listed file (a rule it contradicts, a path or command it names that the repo lacks) is this PR's finding and blocks as usual. A file the check does not list gets the normal review.
+
 ## Also escalate when the diff includes
 
 These escalate on their own: the gate's own files in every project (`.github/scripts/**`, `.github/review-gate.yml`, this guide, the review workflows and the project's check folder), and this repo's trigger paths in `.github/review-gate.yml` (`escalate.paths`: `_core/`, `engine/`). Mark these for escalation too:
