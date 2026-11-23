@@ -20,10 +20,9 @@ the hook also asks the assistant to write the session's focus to its purpose fil
 after a compaction or a resume it names the purpose already written and asks for
 a rewrite if the work has moved on.
 
-The title reaches the session on this computer only. Claude Code names a Remote
-Control session on the phone or the web from /rename, the --name flag or a
-rename made there, never from a hook's title, so those two names can differ
-until the user runs /rename.
+The title reaches the session on this computer only: Claude Code does not pass
+a hook's title to the name a Remote Control session shows on the phone or the
+web, so those two names can differ. /rename sets both.
 
 The project root is CLAUDE_PROJECT_DIR, else the input's `cwd`, else the current
 folder. Every failure prints nothing and exits 0: a title never blocks a session
