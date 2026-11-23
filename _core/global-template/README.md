@@ -22,6 +22,7 @@ global-template/
 │   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
 └── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
     ├── README.md                          # What each mod does, install, options, tests
+    ├── chat-sync/                         # Keeps chats in step across computers (opt-in)
     ├── ci-watch/                          # Watches a pushed PR's checks, wakes the session once
     ├── compact-handoff/                   # Compaction as a focused hand-off, plus a recall tool
     ├── session-facts/                     # Time, context fill and plan usage on every prompt

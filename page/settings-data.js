@@ -339,6 +339,11 @@ export const FIXED = [
 // One row per mod in the engine's MODS list, in the same order. The title is the mod's name.
 export const MODS_ROWS = [
   {
+    id: "chat-sync",
+    text: "Keeps your chats in step across computers through a sync folder or a private GitHub repo.",
+    value: "Off",
+  },
+  {
     id: "ci-watch",
     text: "Watches pull request checks and wakes the session when they finish. After repeated red rounds, "
       + "it holds changes until the session researches a better fix.",
