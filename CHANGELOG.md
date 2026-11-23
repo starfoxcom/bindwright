@@ -6,6 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.15.3] — 2026-11-23
+
+### Fixed
+
+- **The template-text check no longer lists a file whose PR only added carriage returns.** It compared files with Windows line endings turned into plain ones on both sides, so a PR that only added carriage returns to a template file, which breaks a shell hook, had that file listed as unedited template text, and the review left its findings out of the verdict. A file now counts as unedited only when it equals the render, or equals it in the Windows line endings the base's copy already used on every line. The check also runs the release's engine from the unpacked download instead of the PR's checkout.
+- **A no to the template's skill contracts sticks.** When a project keeps its own skill-check steps, for example because its hand-off file lives in another folder, the update offered the template's steps again on every run, and one yes made skill-check report the hand-off step as skipped at every session start and close. The update and setup now save the steps a no turned down under the project's `"_offered"` entry in `~/.claude/skill-contracts.json` and ask again only once the template's steps change.
+
 ## [v7.15.2] — 2026-11-23
 
 ### Fixed
