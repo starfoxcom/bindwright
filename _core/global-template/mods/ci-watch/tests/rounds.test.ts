@@ -400,12 +400,16 @@ test("a round adds to the count file as read right before its write", async ($, 
 const ROUTINE = '## Code Review\n<!-- review-run: 11-1 review -->\n\n🟢 LGTM\n'
 const REQUEST = '@claude review this PR — depth pass.\n\n<!-- review-run: 11-1 request -->\n'
 const DEEP = '## Deep review\n<!-- deep-run: 12-1 review -->\n\n- a finding\n\n**Verdict:** 🔴 Blocking\n'
+// The review workflow's early jobs, which a cancel during triage leaves cancelled.
+const EARLY = ['Diff triage', 'Project triggers', 'Project pre-screen']
 type VerdictRow = {
   name: string
   state?: string
   comments?: { at?: string; body: string }[]
   deepWorkflow?: string
   build: string
+  // Review workflow jobs a cancel left in the cancelled bucket, beside the failed gate.
+  cancelled?: string[]
   counted: boolean
 }
 const VERDICT_ROWS: VerdictRow[] = [
@@ -449,6 +453,15 @@ const VERDICT_ROWS: VerdictRow[] = [
   { name: 'a routine 🔴 then an errored deep run', state: 'routine=block;deep=error', build: 'pass', counted: true },
   { name: "a deep 🔴", state: 'routine=pass;escalated=yes;deep=block', build: 'pass', counted: true },
   { name: 'a gate state with no tier', state: '', build: 'pass', counted: true },
+  { name: 'a run cancelled in triage', state: 'routine=error', build: 'pass', cancelled: EARLY, counted: false },
+  {
+    name: 'a run cancelled after its review posted',
+    state: 'routine=error',
+    comments: [{ body: ROUTINE }],
+    build: 'pass',
+    cancelled: EARLY,
+    counted: true,
+  },
   { name: 'a failed gate whose tiers all passed', state: 'routine=pass;deep=none', build: 'pass', counted: true },
   { name: 'a gate state that cannot be read', build: 'pass', counted: true },
   { name: 'a failed test beside an errored review', state: 'routine=error;deep=none', build: 'fail', counted: true },
@@ -480,7 +493,8 @@ for (const row of VERDICT_ROWS) {
     await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
     seed(seen, reds(2))
     seen.bucket = row.build
-    seen.rows = [{ name: 'Review gate', bucket: 'fail' }, { name: 'Claude On-Demand', bucket: 'fail' }]
+    const early = (row.cancelled ?? []).map(name => ({ name, bucket: 'cancel' }))
+    seen.rows = [{ name: 'Review gate', bucket: 'fail' }, { name: 'Claude On-Demand', bucket: 'fail' }, ...early]
     seen.gateState = row.state
     seen.comments = row.comments
     seen.deepWorkflow = row.deepWorkflow
