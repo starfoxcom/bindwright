@@ -15,7 +15,9 @@ const base = require('./sync.cjs')
 const paths = require('./paths.cjs')
 const { syncPlaces } = require('./places.cjs')
 
-const { neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf } = paths
+const {
+  neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf, copyPlainFile,
+} = paths
 const CHAT = /^[\w-]+\.jsonl$/
 const ID = /^[\w-]+$/
 const VISIBILITY_FRESH_MS = 60 * 60_000
@@ -117,20 +119,28 @@ function compareChat(local, stored, root) {
   const home = os.homedir()
   const toPlaceholders = neutralize(root, home)
   const toLocal = expand(root, home)
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-sync-'))
-  try {
+  return inWorkFolder(dir => {
     const mine = path.join(dir, 'mine')
     const theirs = path.join(dir, 'theirs')
     transformFile(local, mine, text => formless(toPlaceholders(text)), true)
     transformFile(stored, theirs, text => formless(toPlaceholders(toLocal(text))), true)
     return { verdict: compare(mine, theirs), localLines: countLines(mine), storedLines: countLines(theirs) }
+  })
+}
+
+// Runs `work` with a private folder of this computer's, removed after.
+function inWorkFolder(work) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-sync-'))
+  try {
+    return work(dir)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
 }
 
+// Removes a file, or whatever else sits at its name.
 function removeQuietly(file) {
-  fs.rmSync(file, { force: true })
+  fs.rmSync(file, { force: true, recursive: true })
 }
 
 // Commits what this computer wrote, brings the clone up to the repo and pushes.
@@ -230,46 +240,59 @@ function otherCopies(folder) {
     .sort((a, b) => sizeOf(b) - sizeOf(a))
 }
 
+// Other computers' copies of one chat, each read once into the private folder
+// `work`, longest first, as { copy, read }; one that is no plain file is left out.
+function* readCopies(folder, work) {
+  for (const [at, copy] of otherCopies(folder).entries()) {
+    const read = path.join(work, `copy-${at}`)
+    if (copyPlainFile(copy, read)) yield { copy, read }
+  }
+}
+
 // The longest other computer's copy that the chat `transcript` starts with.
-function extendedCopy(transcript, folder, root) {
-  for (const copy of otherCopies(folder)) {
-    const { verdict, storedLines } = compareChat(transcript, copy, root)
-    if (verdict === 'ahead' || verdict === 'same') return { copy, storedLines }
+function extendedCopy(transcript, folder, root, work) {
+  for (const { read } of readCopies(folder, work)) {
+    const { verdict, storedLines } = compareChat(transcript, read, root)
+    if (verdict === 'ahead' || verdict === 'same') return { read, storedLines }
   }
   return null
 }
 
 // Writes this computer's own copy of one chat: the lines of the longest other
 // copy the chat extends, byte for byte, then this computer's lines after them,
-// so a path the other computer left as text stays text. True when it changed.
+// so a path the other computer left as text stays text. It is built in a
+// private folder and only then copied into the sync place. True when it changed.
 function sendChat(transcript, root, projectDir) {
   const id = path.basename(transcript, '.jsonl')
   ensureFolder(projectDir)
   ensureFolder(path.join(projectDir, id))
   const own = ownCopy(projectDir, id)
-  const next = tempOf(own)
   sweepTemps(own)
-  removeQuietly(next)
-  const toPlaceholders = neutralize(root, os.homedir())
-  const start = extendedCopy(transcript, path.dirname(own), root)
-  if (start) {
-    transformFile(start.copy, next, text => text, true, 'wx')
-    appendLines(transcript, start.storedLines, next, toPlaceholders)
-  } else {
-    transformFile(transcript, next, toPlaceholders, true, 'wx')
-  }
-  if (compare(next, own) === 'same') {
+  return inWorkFolder(work => {
+    const built = path.join(work, 'own')
+    const toPlaceholders = neutralize(root, os.homedir())
+    const start = extendedCopy(transcript, path.dirname(own), root, work)
+    if (start) {
+      transformFile(start.read, built, text => text, true)
+      appendLines(transcript, start.storedLines, built, toPlaceholders)
+    } else {
+      transformFile(transcript, built, toPlaceholders, true)
+    }
+    if (compare(built, own) === 'same') return false
+    const next = tempOf(own)
     removeQuietly(next)
-    return false
-  }
-  fs.renameSync(next, own)
-  return true
+    fs.copyFileSync(built, next, fs.constants.COPYFILE_EXCL)
+    fs.renameSync(next, own)
+    return true
+  })
 }
 
 // A chat counts as sent while neither it nor its own copy in the sync place has
-// changed since; a copy a pull or a reset took back reads as not sent.
-function sentStamp(local, own) {
-  return `${stampOf(local)}|${isPlainFile(own) ? stampOf(own) : 'none'}`
+// changed since; a copy a pull or a reset took back reads as not sent. The
+// chat's stamp is taken before it is read, so lines added during the copy
+// leave it reading as not sent.
+function sentStamp(localStamp, own) {
+  return `${localStamp}|${isPlainFile(own) ? stampOf(own) : 'none'}`
 }
 
 // The chats sent, by size and time, and the other computers' copies already
@@ -294,9 +317,10 @@ function out([transcript, root]) {
   const id = path.basename(transcript, '.jsonl')
   const key = base.projectKey(root)
   const projectDir = path.join(store, key)
+  const stamp = stampOf(transcript)
   const isChanged = sendChat(transcript, root, projectDir)
   const seen = base.readJson(seenFile(), {})
-  seen[`sent:${key}/${id}`] = sentStamp(transcript, ownCopy(projectDir, id))
+  seen[`sent:${key}/${id}`] = sentStamp(stamp, ownCopy(projectDir, id))
   base.writeJson(seenFile(), seen)
   const result = isChanged ? { copied: id } : { same: id }
   return isGit && isChanged ? Object.assign(result, publish(store, `${id} from ${base.machineId()}`)) : result
@@ -324,17 +348,19 @@ function bringIn([chatDir, root, openId]) {
     if (answer.verdict === 'open') result.behind.push(id)
     if (answer.isConflict) result.conflicts.push(id)
   }
-  const isRefused = isGit && Boolean(privateRepoError(place.repo))
-  for (const name of isRefused ? [] : chatFiles(chatDir)) {
+  const refused = isGit ? privateRepoError(place.repo) : null
+  if (refused) result.error = result.error ? `${result.error} ${refused}` : refused
+  for (const name of refused ? [] : chatFiles(chatDir)) {
     const local = path.join(chatDir, name)
     const id = name.slice(0, -'.jsonl'.length)
     const sentKey = `sent:${key}/${id}`
-    if (seen[sentKey] === sentStamp(local, ownCopy(dir, id))) continue
+    const stamp = stampOf(local)
+    if (seen[sentKey] === sentStamp(stamp, ownCopy(dir, id))) continue
     if (sendChat(local, root, dir)) result.sent.push(id)
-    seen[sentKey] = sentStamp(local, ownCopy(dir, id))
+    seen[sentKey] = sentStamp(stamp, ownCopy(dir, id))
   }
   base.writeJson(seenFile(), seen)
-  if (isGit && !isRefused) Object.assign(result, publish(store, `${result.sent.length} chats from ${base.machineId()}`))
+  if (isGit && !refused) Object.assign(result, publish(store, `${result.sent.length} chats from ${base.machineId()}`))
   return result
 }
 
@@ -348,20 +374,31 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
   if (!hasLocal && seen[`sent:${key}`] !== undefined) return { verdict: 'kept' }
   const isUnchanged = copies.every(copy => seen[`${key}/${path.basename(copy)}`] === stampOf(copy))
   if (hasLocal && isUnchanged) return { verdict: 'kept' }
-  let answer = { verdict: 'kept', isConflict: false }
-  for (const copy of copies) {
-    const before = hasLocal ? stampOf(local) : null
-    const { verdict, localLines } = hasLocal ? compareChat(local, copy, root) : { verdict: 'behind', localLines: 0 }
-    if (verdict === 'diverged') answer.isConflict = true
-    if (verdict !== 'behind') continue
-    if (isOpen) return { verdict: 'open', isConflict: answer.isConflict }
-    if (!importCopy(copy, local, root, { localLines, before })) return answer
-    answer = { ...answer, verdict: 'imported' }
-    break
+  const before = hasLocal ? stampOf(local) : null
+  return inWorkFolder(work => {
+    const found = behindCopy(storeChat, local, root, work)
+    const answer = { verdict: found.read ? 'imported' : 'kept', isConflict: found.isConflict }
+    if (found.read && isOpen) return { ...answer, verdict: 'open' }
+    if (found.read && !importCopy(found.read, local, root, { localLines: found.localLines, before })) {
+      return { ...answer, verdict: 'kept' }
+    }
+    // Marked as looked at only once done, so an import given up on is tried again.
+    for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
+    return answer
+  })
+}
+
+// The longest other computer's copy that this computer's chat is behind, read
+// into `work`, and whether a copy before it changed on both computers.
+function behindCopy(storeChat, local, root, work) {
+  let isConflict = false
+  const hasLocal = sizeOf(local) >= 0
+  for (const { read } of readCopies(storeChat, work)) {
+    const { verdict, localLines } = hasLocal ? compareChat(local, read, root) : { verdict: 'behind', localLines: 0 }
+    if (verdict === 'diverged') isConflict = true
+    if (verdict === 'behind') return { read, localLines, isConflict }
   }
-  // Marked as looked at only once done, so an import given up on is tried again.
-  for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
-  return answer
+  return { isConflict }
 }
 
 // Writes the local chat as its own complete lines plus the copy's lines after

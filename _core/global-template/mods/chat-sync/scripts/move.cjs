@@ -4,6 +4,7 @@
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
@@ -20,7 +21,7 @@ function describe(place) {
 // A chat repo must be private: a chat holds code, command output and anything pasted in.
 function checkPrivate(repo) {
   const view = spawnSync('gh', ['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility'],
-    { encoding: 'utf8', timeout: 30_000 })
+    { encoding: 'utf8', timeout: 30_000, env: base.quietEnv() })
   if (view.status !== 0) return `Could not confirm that ${repo} is private: ${(view.stderr || '').trim()}`
   const visibility = view.stdout.trim()
   if (visibility === 'PRIVATE') return null
@@ -32,7 +33,7 @@ function checkPrivate(repo) {
 function clone(repo, folder) {
   fs.rmSync(folder, { recursive: true, force: true })
   const args = ['repo', 'clone', repo, folder, '--', '-c', 'core.autocrlf=false', '-c', 'core.symlinks=false']
-  const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000 })
+  const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000, env: base.quietEnv() })
   return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim()}`
 }
 
@@ -75,11 +76,19 @@ function keepBoth(source, kept) {
   fs.copyFileSync(source, kept)
 }
 
+// A folder as the user typed it, with a leading ~ as their home folder, or null
+// for a relative path: the helper's working folder is often the project, and
+// chats kept there would land in its commits.
+function fullPath(where) {
+  const expanded = where.replace(/^~(?=$|[\\/])/, os.homedir())
+  return path.isAbsolute(expanded) ? path.resolve(expanded) : null
+}
+
 // The new place and the folder chats are copied into, or a reason to stop.
 function prepare(kind, where) {
   if (kind === 'folder') {
-    if (!where) return { error: 'Name the folder to keep the chats in.' }
-    const folder = path.resolve(where)
+    const folder = fullPath(where || '')
+    if (!folder) return { error: 'Name the chats folder by its full path, such as ~/Dropbox/Claude chats.' }
     fs.mkdirSync(folder, { recursive: true })
     return { place: { kind: 'folder', path: folder }, store: folder }
   }

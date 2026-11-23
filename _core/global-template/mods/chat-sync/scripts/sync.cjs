@@ -63,8 +63,25 @@ function storeRoot(place) {
   return null
 }
 
+let sshCommand
+
+// The environment for git and gh: a password, passphrase or host-key question
+// fails the command at once instead of waiting, since no one is there to answer
+// it. A user's own ssh program is kept, as its options may differ from ssh's.
+function quietEnv() {
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GH_PROMPT_DISABLED: '1' }
+  if (env.GIT_SSH_COMMAND || env.GIT_SSH) return env
+  if (sshCommand === undefined) {
+    const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
+      { cwd: os.homedir(), encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
+    sshCommand = (run.stdout || '').trim()
+  }
+  if (!sshCommand) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
+  return env
+}
+
 function git(cwd, ...args) {
-  const run = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
+  const run = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv() })
   return { ok: run.status === 0, out: `${run.stdout || ''}${run.stderr || ''}`.trim() }
 }
 
@@ -86,7 +103,7 @@ function safeName(text) {
 }
 
 module.exports = {
-  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, git, projectKey, safeName,
+  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, git, projectKey, safeName,
 }
 
 if (require.main === module) {

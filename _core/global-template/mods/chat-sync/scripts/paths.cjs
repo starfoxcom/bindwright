@@ -68,15 +68,12 @@ function formless(text) {
   return text.replace(/__CHATSYNC_(PROJECT|HOME)_(?:F|E1|E2)__/g, '__CHATSYNC_$1__')
 }
 
-// The rules that turn each placeholder into `folder` as this computer writes it.
+// Each placeholder and `folder` as this computer writes it in that form.
 // A computer without drive letters writes every form with forward slashes.
-function inRules(name, folder) {
+function inValues(name, folder) {
   const parts = segments(folder)
   const isWindows = isWindowsPath(folder)
-  return Object.keys(FORMS).map(form => ({
-    pattern: new RegExp(escapeRegExp(token(name, form)), 'g'),
-    value: parts.join(isWindows ? FORMS[form] : '/'),
-  }))
+  return Object.keys(FORMS).map(form => [token(name, form), parts.join(isWindows ? FORMS[form] : '/')])
 }
 
 function applyRules(text, rules) {
@@ -85,9 +82,11 @@ function applyRules(text, rules) {
 
 // Text in a chat that already reads like a placeholder (a chat about this mod)
 // is escaped on the way out and restored on the way in, so it never becomes a
-// path on the other computer.
-const LITERAL = /__CHATSYNC_/g
-const ESCAPED = /__CHATSYNC_LIT_/g
+// path on the other computer. Every `CHATSYNC_` gets `LIT_` after it, which no
+// placeholder holds; the way back reads placeholders and escapes in one pass,
+// so a path it writes in is never read as an escape.
+const LITERAL = /CHATSYNC_/g
+const WRITTEN = /__CHATSYNC_(?:PROJECT|HOME)_(?:F|E1|E2)__|CHATSYNC_LIT_/g
 
 // The deeper of the two folders goes first, as the longest prefix wins: the
 // project usually sits inside the home folder, but a session started in /home
@@ -97,21 +96,20 @@ function neutralize(root, home) {
   const homeRules = outRules('home', home)
   const isHomeDeeper = segments(home).length > segments(root).length
   const rules = isHomeDeeper ? [...homeRules, ...project] : [...project, ...homeRules]
-  return text => applyRules(text.replace(LITERAL, '__CHATSYNC_LIT_'), rules)
+  return text => applyRules(text.replace(LITERAL, 'CHATSYNC_LIT_'), rules)
 }
 
 function expand(root, home) {
-  const rules = [...inRules('project', root), ...inRules('home', home)]
-  return text => applyRules(text, rules).replace(ESCAPED, '__CHATSYNC_')
+  const values = Object.fromEntries([...inValues('project', root), ...inValues('home', home)])
+  return text => text.replace(WRITTEN, match => values[match] ?? 'CHATSYNC_')
 }
 
 // Writes `src` through `change`, line by line, to `dst`. With `completeOnly`, a
 // last line still being written (no newline yet) is left out, so the copy never
-// ends halfway through a record. `flags` 'wx' creates `dst` only when nothing is
-// there, a link included, so it never writes through one.
-function transformFile(src, dst, change, completeOnly, flags = 'w') {
+// ends halfway through a record.
+function transformFile(src, dst, change, completeOnly) {
   const input = fs.openSync(src, 'r')
-  const output = fs.openSync(dst, flags)
+  const output = fs.openSync(dst, 'w')
   const decoder = new StringDecoder('utf8')
   const buffer = Buffer.alloc(CHUNK_BYTES)
   let carry = ''
@@ -173,6 +171,49 @@ function countLines(file) {
   }
 }
 
+// Opening never follows a link where the system can refuse one, and never
+// waits on a pipe planted at the name.
+const READ_PLAIN = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0)
+
+// Copies the plain file `src` to `dst` through one open handle, checked to be
+// the file the name held when it was looked at (same disk, same file number),
+// so a file swapped for a link meanwhile is never read. False when `src` is no
+// plain file or was swapped.
+function copyPlainFile(src, dst) {
+  let named
+  try {
+    named = fs.lstatSync(src, { bigint: true })
+    if (!named.isFile()) return false
+  } catch {
+    return false
+  }
+  let input
+  try {
+    input = fs.openSync(src, READ_PLAIN)
+  } catch {
+    return false
+  }
+  try {
+    const opened = fs.fstatSync(input, { bigint: true })
+    if (!opened.isFile() || opened.ino !== named.ino || opened.dev !== named.dev) return false
+    copyOpened(input, dst)
+    return true
+  } finally {
+    fs.closeSync(input)
+  }
+}
+
+function copyOpened(input, dst) {
+  const output = fs.openSync(dst, 'w')
+  const buffer = Buffer.alloc(CHUNK_BYTES)
+  try {
+    let read
+    while ((read = fs.readSync(input, buffer, 0, CHUNK_BYTES, null)) > 0) fs.writeSync(output, buffer, 0, read)
+  } finally {
+    fs.closeSync(output)
+  }
+}
+
 function sizeOf(file) {
   try {
     return fs.statSync(file).size
@@ -206,5 +247,5 @@ function startsWithFile(longer, shorter) {
 }
 
 module.exports = {
-  neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf,
+  neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf, copyPlainFile,
 }

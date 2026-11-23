@@ -73,7 +73,8 @@ function bringInNote(answer: Answer): string | undefined {
     parts.push('this chat has newer messages on your other computer: start a new session in this project, '
       + 'then /resume this chat to load them')
   }
-  if (answer.error) parts.push(`could not sync: ${answer.error}`)
+  if (answer.pushError) parts.push(`could not push the chat repo: ${String(answer.pushError).slice(0, 200)}`)
+  if (answer.error) parts.push(`could not sync: ${answer.error.slice(0, 200)}`)
   return parts.length ? `Chat sync: ${parts.join('; ')}.` : undefined
 }
 

@@ -51,6 +51,13 @@ test('a session start brings newer chats in, and says how to load the open chat 
   expect(seen.toasts[0]).toContain('start a new session in this project, then /resume this chat')
 })
 
+test('a push that fails at session start says so', async ($, on) => {
+  const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['other'], pushError: 'rejected' } })
+  await start($)
+
+  expect(seen.toasts).toEqual(['Chat sync: could not push the chat repo: rejected.'])
+})
+
 test('turns copy the chat out at most once a minute, and a copy that fails says so', async ($, on) => {
   const seen = world(on, { out: { error: 'EBUSY: the sync folder is locked' } })
   await start($)

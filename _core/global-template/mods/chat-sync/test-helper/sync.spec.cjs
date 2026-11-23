@@ -6,7 +6,11 @@ const assert = require('node:assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { execFileSync } = require('child_process')
+const http = require('http')
+const { promisify } = require('util')
+const { execFile, execFileSync } = require('child_process')
+
+const execFileAsync = promisify(execFile)
 
 const SCRIPTS = path.join(__dirname, '..', 'scripts')
 const SYNC = path.join(SCRIPTS, 'sync.cjs')
@@ -50,16 +54,16 @@ function computer(name, store, paths = {}) {
     fs.mkdirSync(dataDir, { recursive: true })
     fs.writeFileSync(path.join(dataDir, 'machine.json'), JSON.stringify({ id: paths.id }))
   }
-  const env = { ...process.env, ...GIT_ENV, CLAUDE_CONFIG_DIR: config, HOME: home, USERPROFILE: home }
+  const env = { ...process.env, ...GIT_ENV, ...paths.env, CLAUDE_CONFIG_DIR: config, HOME: home, USERPROFILE: home }
   const sync = (...args) => JSON.parse(execFileSync(process.execPath, [SYNC, ...args], { env, encoding: 'utf8' }))
   if (store) sync('move', 'folder', store)
-  return { home, root, chatDir, sync, dataDir }
+  return { home, root, chatDir, sync, dataDir, env }
 }
 
 // A computer whose chats sync through a clone of the bare repo `origin`, set up
 // as `move git` leaves it, with the repo already confirmed private.
-function gitComputer(name, origin) {
-  const pc = computer(name)
+function gitComputer(name, origin, env = {}) {
+  const pc = computer(name, null, { env })
   const repo = 'me/chats'
   fs.mkdirSync(pc.dataDir, { recursive: true })
   fs.writeFileSync(path.join(pc.dataDir, 'place.json'), JSON.stringify({ kind: 'git', repo }))
@@ -123,7 +127,7 @@ test('only this computer\'s own folders are swapped, never a longer path or name
   assert.strictEqual(homeInside('"/home/sam/x"'), '"__CHATSYNC_HOME_F__/x"', 'the deeper folder wins')
 })
 
-test('a link planted at this computer\'s temporary copy name is never written through', t => {
+test('a folder or link planted at this computer\'s temporary copy name never stops or redirects a copy', t => {
   const store = tempDir('store')
   const outside = path.join(tempDir('outside'), 'victim.txt')
   fs.writeFileSync(outside, 'keep me')
@@ -132,6 +136,9 @@ test('a link planted at this computer\'s temporary copy name is never written th
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   const folder = path.join(store, 'shop', 's1')
   const own = fs.readdirSync(folder)[0]
+  fs.mkdirSync(path.join(folder, `.${own}.folder.tmp`))
+  writeChat(a, 's1', ['one', 'more'])
+  assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1' })
   try {
     fs.symlinkSync(outside, path.join(folder, `.${own}.planted.tmp`))
   } catch {
@@ -172,7 +179,7 @@ test('a chat that quotes the placeholders keeps them as text and reads the same 
   const store = tempDir('store')
   const a = computer('a', store)
   const b = computer('b', store)
-  const quoted = 'x__CHATSYNC_HOME_F__ and conflicts/__CHATSYNC_PROJECT_F__s'
+  const quoted = 'x__CHATSYNC_HOME_F__ and conflicts/__CHATSYNC_PROJECT_F__s and __CHATSYNC__CHATSYNC_PROJECT_F__'
   writeChat(a, 's1', [quoted])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   b.sync('in', b.chatDir, b.root, 'other')
@@ -410,6 +417,42 @@ test('a chat cut off mid-line here takes the newer copy\'s lines whole', () => {
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
   assert.deepStrictEqual(readChat(b, 's1').map(r => r.message.content), [`one in ${b.root}`, `two in ${b.root}`])
+})
+
+test('a chat repo that cannot be confirmed private at session start says so and sends nothing', () => {
+  const a = gitComputer('a', bareRepo(), { GH_HOST: 'chat-sync.invalid' })
+  fs.writeFileSync(path.join(a.dataDir, 'visibility.json'), JSON.stringify({ repo: 'me/chats', at: 0 }))
+  writeChat(a, 's1', ['one'])
+  const answer = a.sync('in', a.chatDir, a.root, 'other')
+  assert.match(answer.error || '', /private/)
+  assert.deepStrictEqual(answer.sent, [])
+})
+
+test('a chat repo that asks for a password fails at once instead of waiting on a prompt', async () => {
+  const server = http.createServer((request, response) => {
+    response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="chats"' })
+    response.end()
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const a = gitComputer('a', bareRepo())
+    const url = `http://127.0.0.1:${server.address().port}/chats.git`
+    execFileSync('git', ['-C', path.join(a.dataDir, 'repo'), 'remote', 'set-url', 'origin', url])
+    writeChat(a, 's1', ['one'])
+    const started = Date.now()
+    const run = await execFileAsync(process.execPath, [SYNC, 'in', a.chatDir, a.root, 'other'],
+      { env: a.env, timeout: 50_000 })
+    assert.match(JSON.parse(run.stdout).pushError || '', /terminal prompts disabled/)
+    assert.ok(Date.now() - started < 20_000, 'no git call waited out its time limit')
+  } finally {
+    server.close()
+  }
+})
+
+test('a sync folder named from the home folder lands there, and a relative one is refused', () => {
+  const a = computer('a')
+  assert.match(a.sync('move', 'folder', 'Claude chats').error, /full path/)
+  assert.strictEqual(a.sync('move', 'folder', '~/Claude chats').to, path.join(a.home, 'Claude chats'))
 })
 
 test('with no place chosen, nothing is copied', () => {
