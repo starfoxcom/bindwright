@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.15.1] — 2026-11-23
+
 ### Fixed
 
 - **A review round that passed but never merged now counts red.** The fix-round count reset on any round whose checks all passed, even when the PR then had to be pushed again, for a conflict with its base or anything else. So a PR could go red, red, passed, red and never reach the research step back at the 3rd round. ci-watch now counts a round green only when the PR merges at its head, counts earlier passed rounds red once another head follows, and still asks for the step back when the count jumps past it, also when the same head is recorded twice. `review-tiers.md` and `local-review.md` say the same.
