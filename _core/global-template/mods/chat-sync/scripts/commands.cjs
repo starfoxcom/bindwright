@@ -88,8 +88,8 @@ function sweepTemps(own) {
   const prefix = `.${path.basename(own)}.`
   for (const name of fs.readdirSync(path.dirname(own))) {
     const file = path.join(path.dirname(own), name)
-    if (!name.startsWith(prefix) || !name.endsWith('.tmp') || !isPlainFile(file)) continue
-    if (Date.now() - fs.lstatSync(file).mtimeMs > TEMP_STALE_MS) removeQuietly(file)
+    if (!name.startsWith(prefix) || !name.endsWith('.tmp')) continue
+    if (!isPlainFile(file) || Date.now() - fs.lstatSync(file).mtimeMs > TEMP_STALE_MS) removeQuietly(file)
   }
 }
 
@@ -249,13 +249,14 @@ function sendChat(transcript, root, projectDir) {
   const own = ownCopy(projectDir, id)
   const next = tempOf(own)
   sweepTemps(own)
+  removeQuietly(next)
   const toPlaceholders = neutralize(root, os.homedir())
   const start = extendedCopy(transcript, path.dirname(own), root)
   if (start) {
-    transformFile(start.copy, next, text => text, true)
+    transformFile(start.copy, next, text => text, true, 'wx')
     appendLines(transcript, start.storedLines, next, toPlaceholders)
   } else {
-    transformFile(transcript, next, toPlaceholders, true)
+    transformFile(transcript, next, toPlaceholders, true, 'wx')
   }
   if (compare(next, own) === 'same') {
     removeQuietly(next)
@@ -354,9 +355,11 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
     if (verdict === 'diverged') answer.isConflict = true
     if (verdict !== 'behind') continue
     if (isOpen) return { verdict: 'open', isConflict: answer.isConflict }
-    if (importCopy(copy, local, root, { localLines, before })) answer = { ...answer, verdict: 'imported' }
+    if (!importCopy(copy, local, root, { localLines, before })) return answer
+    answer = { ...answer, verdict: 'imported' }
     break
   }
+  // Marked as looked at only once done, so an import given up on is tried again.
   for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
   return answer
 }

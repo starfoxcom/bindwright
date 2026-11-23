@@ -119,6 +119,29 @@ test('only this computer\'s own folders are swapped, never a longer path or name
   for (const [label, text, want] of swapped) assert.strictEqual(posix(text), want, label)
   const rootHome = neutralize('/srv/app', '/')
   assert.strictEqual(rootHome('"/etc/hosts"'), '"/etc/hosts"', 'a home of / is never swapped')
+  const homeInside = neutralize('/home', '/home/sam')
+  assert.strictEqual(homeInside('"/home/sam/x"'), '"__CHATSYNC_HOME_F__/x"', 'the deeper folder wins')
+})
+
+test('a link planted at this computer\'s temporary copy name is never written through', t => {
+  const store = tempDir('store')
+  const outside = path.join(tempDir('outside'), 'victim.txt')
+  fs.writeFileSync(outside, 'keep me')
+  const a = computer('a', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const folder = path.join(store, 'shop', 's1')
+  const own = fs.readdirSync(folder)[0]
+  try {
+    fs.symlinkSync(outside, path.join(folder, `.${own}.planted.tmp`))
+  } catch {
+    t.skip('this computer cannot make file links')
+    return
+  }
+  writeChat(a, 's1', ['one', 'two'])
+  assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1' })
+  assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'keep me')
+  assert.ok(!fs.existsSync(path.join(folder, `.${own}.planted.tmp`)), 'the link is removed')
 })
 
 test('a network path is swapped like a drive path', () => {

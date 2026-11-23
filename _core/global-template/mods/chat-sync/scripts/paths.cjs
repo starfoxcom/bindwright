@@ -89,9 +89,14 @@ function applyRules(text, rules) {
 const LITERAL = /__CHATSYNC_/g
 const ESCAPED = /__CHATSYNC_LIT_/g
 
-// The project folder goes first, since it usually sits inside the home folder.
+// The deeper of the two folders goes first, as the longest prefix wins: the
+// project usually sits inside the home folder, but a session started in /home
+// or C:\Users holds the home folder inside the project.
 function neutralize(root, home) {
-  const rules = [...outRules('project', root), ...outRules('home', home)]
+  const project = outRules('project', root)
+  const homeRules = outRules('home', home)
+  const isHomeDeeper = segments(home).length > segments(root).length
+  const rules = isHomeDeeper ? [...homeRules, ...project] : [...project, ...homeRules]
   return text => applyRules(text.replace(LITERAL, '__CHATSYNC_LIT_'), rules)
 }
 
@@ -102,10 +107,11 @@ function expand(root, home) {
 
 // Writes `src` through `change`, line by line, to `dst`. With `completeOnly`, a
 // last line still being written (no newline yet) is left out, so the copy never
-// ends halfway through a record.
-function transformFile(src, dst, change, completeOnly) {
+// ends halfway through a record. `flags` 'wx' creates `dst` only when nothing is
+// there, a link included, so it never writes through one.
+function transformFile(src, dst, change, completeOnly, flags = 'w') {
   const input = fs.openSync(src, 'r')
-  const output = fs.openSync(dst, 'w')
+  const output = fs.openSync(dst, flags)
   const decoder = new StringDecoder('utf8')
   const buffer = Buffer.alloc(CHUNK_BYTES)
   let carry = ''
