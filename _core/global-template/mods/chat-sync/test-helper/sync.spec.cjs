@@ -475,6 +475,30 @@ test('a sync folder named from the home folder lands there, and a relative one i
   assert.strictEqual(a.sync('move', 'folder', '~/Claude chats').to, path.join(a.home, 'Claude chats'))
 })
 
+test('a folder planted at this computer\'s own copy is cleared, and one failing chat never stops the rest', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const folder = path.join(store, 'shop', 's1')
+  const own = path.join(folder, fs.readdirSync(folder)[0])
+  fs.rmSync(own)
+  fs.mkdirSync(own)
+  writeChat(a, 's1', ['one', 'two'])
+  writeChat(a, 's2', ['other'])
+  assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent.sort(), ['s1', 's2'])
+  assert.ok(fs.lstatSync(own).isFile())
+})
+
+test('an import a stopped helper left half done is cleared at the next session start', () => {
+  const a = computer('a', tempDir('store'))
+  const left = path.join(a.chatDir, 's1.jsonl.chat-sync.99999.in')
+  fs.writeFileSync(left, 'half')
+  fs.utimesSync(left, new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000))
+  a.sync('in', a.chatDir, a.root, 'other')
+  assert.ok(!fs.existsSync(left))
+})
+
 test('a session that ends before its first message has no chat to copy, and says nothing', () => {
   const a = computer('a', tempDir('store'))
   assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 'unsent.jsonl'), a.root), { skipped: 'no chat yet' })

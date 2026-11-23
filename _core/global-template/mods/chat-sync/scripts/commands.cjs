@@ -26,14 +26,6 @@ const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same ti
 
 // What another computer put in the sync place is read as input: a link there is
 // never followed, read or written through.
-function isLink(file) {
-  try {
-    return fs.lstatSync(file).isSymbolicLink()
-  } catch {
-    return false
-  }
-}
-
 function isPlainFile(file) {
   try {
     return fs.lstatSync(file).isFile()
@@ -143,6 +135,18 @@ function removeQuietly(file) {
   fs.rmSync(file, { force: true, recursive: true })
 }
 
+// Clears whatever sits at a name this computer writes unless it is a plain
+// file, so a link, pipe or folder planted there is never read or followed.
+function clearUnlessPlain(file) {
+  let entry
+  try {
+    entry = fs.lstatSync(file)
+  } catch {
+    return
+  }
+  if (!entry.isFile()) removeQuietly(file)
+}
+
 // Commits what this computer wrote, brings the clone up to the repo and pushes.
 function publish(store, label) {
   base.git(store, 'add', '-A')
@@ -187,7 +191,8 @@ function pull(store) {
   if (run.ok) return { branch }
   base.git(store, 'rebase', '--abort')
   const reset = base.git(store, 'reset', '--hard', '-q', `origin/${branch}`)
-  return { error: reset.ok ? CHANGED_MEANWHILE : run.out }
+  const isConflict = /conflict/i.test(run.out)
+  return { error: reset.ok && isConflict ? CHANGED_MEANWHILE : run.out || reset.out }
 }
 
 // The repo is checked again before a push, at most once an hour, in case it was
@@ -277,6 +282,7 @@ function sendChat(transcript, root, projectDir) {
     } else {
       transformFile(transcript, built, toPlaceholders, true)
     }
+    clearUnlessPlain(own)
     if (compare(built, own) === 'same') return false
     const next = tempOf(own)
     removeQuietly(next)
@@ -341,25 +347,26 @@ function bringIn([chatDir, root, openId]) {
   const dir = path.join(store, key)
   const seen = base.readJson(seenFile(), {})
   const result = { imported: [], conflicts: [], behind: [], sent: [] }
-  if (pulled.error) result.error = pulled.error
-  for (const id of chatIds(dir)) {
+  if (pulled.error) addError(result, pulled.error)
+  sweepImports(chatDir)
+  forEachChat(chatIds(dir), result, id => {
     const answer = bringChat(path.join(dir, id), path.join(chatDir, `${id}.jsonl`), root,
       { isOpen: id === openId, seen, key: `${key}/${id}` })
     if (answer.verdict === 'imported') result.imported.push(id)
     if (answer.verdict === 'open') result.behind.push(id)
     if (answer.isConflict) result.conflicts.push(id)
-  }
+  })
   const refused = isGit ? privateRepoError(place.repo) : null
-  if (refused) result.error = result.error ? `${result.error} ${refused}` : refused
-  for (const name of refused ? [] : chatFiles(chatDir)) {
-    const local = path.join(chatDir, name)
-    const id = name.slice(0, -'.jsonl'.length)
+  if (refused) addError(result, refused)
+  const localIds = refused ? [] : chatFiles(chatDir).map(name => name.slice(0, -'.jsonl'.length))
+  forEachChat(localIds, result, id => {
+    const local = path.join(chatDir, `${id}.jsonl`)
     const sentKey = `sent:${key}/${id}`
     const stamp = stampOf(local)
-    if (seen[sentKey] === sentStamp(stamp, ownCopy(dir, id))) continue
+    if (seen[sentKey] === sentStamp(stamp, ownCopy(dir, id))) return
     if (sendChat(local, root, dir)) result.sent.push(id)
     seen[sentKey] = sentStamp(stamp, ownCopy(dir, id))
-  }
+  })
   base.writeJson(seenFile(), seen)
   if (isGit && !refused) Object.assign(result, publish(store, `${result.sent.length} chats from ${base.machineId()}`))
   return result
@@ -372,13 +379,16 @@ function bringIn([chatDir, root, openId]) {
 // old chats), so it comes back only once another computer has continued it.
 function bringChat(storeChat, local, root, { isOpen, seen, key }) {
   const copies = otherCopies(storeChat)
+  // Stamps taken before any copy is read, so a copy that changes meanwhile
+  // reads as changed at the next start.
+  const stamps = copies.map(copy => [copy, stampOf(copy)])
   const hasLocal = sizeOf(local) >= 0
   const wasDeleted = !hasLocal && seen[`sent:${key}`] !== undefined
-  const isUnchanged = copies.every(copy => seen[`${key}/${path.basename(copy)}`] === stampOf(copy))
+  const isUnchanged = stamps.every(([copy, stamp]) => seen[`${key}/${path.basename(copy)}`] === stamp)
   const isSentHere = isPlainFile(path.join(storeChat, ownName()))
   if ((hasLocal || (wasDeleted && isSentHere)) && isUnchanged) return { verdict: 'kept' }
   if (wasDeleted && !isContinuedElsewhere(storeChat, root)) {
-    markSeen(copies, seen, key)
+    markSeen(stamps, seen, key)
     return { verdict: 'kept' }
   }
   const before = hasLocal ? stampOf(local) : null
@@ -390,14 +400,48 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
       return { ...answer, verdict: 'kept' }
     }
     // Marked as looked at only once done, so an import given up on is tried again.
-    markSeen(copies, seen, key)
+    markSeen(stamps, seen, key)
     return answer
   })
 }
 
 // Records each copy's stamp, so an unchanged one is not read again.
-function markSeen(copies, seen, key) {
-  for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
+function markSeen(stamps, seen, key) {
+  for (const [copy, stamp] of stamps) seen[`${key}/${path.basename(copy)}`] = stamp
+}
+
+// Runs `step` for each chat id; one that fails is named in the answer's error
+// and the others still go.
+function forEachChat(ids, result, step) {
+  for (const id of ids) {
+    try {
+      step(id)
+    } catch (error) {
+      addError(result, `${id}: ${error.message}`)
+    }
+  }
+}
+
+function addError(result, text) {
+  result.error = result.error ? `${result.error} ${text}` : text
+}
+
+// The temporary file an import builds beside the chat it replaces.
+const IMPORT_TEMP = /\.jsonl\.chat-sync\.\d+\.in$/
+
+// Removes import files a helper stopped before it renamed them. One younger
+// than a helper's longest run may still be written, so it stays.
+function sweepImports(chatDir) {
+  let names = []
+  try {
+    names = fs.readdirSync(chatDir)
+  } catch {
+    return
+  }
+  for (const name of names.filter(entry => IMPORT_TEMP.test(entry))) {
+    const file = path.join(chatDir, name)
+    if (Date.now() - fs.lstatSync(file).mtimeMs > TEMP_STALE_MS) removeQuietly(file)
+  }
 }
 
 // True when another computer's copy holds lines after the ones this computer
@@ -435,14 +479,15 @@ function importCopy(copy, local, root, { localLines, before }) {
   fs.mkdirSync(path.dirname(local), { recursive: true })
   const incoming = `${local}.chat-sync.${process.pid}.in`
   removeQuietly(incoming)
-  if (before) transformFile(local, incoming, text => text, true)
-  appendLines(copy, localLines, incoming, expand(root, os.homedir()))
-  if ((sizeOf(local) >= 0 ? stampOf(local) : null) !== before) {
+  try {
+    if (before) transformFile(local, incoming, text => text, true)
+    appendLines(copy, localLines, incoming, expand(root, os.homedir()))
+    if ((sizeOf(local) >= 0 ? stampOf(local) : null) !== before) return false
+    fs.renameSync(incoming, local)
+    return true
+  } finally {
     removeQuietly(incoming)
-    return false
   }
-  fs.renameSync(incoming, local)
-  return true
 }
 
 function run([command, ...args]) {
@@ -469,4 +514,6 @@ function hasGit() {
   return spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0
 }
 
-module.exports = { run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, isLink }
+module.exports = {
+  run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain,
+}

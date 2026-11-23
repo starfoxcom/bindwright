@@ -107,7 +107,17 @@ function gitSettings() {
 function git(cwd, ...args) {
   const run = spawnSync('git', [...gitSettings(), '-C', cwd, ...args],
     { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv() })
-  return { ok: run.status === 0, out: `${run.stdout || ''}${run.stderr || ''}`.trim() }
+  const ok = run.status === 0
+  const out = `${run.stdout || ''}${run.stderr || ''}`.trim()
+  return { ok, out: ok || out ? out : stopReason(`git ${args[0]}`, run) }
+}
+
+// Why a command that printed nothing failed: it timed out, could not start, or
+// only exited with a code.
+function stopReason(name, run) {
+  if (run.error && run.error.code === 'ETIMEDOUT') return `${name} did not finish within its time limit.`
+  if (run.error) return `${name} could not run: ${run.error.message}`
+  return `${name} failed (exit code ${run.status}).`
 }
 
 // The project's name in the sync place, the same on every computer: its git
@@ -139,8 +149,8 @@ function safeName(text) {
 }
 
 module.exports = {
-  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git, projectKey,
-  safeName,
+  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git, stopReason,
+  projectKey, safeName,
 }
 
 if (require.main === module) {

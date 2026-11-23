@@ -8,7 +8,7 @@ const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
-const { compare, publish, chatFiles, chatIds, ensureFolder, isLink } = require('./commands.cjs')
+const { compare, publish, chatFiles, chatIds, ensureFolder, clearUnlessPlain } = require('./commands.cjs')
 
 // Neither part starts with a dash, so gh never reads the name as an option.
 const REPO = /^[\w.][\w.-]*\/[\w.][\w.-]*$/
@@ -23,7 +23,9 @@ function describe(place) {
 function checkPrivate(repo) {
   const view = spawnSync('gh', ['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility'],
     { encoding: 'utf8', timeout: 30_000, env: base.quietEnv() })
-  if (view.status !== 0) return `Could not confirm that ${repo} is private: ${(view.stderr || '').trim()}`
+  if (view.status !== 0) {
+    return `Could not confirm that ${repo} is private: ${(view.stderr || '').trim() || base.stopReason('gh', view)}`
+  }
   const visibility = view.stdout.trim()
   if (visibility === 'PRIVATE') return null
   return `${repo} is ${visibility.toLowerCase() || 'not confirmed private'}, and chats go only to a private repo.`
@@ -34,7 +36,7 @@ function clone(repo, folder) {
   fs.rmSync(folder, { recursive: true, force: true })
   const args = ['repo', 'clone', repo, folder, '--', ...base.gitSettings()]
   const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000, env: base.quietEnv() })
-  return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim()}`
+  return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim() || base.stopReason('gh', run)}`
 }
 
 // The project folders in a sync place, each holding chat files.
@@ -59,7 +61,7 @@ function copyChats(from, to) {
       for (const name of chatFiles(path.join(from, project, id))) {
         const source = path.join(from, project, id, name)
         const dest = path.join(target, name)
-        if (isLink(dest)) fs.rmSync(dest)
+        clearUnlessPlain(dest)
         const verdict = compare(source, dest)
         if (verdict === 'new' || verdict === 'ahead') fs.copyFileSync(source, dest)
         if (verdict === 'diverged') keepBoth(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
@@ -72,7 +74,7 @@ function copyChats(from, to) {
 }
 
 function keepBoth(source, kept) {
-  if (isLink(kept)) fs.rmSync(kept)
+  clearUnlessPlain(kept)
   fs.copyFileSync(source, kept)
 }
 
