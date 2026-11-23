@@ -69,13 +69,13 @@ function render() {
   return rendering;
 }
 
-async function pullRequest(folder, pin, basePin) {
+async function pullRequest(folder, pin, { basePin, baseVersion = VERSION } = {}) {
   const rendered = await render();
   const root = join(folder, "repo");
   mkdirSync(root);
   git(root, "init", "-q", "-b", "main");
   put(root, ".bindwright/project.json", JSON.stringify(ANSWERS));
-  put(root, ".bindwright/pristine.json", JSON.stringify({ version: VERSION, year: 2026, files: {} }));
+  put(root, ".bindwright/pristine.json", JSON.stringify({ version: baseVersion, year: 2026, files: {} }));
   put(root, "README.md", "base\n");
   if (basePin) put(root, ".bindwright/helper.json", JSON.stringify({ python: basePin }));
   git(root, "add", "-A");
@@ -129,6 +129,12 @@ const CASES = [
     basePin: { url: `${RELEASES}/v999.0.0/bindwright-999.0.0-py3-none-any.whl`, sha256: "0".repeat(64) },
     reason: `the head pins Bindwright ${VERSION}, older than the base's 999.0.0`,
   },
+  {
+    name: "a pin older than the base's record lists nothing when the base has no pin",
+    pin: (sum) => ({ url: URL, sha256: sum }),
+    baseVersion: "999.0.0",
+    reason: `the head pins Bindwright ${VERSION}, older than the base's 999.0.0`,
+  },
 ];
 
 // One wheel for every row: packing the templates is the slow part.
@@ -148,7 +154,7 @@ for (const row of CASES) {
     const folder = mkdtempSync(join(tmpdir(), "template-check-"));
     try {
       const { wheel, sum } = sharedWheel();
-      const root = await pullRequest(folder, row.pin(sum), row.basePin);
+      const root = await pullRequest(folder, row.pin(sum), row);
       const out = runCheck(root, folder, wheel);
       const listed = out.split(/\r?\n/).filter((l) => l.startsWith("- ")).map((l) => l.slice(2));
       assert.deepEqual(listed, row.listed ?? [], out);

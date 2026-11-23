@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.request
 import zipfile
 
@@ -36,7 +37,8 @@ STAGING = ".bindwright/incoming/"
 RELEASE = re.compile(
     r"https://github\.com/starfoxcom/bindwright/releases/download/"
     r"v([0-9]+\.[0-9]+\.[0-9]+)/bindwright-\1-py3-none-any\.whl")
-DOWNLOAD_SECONDS = 120
+# Together well under the pre-screen job's 300 s limit, which would fail the job.
+DOWNLOAD_SECONDS = 60
 RENDER_SECONDS = 120
 HEADING = "Bindwright template text, unedited"
 
@@ -82,24 +84,57 @@ def pinned_wheel(pin):
     return url, digest
 
 
-def release_version(url):
-    return tuple(int(part) for part in RELEASE.fullmatch(url).group(1).split("."))
+def version_of(text):
+    """`1.2.3` or `v1.2.3` as a tuple of numbers, or None."""
+    match = re.fullmatch(r"v?([0-9]+)\.([0-9]+)\.([0-9]+)", text) if isinstance(text, str) else None
+    return tuple(int(part) for part in match.groups()) if match else None
 
 
-def refuse_older_pin(base, url):
-    """Refuses a head pin older than the base's, so a PR cannot exempt text it reverts."""
+def base_version(base, pristine):
+    """The newest release the base is known to hold: its record's version or its pin's."""
+    versions = [version_of(pristine.get("version"))]
     try:
         base_url, _ = pinned_wheel(json.loads((git_show(base, PIN) or b"").decode("utf-8")))
+        versions.append(version_of(RELEASE.fullmatch(base_url).group(1)))
     except (Skip, UnicodeDecodeError, ValueError):
-        return
-    if release_version(url) < release_version(base_url):
+        pass
+    versions = [v for v in versions if v]
+    if not versions:
+        raise Skip("the base records no Bindwright version to compare the pin with")
+    return max(versions)
+
+
+def refuse_older_pin(release, base, pristine):
+    """Refuses a head pin older than the base, so a PR cannot exempt text it reverts."""
+    floor = base_version(base, pristine)
+    if version_of(release) < floor:
         raise Skip("the head pins Bindwright %s, older than the base's %s"
-                   % (RELEASE.fullmatch(url).group(1), RELEASE.fullmatch(base_url).group(1)))
+                   % (release, ".".join(str(part) for part in floor)))
 
 
 def download(url):
     with urllib.request.urlopen(url, timeout=DOWNLOAD_SECONDS) as response:
         return response.read()
+
+
+def fetch(url):
+    """The wheel's bytes within DOWNLOAD_SECONDS in all, so the job's time limit is never hit."""
+    result = {}
+
+    def worker():
+        try:
+            result["data"] = download(url)
+        except Exception as e:
+            result["error"] = e
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(DOWNLOAD_SECONDS)
+    if thread.is_alive():
+        raise Skip("the wheel download took over %d s" % DOWNLOAD_SECONDS)
+    if "error" in result:
+        raise Skip("the wheel download failed: %s" % result["error"])
+    return result["data"]
 
 
 def unpack(data, digest, folder):
@@ -173,16 +208,14 @@ def changed_files(path):
 def run(files_path):
     base = base_commit()
     url, digest = pinned_wheel(read_json("HEAD", PIN))
-    refuse_older_pin(base, url)
-    answers = read_json(base, ANSWERS)
-    year = read_json(base, PRISTINE).get("year")
-    with tempfile.TemporaryDirectory() as folder:
-        try:
-            data = download(url)
-        except OSError as e:
-            raise Skip("the wheel download failed: %s" % e)
-        rendered = render(unpack(data, digest, folder), answers, year)
     release = RELEASE.fullmatch(url).group(1)
+    pristine = read_json(base, PRISTINE)
+    if not isinstance(pristine, dict):
+        raise Skip("%s is not an object" % PRISTINE)
+    refuse_older_pin(release, base, pristine)
+    answers = read_json(base, ANSWERS)
+    with tempfile.TemporaryDirectory() as folder:
+        rendered = render(unpack(fetch(url), digest, folder), answers, pristine.get("year"))
     return release, unedited(changed_files(files_path), rendered)
 
 
