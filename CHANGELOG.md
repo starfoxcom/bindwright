@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The review guide names the listed files as the text Bindwright reviews.** Since 7.15.4 the sentence before it in the "Bindwright template text" section ends on a list written in a comment, the PR body or a commit, so "Their text is reviewed in Bindwright's own repo" could read as pointing at that list. It now says "The listed files' text", the files the pre-screen report lists. The rule is unchanged.
+
 ## [v7.15.4] — 2026-11-23
 
 ### Fixed
