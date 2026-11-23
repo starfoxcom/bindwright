@@ -403,6 +403,9 @@ footer {
   max-width: 1360px; margin: 0 auto; padding: 24px 40px 40px;
   border-top: 1px solid var(--rule); font-size: 14px; color: var(--text-2);
 }
+footer .version { margin-top: 8px; }
+footer .version a { text-underline-offset: 4px; }
+footer .version a:hover { color: var(--text); }
 
 @media (max-width: 900px) {
   header { padding: 16px; }

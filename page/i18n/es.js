@@ -95,6 +95,8 @@ export default {
   "asks.project.text": "Quién trabaja en él, si es privado o público, qué revisiones corren, cómo "
     + "trabaja el asistente y dónde vive el plan.",
   "footer.note": "Bindwright funciona con Claude Code. No está hecho ni respaldado por Anthropic, ni afiliado a ella.",
+  "footer.version": "Versión",
+  "footer.feedback": "Enviar comentarios",
 
   "copy.command": "Copiar comando",
   "copy.done": "Copiado",

@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.15.0] — 2026-11-23
+
+### Added
+
+- **A question form among the issue forms setup writes.** The new-issue page offered a "Question / discussion" link to the project's Discussions page, which a new GitHub repo has turned off, so with blank issues off a question had nowhere to go. Setup now writes a short question form instead, and the forms link no page outside the repo. A project that already has the old link keeps it until the update offers the change.
+
 ## [v7.14.1] — 2026-11-22
 
 ### Fixed
