@@ -39,13 +39,15 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
 }
 
-// This computer's id: its host name plus a random part kept from the first run,
-// so two computers with the same host name still tell each other apart.
+// This computer's id: its host name as a label plus a random part kept from the
+// first run, so two computers with the same host name still tell each other
+// apart. Letters, digits and dashes only, since it names a file in the sync
+// place (a Mac's "Sams-MacBook.local" becomes "Sams-MacBook-local").
 function machineId() {
   const file = path.join(dataDir(), 'machine.json')
   const saved = readJson(file, null)
   if (saved && saved.id) return saved.id
-  const id = `${os.hostname()}-${Math.random().toString(36).slice(2, 8)}`
+  const id = `${os.hostname().replace(/[^\w-]+/g, '-')}-${Math.random().toString(36).slice(2, 8)}`
   writeJson(file, { id })
   return id
 }

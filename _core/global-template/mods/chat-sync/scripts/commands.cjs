@@ -55,8 +55,10 @@ function chatFiles(folder) {
   }
 }
 
-// The chats a project folder of the sync place holds, by id.
+// The chats a project folder of the sync place holds, by id. A project folder
+// that is a link is not read.
 function chatIds(projectDir) {
+  if (!isRealFolder(projectDir)) return []
   try {
     return fs.readdirSync(projectDir, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && ID.test(entry.name))
@@ -66,9 +68,37 @@ function chatIds(projectDir) {
   }
 }
 
-// This computer's id as a file name in the sync place.
+// This computer's id as a file name in the sync place, in the same letters the
+// readers accept, for an id saved before ids were limited to them too.
 function ownName() {
-  return `${base.safeName(base.machineId())}.jsonl`
+  return `${base.machineId().replace(/[^\w-]+/g, '-')}.jsonl`
+}
+
+// A temporary copy of this computer's, named the way sync apps name theirs.
+function tempOf(own) {
+  return path.join(path.dirname(own), `.${path.basename(own)}.${process.pid}.tmp`)
+}
+
+// Removes temporary copies this computer left in a chat's folder, from a helper
+// stopped before it renamed them. One younger than a helper's longest run may
+// belong to another session's helper still writing it, so it stays.
+const TEMP_STALE_MS = 5 * 60_000
+
+function sweepTemps(own) {
+  const prefix = `.${path.basename(own)}.`
+  for (const name of fs.readdirSync(path.dirname(own))) {
+    const file = path.join(path.dirname(own), name)
+    if (!name.startsWith(prefix) || !name.endsWith('.tmp') || !isPlainFile(file)) continue
+    if (Date.now() - fs.lstatSync(file).mtimeMs > TEMP_STALE_MS) removeQuietly(file)
+  }
+}
+
+function isRealFolder(folder) {
+  try {
+    return fs.lstatSync(folder).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 // How file `mine` stands against file `theirs`.
@@ -162,6 +192,15 @@ function privateRepoError(repo) {
   return refused
 }
 
+// The clone's own ignore list (never committed) leaves temporary copies out.
+function keepTempsOutOfGit(store) {
+  const exclude = path.join(store, '.git', 'info', 'exclude')
+  const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''
+  if (text.split('\n').includes('.*.tmp')) return
+  fs.mkdirSync(path.dirname(exclude), { recursive: true })
+  fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.*.tmp\n`)
+}
+
 // Where the chats go now, or a reason nothing can be copied. A clone keeps chat
 // files byte for byte on every computer, whatever git's line-end setting is.
 function openStore() {
@@ -174,6 +213,7 @@ function openStore() {
     }
     base.git(store, 'config', 'core.autocrlf', 'false')
     base.git(store, 'config', 'core.symlinks', 'false')
+    keepTempsOutOfGit(store)
   }
   return { place, store }
 }
@@ -207,8 +247,8 @@ function sendChat(transcript, root, projectDir) {
   ensureFolder(projectDir)
   ensureFolder(path.join(projectDir, id))
   const own = ownCopy(projectDir, id)
-  const next = `${own}.${process.pid}.tmp`
-  removeQuietly(next)
+  const next = tempOf(own)
+  sweepTemps(own)
   const toPlaceholders = neutralize(root, os.homedir())
   const start = extendedCopy(transcript, path.dirname(own), root)
   if (start) {
@@ -309,11 +349,12 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
   if (hasLocal && isUnchanged) return { verdict: 'kept' }
   let answer = { verdict: 'kept', isConflict: false }
   for (const copy of copies) {
+    const before = hasLocal ? stampOf(local) : null
     const { verdict, localLines } = hasLocal ? compareChat(local, copy, root) : { verdict: 'behind', localLines: 0 }
     if (verdict === 'diverged') answer.isConflict = true
     if (verdict !== 'behind') continue
     if (isOpen) return { verdict: 'open', isConflict: answer.isConflict }
-    if (importCopy(copy, local, root, localLines)) answer = { ...answer, verdict: 'imported' }
+    if (importCopy(copy, local, root, { localLines, before })) answer = { ...answer, verdict: 'imported' }
     break
   }
   for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
@@ -322,10 +363,11 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
 
 // Writes the local chat as its own complete lines plus the copy's lines after
 // them; a last line cut off mid-write is dropped, since the copy's next line
-// takes its place. When the chat changed meanwhile (another session on this
-// computer wrote it), nothing is written. True when the chat was written.
-function importCopy(copy, local, root, localLines) {
-  const before = sizeOf(local) >= 0 ? stampOf(local) : null
+// takes its place. When the chat changed since `before`, its stamp when the
+// compare began (another session on this computer wrote it), nothing is
+// written. True when the chat was written.
+function importCopy(copy, local, root, { localLines, before }) {
+  fs.mkdirSync(path.dirname(local), { recursive: true })
   const incoming = `${local}.chat-sync.${process.pid}.in`
   removeQuietly(incoming)
   if (before) transformFile(local, incoming, text => text, true)

@@ -45,10 +45,15 @@ function computer(name, store, paths = {}) {
   const config = path.join(own, '.claude')
   const chatDir = path.join(config, 'projects', name)
   fs.mkdirSync(chatDir, { recursive: true })
+  const dataDir = path.join(config, 'mods-data', 'chat-sync')
+  if (paths.id) {
+    fs.mkdirSync(dataDir, { recursive: true })
+    fs.writeFileSync(path.join(dataDir, 'machine.json'), JSON.stringify({ id: paths.id }))
+  }
   const env = { ...process.env, ...GIT_ENV, CLAUDE_CONFIG_DIR: config, HOME: home, USERPROFILE: home }
   const sync = (...args) => JSON.parse(execFileSync(process.execPath, [SYNC, ...args], { env, encoding: 'utf8' }))
   if (store) sync('move', 'folder', store)
-  return { home, root, chatDir, sync, dataDir: path.join(config, 'mods-data', 'chat-sync') }
+  return { home, root, chatDir, sync, dataDir }
 }
 
 // A computer whose chats sync through a clone of the bare repo `origin`, set up
@@ -259,7 +264,7 @@ test('a chat naming the other computer\'s home as text goes back and forth witho
   assert.deepStrictEqual([back.imported, back.conflicts], [['s1'], []])
 })
 
-test('a project folder in the sync place that is a link is never written through', () => {
+test('a project folder in the sync place that is a link is never written or read through', () => {
   const store = tempDir('store')
   const outside = tempDir('outside')
   const a = computer('a', store)
@@ -267,6 +272,45 @@ test('a project folder in the sync place that is a link is never written through
   writeChat(a, 's1', ['one'])
   assert.match(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).error, /is a link/)
   assert.deepStrictEqual(fs.readdirSync(outside), [])
+  fs.mkdirSync(path.join(outside, 's2'))
+  fs.writeFileSync(path.join(outside, 's2', 'other.jsonl'), '{"planted":true}\n')
+  const b = computer('b', store)
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, [])
+  assert.ok(!fs.existsSync(path.join(b.chatDir, 's2.jsonl')))
+})
+
+test('a computer whose host name holds a dot is read by the others', () => {
+  const store = tempDir('store')
+  const mac = computer('m', store, { id: 'Sams-MacBook-Pro.local-ab12cd' })
+  const b = computer('b', store)
+  writeChat(mac, 's1', ['one'])
+  mac.sync('out', path.join(mac.chatDir, 's1.jsonl'), mac.root)
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+})
+
+test('the first chat into a project this computer never opened makes its chat folder', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  fs.rmSync(b.chatDir, { recursive: true })
+  const brought = b.sync('in', b.chatDir, b.root, 'other')
+  assert.deepStrictEqual([brought.imported, brought.error], [['s1'], undefined])
+})
+
+test('a temporary copy left by a stopped helper is cleared at the next copy out', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const folder = path.join(store, 'shop', 's1')
+  const left = path.join(folder, `.${fs.readdirSync(folder)[0]}.99999.tmp`)
+  fs.writeFileSync(left, 'half')
+  fs.utimesSync(left, new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000))
+  writeChat(a, 's1', ['one', 'two'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.ok(!fs.existsSync(left))
 })
 
 test('moving to another folder copies every chat, switches, and keeps the old copy', () => {

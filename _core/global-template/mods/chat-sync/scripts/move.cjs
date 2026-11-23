@@ -61,13 +61,18 @@ function copyChats(from, to) {
         if (isLink(dest)) fs.rmSync(dest)
         const verdict = compare(source, dest)
         if (verdict === 'new' || verdict === 'ahead') fs.copyFileSync(source, dest)
-        if (verdict === 'diverged') fs.copyFileSync(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
+        if (verdict === 'diverged') keepBoth(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
         if (!fs.existsSync(dest)) missing.push(`${project}/${id}/${name}`)
       }
       moved += 1
     }
   }
   return { moved, missing }
+}
+
+function keepBoth(source, kept) {
+  if (isLink(kept)) fs.rmSync(kept)
+  fs.copyFileSync(source, kept)
 }
 
 // The new place and the folder chats are copied into, or a reason to stop.
