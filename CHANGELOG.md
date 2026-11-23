@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The review tells Bindwright's own text apart from the project's.** Setup and update ship a pre-screen check into `.github/review-checks`, now the default `prescreen.dir`, that renders the setup with the Bindwright release the PR pins and the base branch's answers, and lists each changed file whose text equals that render. The review guide says a finding in the content of a listed file does not block the PR: the reviewer lists it apart and the author reports it upstream with `/bindwright:report`. The pin is taken only from a Bindwright release download that matches its SHA-256, and any failure lists nothing, so every file keeps its normal review. A project that names another check folder copies the check there.
+
 ## [v7.13.3] — 2026-11-22
 
 ### Fixed
