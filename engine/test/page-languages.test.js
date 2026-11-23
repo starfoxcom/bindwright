@@ -9,7 +9,9 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DICTIONARIES, t } from "../../page/i18n/index.js";
 import { LANGUAGES, PAGES } from "../../page/i18n/languages.js";
-import { alternates, pageKeys, renderLanguage, sitemap, switchLinks } from "../../page/i18n/render.js";
+import {
+  alternates, pageKeys, renderLanguage, sitemap, switchLinks, versionLink,
+} from "../../page/i18n/render.js";
 
 const page = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "page");
 const read = (path) => readFileSync(join(page, path), "utf8").replace(/\r\n/g, "\n");
@@ -22,6 +24,11 @@ test("each English page links every language for search engines and visitors", (
     assert.ok(english[file].includes(`<!-- alternates -->\n${alternates(path)}\n<!-- /alternates -->`), file);
     assert.ok(english[file].includes(switchLinks("en", path)), file);
   }
+});
+
+test("each English page's footer names the release in VERSION, linked to its notes", () => {
+  const version = readFileSync(join(page, "..", "VERSION"), "utf8").trim().replace(/^v+/, "");
+  for (const { file } of PAGES) assert.ok(english[file].includes(versionLink(version)), file);
 });
 
 test("the sitemap on disk is the one the generator writes", () => {
