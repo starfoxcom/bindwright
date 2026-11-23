@@ -55,7 +55,7 @@ ENGINE_FILES = [
     "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py",
     "layers.py", "share.py", "doctor.py", "report.py", "audit.py", "remove.py", "staging.py", "releases.py",
     "exclude.py", "propose.py",
-    "home.py", "home_files.py", "mod_update.py", "helper_install.py", "authored.py",
+    "home.py", "home_files.py", "mod_update.py", "helper_install.py", "authored.py", "skill_contracts.py",
 ]
 # The ~/.claude templates bind.js and bind.py read (globalFiles), and beside the reply style the
 # fingerprints of its earlier shipped copies, which home.py's style-status reads.
