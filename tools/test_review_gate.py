@@ -479,15 +479,20 @@ class Upsert(unittest.TestCase):
         # A fake check store. `wipes` stands for another workflow whose stale
         # write lands right after each of the next N PATCHes, putting back the
         # start state.
-        self.calls, self.existing, self.wipes = [], [], 0
+        # `suite` is the calling run's check suite, None outside a routine run.
+        self.calls, self.existing, self.wipes, self.suite = [], [], 0, None
         real, settle = gate._gh, gate.SETTLE_SECONDS
+        env = {k: os.environ.pop(k) for k in ("GITHUB_EVENT_NAME", "GITHUB_RUN_ID") if k in os.environ}
+        self.addCleanup(os.environ.update, env)
 
         def fake(path, method="GET", body=None):
             self.calls.append((method, path, body))
+            if path.startswith("repos/o/r/actions/runs/"):
+                return {"check_suite_id": self.suite}
             if method == "GET":
                 return {"check_runs": self.existing}
             if method == "POST":
-                self.existing.append(dict(body, id=1))
+                self.existing.append(dict(body, id=1, check_suite={"id": self.suite}))
                 return {}
             run = next(r for r in self.existing if path.endswith("/%d" % r["id"]))
             run["external_id"] = body["external_id"]
@@ -523,6 +528,30 @@ class Upsert(unittest.TestCase):
         self.assertEqual((out["conclusion"], body["conclusion"], body["external_id"]),
                          ("failure", "failure",
                           "triage=reviewable;routine=pass;escalated=yes;deep=block;routine_by=5.1.1;deep_by=0.0.0"))
+
+    def test_a_routine_run_writes_the_check_in_its_own_suite(self):
+        # Suite 5 holds the gate from an earlier run on this head (a reopen, a second run).
+        old = "triage=reviewable;routine=pass;escalated=no;deep=none;routine_by=1.1.1;deep_by=0.0.0"
+        cases = [("a newer run starts its own check", 8, "POST"),
+                 ("the same run updates it", 5, "PATCH"),
+                 ("an older run's late write updates the newest", 3, "PATCH")]
+        for name, suite, method in cases:
+            with self.subTest(name):
+                self.calls, self.suite = [], suite
+                self.existing = [{"id": 7, "name": "Review gate", "external_id": old, "check_suite": {"id": 5}}]
+                os.environ.update(GITHUB_EVENT_NAME="pull_request", GITHUB_RUN_ID="42")
+                self.addCleanup(os.environ.pop, "GITHUB_EVENT_NAME", None)
+                self.addCleanup(os.environ.pop, "GITHUB_RUN_ID", None)
+                gate.upsert("o/r", self.SHA, routine="pending", order="9.1.0")
+                [write] = [c for c in self.calls if c[0] in ("POST", "PATCH")]
+                self.assertEqual(write[0], method)
+                self.assertIn("triage=reviewable;routine=pending", write[2]["external_id"])
+
+    def test_outside_a_routine_run_the_newest_suite_is_written(self):
+        self.existing = [{"id": 9, "name": "Review gate", "external_id": "", "check_suite": {"id": 4}},
+                         {"id": 7, "name": "Review gate", "external_id": "", "check_suite": {"id": 5}}]
+        gate.upsert("o/r", self.SHA, deep="pass", escalated=True, order="5.1.1")
+        self.assertEqual(self.calls[1][:2], ("PATCH", "repos/o/r/check-runs/7"))
 
     def test_a_wiped_write_is_written_again(self):
         self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]

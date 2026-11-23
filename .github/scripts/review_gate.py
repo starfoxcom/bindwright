@@ -49,6 +49,7 @@ Every command prints one line; a bad argument prints {"error": ...} and exits 1.
 
 import fnmatch
 import json
+import os
 import re
 import subprocess
 import sys
@@ -422,16 +423,33 @@ def check_body(check, note=""):
     return body
 
 
+def _suite_of(run):
+    return (run.get("check_suite") or {}).get("id") or 0
+
+
 def _newest(repo, sha):
+    """The gate check in the newest check suite on `sha`, the newest one within it."""
     runs = _gh("repos/%s/commits/%s/check-runs?check_name=Review%%20gate&per_page=100" % (repo, sha))
     mine = [r for r in runs.get("check_runs", []) if r.get("name") == GATE]
-    return max(mine, key=lambda r: r["id"]) if mine else None
+    return max(mine, key=lambda r: (_suite_of(r), r["id"])) if mine else None
 
 
-def _write(repo, sha, current, note, facts):
+def _own_suite(repo):
+    """The check suite of the routine run calling this, or None outside one. The merge reads a
+    required check from the newest suite, so a gate check left in an earlier run's suite (after
+    a reopen or a second run on the same head) reads to it as missing."""
+    run = os.environ.get("GITHUB_RUN_ID", "")
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request" or not run.isdigit():
+        return None
+    return _gh("repos/%s/actions/runs/%s" % (repo, run)).get("check_suite_id")
+
+
+def _write(repo, sha, current, note, facts, suite=None):
+    """Write the gate decision onto `current`, or onto a new check, carrying its state, when
+    there is none or the calling run's `suite` is newer than the one `current` sits in."""
     check = gate((current or {}).get("external_id") or "", **facts)
     body = check_body(check, note)
-    if current:
+    if current and not (suite and _suite_of(current) < suite):
         _gh("repos/%s/check-runs/%d" % (repo, current["id"]), "PATCH", body)
     else:
         _gh("repos/%s/check-runs" % repo, "POST", dict(body, name=GATE, head_sha=sha))
@@ -457,13 +475,15 @@ def _holds(current, facts):
 
 def upsert(repo, sha, note="", **facts):
     """Decide from the gate check's stored state plus `facts`, then write the
-    result back to the check on `sha`, creating it on the first call. Reads
-    it back, and writes again while another workflow's write wiped the facts."""
+    result back to the check on `sha`, creating it on the first call and on the
+    first call of a newer routine run. Reads it back, and writes again while
+    another workflow's write wiped the facts."""
     if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise GateError("upsert needs --repo OWNER/NAME and a 40-character --sha")
     if facts.get("order") is None and any(facts.get(k) is not None for k in OWNER):
         raise GateError("upsert needs --order with --triage, --routine or --deep")
-    check = _write(repo, sha, _newest(repo, sha), note, facts)
+    suite = _own_suite(repo)
+    check = _write(repo, sha, _newest(repo, sha), note, facts, suite)
     for round_ in range(WRITE_ROUNDS):
         current = None
         for delay in SETTLE_SECONDS:
@@ -474,7 +494,7 @@ def upsert(repo, sha, note="", **facts):
         else:
             return check
         if round_ < WRITE_ROUNDS - 1:
-            check = _write(repo, sha, current, note, facts)
+            check = _write(repo, sha, current, note, facts, suite)
     raise GateError("another workflow kept overwriting the Review gate; re-run this job")
 
 
