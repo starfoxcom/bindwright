@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The review rules no longer suggest closing and reopening a PR to start its checks.** A second run on the same head commit writes into the first run's gate check, and the merge then reports `Review gate` as expected although it passed. `review-tiers.md` now says to push a commit, an empty one if nothing else changed, also to re-run the review after a fix that touches only the PR body.
+
 ## [v7.13.3] — 2026-11-22
 
 ### Fixed
