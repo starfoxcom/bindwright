@@ -8,7 +8,7 @@ const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
-const { compare, publish, chatFiles, chatIds, ensureFolder, clearUnlessPlain } = require('./commands.cjs')
+const { compare, publish, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile } = require('./commands.cjs')
 
 // Neither part starts with a dash, so gh never reads the name as an option.
 const REPO = /^[\w.][\w.-]*\/[\w.][\w.-]*$/
@@ -63,19 +63,14 @@ function copyChats(from, to) {
         const dest = path.join(target, name)
         clearUnlessPlain(dest)
         const verdict = compare(source, dest)
-        if (verdict === 'new' || verdict === 'ahead') fs.copyFileSync(source, dest)
-        if (verdict === 'diverged') keepBoth(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
+        if (verdict === 'new' || verdict === 'ahead') placeFile(source, dest)
+        if (verdict === 'diverged') placeFile(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
         if (!fs.existsSync(dest)) missing.push(`${project}/${id}/${name}`)
       }
       moved += 1
     }
   }
   return { moved, missing }
-}
-
-function keepBoth(source, kept) {
-  clearUnlessPlain(kept)
-  fs.copyFileSync(source, kept)
 }
 
 // A folder as the user typed it, with a leading ~ as their home folder, or null

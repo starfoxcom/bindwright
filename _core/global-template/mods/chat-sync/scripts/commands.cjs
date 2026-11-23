@@ -82,9 +82,29 @@ function sweepTemps(own) {
   const prefix = `.${path.basename(own)}.`
   for (const name of fs.readdirSync(path.dirname(own))) {
     const file = path.join(path.dirname(own), name)
-    if (!name.startsWith(prefix) || !name.endsWith('.tmp')) continue
-    if (!isPlainFile(file) || Date.now() - fs.lstatSync(file).mtimeMs > TEMP_STALE_MS) removeQuietly(file)
+    if (name.startsWith(prefix) && name.endsWith('.tmp') && isLeftOver(file)) removeQuietly(file)
   }
+}
+
+// True when what sits at `file` should go: anything but a plain file, or one
+// older than a helper's longest run. A name another helper removed meanwhile
+// is left alone.
+function isLeftOver(file) {
+  try {
+    const entry = fs.lstatSync(file)
+    return !entry.isFile() || Date.now() - entry.mtimeMs > TEMP_STALE_MS
+  } catch {
+    return false
+  }
+}
+
+// Puts a copy of `built` at `dest` through an exclusive temporary file renamed
+// over it, so a link planted at either name is replaced, never written through.
+function placeFile(built, dest) {
+  const next = tempOf(dest)
+  removeQuietly(next)
+  fs.copyFileSync(built, next, fs.constants.COPYFILE_EXCL)
+  fs.renameSync(next, dest)
 }
 
 function isRealFolder(folder) {
@@ -284,10 +304,7 @@ function sendChat(transcript, root, projectDir) {
     }
     clearUnlessPlain(own)
     if (compare(built, own) === 'same') return false
-    const next = tempOf(own)
-    removeQuietly(next)
-    fs.copyFileSync(built, next, fs.constants.COPYFILE_EXCL)
-    fs.renameSync(next, own)
+    placeFile(built, own)
     return true
   })
 }
@@ -439,8 +456,7 @@ function sweepImports(chatDir) {
     return
   }
   for (const name of names.filter(entry => IMPORT_TEMP.test(entry))) {
-    const file = path.join(chatDir, name)
-    if (Date.now() - fs.lstatSync(file).mtimeMs > TEMP_STALE_MS) removeQuietly(file)
+    if (isLeftOver(path.join(chatDir, name))) removeQuietly(path.join(chatDir, name))
   }
 }
 
@@ -515,5 +531,5 @@ function hasGit() {
 }
 
 module.exports = {
-  run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain,
+  run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile,
 }
