@@ -1,5 +1,7 @@
 # Settings for the review gate (.github/scripts/review_gate.py). Every value
-# starts at the gate's default; delete a line to keep the default.
+# starts at the gate's default but prescreen.dir, the folder setup ships its
+# own check into: delete that line and no pre-screen check runs. Delete any
+# other line to keep the default.
 # Unknown keys and bad values fail the gate instead of being ignored.
 # The workflows read this file from the PR's base branch, so a PR cannot
 # change the settings its own review runs under.
