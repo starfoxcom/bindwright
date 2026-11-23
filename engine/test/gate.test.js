@@ -1,7 +1,7 @@
 // A bound project gets the review gate this repo runs: bound with this repo's
 // own choices, the workflows and the gate's scripts come out byte for byte as
-// the live copies, and the settings file holds the gate's defaults. Other
-// choices flip only the two switches they map to.
+// the live copies, and the settings file holds the gate's defaults but the
+// check folder. Other choices flip only the two switches they map to.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
