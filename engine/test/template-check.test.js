@@ -24,8 +24,12 @@ const ANSWERS = defaults({ team: true });
 const UNEDITED = ".claude/rules/git.md";
 const EDITED = ".claude/rules/testing.md";
 
+// No hooks: a hooks folder set for this computer would run on every test commit.
+const NO_HOOKS = mkdtempSync(join(tmpdir(), "template-hooks-"));
+after(() => rmSync(NO_HOOKS, { recursive: true, force: true }));
 const git = (cwd, ...args) => {
-  const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8" });
+  const config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", `core.hooksPath=${NO_HOOKS}`];
+  const r = spawnSync("git", [...config, ...args], { cwd, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();
 };
@@ -65,7 +69,7 @@ function render() {
   return rendering;
 }
 
-async function pullRequest(folder, pin) {
+async function pullRequest(folder, pin, basePin) {
   const rendered = await render();
   const root = join(folder, "repo");
   mkdirSync(root);
@@ -73,6 +77,7 @@ async function pullRequest(folder, pin) {
   put(root, ".bindwright/project.json", JSON.stringify(ANSWERS));
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: VERSION, year: 2026, files: {} }));
   put(root, "README.md", "base\n");
+  if (basePin) put(root, ".bindwright/helper.json", JSON.stringify({ python: basePin }));
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "base");
   git(root, "checkout", "-q", "-b", "pr");
@@ -118,6 +123,12 @@ const CASES = [
     pin: () => ({ url: URL, sha256: "0".repeat(64) }),
     reason: "does not match the SHA-256",
   },
+  {
+    name: "a pin older than the base's lists nothing",
+    pin: (sum) => ({ url: URL, sha256: sum }),
+    basePin: { url: `${RELEASES}/v999.0.0/bindwright-999.0.0-py3-none-any.whl`, sha256: "0".repeat(64) },
+    reason: `the head pins Bindwright ${VERSION}, older than the base's 999.0.0`,
+  },
 ];
 
 // One wheel for every row: packing the templates is the slow part.
@@ -137,7 +148,7 @@ for (const row of CASES) {
     const folder = mkdtempSync(join(tmpdir(), "template-check-"));
     try {
       const { wheel, sum } = sharedWheel();
-      const root = await pullRequest(folder, row.pin(sum));
+      const root = await pullRequest(folder, row.pin(sum), row.basePin);
       const out = runCheck(root, folder, wheel);
       const listed = out.split(/\r?\n/).filter((l) => l.startsWith("- ")).map((l) => l.slice(2));
       assert.deepEqual(listed, row.listed ?? [], out);

@@ -82,6 +82,21 @@ def pinned_wheel(pin):
     return url, digest
 
 
+def release_version(url):
+    return tuple(int(part) for part in RELEASE.fullmatch(url).group(1).split("."))
+
+
+def refuse_older_pin(base, url):
+    """Refuses a head pin older than the base's, so a PR cannot exempt text it reverts."""
+    try:
+        base_url, _ = pinned_wheel(json.loads((git_show(base, PIN) or b"").decode("utf-8")))
+    except (Skip, UnicodeDecodeError, ValueError):
+        return
+    if release_version(url) < release_version(base_url):
+        raise Skip("the head pins Bindwright %s, older than the base's %s"
+                   % (RELEASE.fullmatch(url).group(1), RELEASE.fullmatch(base_url).group(1)))
+
+
 def download(url):
     with urllib.request.urlopen(url, timeout=DOWNLOAD_SECONDS) as response:
         return response.read()
@@ -158,6 +173,7 @@ def changed_files(path):
 def run(files_path):
     base = base_commit()
     url, digest = pinned_wheel(read_json("HEAD", PIN))
+    refuse_older_pin(base, url)
     answers = read_json(base, ANSWERS)
     year = read_json(base, PRISTINE).get("year")
     with tempfile.TemporaryDirectory() as folder:
@@ -173,8 +189,9 @@ def run(files_path):
 def main(argv):
     try:
         release, found = run(argv[0])
-    except Skip as e:
-        print("%s: none listed, since %s. Every changed file gets the normal review." % (HEADING, e))
+    except Exception as e:
+        reason = e if isinstance(e, Skip) else "the check failed (%s: %s)" % (type(e).__name__, e)
+        print("%s: none listed, since %s. Every changed file gets the normal review." % (HEADING, reason))
         return 0
     if not found:
         print("%s: no changed file equals the render of Bindwright %s." % (HEADING, release))
