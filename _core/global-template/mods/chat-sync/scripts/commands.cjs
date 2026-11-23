@@ -378,7 +378,7 @@ function bringIn([chatDir, root, openId]) {
 // Brings in the longest other computer's copy of one chat that extends this
 // computer's chat. A copy that both changed is left where it is, in the sync
 // place, and this computer's chat is kept. A chat this computer once had and
-// no longer has was deleted here (by the user, or by Claude Code's clean-up of
+// no longer has was deleted here (by the user, or when Claude Code cleared out
 // old chats), so it comes back only once another computer has continued it.
 function bringChat(storeChat, local, root, { isOpen, seen, key }) {
   const copies = otherCopies(storeChat)
