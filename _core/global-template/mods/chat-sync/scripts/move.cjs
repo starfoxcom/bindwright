@@ -22,7 +22,9 @@ function checkPrivate(repo) {
   const view = spawnSync('gh', ['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility'],
     { encoding: 'utf8', timeout: 30_000 })
   if (view.status !== 0) return `Could not confirm that ${repo} is private: ${(view.stderr || '').trim()}`
-  return view.stdout.trim() === 'PUBLIC' ? `${repo} is public, and chats must never go to a public repo.` : null
+  const visibility = view.stdout.trim()
+  if (visibility === 'PRIVATE') return null
+  return `${repo} is ${visibility.toLowerCase() || 'not confirmed private'}, and chats go only to a private repo.`
 }
 
 function clone(repo, folder) {
@@ -113,4 +115,4 @@ function move([kind, where]) {
   return { moved: copied.moved, from: describe(old), to: describe(ready.place), ...pushed }
 }
 
-module.exports = { move, describe }
+module.exports = { move, describe, checkPrivate }

@@ -30,20 +30,40 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// The rules that turn `folder` into its placeholders, longest form first. The
-// match must end where the folder's name ends, so C:/Users/al never matches
-// inside C:/Users/alex.
+// A path starts after a line or string start, white space, a quote, a bracket,
+// one of `=:,;|<>`, or an escaped newline or tab (`\n`, `\t`, `\r`), so
+// https://x.com/home/sam and /mnt/backup/home/sam are left alone.
+const STARTS_AFTER = '(?<=^|[\\s"\'`([{<>=:,;|]|\\\\[nrt])'
+// A path ends where the folder's name ends, so C:/Users/al never matches inside
+// C:/Users/alex or /home/sam.bak; a sentence's closing dot still ends it.
+const ENDS_BEFORE = '(?![\\w-]|\\.[\\w-])'
+
+// A folder with no name below the root or the drive ("/", "C:\") is everywhere
+// in a chat, so it gets no rule.
+function hasName(parts) {
+  return parts.some(part => part && !/^[A-Za-z]:$/.test(part))
+}
+
+// The rules that turn `folder` into its placeholders, longest form first.
 function outRules(name, folder) {
   const parts = segments(folder)
+  if (!hasName(parts)) return []
   const forms = isWindowsPath(folder) ? Object.keys(FORMS) : ['F']
   const flags = isWindowsPath(folder) ? 'gi' : 'g'
   return forms
     .map(form => ({ text: parts.join(FORMS[form]), form }))
     .sort((a, b) => b.text.length - a.text.length)
     .map(({ text, form }) => ({
-      pattern: new RegExp(`${escapeRegExp(text)}(?![\\w-])`, flags),
+      pattern: new RegExp(`${STARTS_AFTER}${escapeRegExp(text)}${ENDS_BEFORE}`, flags),
       value: token(name, form),
     }))
+}
+
+// Placeholders without the form they were written in. Two copies of a chat are
+// compared in this view, since a computer without drive letters writes every
+// path in one form where a Windows computer wrote three.
+function formless(text) {
+  return text.replace(/__CHATSYNC_(PROJECT|HOME)_(?:F|E1|E2)__/g, '__CHATSYNC_$1__')
 }
 
 // The rules that turn each placeholder into `folder` as this computer writes it.
@@ -97,6 +117,48 @@ function transformFile(src, dst, change, completeOnly) {
   }
 }
 
+// Appends the lines of `src` after its first `skipLines` to `dst`, through
+// `change`. A last line with no newline yet is left out.
+function appendLines(src, skipLines, dst, change) {
+  const input = fs.openSync(src, 'r')
+  const output = fs.openSync(dst, 'a')
+  const decoder = new StringDecoder('utf8')
+  const buffer = Buffer.alloc(CHUNK_BYTES)
+  let toSkip = skipLines
+  let carry = ''
+  try {
+    let read
+    while ((read = fs.readSync(input, buffer, 0, CHUNK_BYTES, null)) > 0) {
+      let text = carry + decoder.write(buffer.subarray(0, read))
+      while (toSkip > 0 && text.includes('\n')) {
+        text = text.slice(text.indexOf('\n') + 1)
+        toSkip--
+      }
+      const end = toSkip > 0 ? 0 : text.lastIndexOf('\n') + 1
+      if (end > 0) fs.writeSync(output, change(text.slice(0, end)))
+      carry = text.slice(end)
+    }
+  } finally {
+    fs.closeSync(input)
+    fs.closeSync(output)
+  }
+}
+
+function countLines(file) {
+  const input = fs.openSync(file, 'r')
+  const buffer = Buffer.alloc(CHUNK_BYTES)
+  let lines = 0
+  try {
+    let read
+    while ((read = fs.readSync(input, buffer, 0, CHUNK_BYTES, null)) > 0) {
+      for (let at = 0; at < read; at++) if (buffer[at] === 10) lines++
+    }
+    return lines
+  } finally {
+    fs.closeSync(input)
+  }
+}
+
 function sizeOf(file) {
   try {
     return fs.statSync(file).size
@@ -129,4 +191,6 @@ function startsWithFile(longer, shorter) {
   }
 }
 
-module.exports = { neutralize, expand, transformFile, startsWithFile, sizeOf, token }
+module.exports = {
+  neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf,
+}

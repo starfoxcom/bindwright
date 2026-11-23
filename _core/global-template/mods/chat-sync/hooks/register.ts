@@ -13,8 +13,8 @@ const END_TIMEOUT_MS = 8_000
 const COMMAND = 'chat-sync'
 const HINT = '[status | places | move folder <path> | move git <owner/repo> | move off]'
 const HELP = [
-  'Chat sync keeps your chats in step across computers, so `claude --resume` finds a chat '
-    + 'started on another one.',
+  'Chat sync keeps your chats in step across computers: start Claude Code in the project, '
+    + 'then /resume finds a chat started on another one.',
   '/chat-sync status: where the chats sync and how many this project has.',
   '/chat-sync places: the sync folders found on this computer.',
   '/chat-sync move folder <path>: sync through that folder (Google Drive, OneDrive, Dropbox, '
@@ -64,7 +64,8 @@ function bringInNote(answer: Answer): string | undefined {
   if (imported) parts.push(`${plural(imported, 'newer chat')} from your other computer, ready in /resume`)
   if (conflicts) parts.push(`${plural(conflicts, 'chat')} changed on both computers, so this computer's copy was kept`)
   if (countOf(answer.behind)) {
-    parts.push('this chat has newer messages on your other computer: exit and resume it again to load them')
+    parts.push('this chat has newer messages on your other computer: start a new session in this project, '
+      + 'then /resume this chat to load them')
   }
   if (answer.error) parts.push(`could not sync: ${answer.error}`)
   return parts.length ? `Chat sync: ${parts.join('; ')}.` : undefined
@@ -86,6 +87,7 @@ function outNote(answer: Answer): string | undefined {
   }
   if (answer.conflict) return 'Chat sync: this chat changed on both computers; this copy was saved beside the other.'
   if (answer.pushError) return `Chat sync: could not push the chat repo: ${String(answer.pushError).slice(0, 200)}`
+  if (answer.error) return `Chat sync: could not copy this chat out: ${answer.error.slice(0, 200)}`
   return undefined
 }
 

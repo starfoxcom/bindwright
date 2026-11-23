@@ -25,11 +25,12 @@ function children(folder) {
 
 // Dropbox writes where its folder is in info.json, wherever the user moved it.
 function dropboxFolders(home) {
-  const infos = [
-    path.join(process.env.APPDATA || '', 'Dropbox', 'info.json'),
-    path.join(process.env.LOCALAPPDATA || '', 'Dropbox', 'info.json'),
-    path.join(home, '.dropbox', 'info.json'),
-  ]
+  // An unset variable is skipped, since an empty one would read Dropbox/info.json
+  // from whatever folder the helper runs in.
+  const infos = [process.env.APPDATA, process.env.LOCALAPPDATA]
+    .filter(Boolean)
+    .map(folder => path.join(folder, 'Dropbox', 'info.json'))
+    .concat(path.join(home, '.dropbox', 'info.json'))
   const found = []
   for (const file of infos) {
     try {

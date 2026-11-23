@@ -7,9 +7,10 @@ const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
-const { neutralize, expand, transformFile, startsWithFile, sizeOf } = require('./paths.cjs')
+const paths = require('./paths.cjs')
 const { syncPlaces } = require('./places.cjs')
 
+const { neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf } = paths
 const CHAT = /^[\w-]+\.jsonl$/
 
 function chatFiles(folder) {
@@ -20,12 +21,34 @@ function chatFiles(folder) {
   }
 }
 
-// How copy `mine` stands against copy `theirs`, both in the same form.
+// How file `mine` stands against file `theirs`.
 function compare(mine, theirs) {
   if (sizeOf(theirs) < 0) return 'new'
   if (startsWithFile(mine, theirs)) return sizeOf(mine) === sizeOf(theirs) ? 'same' : 'ahead'
   if (startsWithFile(theirs, mine)) return 'behind'
   return 'diverged'
+}
+
+// How this computer's chat `local` stands against the stored copy `stored`,
+// with the line count of each. Both are read in one view: each computer's paths
+// as placeholders, without the form they were written in. The stored copy goes
+// through this computer's paths first, so a path that is this computer's in it
+// reads the same as in the local chat.
+function compareChat(local, stored, root) {
+  if (sizeOf(stored) < 0) return { verdict: 'new' }
+  const home = os.homedir()
+  const toPlaceholders = neutralize(root, home)
+  const toLocal = expand(root, home)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-sync-'))
+  try {
+    const mine = path.join(dir, 'mine')
+    const theirs = path.join(dir, 'theirs')
+    transformFile(local, mine, text => formless(toPlaceholders(text)), true)
+    transformFile(stored, theirs, text => formless(toPlaceholders(toLocal(text))), true)
+    return { verdict: compare(mine, theirs), localLines: countLines(mine), storedLines: countLines(theirs) }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 function removeQuietly(file) {
@@ -39,18 +62,36 @@ function commitAndPush(store, label) {
   if (!commit.ok) return { pushError: commit.out }
   const pulled = pull(store)
   if (pulled.error) return { pushError: pulled.error }
-  const push = base.git(store, 'push')
+  const branch = pulled.branch || base.git(store, 'symbolic-ref', '--short', 'HEAD').out
+  const push = base.git(store, 'push', 'origin', `HEAD:refs/heads/${branch}`)
   return push.ok ? { pushed: true } : { pushError: push.out }
 }
 
-function pull(store) {
-  if (!base.git(store, 'rev-parse', '--verify', 'HEAD').ok) return {}
-  if (!base.git(store, 'ls-remote', '--exit-code', '--heads', 'origin').ok) return {}
-  const run = base.git(store, 'pull', '--rebase', '--autostash')
-  if (run.ok) return {}
-  base.git(store, 'rebase', '--abort')
-  return { error: run.out }
+// The repo's default branch, or null while nothing has been pushed to it.
+function remoteBranch(store) {
+  const head = base.git(store, 'ls-remote', '--symref', 'origin', 'HEAD')
+  const match = /^ref: refs\/heads\/(\S+)\s+HEAD/m.exec(head.out)
+  return head.ok && match ? match[1] : null
 }
+
+// Brings the clone up to the repo, naming the branch, so a clone made while the
+// repo was empty catches up too. A commit of this computer's that cannot be
+// replayed on top (another computer changed the same chat meanwhile) is
+// dropped: every chat it held is still in this computer's chat folder, and the
+// next copy out compares it against the repo's newer copy.
+function pull(store) {
+  const branch = remoteBranch(store)
+  if (!branch) return {}
+  const run = base.git(store, 'pull', '--rebase', '--autostash', 'origin', branch)
+  if (run.ok) return { branch }
+  base.git(store, 'rebase', '--abort')
+  const reset = base.git(store, 'reset', '--hard', `origin/${branch}`)
+  if (!reset.ok) return { error: run.out }
+  return { error: CHANGED_MEANWHILE }
+}
+
+const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same time; '
+  + 'this computer copies its chats again at the next turn.'
 
 // Where the chats go now, or a reason nothing can be copied.
 function openStore() {
@@ -69,6 +110,9 @@ function out([transcript, root, release]) {
   const opened = openStore()
   if (!opened.store) return opened
   const { place, store } = opened
+  const isGit = place.kind === 'git'
+  const pulled = isGit ? pull(store) : {}
+  if (pulled.error) return { error: pulled.error }
   const id = path.basename(transcript, '.jsonl')
   const me = base.machineId()
   const dir = path.join(store, base.projectKey(root))
@@ -76,29 +120,49 @@ function out([transcript, root, release]) {
   const lock = base.lockOf(lockFile)
   if (base.isHeldElsewhere(lock, me)) return { held: id, by: lock.machine }
   fs.mkdirSync(dir, { recursive: true })
-  const mine = path.join(dir, `.${id}.${me}.tmp`)
-  transformFile(transcript, mine, neutralize(root, os.homedir()), true)
-  const result = placeCopy(mine, path.join(dir, `${id}.jsonl`), id, me)
+  const result = placeCopy(transcript, path.join(dir, `${id}.jsonl`), root, { id, me })
   if (release === 'release') removeQuietly(lockFile)
   else base.writeJson(lockFile, { machine: me, at: Date.now() })
-  if (place.kind === 'git' && result.copied) Object.assign(result, commitAndPush(store, `${id} from ${me}`))
-  return result
+  if (!isGit) return result
+  const refused = privateRepoError(place.repo)
+  return Object.assign(result, refused ? { pushError: refused } : commitAndPush(store, `${id} from ${me}`))
 }
 
-function placeCopy(mine, target, id, me) {
-  const verdict = compare(mine, target)
-  if (verdict === 'new' || verdict === 'ahead') {
-    fs.renameSync(mine, target)
-    return { copied: id }
-  }
+const VISIBILITY_FRESH_MS = 60 * 60_000
+
+// The repo is checked again before a push, at most once an hour, in case it was
+// made public since it was chosen.
+function privateRepoError(repo) {
+  const file = path.join(base.dataDir(), 'visibility.json')
+  const last = base.readJson(file, {})
+  if (last.repo === repo && Date.now() - last.at < VISIBILITY_FRESH_MS) return null
+  const { checkPrivate } = require('./move.cjs')
+  const refused = checkPrivate(repo)
+  if (!refused) base.writeJson(file, { repo, at: Date.now() })
+  return refused
+}
+
+// Writes this computer's chat into the store as the verdict says. A copy that
+// is ahead keeps the stored lines as they are and gains only the new ones, so
+// each line stays in the form the computer that wrote it used.
+function placeCopy(transcript, target, root, { id, me }) {
+  const { verdict, storedLines } = compareChat(transcript, target, root)
+  const toPlaceholders = neutralize(root, os.homedir())
   if (verdict === 'diverged') {
     const conflicts = path.join(path.dirname(target), 'conflicts')
     fs.mkdirSync(conflicts, { recursive: true })
-    fs.renameSync(mine, path.join(conflicts, `${id}.${me}.jsonl`))
+    transformFile(transcript, path.join(conflicts, `${id}.${me}.jsonl`), toPlaceholders, true)
     return { conflict: id }
   }
-  removeQuietly(mine)
-  return verdict === 'behind' ? { behind: id } : { same: id }
+  if (verdict !== 'new' && verdict !== 'ahead') return verdict === 'behind' ? { behind: id } : { same: id }
+  const next = path.join(path.dirname(target), `.${id}.${me}.tmp`)
+  if (verdict === 'new') transformFile(transcript, next, toPlaceholders, true)
+  else {
+    fs.copyFileSync(target, next)
+    appendLines(transcript, storedLines, next, toPlaceholders)
+  }
+  fs.renameSync(next, target)
+  return { copied: id }
 }
 
 // The store copies already looked at, by size and time, so an unchanged one
@@ -122,7 +186,8 @@ function bringIn([chatDir, root, openId]) {
   const key = base.projectKey(root)
   const dir = path.join(store, key)
   const seen = base.readJson(seenFile(), {})
-  const result = { imported: [], conflicts: [], behind: [], openElsewhere: [], ...pulled }
+  const result = { imported: [], conflicts: [], behind: [], openElsewhere: [] }
+  if (pulled.error) result.error = pulled.error
   const me = base.machineId()
   for (const name of chatFiles(dir)) {
     const id = name.slice(0, -'.jsonl'.length)
@@ -141,18 +206,18 @@ function bringIn([chatDir, root, openId]) {
   return result
 }
 
+// Brings one stored chat in. A local chat that is behind keeps its own lines
+// and gains only the stored ones it lacks.
 function bringOne(theirs, local, root, isOpen) {
-  const home = os.homedir()
   const hasLocal = sizeOf(local) >= 0
-  const mine = `${local}.chat-sync.mine`
-  if (hasLocal) transformFile(local, mine, neutralize(root, home), false)
-  const verdict = hasLocal ? compare(mine, theirs) : 'new'
-  if (hasLocal) removeQuietly(mine)
+  const { verdict, localLines } = hasLocal ? compareChat(local, theirs, root) : { verdict: 'behind', localLines: 0 }
   if (verdict === 'same' || verdict === 'ahead') return 'kept'
   if (verdict === 'diverged') return 'conflict'
   if (isOpen) return 'open'
   const incoming = `${local}.chat-sync.in`
-  transformFile(theirs, incoming, expand(root, home), false)
+  if (hasLocal) fs.copyFileSync(local, incoming)
+  else removeQuietly(incoming)
+  appendLines(theirs, localLines, incoming, expand(root, os.homedir()))
   fs.renameSync(incoming, local)
   return 'imported'
 }

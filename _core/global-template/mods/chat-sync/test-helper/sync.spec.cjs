@@ -16,19 +16,50 @@ function tempDir(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `chat-sync-${name}-`))
 }
 
+// Git that reads none of this computer's own settings or hooks.
+const GIT_ENV = {
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: path.join(tempDir('gitconfig'), 'config'),
+  GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
+  GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com',
+}
+
 // One computer: its own config folder, home folder and copy of the project.
-function computer(name, store) {
-  const home = tempDir(`${name}-home`)
-  const root = path.join(home, 'work', 'shop')
-  fs.mkdirSync(path.join(root, '.bindwright'), { recursive: true })
-  fs.writeFileSync(path.join(root, '.bindwright', 'project.json'), JSON.stringify({ project: { name: 'shop' } }))
-  const config = path.join(home, '.claude')
+// `paths` gives another computer's project and home folders as text only, such
+// as /home/sam on Windows: the project is then named after its folder.
+function computer(name, store, paths = {}) {
+  const own = tempDir(`${name}-home`)
+  const home = paths.home || own
+  const root = paths.root || path.join(own, 'work', 'shop')
+  if (!paths.root) {
+    fs.mkdirSync(path.join(root, '.bindwright'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.bindwright', 'project.json'), JSON.stringify({ project: { name: 'shop' } }))
+  }
+  const config = path.join(own, '.claude')
   const chatDir = path.join(config, 'projects', name)
   fs.mkdirSync(chatDir, { recursive: true })
-  const env = { ...process.env, CLAUDE_CONFIG_DIR: config, HOME: home, USERPROFILE: home }
+  const env = { ...process.env, ...GIT_ENV, CLAUDE_CONFIG_DIR: config, HOME: home, USERPROFILE: home }
   const sync = (...args) => JSON.parse(execFileSync(process.execPath, [SYNC, ...args], { env, encoding: 'utf8' }))
   if (store) sync('move', 'folder', store)
-  return { home, root, chatDir, sync }
+  return { home, root, chatDir, sync, dataDir: path.join(config, 'mods-data', 'chat-sync') }
+}
+
+// A computer whose chats sync through a clone of the bare repo `origin`, set up
+// as `move git` leaves it, with the repo already confirmed private.
+function gitComputer(name, origin) {
+  const pc = computer(name)
+  const repo = 'me/chats'
+  fs.mkdirSync(pc.dataDir, { recursive: true })
+  fs.writeFileSync(path.join(pc.dataDir, 'place.json'), JSON.stringify({ kind: 'git', repo }))
+  fs.writeFileSync(path.join(pc.dataDir, 'visibility.json'), JSON.stringify({ repo, at: Date.now() }))
+  execFileSync('git', ['clone', '-q', origin, path.join(pc.dataDir, 'repo')], { env: { ...process.env, ...GIT_ENV } })
+  return pc
+}
+
+function bareRepo() {
+  const origin = tempDir('origin')
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin], { env: { ...process.env, ...GIT_ENV } })
+  return origin
 }
 
 // A chat file whose every line names the project folder, as Claude Code writes it.
@@ -53,10 +84,50 @@ test('a Windows chat moved to a computer without drive letters gets its paths in
   assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, '/home/sam/dev/app')
 })
 
-test('a folder name is only swapped where it ends, never inside a longer name', () => {
-  const out = neutralize('C:\\work\\app', 'C:\\Users\\al')
-  const line = JSON.stringify({ a: 'C:\\Users\\alex\\x', b: 'C:\\work\\apples' })
-  assert.strictEqual(out(line), line)
+test('only this computer\'s own folders are swapped, never a longer path or name that holds them', () => {
+  const windows = neutralize('C:\\work\\app', 'C:\\Users\\al')
+  const posix = neutralize('/srv/app', '/home/sam')
+  const kept = [
+    ['a longer folder name', windows, 'C:\\Users\\alex\\x'],
+    ['a longer project name', windows, 'C:\\work\\apples'],
+    ['inside a web address', posix, 'https://example.com/home/sam/x'],
+    ['inside a longer path', posix, '/mnt/backup/home/sam/x'],
+    ['a name with a suffix', posix, '/home/sam.bak/x'],
+    ['the project name in a relative path', posix, 'src/srv/app/main.ts'],
+  ]
+  for (const [label, out, text] of kept) {
+    const line = JSON.stringify({ text })
+    assert.strictEqual(out(line), line, label)
+  }
+  const swapped = [
+    ['a quoted path', '"/home/sam/x"', '"__CHATSYNC_HOME_F__/x"'],
+    ['a path ending a sentence', '"in /home/sam."', '"in __CHATSYNC_HOME_F__."'],
+    ['a path after an escaped newline', '"a\\n/home/sam/x"', '"a\\n__CHATSYNC_HOME_F__/x"'],
+  ]
+  for (const [label, text, want] of swapped) assert.strictEqual(posix(text), want, label)
+  const rootHome = neutralize('/srv/app', '/')
+  assert.strictEqual(rootHome('"/etc/hosts"'), '"/etc/hosts"', 'a home of / is never swapped')
+})
+
+test('a Windows chat continued on Linux comes back to Windows whole, with no copy left in conflicts', () => {
+  const store = tempDir('store')
+  const win = computer('w', store, { root: 'C:\\Users\\al\\work\\shop', home: 'C:\\Users\\al' })
+  const linux = computer('l', store, { root: '/home/sam/work/shop', home: '/home/sam' })
+  writeChat(win, 's1', ['one', 'two'])
+  win.sync('out', path.join(win.chatDir, 's1.jsonl'), win.root, 'release')
+  const stored = path.join(store, 'shop', 's1.jsonl')
+  const before = fs.readFileSync(stored, 'utf8')
+  assert.deepStrictEqual(linux.sync('in', linux.chatDir, linux.root, 'other').imported, ['s1'])
+  assert.deepStrictEqual(linux.sync('out', path.join(linux.chatDir, 's1.jsonl'), linux.root), { same: 's1' })
+  writeChat(linux, 's1', ['one', 'two', 'three'])
+  const release = [path.join(linux.chatDir, 's1.jsonl'), linux.root, 'release']
+  assert.deepStrictEqual(linux.sync('out', ...release), { copied: 's1' })
+  assert.ok(fs.readFileSync(stored, 'utf8').startsWith(before), 'the Windows lines stay as Windows wrote them')
+  assert.ok(!fs.existsSync(path.join(store, 'shop', 'conflicts')))
+  assert.deepStrictEqual(win.sync('in', win.chatDir, win.root, 'other').imported, ['s1'])
+  const back = readChat(win, 's1')
+  assert.deepStrictEqual(back.map(r => r.cwd.replace(/\//g, '\\')), [win.root, win.root, win.root])
+  assert.deepStrictEqual(win.sync('out', path.join(win.chatDir, 's1.jsonl'), win.root), { same: 's1' })
 })
 
 test('a chat copied out on one computer resumes on another with that computer\'s project folder', () => {
@@ -137,6 +208,27 @@ test('a project keeps one name across computers from its git remote, in https an
     return pc.sync('status', pc.root).project
   })
   assert.deepStrictEqual(keys, ['github.com-acme-shop', 'github.com-acme-shop'])
+})
+
+test('through a git repo, a closed chat is free elsewhere at once, and both copies of a split chat are pushed', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const b = gitComputer('b', origin)
+  writeChat(a, 's1', ['one'])
+  const first = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.strictEqual(first.pushed, true, 'first push to an empty repo')
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  writeChat(b, 's1', ['one', 'two from b'])
+  const fromB = b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root, 'release')
+  assert.deepStrictEqual([fromB.copied, fromB.pushed], ['s1', true], 'not held by the closed chat')
+  writeChat(a, 's1', ['one', 'two from a'])
+  const fromA = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.deepStrictEqual([fromA.conflict, fromA.pushed], ['s1', true], 'compared against the newer repo')
+  const tree = ['--git-dir', origin, 'ls-tree', '-r', '--name-only', 'main']
+  const listed = execFileSync('git', tree, { encoding: 'utf8' })
+  assert.ok(listed.includes(`shop/conflicts/s1.`), 'the conflict copy reached the repo')
+  assert.ok(!b.sync('in', b.chatDir, b.root, 'other').error, 'the other clone still pulls')
 })
 
 test('with no place chosen, nothing is copied', () => {
