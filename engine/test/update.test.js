@@ -592,6 +592,7 @@ test("a file held back again after its template moved keeps the base the update 
     repo.write(PRISTINE, JSON.stringify({ ...JSON.parse(repo.read(PRISTINE)), year: 2027 }));
     assert.ok(run(["--update", repo.at("")]).updated.includes(LICENSE), cmd);
     holdBack(at(2026));
+    holdBack(at(2026)); // a repeat keeps the same base
     assert.equal(JSON.parse(repo.read(PRISTINE)).files[LICENSE], at(2026), `${cmd}: the base the update used`);
     const out = run(["--update", repo.at("")]);
     assert.ok(out.updated.includes(LICENSE), `${cmd}: ${JSON.stringify(out)}`);
