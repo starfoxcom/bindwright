@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.14.1] — 2026-11-22
+
 ### Fixed
 
 - **The review gate's settings file names every value that is not the gate's default.** Its header named only the check folder, so a project that turned off the attribution scan or automatic deep reviews was told every other line kept the default. The header now names those two as well when setup turns them off, and the settings test checks it for both answers.
