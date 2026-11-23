@@ -22,9 +22,34 @@ const VISIBILITY_FRESH_MS = 60 * 60_000
 const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same time; '
   + 'this computer copies its chats again at the next turn.'
 
+// What another computer put in the sync place is read as input: a link there is
+// never followed, read or written through.
+function isLink(file) {
+  try {
+    return fs.lstatSync(file).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+function isPlainFile(file) {
+  try {
+    return fs.lstatSync(file).isFile()
+  } catch {
+    return false
+  }
+}
+
+function ensureFolder(folder) {
+  fs.mkdirSync(folder, { recursive: true })
+  if (!fs.lstatSync(folder).isDirectory()) {
+    throw new Error(`${folder} is a link, and chat sync writes only into folders.`)
+  }
+}
+
 function chatFiles(folder) {
   try {
-    return fs.readdirSync(folder).filter(name => CHAT.test(name))
+    return fs.readdirSync(folder).filter(name => CHAT.test(name) && isPlainFile(path.join(folder, name)))
   } catch {
     return []
   }
@@ -68,7 +93,7 @@ function compareChat(local, stored, root) {
     const theirs = path.join(dir, 'theirs')
     transformFile(local, mine, text => formless(toPlaceholders(text)), true)
     transformFile(stored, theirs, text => formless(toPlaceholders(toLocal(text))), true)
-    return { verdict: compare(mine, theirs), localLines: countLines(mine) }
+    return { verdict: compare(mine, theirs), localLines: countLines(mine), storedLines: countLines(theirs) }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -148,23 +173,62 @@ function openStore() {
       return { error: 'The chat repo is not cloned here. Run /chat-sync move git <owner/repo> again.' }
     }
     base.git(store, 'config', 'core.autocrlf', 'false')
+    base.git(store, 'config', 'core.symlinks', 'false')
   }
   return { place, store }
 }
 
-// Writes this computer's own copy of one chat. True when it changed.
+// This computer's own copy of one chat in the sync place.
+function ownCopy(projectDir, id) {
+  return path.join(projectDir, id, ownName())
+}
+
+// Other computers' copies of one chat, the longest first.
+function otherCopies(folder) {
+  const own = ownName()
+  return chatFiles(folder).filter(name => name !== own).map(name => path.join(folder, name))
+    .sort((a, b) => sizeOf(b) - sizeOf(a))
+}
+
+// The longest other computer's copy that the chat `transcript` starts with.
+function extendedCopy(transcript, folder, root) {
+  for (const copy of otherCopies(folder)) {
+    const { verdict, storedLines } = compareChat(transcript, copy, root)
+    if (verdict === 'ahead' || verdict === 'same') return { copy, storedLines }
+  }
+  return null
+}
+
+// Writes this computer's own copy of one chat: the lines of the longest other
+// copy the chat extends, byte for byte, then this computer's lines after them,
+// so a path the other computer left as text stays text. True when it changed.
 function sendChat(transcript, root, projectDir) {
-  const folder = path.join(projectDir, path.basename(transcript, '.jsonl'))
-  fs.mkdirSync(folder, { recursive: true })
-  const own = path.join(folder, ownName())
-  const next = `${own}.tmp`
-  transformFile(transcript, next, neutralize(root, os.homedir()), true)
+  const id = path.basename(transcript, '.jsonl')
+  ensureFolder(projectDir)
+  ensureFolder(path.join(projectDir, id))
+  const own = ownCopy(projectDir, id)
+  const next = `${own}.${process.pid}.tmp`
+  removeQuietly(next)
+  const toPlaceholders = neutralize(root, os.homedir())
+  const start = extendedCopy(transcript, path.dirname(own), root)
+  if (start) {
+    transformFile(start.copy, next, text => text, true)
+    appendLines(transcript, start.storedLines, next, toPlaceholders)
+  } else {
+    transformFile(transcript, next, toPlaceholders, true)
+  }
   if (compare(next, own) === 'same') {
     removeQuietly(next)
     return false
   }
   fs.renameSync(next, own)
   return true
+}
+
+// A chat counts as sent while neither it nor its own copy in the sync place has
+// changed since; a copy a pull or a reset took back reads as not sent.
+function sentStamp(local, own) {
+  return `${stampOf(local)}|${isPlainFile(own) ? stampOf(own) : 'none'}`
 }
 
 // The chats sent, by size and time, and the other computers' copies already
@@ -188,9 +252,10 @@ function out([transcript, root]) {
   if (refused) return { pushError: refused }
   const id = path.basename(transcript, '.jsonl')
   const key = base.projectKey(root)
-  const isChanged = sendChat(transcript, root, path.join(store, key))
+  const projectDir = path.join(store, key)
+  const isChanged = sendChat(transcript, root, projectDir)
   const seen = base.readJson(seenFile(), {})
-  seen[`sent:${key}/${id}`] = stampOf(transcript)
+  seen[`sent:${key}/${id}`] = sentStamp(transcript, ownCopy(projectDir, id))
   base.writeJson(seenFile(), seen)
   const result = isChanged ? { copied: id } : { same: id }
   return isGit && isChanged ? Object.assign(result, publish(store, `${id} from ${base.machineId()}`)) : result
@@ -221,10 +286,11 @@ function bringIn([chatDir, root, openId]) {
   const isRefused = isGit && Boolean(privateRepoError(place.repo))
   for (const name of isRefused ? [] : chatFiles(chatDir)) {
     const local = path.join(chatDir, name)
-    const sentKey = `sent:${key}/${name.slice(0, -'.jsonl'.length)}`
-    if (seen[sentKey] === stampOf(local)) continue
-    if (sendChat(local, root, dir)) result.sent.push(name.slice(0, -'.jsonl'.length))
-    seen[sentKey] = stampOf(local)
+    const id = name.slice(0, -'.jsonl'.length)
+    const sentKey = `sent:${key}/${id}`
+    if (seen[sentKey] === sentStamp(local, ownCopy(dir, id))) continue
+    if (sendChat(local, root, dir)) result.sent.push(id)
+    seen[sentKey] = sentStamp(local, ownCopy(dir, id))
   }
   base.writeJson(seenFile(), seen)
   if (isGit && !isRefused) Object.assign(result, publish(store, `${result.sent.length} chats from ${base.machineId()}`))
@@ -233,22 +299,21 @@ function bringIn([chatDir, root, openId]) {
 
 // Brings in the longest other computer's copy of one chat that extends this
 // computer's chat. A copy that both changed is left where it is, in the sync
-// place, and this computer's chat is kept.
+// place, and this computer's chat is kept. A chat this computer once had and
+// no longer has was deleted here, so it is not brought back.
 function bringChat(storeChat, local, root, { isOpen, seen, key }) {
-  const own = ownName()
-  const copies = chatFiles(storeChat).filter(name => name !== own).map(name => path.join(storeChat, name))
+  const copies = otherCopies(storeChat)
   const hasLocal = sizeOf(local) >= 0
+  if (!hasLocal && seen[`sent:${key}`] !== undefined) return { verdict: 'kept' }
   const isUnchanged = copies.every(copy => seen[`${key}/${path.basename(copy)}`] === stampOf(copy))
   if (hasLocal && isUnchanged) return { verdict: 'kept' }
-  copies.sort((a, b) => sizeOf(b) - sizeOf(a))
   let answer = { verdict: 'kept', isConflict: false }
   for (const copy of copies) {
     const { verdict, localLines } = hasLocal ? compareChat(local, copy, root) : { verdict: 'behind', localLines: 0 }
     if (verdict === 'diverged') answer.isConflict = true
     if (verdict !== 'behind') continue
     if (isOpen) return { verdict: 'open', isConflict: answer.isConflict }
-    importCopy(copy, local, root, localLines)
-    answer = { ...answer, verdict: 'imported' }
+    if (importCopy(copy, local, root, localLines)) answer = { ...answer, verdict: 'imported' }
     break
   }
   for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
@@ -257,13 +322,20 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
 
 // Writes the local chat as its own complete lines plus the copy's lines after
 // them; a last line cut off mid-write is dropped, since the copy's next line
-// takes its place.
+// takes its place. When the chat changed meanwhile (another session on this
+// computer wrote it), nothing is written. True when the chat was written.
 function importCopy(copy, local, root, localLines) {
-  const incoming = `${local}.chat-sync.in`
-  if (sizeOf(local) >= 0) transformFile(local, incoming, text => text, true)
-  else removeQuietly(incoming)
+  const before = sizeOf(local) >= 0 ? stampOf(local) : null
+  const incoming = `${local}.chat-sync.${process.pid}.in`
+  removeQuietly(incoming)
+  if (before) transformFile(local, incoming, text => text, true)
   appendLines(copy, localLines, incoming, expand(root, os.homedir()))
+  if ((sizeOf(local) >= 0 ? stampOf(local) : null) !== before) {
+    removeQuietly(incoming)
+    return false
+  }
   fs.renameSync(incoming, local)
+  return true
 }
 
 function run([command, ...args]) {
@@ -288,4 +360,4 @@ function hasGit() {
   return spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0
 }
 
-module.exports = { run, out, bringIn, compare, publish, pull, chatFiles, chatIds }
+module.exports = { run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, isLink }

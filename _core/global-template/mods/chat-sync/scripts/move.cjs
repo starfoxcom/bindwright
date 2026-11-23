@@ -7,7 +7,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
-const { compare, publish, chatFiles, chatIds } = require('./commands.cjs')
+const { compare, publish, chatFiles, chatIds, ensureFolder, isLink } = require('./commands.cjs')
 
 const REPO = /^[\w.-]+\/[\w.-]+$/
 
@@ -28,10 +28,10 @@ function checkPrivate(repo) {
 }
 
 // The clone keeps chat files byte for byte, whatever git's line-end setting is
-// on this computer.
+// on this computer, and checks a committed link out as a plain file.
 function clone(repo, folder) {
   fs.rmSync(folder, { recursive: true, force: true })
-  const args = ['repo', 'clone', repo, folder, '--', '-c', 'core.autocrlf=false']
+  const args = ['repo', 'clone', repo, folder, '--', '-c', 'core.autocrlf=false', '-c', 'core.symlinks=false']
   const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000 })
   return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim()}`
 }
@@ -53,10 +53,12 @@ function copyChats(from, to) {
   for (const project of projectFolders(from)) {
     for (const id of chatIds(path.join(from, project))) {
       const target = path.join(to, project, id)
-      fs.mkdirSync(target, { recursive: true })
+      ensureFolder(path.join(to, project))
+      ensureFolder(target)
       for (const name of chatFiles(path.join(from, project, id))) {
         const source = path.join(from, project, id, name)
         const dest = path.join(target, name)
+        if (isLink(dest)) fs.rmSync(dest)
         const verdict = compare(source, dest)
         if (verdict === 'new' || verdict === 'ahead') fs.copyFileSync(source, dest)
         if (verdict === 'diverged') fs.copyFileSync(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
@@ -118,8 +120,8 @@ function move([kind, where]) {
   const copied = copyChats(base.storeRoot(old), ready.store)
   if (copied.missing.length) return { error: `These chats did not arrive: ${copied.missing.join(', ')}` }
   const store = settleClone(ready.place)
-  const pushed = ready.place.kind === 'git' ? publish(store, `move ${copied.moved} chats in`) : {}
   base.writeJson(placeFile, ready.place)
+  const pushed = ready.place.kind === 'git' ? publish(store, `move ${copied.moved} chats in`) : {}
   return { moved: copied.moved, from: describe(old), to: describe(ready.place), ...pushed }
 }
 

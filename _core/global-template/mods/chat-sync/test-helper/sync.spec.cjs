@@ -222,6 +222,53 @@ test('a chat that changed here but never went out is sent at the next session st
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
 })
 
+test('a copy that went missing from the sync place is sent again, though the chat did not change', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const folder = path.join(store, 'shop', 's1')
+  for (const name of fs.readdirSync(folder)) fs.rmSync(path.join(folder, name))
+  assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent, ['s1'])
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+})
+
+test('a chat deleted on this computer is not brought back', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  b.sync('in', b.chatDir, b.root, 'other')
+  fs.rmSync(path.join(b.chatDir, 's1.jsonl'))
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, [])
+  assert.ok(!fs.existsSync(path.join(b.chatDir, 's1.jsonl')))
+})
+
+test('a chat naming the other computer\'s home as text goes back and forth without splitting', () => {
+  const store = tempDir('store')
+  const laptop = computer('l', store, { root: '/Users/sam/work/shop', home: '/Users/sam' })
+  const desktop = computer('d', store, { root: '/home/sam/work/shop', home: '/home/sam' })
+  writeChat(laptop, 's1', ['ssh desktop cat /home/sam/notes.txt'])
+  laptop.sync('out', path.join(laptop.chatDir, 's1.jsonl'), laptop.root)
+  desktop.sync('in', desktop.chatDir, desktop.root, 'other')
+  writeChat(desktop, 's1', ['ssh desktop cat /home/sam/notes.txt', 'more'])
+  desktop.sync('out', path.join(desktop.chatDir, 's1.jsonl'), desktop.root)
+  const back = laptop.sync('in', laptop.chatDir, laptop.root, 'other')
+  assert.deepStrictEqual([back.imported, back.conflicts], [['s1'], []])
+})
+
+test('a project folder in the sync place that is a link is never written through', () => {
+  const store = tempDir('store')
+  const outside = tempDir('outside')
+  const a = computer('a', store)
+  fs.symlinkSync(outside, path.join(store, 'shop'), 'junction')
+  writeChat(a, 's1', ['one'])
+  assert.match(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).error, /is a link/)
+  assert.deepStrictEqual(fs.readdirSync(outside), [])
+})
+
 test('moving to another folder copies every chat, switches, and keeps the old copy', () => {
   const first = tempDir('first')
   const second = tempDir('second')
