@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/starfoxcom/bindwright/security/advisories/new
+    about: A flaw someone could use to harm a project set up with Bindwright. Only the maintainers see the report.
+  - name: How Bindwright works
+    url: https://starfoxcom.github.io/bindwright/page/
+    about: What setup asks, what it writes and how to install it.
