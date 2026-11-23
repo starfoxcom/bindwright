@@ -2,7 +2,8 @@
 // the setup with the release the head's record names and the base's answers,
 // lists only the changed files equal to that render, and lists nothing, with
 // its reason, when the record names no release, the release is older than the
-// base's, the download fails, or the wheel does not match the helper pin's hash.
+// base's, the download fails, or the wheel does not match the hash the base's
+// helper pin records, which a PR cannot change.
 
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -149,16 +150,21 @@ const CASES = [
     reason: "the downloaded wheel does not match the hash in .bindwright/helper.json",
   },
   {
-    name: "no pin for the recorded release lists nothing",
+    name: "a base with no pin lists nothing",
     basePin: null,
-    reason: `neither side's .bindwright/helper.json records the wheel's hash for Bindwright ${VERSION}`,
+    reason: "the base has no .bindwright/helper.json",
   },
   {
-    name: "a PR that moves the release takes the head's pin",
+    name: "the base's pin wins over the head's",
+    headPin: { version: VERSION, sha256: "0".repeat(64) },
+    listed: [UNEDITED],
+  },
+  {
+    name: "a PR that moves the release lists nothing, whatever its own pin says",
     baseVersion: "0.1.0",
     basePin: { version: "0.1.0", sha256: "0".repeat(64) },
     headPin: "real",
-    listed: [UNEDITED],
+    reason: `the base's .bindwright/helper.json records no wheel hash for Bindwright ${VERSION}`,
   },
 ];
 

@@ -9,10 +9,11 @@ not own. The render uses:
   every setup and update writes, downloaded only from starfoxcom/bindwright's
   release page, so the record can name a published release and nothing else,
   and never one older than the base's record;
-- the wheel's SHA-256 from `.bindwright/helper.json`, the pin the review jobs
-  install the helper from: the base's pin when it names that release, else the
-  head's, since an update PR moves both together. A wheel that does not match
-  is never opened, so a swapped release file cannot run here;
+- the wheel's SHA-256 from the base's `.bindwright/helper.json`, the pin the
+  review jobs install the helper from, so a PR cannot pick the hash. A wheel
+  that does not match is never opened, so a swapped release file cannot run
+  here. A PR that moves the release (an update) lists nothing, since the base
+  pins no hash for it yet; the PRs after it merges list as usual;
 - the base's `.bindwright/project.json` answers and `.bindwright/pristine.json`
   year, so a PR cannot steer what the render fills in.
 
@@ -90,18 +91,14 @@ def recorded_release(record, side):
 
 
 def pinned_hash(base, release):
-    """The wheel's SHA-256 that the base's pin, or else the head's, records for `release`."""
-    for rev in (base, "HEAD"):
-        try:
-            pin = read_json(rev, PIN)
-        except Skip:
-            continue
-        python = pin.get("python")
-        digest = python.get("sha256") if isinstance(python, dict) else None
-        if pin.get("version") == release and isinstance(digest, str) \
-                and re.fullmatch(r"[0-9a-f]{64}", digest):
-            return digest
-    raise Skip("neither side's %s records the wheel's hash for Bindwright %s" % (PIN, release))
+    """The wheel's SHA-256 the base's pin records for `release`; a PR cannot change it."""
+    pin = read_json(base, PIN)
+    python = pin.get("python")
+    digest = python.get("sha256") if isinstance(python, dict) else None
+    if pin.get("version") != release or not isinstance(digest, str) \
+            or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise Skip("the base's %s records no wheel hash for Bindwright %s" % (PIN, release))
+    return digest
 
 
 def verified(data, digest):
