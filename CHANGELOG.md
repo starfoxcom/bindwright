@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The update knows what to do with an owned template the project does not keep.** A project can list a template file in `.bindwright/owned` without keeping it, since another of its files covers the same topic. When that template changed, the update staged its new text but only said to compare it with the project's copy, which does not exist. It now says to find the file that covers the topic and carry the changes there on a yes, or to say they have no home, and to delete the staged copy either way.
+
 ## [v7.15.1] — 2026-11-23
 
 ### Fixed
