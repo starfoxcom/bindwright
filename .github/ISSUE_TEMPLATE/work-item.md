@@ -1,6 +1,6 @@
 ---
-name: Work item
-about: One piece of planned work, with where it stands kept in this body
+name: Planned work (maintainers)
+about: The maintainers' own planning. To report a problem, share an idea or ask something, pick a form above.
 ---
 
 ## What

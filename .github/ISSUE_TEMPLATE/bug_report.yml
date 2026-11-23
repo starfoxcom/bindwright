@@ -1,0 +1,63 @@
+name: Something went wrong
+description: Bindwright or its website did something it should not have, or failed to do what it says
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. If you use Claude Code, the quickest route is to run `/bindwright:report` in the session where it went wrong: it drafts this report from what failed, takes out paths, names, emails and tokens, shows it to you in full and files it only when you say yes.
+
+        A security problem goes in a private report instead, from the link on the previous page, never in a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did and what Bindwright did. A screenshot or the exact message helps.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it happen?
+      description: The steps that lead to it, as short as you can make them. Leave it empty if you are not sure.
+      placeholder: |
+        1. Ran /bindwright:setup in a new project
+        2. Answered "team" to the first question
+        3. Saw ...
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it happen?
+      options:
+        - Claude Code in a terminal
+        - Claude Code desktop app
+        - Claude Code in an editor (VS Code, JetBrains)
+        - The website
+        - A pull request's review checks
+        - Somewhere else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Bindwright version
+      description: Shown by `/plugin` in Claude Code. Leave it empty if you cannot find it.
+      placeholder: "7.14.1"
+  - type: input
+    id: system
+    attributes:
+      label: Your computer
+      description: The operating system, and the Claude Code version if you know it.
+      placeholder: "Windows 11, Claude Code 2.1.330"
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: Any error text or log lines. Take out anything private first, such as tokens, emails or folder names.
+      render: text

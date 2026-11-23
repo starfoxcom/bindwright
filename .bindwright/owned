@@ -1,0 +1,3 @@
+# Files this repo keeps as its own: /bindwright:update leaves them alone.
+# The issue forms are written for people who use Bindwright, not the generic ones setup ships.
+.github/ISSUE_TEMPLATE/
