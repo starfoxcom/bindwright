@@ -1,5 +1,10 @@
 // The chat-sync helper's commands. Every one returns a plain object that
 // sync.cjs prints as JSON.
+//
+// The sync place holds each chat as one file per computer:
+// <project>/<chat id>/<computer id>.jsonl. A computer writes only its own file
+// and reads the others', so no two computers ever write the same file: a git
+// pull never meets a conflict and a sync app never makes a "conflicted copy".
 'use strict'
 
 const fs = require('fs')
@@ -12,6 +17,10 @@ const { syncPlaces } = require('./places.cjs')
 
 const { neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf } = paths
 const CHAT = /^[\w-]+\.jsonl$/
+const ID = /^[\w-]+$/
+const VISIBILITY_FRESH_MS = 60 * 60_000
+const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same time; '
+  + 'this computer copies its chats again at the next turn.'
 
 function chatFiles(folder) {
   try {
@@ -19,6 +28,22 @@ function chatFiles(folder) {
   } catch {
     return []
   }
+}
+
+// The chats a project folder of the sync place holds, by id.
+function chatIds(projectDir) {
+  try {
+    return fs.readdirSync(projectDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && ID.test(entry.name))
+      .map(entry => entry.name)
+  } catch {
+    return []
+  }
+}
+
+// This computer's id as a file name in the sync place.
+function ownName() {
+  return `${base.safeName(base.machineId())}.jsonl`
 }
 
 // How file `mine` stands against file `theirs`.
@@ -29,13 +54,11 @@ function compare(mine, theirs) {
   return 'diverged'
 }
 
-// How this computer's chat `local` stands against the stored copy `stored`,
-// with the line count of each. Both are read in one view: each computer's paths
-// as placeholders, without the form they were written in. The stored copy goes
-// through this computer's paths first, so a path that is this computer's in it
-// reads the same as in the local chat.
+// How this computer's chat `local` stands against another computer's copy
+// `stored`, with the local line count. Both are read as placeholders without
+// the form a path was written in; the stored copy is made this computer's
+// first, so a path that is this computer's in it reads the same as here.
 function compareChat(local, stored, root) {
-  if (sizeOf(stored) < 0) return { verdict: 'new' }
   const home = os.homedir()
   const toPlaceholders = neutralize(root, home)
   const toLocal = expand(root, home)
@@ -45,7 +68,7 @@ function compareChat(local, stored, root) {
     const theirs = path.join(dir, 'theirs')
     transformFile(local, mine, text => formless(toPlaceholders(text)), true)
     transformFile(stored, theirs, text => formless(toPlaceholders(toLocal(text))), true)
-    return { verdict: compare(mine, theirs), localLines: countLines(mine), storedLines: countLines(theirs) }
+    return { verdict: compare(mine, theirs), localLines: countLines(mine) }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -55,15 +78,18 @@ function removeQuietly(file) {
   fs.rmSync(file, { force: true })
 }
 
-function commitAndPush(store, label) {
+// Commits what this computer wrote, brings the clone up to the repo and pushes.
+function publish(store, label) {
   base.git(store, 'add', '-A')
-  if (base.git(store, 'diff', '--cached', '--quiet').ok) return { pushed: false }
-  const commit = base.git(store, 'commit', '-m', `chat-sync: ${label}`)
-  if (!commit.ok) return { pushError: commit.out }
+  if (!base.git(store, 'diff', '--cached', '--quiet').ok) {
+    const commit = base.git(store, 'commit', '-q', '-m', `chat-sync: ${label}`)
+    if (!commit.ok) return { pushError: commit.out }
+  }
   const pulled = pull(store)
   if (pulled.error) return { pushError: pulled.error }
   const branch = pulled.branch || base.git(store, 'symbolic-ref', '--short', 'HEAD').out
-  const push = base.git(store, 'push', 'origin', `HEAD:refs/heads/${branch}`)
+  if (!base.git(store, 'rev-parse', '--verify', '-q', 'HEAD').ok) return { pushed: false }
+  const push = base.git(store, 'push', '-q', 'origin', `HEAD:refs/heads/${branch}`)
   return push.ok ? { pushed: true } : { pushError: push.out }
 }
 
@@ -83,62 +109,21 @@ function remoteBranch(store) {
 }
 
 // Brings the clone up to the repo, naming the branch, so a clone made while the
-// repo was empty catches up too. Every file in the clone can be rebuilt from
-// this computer's chat folder, so changes never committed (a copy cut short, a
-// push refused) are dropped first, and a commit of this computer's that cannot
-// be replayed on top (another computer changed the same chat meanwhile) is
-// dropped too: the next copy out compares the chat against the repo's copy.
+// repo was empty catches up too. Files never committed (a copy cut short) are
+// dropped first: each is this computer's own and is written again from its chat
+// folder. Every commit touches only its own computer's files, so a pull that
+// still fails is reset to the repo's copy, and this computer's next copy out
+// writes its files again.
 function pull(store) {
   dropUncommitted(store)
   const branch = remoteBranch(store)
   if (!branch) return {}
-  const run = base.git(store, 'pull', '--rebase', 'origin', branch)
+  const run = base.git(store, 'pull', '-q', '--rebase', 'origin', branch)
   if (run.ok) return { branch }
   base.git(store, 'rebase', '--abort')
-  const reset = base.git(store, 'reset', '--hard', `origin/${branch}`)
-  if (!reset.ok) return { error: run.out }
-  return { error: CHANGED_MEANWHILE }
+  const reset = base.git(store, 'reset', '--hard', '-q', `origin/${branch}`)
+  return { error: reset.ok ? CHANGED_MEANWHILE : run.out }
 }
-
-const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same time; '
-  + 'this computer copies its chats again at the next turn.'
-
-// Where the chats go now, or a reason nothing can be copied.
-function openStore() {
-  const place = base.readPlace()
-  const store = base.storeRoot(place)
-  if (!store) return { skipped: 'off' }
-  if (place.kind === 'git' && !fs.existsSync(path.join(store, '.git'))) {
-    return { error: 'The chat repo is not cloned here. Run /chat-sync move git <owner/repo> again.' }
-  }
-  return { place, store }
-}
-
-// Copies one chat out to the sync place, unless another computer has it open
-// or holds a newer copy. With `release`, this computer's lock on it ends too.
-function out([transcript, root, release]) {
-  const opened = openStore()
-  if (!opened.store) return opened
-  const { place, store } = opened
-  const isGit = place.kind === 'git'
-  const pulled = isGit ? pull(store) : {}
-  if (pulled.error) return { error: pulled.error }
-  const id = path.basename(transcript, '.jsonl')
-  const me = base.machineId()
-  const dir = path.join(store, base.projectKey(root))
-  const lockFile = path.join(dir, `${id}.lock`)
-  const lock = base.lockOf(lockFile)
-  if (base.isHeldElsewhere(lock, me)) return { held: id, by: lock.machine }
-  const refused = isGit ? privateRepoError(place.repo) : null
-  if (refused) return { pushError: refused }
-  fs.mkdirSync(dir, { recursive: true })
-  const result = placeCopy(transcript, path.join(dir, `${id}.jsonl`), root, { id, me })
-  if (release === 'release') removeQuietly(lockFile)
-  else base.writeJson(lockFile, { machine: me, at: Date.now() })
-  return isGit ? Object.assign(result, commitAndPush(store, `${id} from ${me}`)) : result
-}
-
-const VISIBILITY_FRESH_MS = 60 * 60_000
 
 // The repo is checked again before a push, at most once an hour, in case it was
 // made public since it was chosen.
@@ -152,31 +137,38 @@ function privateRepoError(repo) {
   return refused
 }
 
-// Writes this computer's chat into the store as the verdict says. A copy that
-// is ahead keeps the stored lines as they are and gains only the new ones, so
-// each line stays in the form the computer that wrote it used.
-function placeCopy(transcript, target, root, { id, me }) {
-  const { verdict, storedLines } = compareChat(transcript, target, root)
-  const toPlaceholders = neutralize(root, os.homedir())
-  if (verdict === 'diverged') {
-    const conflicts = path.join(path.dirname(target), 'conflicts')
-    fs.mkdirSync(conflicts, { recursive: true })
-    transformFile(transcript, path.join(conflicts, `${id}.${me}.jsonl`), toPlaceholders, true)
-    return { conflict: id }
+// Where the chats go now, or a reason nothing can be copied. A clone keeps chat
+// files byte for byte on every computer, whatever git's line-end setting is.
+function openStore() {
+  const place = base.readPlace()
+  const store = base.storeRoot(place)
+  if (!store) return { skipped: 'off' }
+  if (place.kind === 'git') {
+    if (!fs.existsSync(path.join(store, '.git'))) {
+      return { error: 'The chat repo is not cloned here. Run /chat-sync move git <owner/repo> again.' }
+    }
+    base.git(store, 'config', 'core.autocrlf', 'false')
   }
-  if (verdict !== 'new' && verdict !== 'ahead') return verdict === 'behind' ? { behind: id } : { same: id }
-  const next = path.join(path.dirname(target), `.${id}.${me}.tmp`)
-  if (verdict === 'new') transformFile(transcript, next, toPlaceholders, true)
-  else {
-    fs.copyFileSync(target, next)
-    appendLines(transcript, storedLines, next, toPlaceholders)
-  }
-  fs.renameSync(next, target)
-  return { copied: id }
+  return { place, store }
 }
 
-// The store copies already looked at, by size and time, so an unchanged one
-// is not read again at the next start.
+// Writes this computer's own copy of one chat. True when it changed.
+function sendChat(transcript, root, projectDir) {
+  const folder = path.join(projectDir, path.basename(transcript, '.jsonl'))
+  fs.mkdirSync(folder, { recursive: true })
+  const own = path.join(folder, ownName())
+  const next = `${own}.tmp`
+  transformFile(transcript, next, neutralize(root, os.homedir()), true)
+  if (compare(next, own) === 'same') {
+    removeQuietly(next)
+    return false
+  }
+  fs.renameSync(next, own)
+  return true
+}
+
+// The chats sent, by size and time, and the other computers' copies already
+// looked at, so an unchanged file is not read again.
 function seenFile() {
   return path.join(base.dataDir(), 'seen.json')
 }
@@ -186,51 +178,92 @@ function stampOf(file) {
   return `${stat.size}:${Math.round(stat.mtimeMs)}`
 }
 
-// Brings each newer chat of this project from the sync place into this
-// computer's chat folder. The chat open in this session is never written.
+// Copies one chat out to the sync place.
+function out([transcript, root]) {
+  const opened = openStore()
+  if (!opened.store) return opened
+  const { place, store } = opened
+  const isGit = place.kind === 'git'
+  const refused = isGit ? privateRepoError(place.repo) : null
+  if (refused) return { pushError: refused }
+  const id = path.basename(transcript, '.jsonl')
+  const key = base.projectKey(root)
+  const isChanged = sendChat(transcript, root, path.join(store, key))
+  const seen = base.readJson(seenFile(), {})
+  seen[`sent:${key}/${id}`] = stampOf(transcript)
+  base.writeJson(seenFile(), seen)
+  const result = isChanged ? { copied: id } : { same: id }
+  return isGit && isChanged ? Object.assign(result, publish(store, `${id} from ${base.machineId()}`)) : result
+}
+
+// Brings each newer chat of this project into this computer's chat folder, then
+// sends every chat of the project that changed here since it last went out (a
+// copy cut short when a session ended goes now). The chat open in this session
+// is never written.
 function bringIn([chatDir, root, openId]) {
   const opened = openStore()
   if (!opened.store) return opened
   const { place, store } = opened
-  const pulled = place.kind === 'git' ? pull(store) : {}
+  const isGit = place.kind === 'git'
+  const pulled = isGit ? pull(store) : {}
   const key = base.projectKey(root)
   const dir = path.join(store, key)
   const seen = base.readJson(seenFile(), {})
-  const result = { imported: [], conflicts: [], behind: [], openElsewhere: [] }
+  const result = { imported: [], conflicts: [], behind: [], sent: [] }
   if (pulled.error) result.error = pulled.error
-  const me = base.machineId()
-  for (const name of chatFiles(dir)) {
-    const id = name.slice(0, -'.jsonl'.length)
-    const lock = base.lockOf(path.join(dir, `${id}.lock`))
-    if (base.isHeldElsewhere(lock, me)) result.openElsewhere.push({ id, by: lock.machine })
-    const theirs = path.join(dir, name)
-    const stamp = stampOf(theirs)
-    if (seen[`${key}/${id}`] === stamp && fs.existsSync(path.join(chatDir, name))) continue
-    const verdict = bringOne(theirs, path.join(chatDir, name), root, id === openId)
-    if (verdict === 'imported') result.imported.push(id)
-    if (verdict === 'conflict') result.conflicts.push(id)
-    if (verdict === 'open') result.behind.push(id)
-    if (verdict !== 'open') seen[`${key}/${id}`] = stamp
+  for (const id of chatIds(dir)) {
+    const answer = bringChat(path.join(dir, id), path.join(chatDir, `${id}.jsonl`), root,
+      { isOpen: id === openId, seen, key: `${key}/${id}` })
+    if (answer.verdict === 'imported') result.imported.push(id)
+    if (answer.verdict === 'open') result.behind.push(id)
+    if (answer.isConflict) result.conflicts.push(id)
+  }
+  const isRefused = isGit && Boolean(privateRepoError(place.repo))
+  for (const name of isRefused ? [] : chatFiles(chatDir)) {
+    const local = path.join(chatDir, name)
+    const sentKey = `sent:${key}/${name.slice(0, -'.jsonl'.length)}`
+    if (seen[sentKey] === stampOf(local)) continue
+    if (sendChat(local, root, dir)) result.sent.push(name.slice(0, -'.jsonl'.length))
+    seen[sentKey] = stampOf(local)
   }
   base.writeJson(seenFile(), seen)
+  if (isGit && !isRefused) Object.assign(result, publish(store, `${result.sent.length} chats from ${base.machineId()}`))
   return result
 }
 
-// Brings one stored chat in. A local chat that is behind keeps its own complete
-// lines and gains only the stored ones it lacks; a last line cut off mid-write
-// is dropped, since the stored copy's next line takes its place.
-function bringOne(theirs, local, root, isOpen) {
+// Brings in the longest other computer's copy of one chat that extends this
+// computer's chat. A copy that both changed is left where it is, in the sync
+// place, and this computer's chat is kept.
+function bringChat(storeChat, local, root, { isOpen, seen, key }) {
+  const own = ownName()
+  const copies = chatFiles(storeChat).filter(name => name !== own).map(name => path.join(storeChat, name))
   const hasLocal = sizeOf(local) >= 0
-  const { verdict, localLines } = hasLocal ? compareChat(local, theirs, root) : { verdict: 'behind', localLines: 0 }
-  if (verdict === 'same' || verdict === 'ahead') return 'kept'
-  if (verdict === 'diverged') return 'conflict'
-  if (isOpen) return 'open'
+  const isUnchanged = copies.every(copy => seen[`${key}/${path.basename(copy)}`] === stampOf(copy))
+  if (hasLocal && isUnchanged) return { verdict: 'kept' }
+  copies.sort((a, b) => sizeOf(b) - sizeOf(a))
+  let answer = { verdict: 'kept', isConflict: false }
+  for (const copy of copies) {
+    const { verdict, localLines } = hasLocal ? compareChat(local, copy, root) : { verdict: 'behind', localLines: 0 }
+    if (verdict === 'diverged') answer.isConflict = true
+    if (verdict !== 'behind') continue
+    if (isOpen) return { verdict: 'open', isConflict: answer.isConflict }
+    importCopy(copy, local, root, localLines)
+    answer = { ...answer, verdict: 'imported' }
+    break
+  }
+  for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
+  return answer
+}
+
+// Writes the local chat as its own complete lines plus the copy's lines after
+// them; a last line cut off mid-write is dropped, since the copy's next line
+// takes its place.
+function importCopy(copy, local, root, localLines) {
   const incoming = `${local}.chat-sync.in`
-  if (hasLocal) transformFile(local, incoming, text => text, true)
+  if (sizeOf(local) >= 0) transformFile(local, incoming, text => text, true)
   else removeQuietly(incoming)
-  appendLines(theirs, localLines, incoming, expand(root, os.homedir()))
+  appendLines(copy, localLines, incoming, expand(root, os.homedir()))
   fs.renameSync(incoming, local)
-  return 'imported'
 }
 
 function run([command, ...args]) {
@@ -247,7 +280,7 @@ function status([root]) {
   const place = base.readPlace()
   const store = base.storeRoot(place)
   const key = root ? base.projectKey(root) : null
-  const chats = store && key ? chatFiles(path.join(store, key)).length : 0
+  const chats = store && key ? chatIds(path.join(store, key)).length : 0
   return { place, machine: base.machineId(), project: key, chats, git: hasGit() }
 }
 
@@ -255,4 +288,4 @@ function hasGit() {
   return spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0
 }
 
-module.exports = { run, out, bringIn, compare, commitAndPush, pull, chatFiles }
+module.exports = { run, out, bringIn, compare, publish, pull, chatFiles, chatIds }

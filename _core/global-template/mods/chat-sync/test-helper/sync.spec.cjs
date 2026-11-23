@@ -16,10 +16,17 @@ function tempDir(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `chat-sync-${name}-`))
 }
 
+function gitConfig(text) {
+  const file = path.join(tempDir('gitconfig'), 'config')
+  fs.writeFileSync(file, text)
+  return file
+}
+
 // Git that reads none of this computer's own settings or hooks.
+// It changes line ends on checkout, as git on Windows does by default.
 const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: '1',
-  GIT_CONFIG_GLOBAL: path.join(tempDir('gitconfig'), 'config'),
+  GIT_CONFIG_GLOBAL: gitConfig('[core]\n\tautocrlf = true\n'),
   GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
   GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com',
 }
@@ -109,25 +116,43 @@ test('only this computer\'s own folders are swapped, never a longer path or name
   assert.strictEqual(rootHome('"/etc/hosts"'), '"/etc/hosts"', 'a home of / is never swapped')
 })
 
-test('a Windows chat continued on Linux comes back to Windows whole, with no copy left in conflicts', () => {
+test('a network path is swapped like a drive path', () => {
+  const out = neutralize('\\\\server\\share\\app', 'C:\\Users\\al')
+  const line = JSON.stringify({ cwd: '\\\\server\\share\\app\\x' })
+  assert.strictEqual(out(line), '{"cwd":"__CHATSYNC_PROJECT_E1__\\\\x"}')
+})
+
+test('a Windows chat continued on Linux comes back to Windows whole, and both sides then read the same', () => {
   const store = tempDir('store')
   const win = computer('w', store, { root: 'C:\\Users\\al\\work\\shop', home: 'C:\\Users\\al' })
   const linux = computer('l', store, { root: '/home/sam/work/shop', home: '/home/sam' })
   writeChat(win, 's1', ['one', 'two'])
-  win.sync('out', path.join(win.chatDir, 's1.jsonl'), win.root, 'release')
-  const stored = path.join(store, 'shop', 's1.jsonl')
-  const before = fs.readFileSync(stored, 'utf8')
+  win.sync('out', path.join(win.chatDir, 's1.jsonl'), win.root)
   assert.deepStrictEqual(linux.sync('in', linux.chatDir, linux.root, 'other').imported, ['s1'])
-  assert.deepStrictEqual(linux.sync('out', path.join(linux.chatDir, 's1.jsonl'), linux.root), { same: 's1' })
   writeChat(linux, 's1', ['one', 'two', 'three'])
-  const release = [path.join(linux.chatDir, 's1.jsonl'), linux.root, 'release']
-  assert.deepStrictEqual(linux.sync('out', ...release), { copied: 's1' })
-  assert.ok(fs.readFileSync(stored, 'utf8').startsWith(before), 'the Windows lines stay as Windows wrote them')
-  assert.ok(!fs.existsSync(path.join(store, 'shop', 'conflicts')))
-  assert.deepStrictEqual(win.sync('in', win.chatDir, win.root, 'other').imported, ['s1'])
-  const back = readChat(win, 's1')
-  assert.deepStrictEqual(back.map(r => r.cwd.replace(/\//g, '\\')), [win.root, win.root, win.root])
-  assert.deepStrictEqual(win.sync('out', path.join(win.chatDir, 's1.jsonl'), win.root), { same: 's1' })
+  assert.deepStrictEqual(linux.sync('out', path.join(linux.chatDir, 's1.jsonl'), linux.root), { copied: 's1' })
+  const back = win.sync('in', win.chatDir, win.root, 'other')
+  assert.deepStrictEqual([back.imported, back.conflicts], [['s1'], []])
+  assert.deepStrictEqual(readChat(win, 's1').map(r => r.cwd.replace(/\//g, '\\')), [win.root, win.root, win.root])
+  for (const pc of [win, linux]) {
+    const again = pc.sync('in', pc.chatDir, pc.root, 'other')
+    assert.deepStrictEqual([again.imported, again.conflicts], [[], []], `${pc.root} reads the same`)
+  }
+})
+
+test('a chat that quotes the placeholders keeps them as text and reads the same on both computers', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  const quoted = 'x__CHATSYNC_HOME_F__ and conflicts/__CHATSYNC_PROJECT_F__s'
+  writeChat(a, 's1', [quoted])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  b.sync('in', b.chatDir, b.root, 'other')
+  assert.strictEqual(readChat(b, 's1')[0].message.content, `${quoted} in ${b.root}`)
+  writeChat(b, 's1', [quoted, 'more'])
+  b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root)
+  const back = a.sync('in', a.chatDir, a.root, 'other')
+  assert.deepStrictEqual([back.imported, back.conflicts], [['s1'], []])
 })
 
 test('a chat copied out on one computer resumes on another with that computer\'s project folder', () => {
@@ -172,16 +197,29 @@ test('the chat open in this session is never written, only reported as behind', 
   assert.strictEqual(readChat(b, 's1').length, 1)
 })
 
-test('a chat another computer is writing to is not copied over', () => {
+test('two computers writing one chat each keep their own copy, and neither is written over', () => {
   const store = tempDir('store')
   const a = computer('a', store)
   const b = computer('b', store)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  writeChat(b, 's1', ['one', 'other'])
-  const answer = b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root)
-  assert.strictEqual(answer.held, 's1')
-  assert.ok(b.sync('in', b.chatDir, b.root, 'x').openElsewhere.some(open => open.id === 's1'))
+  writeChat(b, 's1', ['one', 'from b'])
+  assert.deepStrictEqual(b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root), { copied: 's1' })
+  writeChat(a, 's1', ['one', 'from a'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.strictEqual(fs.readdirSync(path.join(store, 'shop', 's1')).length, 2)
+  assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').conflicts, ['s1'])
+  assert.strictEqual(readChat(a, 's1')[1].message.content, `from a in ${a.root}`)
+})
+
+test('a chat that changed here but never went out is sent at the next session start', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent, ['s1'])
+  assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent, [], 'sent once')
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
 })
 
 test('moving to another folder copies every chat, switches, and keeps the old copy', () => {
@@ -194,10 +232,10 @@ test('moving to another folder copies every chat, switches, and keeps the old co
   a.sync('out', path.join(a.chatDir, 's2.jsonl'), a.root)
   const moved = a.sync('move', 'folder', second)
   assert.strictEqual(moved.moved, 2)
-  assert.deepStrictEqual(fs.readdirSync(path.join(second, 'shop')).filter(n => n.endsWith('.jsonl')).sort(),
-    ['s1.jsonl', 's2.jsonl'])
-  assert.ok(fs.existsSync(path.join(first, 'shop', 's1.jsonl')), 'old copy kept')
+  assert.deepStrictEqual(fs.readdirSync(path.join(second, 'shop')).sort(), ['s1', 's2'])
+  assert.ok(fs.existsSync(path.join(first, 'shop', 's1')), 'old copy kept')
   assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(second))
+  assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent, [], 'nothing to send again')
 })
 
 test('a project keeps one name across computers from its git remote, in https and ssh form alike', () => {
@@ -210,42 +248,40 @@ test('a project keeps one name across computers from its git remote, in https an
   assert.deepStrictEqual(keys, ['github.com-acme-shop', 'github.com-acme-shop'])
 })
 
-test('through a git repo, a closed chat is free elsewhere at once, and both copies of a split chat are pushed', () => {
+test('through a git repo that changes line ends, a chat goes back and forth between two computers', () => {
   const origin = bareRepo()
   const a = gitComputer('a', origin)
   const b = gitComputer('b', origin)
   writeChat(a, 's1', ['one'])
-  const first = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  assert.strictEqual(first.pushed, true, 'first push to an empty repo')
+  assert.strictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushed, true, 'first push')
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
-  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
   writeChat(b, 's1', ['one', 'two from b'])
-  const fromB = b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root, 'release')
-  assert.deepStrictEqual([fromB.copied, fromB.pushed], ['s1', true], 'not held by the closed chat')
-  writeChat(a, 's1', ['one', 'two from a'])
-  const fromA = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  assert.deepStrictEqual([fromA.conflict, fromA.pushed], ['s1', true], 'compared against the newer repo')
-  const tree = ['--git-dir', origin, 'ls-tree', '-r', '--name-only', 'main']
-  const listed = execFileSync('git', tree, { encoding: 'utf8' })
-  assert.ok(listed.includes(`shop/conflicts/s1.`), 'the conflict copy reached the repo')
-  assert.ok(!b.sync('in', b.chatDir, b.root, 'other').error, 'the other clone still pulls')
+  const fromB = b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root)
+  assert.deepStrictEqual([fromB.copied, fromB.pushed], ['s1', true])
+  const atA = a.sync('in', a.chatDir, a.root, 'other')
+  assert.deepStrictEqual([atA.imported, atA.conflicts, atA.error], [['s1'], [], undefined])
+  writeChat(a, 's1', ['one', 'two from b', 'three from a'])
+  assert.strictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushed, true)
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+  assert.strictEqual(readChat(b, 's1').length, 3)
 })
 
-test('a copy left uncommitted in the clone never reaches the repo as a merge of two chats', () => {
+test('a copy left half written in the clone is written again whole', () => {
   const origin = bareRepo()
   const a = gitComputer('a', origin)
   const b = gitComputer('b', origin)
   writeChat(a, 's1', ['one'])
-  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const folder = path.join(a.dataDir, 'repo', 'shop', 's1')
+  fs.appendFileSync(path.join(folder, fs.readdirSync(folder)[0]), '{"cut":')
   b.sync('in', b.chatDir, b.root, 'other')
-  writeChat(b, 's1', ['one', 'two from b'])
-  b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root, 'release')
-  fs.appendFileSync(path.join(a.dataDir, 'repo', 'shop', 's1.jsonl'), '{"cut":"short"}\n')
-  writeChat(a, 's1', ['one', 'two from a'])
-  const fromA = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
-  assert.deepStrictEqual([fromA.conflict, fromA.pushed], ['s1', true])
-  const stored = execFileSync('git', ['--git-dir', origin, 'show', 'main:shop/s1.jsonl'], { encoding: 'utf8' })
-  assert.ok(!stored.includes('<<<<<<<') && !stored.includes('cut'), 'the repo keeps the clean copy')
+  writeChat(a, 's1', ['one', 'two'])
+  assert.strictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushed, true)
+  const tree = execFileSync('git', ['--git-dir', origin, 'ls-tree', '-r', '--name-only', 'main'], { encoding: 'utf8' })
+  for (const file of tree.trim().split('\n')) {
+    const text = execFileSync('git', ['--git-dir', origin, 'show', `main:${file}`], { encoding: 'utf8' })
+    assert.ok(!text.includes('cut'), `${file} holds whole lines only`)
+  }
 })
 
 test('a chat cut off mid-line here takes the newer copy\'s lines whole', () => {
@@ -253,11 +289,11 @@ test('a chat cut off mid-line here takes the newer copy\'s lines whole', () => {
   const a = computer('a', store)
   const b = computer('b', store)
   writeChat(a, 's1', ['one'])
-  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   b.sync('in', b.chatDir, b.root, 'other')
   fs.appendFileSync(path.join(b.chatDir, 's1.jsonl'), '{"cut":')
   writeChat(a, 's1', ['one', 'two'])
-  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root, 'release')
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
   assert.deepStrictEqual(readChat(b, 's1').map(r => r.message.content), [`one in ${b.root}`, `two in ${b.root}`])
 })

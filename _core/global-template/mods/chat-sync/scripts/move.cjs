@@ -7,7 +7,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
-const { compare, commitAndPush, chatFiles } = require('./commands.cjs')
+const { compare, publish, chatFiles, chatIds } = require('./commands.cjs')
 
 const REPO = /^[\w.-]+\/[\w.-]+$/
 
@@ -27,9 +27,12 @@ function checkPrivate(repo) {
   return `${repo} is ${visibility.toLowerCase() || 'not confirmed private'}, and chats go only to a private repo.`
 }
 
+// The clone keeps chat files byte for byte, whatever git's line-end setting is
+// on this computer.
 function clone(repo, folder) {
   fs.rmSync(folder, { recursive: true, force: true })
-  const run = spawnSync('gh', ['repo', 'clone', repo, folder], { encoding: 'utf8', timeout: 120_000 })
+  const args = ['repo', 'clone', repo, folder, '--', '-c', 'core.autocrlf=false']
+  const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000 })
   return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim()}`
 }
 
@@ -41,31 +44,28 @@ function projectFolders(store) {
     .map(entry => entry.name)
 }
 
-// Copies each chat into `to`. Where `to` already holds that chat, the newer
-// copy wins, and two copies that both changed are both kept.
+// Copies every computer's copy of each chat into `to`. Where `to` already holds
+// that copy, the newer one wins, and two that both changed are both kept, the
+// one moved in beside the other as `<computer>.moved`.
 function copyChats(from, to) {
   let moved = 0
   const missing = []
   for (const project of projectFolders(from)) {
-    const target = path.join(to, project)
-    fs.mkdirSync(target, { recursive: true })
-    for (const name of chatFiles(path.join(from, project))) {
-      const source = path.join(from, project, name)
-      const dest = path.join(target, name)
-      const verdict = compare(source, dest)
-      if (verdict === 'new' || verdict === 'ahead') fs.copyFileSync(source, dest)
-      if (verdict === 'diverged') keepBoth(source, target, name)
-      if (!fs.existsSync(dest)) missing.push(`${project}/${name}`)
+    for (const id of chatIds(path.join(from, project))) {
+      const target = path.join(to, project, id)
+      fs.mkdirSync(target, { recursive: true })
+      for (const name of chatFiles(path.join(from, project, id))) {
+        const source = path.join(from, project, id, name)
+        const dest = path.join(target, name)
+        const verdict = compare(source, dest)
+        if (verdict === 'new' || verdict === 'ahead') fs.copyFileSync(source, dest)
+        if (verdict === 'diverged') fs.copyFileSync(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
+        if (!fs.existsSync(dest)) missing.push(`${project}/${id}/${name}`)
+      }
       moved += 1
     }
   }
   return { moved, missing }
-}
-
-function keepBoth(source, target, name) {
-  const conflicts = path.join(target, 'conflicts')
-  fs.mkdirSync(conflicts, { recursive: true })
-  fs.copyFileSync(source, path.join(conflicts, name.replace(/\.jsonl$/, '.moved.jsonl')))
 }
 
 // The new place and the folder chats are copied into, or a reason to stop.
@@ -118,7 +118,7 @@ function move([kind, where]) {
   const copied = copyChats(base.storeRoot(old), ready.store)
   if (copied.missing.length) return { error: `These chats did not arrive: ${copied.missing.join(', ')}` }
   const store = settleClone(ready.place)
-  const pushed = ready.place.kind === 'git' ? commitAndPush(store, `move ${copied.moved} chats in`) : {}
+  const pushed = ready.place.kind === 'git' ? publish(store, `move ${copied.moved} chats in`) : {}
   base.writeJson(placeFile, ready.place)
   return { moved: copied.moved, from: describe(old), to: describe(ready.place), ...pushed }
 }

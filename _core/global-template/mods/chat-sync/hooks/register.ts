@@ -27,8 +27,8 @@ type Answer = Record<string, unknown> & { error?: string }
 
 let lastOutAt = 0
 let isOutQueued = false
-// Set by the session's end, so a copy queued after the last turn does not write
-// the lock back once the end has released it; the next turn clears it.
+// Set by the session's end, so a copy queued after the last turn does not run
+// once the end has sent the chat; the next turn clears it.
 let hasEnded = false
 
 async function runSync($: EngineInterface, args: string[], timeoutMs = 120_000): Promise<Answer> {
@@ -65,7 +65,10 @@ function bringInNote(answer: Answer): string | undefined {
   const imported = countOf(answer.imported)
   const conflicts = countOf(answer.conflicts)
   if (imported) parts.push(`${plural(imported, 'newer chat')} from your other computer, ready in /resume`)
-  if (conflicts) parts.push(`${plural(conflicts, 'chat')} changed on both computers, so this computer's copy was kept`)
+  if (conflicts) {
+    parts.push(`${plural(conflicts, 'chat')} changed on both computers, so this computer's copy was kept `
+      + 'and the other stays in the sync place')
+  }
   if (countOf(answer.behind)) {
     parts.push('this chat has newer messages on your other computer: start a new session in this project, '
       + 'then /resume this chat to load them')
@@ -84,11 +87,6 @@ async function bringIn($: EngineInterface): Promise<void> {
 }
 
 function outNote(answer: Answer): string | undefined {
-  if (answer.held) {
-    return `Chat sync: this chat is open on ${String(answer.by)}, so this computer's messages stay here `
-      + 'until it closes there.'
-  }
-  if (answer.conflict) return 'Chat sync: this chat changed on both computers; this copy was saved beside the other.'
   if (answer.pushError) return `Chat sync: could not push the chat repo: ${String(answer.pushError).slice(0, 200)}`
   if (answer.error) return `Chat sync: could not copy this chat out: ${answer.error.slice(0, 200)}`
   return undefined
@@ -97,11 +95,19 @@ function outNote(answer: Answer): string | undefined {
 async function copyOut($: EngineInterface, isEnding: boolean): Promise<void> {
   const here = await where($)
   if (!here) return
-  const args = ['out', here.transcript, here.root, ...(isEnding ? ['release'] : [])]
-  const answer = await runSync($, args, isEnding ? END_TIMEOUT_MS : 120_000)
+  const answer = await runSync($, ['out', here.transcript, here.root], isEnding ? END_TIMEOUT_MS : 120_000)
   lastOutAt = Date.now()
   const note = outNote(answer)
   if (note) $.ui.toast(note)
+}
+
+// The command's first two words, then the rest as one argument, so a folder
+// path keeps its spaces (My Drive, OneDrive - Company); one pair of quotes
+// around it is dropped.
+function moveArgs(text: string): string[] {
+  const match = /^\s*(\S*)\s*(\S*)\s*(.*?)\s*$/s.exec(text)
+  const [, word = '', kind = '', rest = ''] = match ?? []
+  return [word, kind, rest.replace(/^(["'])(.*)\1$/s, '$2')]
 }
 
 function commandText(answer: Answer): string {
@@ -138,10 +144,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: COMMAND }, async ($, e) => {
-    const [word, ...rest] = e.args.trim().split(/\s+/).filter(Boolean)
+    const [word = '', kind = '', where = ''] = moveArgs(e.args)
     if (word === 'status') return { text: commandText(await runSync($, ['status', await $.session.root()])) }
     if (word === 'places') return { text: commandText(await runSync($, ['places'])) }
-    if (word === 'move') return { text: commandText(await runSync($, ['move', ...rest], 300_000)) }
+    if (word === 'move') return { text: commandText(await runSync($, ['move', kind, where], 300_000)) }
     return { text: HELP }
   })
 }

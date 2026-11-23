@@ -42,7 +42,7 @@ async function endTurn($: Engine): Promise<void> {
 }
 
 test('a session start brings newer chats in, and says how to load the open chat when it is behind', async ($, on) => {
-  const seen = world(on, { in: { imported: ['other'], conflicts: [], behind: ['sess-1'], openElsewhere: [] } })
+  const seen = world(on, { in: { imported: ['other'], conflicts: [], behind: ['sess-1'], sent: [] } })
   await start($)
 
   expect(seen.runs).toEqual([['in', CHATS, ROOT, 'sess-1']])
@@ -69,21 +69,29 @@ test('turns copy the chat out at most once a minute, and a copy that fails says 
   expect(outs()).toHaveLength(2)
 })
 
-test('the session end copies the chat out and releases its lock', async ($, on) => {
+test('the session end copies the chat out', async ($, on) => {
   const seen = world(on, { out: { same: 'sess-1' } })
   await start($)
   await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
 
-  expect(seen.runs.at(-1)).toEqual(['out', TRANSCRIPT, ROOT, 'release'])
+  expect(seen.runs.at(-1)).toEqual(['out', TRANSCRIPT, ROOT])
   expect(seen.toasts).toEqual([])
 })
 
-test('a copy queued by the last turn does not run after the session end released the chat', async ($, on) => {
+test('a copy queued by the last turn does not run after the session end sent the chat', async ($, on) => {
   const seen = world(on, { out: { same: 'sess-1' } })
   await start($)
   await endTurn($)
   await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
   await seen.clock.advance(MINUTE)
 
-  expect(seen.runs.filter(args => args[0] === 'out')).toEqual([['out', TRANSCRIPT, ROOT, 'release']])
+  expect(seen.runs.filter(args => args[0] === 'out')).toEqual([['out', TRANSCRIPT, ROOT]])
+})
+
+test('a folder path with spaces reaches the helper whole', async ($, on) => {
+  const seen = world(on, { move: { moved: 0 } })
+  await start($)
+  await $.command.run({ command: 'chat-sync', args: 'move folder "C:/Users/al/My Drive/Claude chats"' } as never)
+
+  expect(seen.runs.at(-1)).toEqual(['move', 'folder', 'C:/Users/al/My Drive/Claude chats'])
 })

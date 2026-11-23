@@ -13,13 +13,15 @@ const NAMES = { project: 'PROJECT', home: 'HOME' }
 // Separator of each form as it appears in the file: "/", "\\" (escaped once), "\\\\" (twice).
 const FORMS = { F: '/', E1: '\\\\', E2: '\\\\\\\\' }
 
+// A drive path (C:\work) or a network one (\\server\share, \\wsl$\Ubuntu).
 function isWindowsPath(text) {
-  return /^[A-Za-z]:[\\/]/.test(text)
+  return /^([A-Za-z]:[\\/]|\\\\[^\\])/.test(text)
 }
 
 function segments(folder) {
   const trimmed = folder.replace(/[\\/]+$/, '')
-  return isWindowsPath(folder) ? trimmed.split(/[\\/]+/) : trimmed.split('/')
+  // One part per separator, so a network path keeps its two leading ones.
+  return isWindowsPath(folder) ? trimmed.split(/[\\/]/) : trimmed.split('/')
 }
 
 function token(name, form) {
@@ -81,15 +83,21 @@ function applyRules(text, rules) {
   return rules.reduce((out, rule) => out.replace(rule.pattern, () => rule.value), text)
 }
 
+// Text in a chat that already reads like a placeholder (a chat about this mod)
+// is escaped on the way out and restored on the way in, so it never becomes a
+// path on the other computer.
+const LITERAL = /__CHATSYNC_/g
+const ESCAPED = /__CHATSYNC_LIT_/g
+
 // The project folder goes first, since it usually sits inside the home folder.
 function neutralize(root, home) {
   const rules = [...outRules('project', root), ...outRules('home', home)]
-  return text => applyRules(text, rules)
+  return text => applyRules(text.replace(LITERAL, '__CHATSYNC_LIT_'), rules)
 }
 
 function expand(root, home) {
   const rules = [...inRules('project', root), ...inRules('home', home)]
-  return text => applyRules(text, rules)
+  return text => applyRules(text, rules).replace(ESCAPED, '__CHATSYNC_')
 }
 
 // Writes `src` through `change`, line by line, to `dst`. With `completeOnly`, a

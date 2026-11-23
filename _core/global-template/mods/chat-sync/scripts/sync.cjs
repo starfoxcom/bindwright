@@ -3,7 +3,7 @@
 // across computers or a clone of a private git repo. On the way out each
 // computer's project folder and home folder become placeholders; on the way in
 // the other computer's paths become this one's.
-//   node sync.cjs out <transcript> <projectRoot> [release]
+//   node sync.cjs out <transcript> <projectRoot>
 //   node sync.cjs in <chatDir> <projectRoot> [<openSessionId>]
 //   node sync.cjs move folder <path> | move git <owner/repo> | move off
 //   node sync.cjs places
@@ -16,8 +16,6 @@ const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
 
-// A lock older than this belongs to a chat nobody has written to lately.
-const LOCK_FRESH_MS = 10 * 60 * 1000
 const GIT_TIMEOUT_MS = 60_000
 
 function configDir() {
@@ -85,17 +83,8 @@ function safeName(text) {
   return text.trim().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+|-+$/g, '') || 'project'
 }
 
-function lockOf(file) {
-  return readJson(file, null)
-}
-
-function isHeldElsewhere(lock, me) {
-  return Boolean(lock && lock.machine !== me && Date.now() - lock.at < LOCK_FRESH_MS)
-}
-
 module.exports = {
-  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, git,
-  projectKey, safeName, lockOf, isHeldElsewhere, LOCK_FRESH_MS,
+  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, git, projectKey, safeName,
 }
 
 if (require.main === module) {
