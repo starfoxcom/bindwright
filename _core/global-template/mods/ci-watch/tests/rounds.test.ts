@@ -35,11 +35,30 @@ test('a round that passed but did not merge counts red once another head follows
 
 // Red, red, passed, red: the streak jumps from 0 to 4 and steps over the 3rd, which still owes its step back.
 test('a streak that jumps past a research step still asks for it', () => {
-  const step = (results: boolean[]) => crossedResearch(of(results.slice(0, -1)), of(results))
+  const step = (results: boolean[]) =>
+    crossedResearch(of(results.slice(0, -1)), `c${results.length - 1}`, of(results))
   expect(step([true, true, false, true])).toBe(true)
   expect(step([true, true, true])).toBe(true)
   expect(step([true, true, true, true])).toBe(false)
   expect(step([true, true])).toBe(false)
+  // The same head recorded again, by a second session or after a restart, still owes the step it crossed.
+  const three = of([true, true, true])
+  expect(crossedResearch(three, 'c2', recordRound(three, 'c2', true))).toBe(true)
+})
+
+// Red, red, passed, then a red push: the count jumps to 4, and the wake both asks for the research and holds edits.
+test('a jumped streak latches the step back and its wake asks for the research', async ($, on) => {
+  const { seen, clock } = world(on)
+  on('tool.call', { tool: 'Edit' }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  seed(seen, [RED, RED, 'SUCCESS'])
+  seen.bucket = 'fail'
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let i = 0; i < 6; i++) await clock.advance(30_000)
+  expect(seen.prompts).toHaveLength(1)
+  expect(seen.prompts[0]).toContain('has had 4 fix rounds in a row')
+  expect(seen.prompts[0]).toContain('look up at least five different ways the community')
+  expect(await $.tool.call(editInput as never)).toHaveProperty('deny')
 })
 
 // A re-run of a head already counted replaces its round; the list keeps the newest fifty.

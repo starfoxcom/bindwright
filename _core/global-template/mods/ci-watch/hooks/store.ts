@@ -59,7 +59,7 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
     const key = `${w.repo}#${w.number}`
     const counted = (pr?: PrRounds) => {
       const next = recordRound(pr, w.headSha, red)
-      if (red && crossedResearch(pr, next)) stepBacks.set(key, SOURCES_NEEDED)
+      if (red && crossedResearch(pr, w.headSha, next)) stepBacks.set(key, SOURCES_NEEDED)
       return next
     }
     await updateRounds($, key, counted).catch(() => stepBacks.delete(key))

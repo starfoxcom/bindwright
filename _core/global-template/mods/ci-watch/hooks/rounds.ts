@@ -46,10 +46,15 @@ export const ROUNDS_FILE = 'rounds.json'
 /** Whether a red streak this long calls for the research step: at 3, 5, then every round from 6. */
 export const isResearchDue = (red: number) => red === 3 || red >= 5
 
-/** Whether recording a round crossed a research step. A round that passed turns red once another head
- * follows it, so the streak can jump (0 to 4) and step over the 3rd without landing on it. */
-export function crossedResearch(before: PrRounds | undefined, after: PrRounds): boolean {
-  for (let red = redStreak(before) + 1; red <= redStreak(after); red++) if (isResearchDue(red)) return true
+/** Whether recording the round of head `sha` crossed a research step. A round that passed turns red once
+ * another head follows it, so the streak can jump (0 to 4) and step over the 3rd without landing on it.
+ * The rounds before are read without `sha`, so a head recorded again (a re-read, a second session) crosses
+ * the same step again. */
+export function crossedResearch(before: PrRounds | undefined, sha: string, after: PrRounds): boolean {
+  const others = (Array.isArray(before?.rounds) ? before.rounds : []).filter(r => r.sha !== sha)
+  for (let red = redStreak({ rounds: others }) + 1; red <= redStreak(after); red++) {
+    if (isResearchDue(red)) return true
+  }
   return false
 }
 
