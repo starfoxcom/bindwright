@@ -25,6 +25,8 @@ Standard library, Python 3.8+.
     python engine/home.py plugin-auto-update on|off [--repo OWNER/NAME]   (the wrights marketplace's auto-update)
     python engine/home.py project-mods ROOT   (the per-project mods turned off in a repo)
     python engine/home.py project-mod ROOT NAME on|off
+    python engine/home.py skill-contracts ROOT [accept|decline]
+        (checks a project's skill-check contracts, or accepts or declines the built ones)
     python engine/home.py helper-install PLUGIN
         (installs the plugin's pinned helper under the install lock: ready, busy or error)
 
@@ -59,6 +61,7 @@ from apply import _is_link
 from helper_install import helper_install
 from home_files import HomeError, _atomic_write, _claude, _is_str_list, _json_field, _style_fingerprint
 from mod_update import _check_mod_folder, _mod_target, _save_record, _shipped_hashes, mod_status, update_mod
+from skill_contracts import skill_contracts
 
 # Its front-matter reader names an output style here too, so both find the same style.
 _REPLY_STYLE_HOOK = os.path.join(
@@ -843,6 +846,7 @@ NAMED_COMMANDS = {
     "remove-style": remove_style,
     "set-language": set_language,
     "helper-install": helper_install,
+    "project-mods": lambda home, root: project_mods(root),
 }
 
 
@@ -869,10 +873,10 @@ def run(argv):
         return update_mod(home, one, adopt)
     if cmd in NAMED_COMMANDS and one:
         return NAMED_COMMANDS[cmd](home, one)
-    if cmd == "project-mods" and one:
-        return project_mods(one)
     if cmd == "project-mod" and len(args) == 3:
         return set_project_mod(*args)
+    if cmd == "skill-contracts" and 1 <= len(args) <= 2:
+        return skill_contracts(home, *args)
     raise HomeError("Usage: see the top of engine/home.py")
 
 

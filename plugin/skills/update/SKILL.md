@@ -90,10 +90,10 @@ Then bring the installed mods current, since setup copies each mod into `~/.clau
 
 ## 6. Skill contracts
 
-When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, build this project's contracts from the example file the way setup's "Mods in this project" says, and compare them with this repo folder's key in `~/.claude/skill-contracts.json`. The key's own steps are every entry but `"_offered"`, which holds the template's steps a no turned down; skill-check never reads it, since it looks a contract up by skill name. Keep every other key in the file, and settle this one by the first case that holds:
+When the skill-check mod is installed and `python "<helper>/engine/home.py" project-mods <repo root>` does not list it as off here, run `python "<helper>/engine/home.py" skill-contracts <repo root>`. It builds this project's contracts from the template's example file and the answers in `.bindwright/project.json`, compares them with this repo folder's key in `skill-contracts.json`, and prints the `file`, the `key`, the new `steps`, the key's `current` steps (`null` when it has none) and a `case`. The key's `"_offered"` entry holds the template's steps a no turned down; skill-check never reads it, since it looks a contract up by skill name.
 
-- The new steps equal the key's own steps, or its `_offered`: leave the key as it is.
-- Otherwise, the key missing included: show what changes and ask. On a yes, write the new steps as the key, without `_offered`. On a no, keep the key's own steps and save the new ones under its `_offered`, creating the key with only that entry when it is missing, so later runs ask again only once the template's steps change.
+- `same` or `declined`: leave the key as it is.
+- `missing` or `differs`: show what changes between `current` and `steps`, and ask. On a yes, run the same command with `accept`, which writes the new steps as the key. On a no, run it with `decline`, which keeps the key's own steps and saves the new ones under its `_offered`, so later runs ask again only once the template's steps change. Both keep every other key in the file.
 
 ## 7. Review counts
 

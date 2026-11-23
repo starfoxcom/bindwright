@@ -52,6 +52,9 @@ test("the helper binds what the repo's engine binds, and the plugin ships no cod
       const packed = join(helper, "_core", "global-template", "output-styles", name);
       assert.ok(existsSync(packed), `the helper lacks output-styles/${name}`);
     }
+    // home.py imports its modules from the helper's engine folder: one left out breaks every command.
+    const listed = run(python, [join(helper, "engine", "home.py"), "list-hooks", "--home", root]);
+    assert.equal(listed.status, 0, listed.stderr || listed.stdout);
 
     // Every path a skill names, in the plugin or the helper, is in that pack.
     for (const name of readdirSync(join(out, "skills"))) {

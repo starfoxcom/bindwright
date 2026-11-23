@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The skill contracts step runs on one engine command.** `/bindwright:setup` and `/bindwright:update` build the project's skill-check contracts with `home.py skill-contracts <repo>` instead of asking the session to filter the template's example file by hand. It prints the new steps, the project's current ones and which case holds, and `accept` or `decline` writes the answer, keeping every other project's key and a turned-down offer under `_offered`.
+
 ### Fixed
 
 - **The review guide names the listed files as the text Bindwright reviews.** Since 7.15.4 the sentence before it in the "Bindwright template text" section ends on a list written in a comment, the PR body or a commit, so "Their text is reviewed in Bindwright's own repo" could read as pointing at that list. It now says "The listed files' text", the files the pre-screen report lists. The rule is unchanged.
