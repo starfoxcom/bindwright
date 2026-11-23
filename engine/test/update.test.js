@@ -119,16 +119,18 @@ test("a conflict the user settled by keeping their line does not come back", nee
   }
 });
 
+// THIRD is owned too, with no template change since the last update, so only OTHER is reported as changed.
 test("owned files and kept sections stay the project's", needsPython, async () => {
   const kept = "<!-- bindwright:keep -->\nOURS ONLY\n<!-- bindwright:end-keep -->\n";
   const { out, repo } = await update((r) => {
-    r.write(".bindwright/owned", `${OTHER}\n`);
+    r.write(".bindwright/owned", `${OTHER}\n${THIRD}\n`);
     r.pristine.files[OTHER] = older(r.read(OTHER));
     r.write(OTHER, "project's own\n");
     clash(r);
     r.write(RULE, `${r.pristine.files[RULE]}${kept}`);
   });
-  assert.deepEqual(out.owned, [OTHER]);
+  assert.deepEqual([...out.owned].sort(), [OTHER, THIRD].sort());
+  assert.deepEqual(out.owned_changed, [OTHER]);
   assert.equal(repo.read(OTHER), "project's own\n");
   assert.deepEqual(out.merged, [RULE]);
   assert.ok(repo.read(RULE).endsWith(kept));
