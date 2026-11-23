@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/bindwright:update` keeps an existing helper pin current.** It moved `.bindwright/helper.json` only when the repo had its own copy of the attribution guard hook, so a repo whose guard lives in the home folder kept an old pin while its record moved on, although its review workflows read that pin on every run. The update now also moves a pin the repo already has.
+
 ## [v7.13.2] — 2026-11-22
 
 ### Fixed
