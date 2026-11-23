@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The review tells Bindwright's own text apart from the project's.** Setup and update ship a pre-screen check into `.github/review-checks`, now the default `prescreen.dir`, that renders the setup with the Bindwright release the PR's `.bindwright/pristine.json` records and the base branch's answers, and lists each changed file whose text equals that render. The review guide says a finding in the content of a listed file does not block the PR: the reviewer lists it apart and the author reports it upstream with `/bindwright:report`, while anything the PR removes by returning a file to the template text still blocks. The release is downloaded only from Bindwright's release page and is never older than the base's, and any failure lists nothing, so every file keeps its normal review. A project that names another check folder copies the check there.
+
 ### Fixed
 
 - **The review rules no longer suggest closing and reopening a PR to start its checks.** A second run on the same head commit writes into the first run's gate check, and the merge then reports `Review gate` as expected although it passed. `review-tiers.md` now says to push a commit, an empty one if nothing else changed, also to re-run the review after a fix that touches only the PR body.
