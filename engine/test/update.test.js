@@ -570,6 +570,37 @@ test("a file held back for a later PR takes its held text as the base once the r
   if (rounds.length === 2) assert.deepEqual(rounds[1], rounds[0], "the two engines report and write alike");
 });
 
+test("a file held back again after its template moved keeps the base the update used", needsPython, async () => {
+  const outs = [];
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const run = (flags, input) => JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
+    let today;
+    const repo = await makeRepo((r) => {
+      today = r.read(LICENSE);
+      r.pristine.files[LICENSE] = today.replaceAll("2026", "2025");
+      r.write(LICENSE, r.pristine.files[LICENSE]);
+    });
+    const at = (year) => today.replaceAll("2026", String(year));
+    // Restore the repo's copy, as the skill does, then hold the file back.
+    const holdBack = (text) => {
+      repo.write(LICENSE, text);
+      run(["--keep-base", repo.at("")], JSON.stringify({ paths: [LICENSE] }));
+    };
+    run(["--update", repo.at("")]);
+    holdBack(at(2025));
+    repo.write(LICENSE, at(2026)); // the later PR ships the held-back text
+    repo.write(PRISTINE, JSON.stringify({ ...JSON.parse(repo.read(PRISTINE)), year: 2027 }));
+    assert.ok(run(["--update", repo.at("")]).updated.includes(LICENSE), cmd);
+    holdBack(at(2026));
+    assert.equal(JSON.parse(repo.read(PRISTINE)).files[LICENSE], at(2026), `${cmd}: the base the update used`);
+    const out = run(["--update", repo.at("")]);
+    assert.ok(out.updated.includes(LICENSE), `${cmd}: ${JSON.stringify(out)}`);
+    outs.push(out);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+  if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
+});
+
 test("a held text the repo has changed is not taken as the base", needsPython, async () => {
   const edit = (text) => `${text}Our own line.\n`;
   for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
