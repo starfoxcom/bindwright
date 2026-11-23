@@ -9,6 +9,10 @@ not own. The render uses:
   every setup and update writes, downloaded only from starfoxcom/bindwright's
   release page, so the record can name a published release and nothing else,
   and never one older than the base's record;
+- the wheel's SHA-256 from `.bindwright/helper.json`, the pin the review jobs
+  install the helper from: the base's pin when it names that release, else the
+  head's, since an update PR moves both together. A wheel that does not match
+  is never opened, so a swapped release file cannot run here;
 - the base's `.bindwright/project.json` answers and `.bindwright/pristine.json`
   year, so a PR cannot steer what the render fills in.
 
@@ -20,6 +24,7 @@ Run by the gate's Project pre-screen job from the base branch:
     bindwright_templates.py FILES DIFF
 """
 
+import hashlib
 import json
 import os
 import re
@@ -32,6 +37,7 @@ import zipfile
 
 ANSWERS = ".bindwright/project.json"
 PRISTINE = ".bindwright/pristine.json"
+PIN = ".bindwright/helper.json"
 STAGING = ".bindwright/incoming/"
 RELEASES = "https://github.com/starfoxcom/bindwright/releases/download"
 # Together well under the pre-screen job's 300 s limit, which would fail the job.
@@ -81,6 +87,28 @@ def recorded_release(record, side):
     if not match:
         raise Skip("%s's %s records no Bindwright release" % (side, PRISTINE))
     return ".".join(match.groups()), tuple(int(part) for part in match.groups())
+
+
+def pinned_hash(base, release):
+    """The wheel's SHA-256 that the base's pin, or else the head's, records for `release`."""
+    for rev in (base, "HEAD"):
+        try:
+            pin = read_json(rev, PIN)
+        except Skip:
+            continue
+        python = pin.get("python")
+        digest = python.get("sha256") if isinstance(python, dict) else None
+        if pin.get("version") == release and isinstance(digest, str) \
+                and re.fullmatch(r"[0-9a-f]{64}", digest):
+            return digest
+    raise Skip("neither side's %s records the wheel's hash for Bindwright %s" % (PIN, release))
+
+
+def verified(data, digest):
+    """The wheel's bytes, once their SHA-256 matches the pin."""
+    if hashlib.sha256(data).hexdigest() != digest:
+        raise Skip("the downloaded wheel does not match the hash in %s" % PIN)
+    return data
 
 
 def download(url):
@@ -183,8 +211,10 @@ def run(files_path):
     if version < floor_version:
         raise Skip("the head records Bindwright %s, older than the base's %s" % (release, floor))
     answers = read_json(base, ANSWERS)
+    digest = pinned_hash(base, release)
     with tempfile.TemporaryDirectory() as folder:
-        rendered = render(unpack(fetch(release), folder), answers, record.get("year"))
+        wheel = verified(fetch(release), digest)
+        rendered = render(unpack(wheel, folder), answers, record.get("year"))
     return release, unedited(changed_files(files_path), rendered)
 
 
