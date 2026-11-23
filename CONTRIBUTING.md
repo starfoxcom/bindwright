@@ -62,7 +62,7 @@ Maintainer-only. Follows Gitflow:
 
 1. Read every `[Unreleased]` entry against § Versioning: anything a user must act on moves under `### Breaking`. The sections then set the version: `### Breaking` makes it a major, `### Added` or `### Changed` a minor, only `### Fixed` or `### Security` a patch.
 2. Branch `release/vX.Y.Z` from `develop` and bump `VERSION` (e.g. `v2.1.0`).
-3. Promote the `[Unreleased]` entries in `CHANGELOG.md` to a dated `[vX.Y.Z]` section, and run `node engine/cli.js --update .` so this repo's own bind record (`.bindwright/pristine.json`) carries the new version; otherwise `/bindwright:doctor` reports the repo as behind.
+3. Promote the `[Unreleased]` entries in `CHANGELOG.md` to a dated `[vX.Y.Z]` section, and run `node engine/cli.js --update .` so this repo's own bind record (`.bindwright/pristine.json`) carries the new version; otherwise `/bindwright:doctor` reports the repo as behind. Then run `node tools/page_languages.mjs`, so every page's footer names the new version and links its notes.
 4. Commit, then run `python tools/pack_plugin.py --marketplace`: it prints Bindwright's entry for the wrights marketplace, with the SHA-256 of the plugin zip built from that commit, so the branch takes no commit after it.
 5. Open PR `release/vX.Y.Z → main` and merge with `--merge` once the gate is green and every other required check passes (a true merge commit, so the tag's files match the pin).
 6. Bump Bindwright's entry in the `starfoxcom/wrights` marketplace (`.claude-plugin/marketplace.json` there) to the version, the release zip URL and the SHA-256 from step 4, in a wrights PR, and merge it. That marketplace is the one installs follow, and step 7 checks the zip against it.

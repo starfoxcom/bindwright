@@ -41,6 +41,16 @@ ${urls.join("\n")}
 `;
 }
 
+// The footer's link to the notes of release `version` ("7.14.1"), named by its number.
+export function versionLink(version) {
+  return `<a href="https://github.com/starfoxcom/bindwright/releases/tag/v${version}" data-version>${version}</a>`;
+}
+
+// The page with its footer's version link pointing at release `version`.
+export function stampVersion(html, version) {
+  return html.replace(/<a href="[^"]*" data-version>[^<]*<\/a>/, versionLink(version));
+}
+
 // The links in the header's language switch: every language but this one, to
 // the same page in that language.
 export function switchLinks(code, page = "") {
