@@ -457,9 +457,10 @@ export function keepBase(root, paths) {
     // Only the first hold counts: a repeat would read the base already put back.
     if (files.has(path) && !held.has(path)) held.set(path, files.get(path));
     // The base the last update decided against: that record's held text when the repo still
-    // holds it, since a file shipped after an earlier hold has moved past the record's base.
+    // holds it, since a file shipped after an earlier hold has moved past the record's base. A
+    // copy still at the text the update just wrote is not restored yet, so it takes the record's.
     const ours = read(path);
-    const prior = baseFor(before, path, ours);
+    const prior = ours === files.get(path) ? before.files[path] : baseFor(before, path, ours);
     if (typeof prior === "string" && (prior === ours || Object.hasOwn(before.files, path))) {
       files.set(path, prior);
       result.kept.push(path);

@@ -424,7 +424,10 @@ def keep_base(root, paths, state_json):
             held[path] = state["files"][path]
         # The base the last update decided against; see keepBase in update.js.
         ours = read(path)
-        prior = _base_for(before, path, ours)
+        if ours == state["files"].get(path):
+            prior = before["files"].get(path)
+        else:
+            prior = _base_for(before, path, ours)
         if isinstance(prior, str) and (prior == ours or path in before["files"]):
             state["files"][path] = prior
             result["kept"].append(path)

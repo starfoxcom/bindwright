@@ -601,6 +601,26 @@ test("a file held back again after its template moved keeps the base the update 
   if (outs.length === 2) assert.deepEqual(outs[1], outs[0], "the two engines report alike");
 });
 
+test("a hold run before the file is restored puts back the record's base", needsPython, async () => {
+  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+    const run = (flags, input) => JSON.parse(spawnSync(cmd, [...args, ...flags], { encoding: "utf8", input }).stdout);
+    let old;
+    const repo = await makeRepo((r) => {
+      old = r.read(LICENSE).replaceAll("2026", "2025");
+      r.pristine.files[LICENSE] = old;
+      r.write(LICENSE, old);
+    });
+    const hold = () => run(["--keep-base", repo.at("")], JSON.stringify({ paths: [LICENSE] }));
+    run(["--update", repo.at("")]);
+    hold();
+    repo.write(LICENSE, old); // restored, and the later PR has not shipped yet
+    run(["--update", repo.at("")]);
+    hold(); // the repo still holds the text the update wrote, which equals the held text
+    assert.equal(JSON.parse(repo.read(PRISTINE)).files[LICENSE], old, cmd);
+    rmSync(repo.at(""), { recursive: true, force: true });
+  }
+});
+
 test("a held text the repo has changed is not taken as the base", needsPython, async () => {
   const edit = (text) => `${text}Our own line.\n`;
   for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
