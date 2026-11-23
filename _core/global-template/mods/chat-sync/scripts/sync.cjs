@@ -95,7 +95,13 @@ function projectKey(root) {
   }
   const project = readJson(path.join(root, '.bindwright', 'project.json'), {})
   const name = project.project && project.project.name
-  return safeName(typeof name === 'string' && name.trim() ? name : path.basename(root))
+  return safeName(typeof name === 'string' && name.trim() ? name : folderName(root))
+}
+
+// The last folder of a path, split on either separator, so one path gives one
+// name whichever system reads it.
+function folderName(root) {
+  return root.split(/[\\/]/).filter(Boolean).pop() || ''
 }
 
 function safeName(text) {

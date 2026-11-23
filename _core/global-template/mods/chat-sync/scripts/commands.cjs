@@ -202,6 +202,13 @@ function privateRepoError(repo) {
   return refused
 }
 
+// An empty folder of the mod's, where git finds no hook to run.
+function noHooksFolder() {
+  const folder = path.join(base.dataDir(), 'no-hooks')
+  fs.mkdirSync(folder, { recursive: true })
+  return folder
+}
+
 // The clone's own ignore list (never committed) leaves temporary copies out.
 function keepTempsOutOfGit(store) {
   const exclude = path.join(store, '.git', 'info', 'exclude')
@@ -212,7 +219,9 @@ function keepTempsOutOfGit(store) {
 }
 
 // Where the chats go now, or a reason nothing can be copied. A clone keeps chat
-// files byte for byte on every computer, whatever git's line-end setting is.
+// files byte for byte on every computer, whatever git's line-end setting is,
+// and its machine-made commits run none of the user's hooks or signing, which
+// could ask for a passphrase or a key touch with no one there.
 function openStore() {
   const place = base.readPlace()
   const store = base.storeRoot(place)
@@ -223,6 +232,8 @@ function openStore() {
     }
     base.git(store, 'config', 'core.autocrlf', 'false')
     base.git(store, 'config', 'core.symlinks', 'false')
+    base.git(store, 'config', 'commit.gpgsign', 'false')
+    base.git(store, 'config', 'core.hooksPath', noHooksFolder())
     keepTempsOutOfGit(store)
   }
   return { place, store }
@@ -367,11 +378,13 @@ function bringIn([chatDir, root, openId]) {
 // Brings in the longest other computer's copy of one chat that extends this
 // computer's chat. A copy that both changed is left where it is, in the sync
 // place, and this computer's chat is kept. A chat this computer once had and
-// no longer has was deleted here, so it is not brought back.
+// no longer has was deleted here (by the user, or by Claude Code's clean-up of
+// old chats), so it comes back only once another computer has continued it.
 function bringChat(storeChat, local, root, { isOpen, seen, key }) {
   const copies = otherCopies(storeChat)
   const hasLocal = sizeOf(local) >= 0
-  if (!hasLocal && seen[`sent:${key}`] !== undefined) return { verdict: 'kept' }
+  const wasDeleted = !hasLocal && seen[`sent:${key}`] !== undefined
+  if (wasDeleted && !isContinuedElsewhere(storeChat, root)) return { verdict: 'kept' }
   const isUnchanged = copies.every(copy => seen[`${key}/${path.basename(copy)}`] === stampOf(copy))
   if (hasLocal && isUnchanged) return { verdict: 'kept' }
   const before = hasLocal ? stampOf(local) : null
@@ -385,6 +398,18 @@ function bringChat(storeChat, local, root, { isOpen, seen, key }) {
     // Marked as looked at only once done, so an import given up on is tried again.
     for (const copy of copies) seen[`${key}/${path.basename(copy)}`] = stampOf(copy)
     return answer
+  })
+}
+
+// True when another computer's copy holds lines after the ones this computer
+// last sent, read in this computer's own paths.
+function isContinuedElsewhere(storeChat, root) {
+  return inWorkFolder(work => {
+    const sent = path.join(work, 'sent')
+    if (!copyPlainFile(path.join(storeChat, ownName()), sent)) return false
+    const asLocal = path.join(work, 'sent-here')
+    transformFile(sent, asLocal, expand(root, os.homedir()), true)
+    return behindCopy(storeChat, asLocal, root, work).read !== undefined
   })
 }
 
@@ -435,7 +460,9 @@ function status([root]) {
   const store = base.storeRoot(place)
   const key = root ? base.projectKey(root) : null
   const chats = store && key ? chatIds(path.join(store, key)).length : 0
-  return { place, machine: base.machineId(), project: key, chats, git: hasGit() }
+  // Read only: setup asks for the status before the user agreed to any write.
+  const machine = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id || null
+  return { place, machine, project: key, chats, git: hasGit() }
 }
 
 function hasGit() {

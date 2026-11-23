@@ -269,7 +269,7 @@ test('a copy that went missing from the sync place is sent again, though the cha
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
 })
 
-test('a chat deleted on this computer is not brought back', () => {
+test('a chat deleted on this computer stays deleted until another computer continues it', () => {
   const store = tempDir('store')
   const a = computer('a', store)
   const b = computer('b', store)
@@ -279,6 +279,10 @@ test('a chat deleted on this computer is not brought back', () => {
   fs.rmSync(path.join(b.chatDir, 's1.jsonl'))
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, [])
   assert.ok(!fs.existsSync(path.join(b.chatDir, 's1.jsonl')))
+  writeChat(a, 's1', ['one', 'two'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+  assert.strictEqual(readChat(b, 's1')[1].message.content, `two in ${b.root}`)
 })
 
 test('a chat naming the other computer\'s home as text goes back and forth without splitting', () => {
@@ -455,8 +459,20 @@ test('a sync folder named from the home folder lands there, and a relative one i
   assert.strictEqual(a.sync('move', 'folder', '~/Claude chats').to, path.join(a.home, 'Claude chats'))
 })
 
-test('with no place chosen, nothing is copied', () => {
+test('with no place chosen, nothing is copied and asking the status writes nothing', () => {
   const a = computer('a')
   writeChat(a, 's1', ['one'])
   assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { skipped: 'off' })
+  assert.strictEqual(a.sync('status', a.root).place.kind, 'off')
+  assert.ok(!fs.existsSync(a.dataDir), 'nothing is written before setup is told yes')
+})
+
+test('the user\'s own commit signing and hooks never run on the chat repo\'s commits', () => {
+  const hooks = tempDir('hooks')
+  fs.writeFileSync(path.join(hooks, 'pre-commit'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+  const config = gitConfig(`[core]\n\tautocrlf = true\n\thooksPath = ${hooks.replace(/\\/g, '/')}\n`
+    + '[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = chat-sync-no-such-signer\n')
+  const a = gitComputer('a', bareRepo(), { GIT_CONFIG_GLOBAL: config })
+  writeChat(a, 's1', ['one'])
+  assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1', pushed: true })
 })
