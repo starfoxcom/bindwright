@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **Only the pre-screen report decides which template files are left out of the verdict.** The review guide and the verdict rule leave findings in files the template-text check lists out of the verdict, but only the routine review gets that list, and neither text said what a review without it does. So the deep review could take a list from the comment that asks for it, which anyone who can comment writes. Both texts now say that only the report's own list counts, that a review without the report treats no file as listed, and that a list in a comment, the PR body or a commit counts for nothing.
+
 ## [v7.15.3] — 2026-11-23
 
 ### Fixed
