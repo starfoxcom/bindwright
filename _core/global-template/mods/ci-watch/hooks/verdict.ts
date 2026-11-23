@@ -12,7 +12,8 @@ import { FAILED } from './settle'
 export const GATE = 'Review gate'
 // The review workflows' own jobs, which fail beside the gate when a review cannot run.
 const REVIEW_JOBS = new Set([
-  GATE, 'Init review gate', 'Auto review', 'Post review', 'Evaluate review outcome', 'Claude On-Demand',
+  GATE, 'Init review gate', 'Diff triage', 'Project triggers', 'Project pre-screen', 'Auto review', 'Post review',
+  'Evaluate review outcome', 'Claude On-Demand',
   'Check who asked for the deep review', 'On-demand deep review (@claude)',
 ])
 // Each tier's result in the gate's state, as the gate script writes it: `routine=block;deep=error;…`.
@@ -108,11 +109,6 @@ export async function withVerdict($: EngineInterface, watch: Watch): Promise<Wat
   const since = gate?.startedAt
   const found = [...(gate?.state ?? '').matchAll(TIER)]
   const tiers = new Map(found.map(([, tier = '', result = '']) => [tier, result]))
-  // A run cancelled before the gate wrote its tiers judged nothing, while no review of it went out.
-  const isCancelled = failedChecks(watch).every(name => watch.checks[name] === 'cancel')
-  if (since && tiers.size === 0 && isCancelled && (await isUnposted($, watch, since, ['routine', 'deep']))) {
-    return { ...watch, noVerdict: 'routine cancelled, deep none' }
-  }
   if (!since || !tiers.has('routine') || [...tiers.values()].includes('block')) return watch
   const unsure = [...tiers].filter(([, result]) => UNSURE.has(result)).map(([tier]) => tier)
   // A failed gate whose tiers all read settled is unexplained, so it counts like a failure.
