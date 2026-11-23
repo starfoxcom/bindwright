@@ -1,7 +1,7 @@
 // A bound project gets the review gate this repo runs: bound with this repo's
 // own choices, the workflows and the gate's scripts come out byte for byte as
-// the live copies, and the settings file holds the gate's defaults. Other
-// choices flip only the two switches they map to.
+// the live copies, and the settings file holds the gate's defaults but the
+// check folder. Other choices flip only the two switches they map to.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -63,9 +63,19 @@ test("this repo's choices bind the live workflows and scripts byte for byte", as
   }
 });
 
-test("the bound settings hold the gate's defaults", { skip: !python && "needs Python 3.8+" }, async () => {
-  const out = await bound(OWN);
-  assert.equal(settings(out.get(".github/review-gate.yml")), settings(""));
+// Every default but the check folder, which names the folder setup ships its own check into.
+// The file's header tells a reader which values differ, so deleting a line never surprises them.
+test("the bound settings hold the gate's defaults, and the header names each that differs", { skip: !python && "needs Python 3.8+" }, async () => {
+  const text = (await bound(OWN)).get(".github/review-gate.yml");
+  const defaults = settings("");
+  const got = settings(text);
+  assert.equal(got, defaults.replace("prescreen_dir=", "prescreen_dir=.github/review-checks"));
+  const header = text.split("\n").filter((line, i, all) => all.slice(0, i + 1).every((l) => l.startsWith("#"))).join("\n");
+  const known = new Set(defaults.split("\n"));
+  for (const line of got.split("\n").filter((l) => l && !known.has(l))) {
+    const key = line.split("=")[0].replace("_", ".");
+    assert.ok(header.includes(key), `the header does not name ${key}`);
+  }
 });
 
 test("the escalation and attribution choices map to the two switches", { skip: !python && "needs Python 3.8+" }, async () => {

@@ -45,7 +45,7 @@ export const PRISTINE = ".bindwright/pristine.json";
 // Guard hooks and the review gate's scripts ship byte for byte: they are
 // code, not templates, and the render step's blank-line folding would still
 // change them.
-const VERBATIM = [".claude/hooks/", ".github/scripts/"];
+const VERBATIM = [".claude/hooks/", ".github/scripts/", ".github/review-checks/"];
 
 function included(path, a, flags) {
   const adv = a.advanced;
@@ -87,6 +87,7 @@ function included(path, a, flags) {
     ".github/scripts/setup-review-gate.sh": gate,
     ".github/scripts/set-review-tokens.sh": gate,
     ".github/scripts/pin_check.py": gate,
+    ".github/review-checks/bindwright_templates.py": gate,
     ".github/workflows/pin-check.yml": gate,
     ".github/review-gate.yml.template": gate,
     ".github/review-guide.md.template": gate,
