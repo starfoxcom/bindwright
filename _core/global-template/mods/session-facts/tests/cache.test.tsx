@@ -15,6 +15,9 @@ import {
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
+// Walking the clock through an hour or more of countdown runs close to the default
+// 5 s limit on a loaded Windows runner.
+const LONG = { timeoutMs: 15_000 }
 const NOW = Date.UTC(2026, 9, 2, 16, 0, 0)
 const WARM = {
   input_tokens: 10,
@@ -155,7 +158,7 @@ async function start($: Engine): Promise<void> {
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
 }
 
-test('a miss two minutes after a reply says the cache broke early and what it resent', async ($, on) => {
+test('a miss two minutes after a reply says the cache broke early and what it resent', LONG, async ($, on) => {
   const { clock, reply } = world(on)
   await start($)
   await turn($)
@@ -323,7 +326,7 @@ test('a miss is timed when the request is sent, not after a long reply', async (
   expect(await ui.find({ type: 'Text', text: /^cache broke early · / })).toBeDefined()
 })
 
-test('a compaction later in a turn does not hide a real expiry on the next one', async ($, on) => {
+test('a compaction later in a turn does not hide a real expiry on the next one', LONG, async ($, on) => {
   const { clock, reply } = world(on)
   await start($)
   await drain($.turn.step({ turnId: 't', index: 0, model: 'claude-opus-5-5', messageCount: 1 } as never))
@@ -406,7 +409,7 @@ test('a minimum raised past the conversation size keeps the cold start countdown
   expect(await ui.find({ type: 'Text', text: /^cache 10m left · cold start 250k$/ })).toBeDefined()
 })
 
-test('after a compaction the countdown waits for the next reply', async ($, on) => {
+test('after a compaction the countdown waits for the next reply', LONG, async ($, on) => {
   const { clock } = world(on)
   await start($)
   await turn($)
