@@ -1,7 +1,7 @@
 // engine/authored.py counts the lines a person wrote by hand, from git history.
 // Every case builds a throwaway git repo in a temp folder, never a real one.
 
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -24,8 +24,12 @@ function withTemp(fn) {
   }
 }
 
+// No hooks: a hooks folder set for this computer would run on every test commit.
+const NO_HOOKS = mkdtempSync(join(tmpdir(), "bw-authored-hooks-"));
+after(() => rmSync(NO_HOOKS, { recursive: true, force: true }));
+
 function git(dir, args, env = {}) {
-  const r = spawnSync("git", ["-C", dir, ...args], {
+  const r = spawnSync("git", ["-C", dir, "-c", `core.hooksPath=${NO_HOOKS}`, ...args], {
     encoding: "utf8", env: { ...process.env, ...env },
   });
   assert.equal(r.status, 0, r.stderr);
