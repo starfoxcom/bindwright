@@ -63,29 +63,31 @@ test("this repo's choices bind the live workflows and scripts byte for byte", as
   }
 });
 
+// The file's header tells a reader which values differ from the gate's defaults, so deleting a
+// line never surprises them: each key whose value differs must appear in the leading comment block.
+function unnamedInHeader(text) {
+  const header = text.split("\n").filter((line, i, all) => all.slice(0, i + 1).every((l) => l.startsWith("#"))).join("\n");
+  const known = new Set(settings("").split("\n"));
+  return settings(text).split("\n").filter((l) => l && !known.has(l))
+    .map((line) => line.split("=")[0].replace("_", ".")).filter((key) => !header.includes(key));
+}
+
 // Every default but the check folder, which names the folder setup ships its own check into.
-// The file's header tells a reader which values differ, so deleting a line never surprises them.
 test("the bound settings hold the gate's defaults, and the header names each that differs", { skip: !python && "needs Python 3.8+" }, async () => {
   const text = (await bound(OWN)).get(".github/review-gate.yml");
-  const defaults = settings("");
-  const got = settings(text);
-  assert.equal(got, defaults.replace("prescreen_dir=", "prescreen_dir=.github/review-checks"));
-  const header = text.split("\n").filter((line, i, all) => all.slice(0, i + 1).every((l) => l.startsWith("#"))).join("\n");
-  const known = new Set(defaults.split("\n"));
-  for (const line of got.split("\n").filter((l) => l && !known.has(l))) {
-    const key = line.split("=")[0].replace("_", ".");
-    assert.ok(header.includes(key), `the header does not name ${key}`);
-  }
+  assert.equal(settings(text), settings("").replace("prescreen_dir=", "prescreen_dir=.github/review-checks"));
+  assert.deepEqual(unnamedInHeader(text), []);
 });
 
-test("the escalation and attribution choices map to the two switches", { skip: !python && "needs Python 3.8+" }, async () => {
+test("the escalation and attribution choices map to the two switches, and the header names them", { skip: !python && "needs Python 3.8+" }, async () => {
   const own = settings((await bound(OWN)).get(".github/review-gate.yml"));
   const off = structuredClone(OWN);
   off.advanced = { ...off.advanced, deepEscalation: false, attributionGuard: false };
-  const got = settings((await bound(off)).get(".github/review-gate.yml"));
+  const text = (await bound(off)).get(".github/review-gate.yml");
   const flipped = own.replace("prescreen_attribution=on", "prescreen_attribution=off").replace("escalate_auto=on", "escalate_auto=off");
   assert.notEqual(flipped, own);
-  assert.equal(got, flipped);
+  assert.equal(settings(text), flipped);
+  assert.deepEqual(unnamedInHeader(text), []);
 });
 
 test("the guide names the project and follows the escalation choice", async () => {
