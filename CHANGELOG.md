@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The update says when the review guide lacks the template-text section.** The pre-screen check that lists files still matching Bindwright's template text only helps when `.github/review-guide.md` tells the reviewer what to do with that list. A project that keeps its own copy of the guide never got that section, and the update did not mention it. The update now names the gap, shows the section and adds it on a yes.
+- **The template-text check verifies the wheel it runs.** The pre-screen check downloaded Bindwright's Python package from the release page and ran its engine without checking the file, so a swapped release file would have run inside the review job. It now checks the download against the SHA-256 in the base branch's `.bindwright/helper.json`, the same pin the review jobs install the helper from, so a PR cannot pick the hash. A wheel that does not match, a base with no pin, or a PR that moves the release (the update PR itself) lists nothing, and every file keeps its normal review. Setup and the update now write that pin for every project with the review gate, not only those whose attribution guard ships in the repo, so the check keeps listing files there too.
 
 ## [v7.15.0] — 2026-11-23
 
