@@ -10,6 +10,7 @@ import os
 import re
 
 from home_files import HomeError, _atomic_write, _claude
+from model import expand_answers
 
 EXAMPLE_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir, "_core", "global-template", "mods",
@@ -35,7 +36,8 @@ def _project_answers(root):
     file = os.path.join(root, ".bindwright", "project.json")
     if not os.path.isfile(file):
         raise HomeError("No project answers file: " + file)
-    advanced = _read_json_object(file, "The project answers file").get("advanced")
+    # Read as the engine binds it: defaults filled in, and a removed tool read as custom.
+    advanced = expand_answers(_read_json_object(file, "The project answers file")).get("advanced")
     if not isinstance(advanced, dict):
         raise HomeError("No advanced object in " + file)
     return advanced

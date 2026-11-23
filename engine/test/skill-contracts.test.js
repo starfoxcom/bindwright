@@ -121,6 +121,16 @@ test("CLAUDE_CONFIG_DIR routes the contracts file; the home folder keeps none", 
   });
 });
 
+test("answers read as the engine binds them: a removed tool counts as custom", { skip }, () => {
+  withHome((dir) => {
+    const root = project(dir, { tracker: "github", codeResearch: "serena" });
+    const r = contracts(dir, root);
+    assert.equal(r.status, 0, r.stderr);
+    const names = Object.values(r.out.steps).flat().map((step) => step.step);
+    assert.ok(names.some((name) => name.includes("code-research count")), "the count step is kept");
+  });
+});
+
 test("a non-JSON contracts file and a bad argument are refused, file kept", { skip }, () => {
   withHome((dir) => {
     const root = project(dir, { tracker: "github" });
