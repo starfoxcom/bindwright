@@ -91,7 +91,7 @@ test('turns copy the chat out at most once a minute, and a copy that fails says 
   expect(outs()).toHaveLength(2)
 })
 
-test('a turn that ends while a copy is still running starts no second copy', async ($, on) => {
+test('a turn or the session end while a copy is still running starts no second copy', async ($, on) => {
   let finish = () => {}
   const seen = world(on, { out: { same: 'sess-1' } }, {}, new Promise<void>(resolve => { finish = resolve }))
   await start($)
@@ -99,6 +99,7 @@ test('a turn that ends while a copy is still running starts no second copy', asy
   await seen.clock.advance(1)
   await endTurn($)
   await seen.clock.advance(MINUTE * 2)
+  await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
   expect(seen.runs.filter(args => args[0] === 'out')).toHaveLength(1)
   finish()
 })

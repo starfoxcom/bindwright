@@ -30,6 +30,9 @@ let isOutQueued = false
 // Set by the session's end, so a copy queued after the last turn does not run
 // once the end has sent the chat; the next turn clears it.
 let hasEnded = false
+// True while a turn's copy runs: the session's end then starts no second
+// helper beside it, and the next session start sends what it missed.
+let isCopying = false
 
 async function runSync($: EngineInterface, args: string[], timeoutMs = 120_000): Promise<Answer> {
   try {
@@ -141,10 +144,13 @@ export const register: Register = on => {
     $.clock.after(wait, async () => {
       // The timer does not wait on this callback, so its failures end here.
       try {
-        if (!hasEnded) await copyOut($, false)
+        if (hasEnded) return
+        isCopying = true
+        await copyOut($, false)
       } catch (error) {
         $.ui.toast(`Chat sync: could not copy this chat out: ${String(error).slice(0, 200)}`)
       } finally {
+        isCopying = false
         isOutQueued = false
       }
     })
@@ -153,7 +159,7 @@ export const register: Register = on => {
 
   on('session.end', async ($, e, next) => {
     hasEnded = true
-    await copyOut($, true)
+    if (!isCopying) await copyOut($, true)
     return next(e)
   })
 
