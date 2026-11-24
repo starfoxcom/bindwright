@@ -22,6 +22,7 @@ global-template/
 │   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
 └── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
     ├── README.md                          # What each mod does, install, options, tests
+    ├── chat-sync/                         # Keeps chats in step across computers (opt-in)
     ├── ci-watch/                          # Watches a pushed PR's checks, wakes the session once
     ├── compact-handoff/                   # Compaction as a focused hand-off, plus a recall tool
     ├── session-facts/                     # Time, context fill and plan usage on every prompt
@@ -183,7 +184,7 @@ By default a bind ships both guards inside the project instead (`.claude/hooks/`
 
 ## 4d. Mods (optional, Claude Code 2.1.287+)
 
-`mods/` holds ten function-hook plugins that run inside Claude Code: session facts on every prompt, a session row (model, project, branch), a compaction hand-off, a local CI watcher, an in-process guard, a shared-machine work queue, skill step checks, task-list upkeep, a plan-usage pause and a local CI runner row. Each is optional; every mod but `runners` and `shared-pc` is recommended for everyone, and `session-facts` supersedes the time-injection hook from § 4. They install globally through `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` and keep their data under `~/.claude/mods-data/<mod>/`. Four of them draw rows above the prompt that take the place of a status line, in the terminal and in the Desktop app (see `mods/README.md`).
+`mods/` holds eleven function-hook plugins that run inside Claude Code: session facts on every prompt, a session row (model, project, branch), a compaction hand-off, a local CI watcher, an in-process guard, a shared-machine work queue, skill step checks, task-list upkeep, a plan-usage pause, a local CI runner row and chat sync across computers. Each is optional; every mod but `runners`, `shared-pc` and `chat-sync` is recommended for everyone, and `session-facts` supersedes the time-injection hook from § 4. They install globally through `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` and keep their data under `~/.claude/mods-data/<mod>/`. Four of them draw rows above the prompt that take the place of a status line, in the terminal and in the Desktop app (see `mods/README.md`).
 
 See [`mods/README.md`](mods/README.md) for what each mod does, its default and options, how to install, test and validate it, and notes for writing your own.
 
