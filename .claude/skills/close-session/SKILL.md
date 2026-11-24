@@ -61,7 +61,7 @@ Commit and PR format, `--body-file`, merge style and branch cleanup are in `git.
 
 ## Hand-off in the tracker
 
-After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat.
+After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat. Leave out the history of the assistant's own setup (a rule, hook or plugin that changed along the way) unless changing it was the work.
 
 Then post a project status update only when this session completed a milestone or a major arc of one, changed the health colour, or changed the plan; `tracker.md` § Project status updates has the shape. Most sessions post none.
 

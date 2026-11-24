@@ -29,7 +29,7 @@ One ❌ means the feature is not complete. If an item stopped making sense mid-w
 <!-- TOGGLE:tracker:file START -->
 ## Hand-off file
 
-Write `{{PROJECT_NAME_UPPER}}-CONTEXT_YYYY-MM-DD_HH-MM.md` at the repo root and `git rm` the previous one, so exactly one exists. It holds current state only: where the work stands, decisions made and why, what the next session should do first. Rules and conventions stay in `.claude/rules/`.
+Write `{{PROJECT_NAME_UPPER}}-CONTEXT_YYYY-MM-DD_HH-MM.md` at the repo root and `git rm` the previous one, so exactly one exists. It holds current state only: where the work stands, decisions made and why, what the next session should do first. Rules and conventions stay in `.claude/rules/`. Leave out the history of the assistant's own setup (a rule, hook or plugin that changed along the way) unless changing it was the work.
 
 For the timestamp, use the latest `[session-facts]` line in the conversation when the session-facts mod provides one. Otherwise read the local clock: `date '+%Y-%m-%d %H:%M'`, or `Get-Date -Format 'yyyy-MM-dd HH:mm'` in PowerShell. Never hardcode a timezone.
 
@@ -156,7 +156,7 @@ Commit the session's work as one save point, or one per finished piece, with the
 <!-- TOGGLE:tracker:github START -->
 ## Hand-off in the tracker
 
-After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat.
+After the commit and PR, so the state records how they ended. For each issue this session worked on, rewrite its `### Current state` per `.claude/rules/tracker.md`: where the work stands, decisions made and why, what the next session should do first. Work without an issue gets one now with the "New item" command, a branch with no PR included. Rules and conventions stay in `.claude/rules/`; session figures (the code-research count, context use) stay in the chat. Leave out the history of the assistant's own setup (a rule, hook or plugin that changed along the way) unless changing it was the work.
 
 Then post a project status update only when this session completed a milestone or a major arc of one, changed the health colour, or changed the plan; `tracker.md` § Project status updates has the shape. Most sessions post none.
 
