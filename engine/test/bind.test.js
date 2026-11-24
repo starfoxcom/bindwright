@@ -1060,6 +1060,7 @@ test("the repo URL is used whole, and git.md names review-tiers.md only with AI 
   const off = await run(a);
   assertClean(off);
   assert.ok(!off.has(".claude/rules/review-tiers.md"));
+  assert.ok(!off.has(".claude/rules/review-workflow.md"));
   assert.ok(!off.get(".claude/rules/git.md").includes("review-tiers.md"));
   assert.ok(off.get(".claude/rules/git.md").includes("CI watching lives in `token-efficiency.md`."));
 });
