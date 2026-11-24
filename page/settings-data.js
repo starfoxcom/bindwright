@@ -157,7 +157,7 @@ export const PROJECT = [
     id: "visual-steps",
     title: "Visual changes in small steps",
     text: "Anything people see changes one checked step at a time.",
-    value: "On",
+    value: "Projects with a UI",
     keys: ["advanced.uiRule"],
     engine: [{ flags: {}, key: "advanced.uiRule", value: true }],
   },

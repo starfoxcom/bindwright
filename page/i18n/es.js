@@ -358,7 +358,7 @@ export default {
   "settings.plain-writing.value": "Activada",
   "settings.visual-steps.title": "Cambios visuales en pasos chicos",
   "settings.visual-steps.text": "Lo que la gente ve cambia un paso revisado a la vez.",
-  "settings.visual-steps.value": "Activada",
+  "settings.visual-steps.value": "Proyectos con interfaz",
   "settings.code-host.title": "Dónde vive el código",
   "settings.code-host.text": "GitHub, GitHub con apps, Actions y tableros bloqueados, solo esta computadora "
     + "u otro sitio. GitHub bloqueado conserva los pull requests y los issues; solo esta computadora no necesita "
