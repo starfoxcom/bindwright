@@ -33,7 +33,7 @@ async function scene(change) {
     if (dest.startsWith(STAGING)) writeFileSync(at(dest.slice(STAGING.length)), text);
   }
   rmSync(at(STAGING), { recursive: true, force: true });
-  change({ at, config, repo });
+  change({ at, config });
   return { root, repo, config };
 }
 
@@ -114,25 +114,17 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     assert.doesNotMatch(found.say, /client-notes/, "a personal rule's name stays out, however it is reached");
   });
 
-test("instructions split by origin, and a match-all rule loads", needsPython,
-  async () => {
-    const setup = ({ at, config }) => {
-      mkdirSync(join(config, "rules"), { recursive: true });
-      writeFileSync(join(config, "CLAUDE.md"), "p".repeat(1000));
-      writeFileSync(join(config, "rules", "mine.md"), "p".repeat(2000));
-      writeFileSync(at(".claude/rules/all.md"), `---\npaths: ["**/*"]\n---\n${"x".repeat(60000)}`);
-      writeFileSync(at(".claude/rules/star.md"), `---\npaths:\n  - "*"\n---\n${"x".repeat(55000)}`);
-      writeFileSync(at(".claude/rules/mixed.md"),
-        `---\npaths: ["**/*", "src/**"]\n---\n${"x".repeat(70000)}`);
-    };
-    const sayOf = (report) => report.checks.find((c) => c.id === "instructions").say;
-    const bare = sayOf(await doctor(setup));
-    assert.match(bare, /of it from this repo and 3\.0k from ~\/\.claude\. The largest: /);
-    // Match-all globs load for any read, so both count; a rule with any other glob stays out.
-    assert.match(bare, /The largest: \.claude\/rules\/all\.md \(60\.0k\), /);
-    assert.match(bare, /\.claude\/rules\/star\.md \(55\.0k\)/);
-    assert.doesNotMatch(bare, /mixed/);
+test("the instructions total is split between the repo and ~/.claude", needsPython, async () => {
+  const report = await doctor(({ at, config }) => {
+    mkdirSync(join(config, "rules"), { recursive: true });
+    writeFileSync(join(config, "CLAUDE.md"), "p".repeat(1000));
+    writeFileSync(join(config, "rules", "mine.md"), "p".repeat(2000));
+    writeFileSync(at(".claude/rules/big.md"), "x".repeat(60000));
   });
+  const say = report.checks.find((c) => c.id === "instructions").say;
+  assert.match(say, /of it from this repo and 3\.0k from ~\/\.claude\. /);
+  assert.match(say, /The largest: \.claude\/rules\/big\.md \(60\.0k\)/);
+});
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
   const broken = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), "{"));

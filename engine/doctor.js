@@ -245,46 +245,7 @@ function hooksCheck(config) {
 // An empty list, an empty string and YAML's null forms list no path.
 const EMPTY_YAML = /^(?:\[[ \t]*\]|""|''|~|null|Null|NULL)$/;
 
-// Globs that match every file, so a rule listing only them loads for any read.
-const MATCH_ALL_GLOBS = new Set(["**", "**/*", "*"]);
-
-// A YAML value's text without its trailing comment or surrounding whitespace.
-const bareValue = (text) => {
-  const comment = text.search(/(^|[ \t])#/);
-  return (comment === -1 ? text : text.slice(0, comment)).trim();
-};
-
-// A YAML scalar with its quotes removed.
-const unquote = (text) => text.replace(/^(["'])(.*)\1$/, "$2");
-
-// The `- ` items from `start` up to the first other line; blank and comment lines are skipped.
-function blockItems(lines, start, end) {
-  const items = [];
-  for (const line of lines.slice(start, end)) {
-    const text = line.trim();
-    if (!text || text.startsWith("#")) continue;
-    if (!text.startsWith("- ")) break;
-    items.push(unquote(bareValue(text.slice(2))));
-  }
-  return items;
-}
-
-// The globs the `paths:` key at `start` lists: a flow list, one scalar, or the items below it.
-function listedGlobs(lines, start, end) {
-  const value = bareValue(lines[start].slice("paths:".length));
-  if (value === "") return blockItems(lines, start + 1, end);
-  if (EMPTY_YAML.test(value)) return [];
-  if (value.startsWith("[")) {
-    // A flow list that runs onto the next line is not read here; null keeps it scoped.
-    if (!value.endsWith("]")) return null;
-    const items = value.slice(1, -1).split(",").map((item) => unquote(item.trim())).filter(Boolean);
-    // A list of only empty items is not one of the empty forms, so it stays scoped.
-    return items.length ? items : null;
-  }
-  return [unquote(value)];
-}
-
-// A rule whose `paths:` lists a glob other than a match-everything one loads only
+// A rule whose front matter lists at least one path under `paths:` loads only
 // when Claude reads a file it matches, so it is not loaded at session start.
 function isPathScoped(text) {
   const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
@@ -292,10 +253,13 @@ function isPathScoped(text) {
   const end = lines.indexOf("---", 1);
   if (lines[0] !== "---" || end === -1) return false;
   for (let i = 1; i < end; i++) {
-    if (lines[i].startsWith("paths:")) {
-      const globs = listedGlobs(lines, i, end);
-      return globs === null || globs.some((glob) => !MATCH_ALL_GLOBS.has(glob));
-    }
+    if (!lines[i].startsWith("paths:")) continue;
+    const rest = lines[i].slice("paths:".length);
+    const comment = rest.search(/(^|[ \t])#/);
+    const inline = (comment === -1 ? rest : rest.slice(0, comment)).trim();
+    if (inline) return !EMPTY_YAML.test(inline);
+    const next = lines.slice(i + 1).find((line) => line.trim() && !line.trim().startsWith("#"));
+    return (next ?? "").trim().startsWith("- ");
   }
   return false;
 }

@@ -245,59 +245,24 @@ def _hooks_check(config):
 _EMPTY_YAML = re.compile(r"\[[ \t]*\]|\"\"|''|~|null|Null|NULL")
 
 
-# Globs that match every file, so a rule listing only them loads for any read.
-_MATCH_ALL_GLOBS = ("**", "**/*", "*")
-
-
-def _bare_value(text):
-    comment = re.search(r"(^|[ \t])#", text)
-    return (text[:comment.start()] if comment else text).strip(JS_WHITESPACE)
-
-
-def _unquote(text):
-    return re.sub(r"^([\"'])(.*)\1$", r"\2", text)
-
-
-def _block_items(lines, start, end):
-    items = []
-    for line in lines[start:end]:
-        text = line.strip(JS_WHITESPACE)
-        if not text or text.startswith("#"):
-            continue
-        if not text.startswith("- "):
-            break
-        items.append(_unquote(_bare_value(text[2:])))
-    return items
-
-
-def _listed_globs(lines, start, end):
-    value = _bare_value(lines[start][len("paths:"):])
-    if value == "":
-        return _block_items(lines, start + 1, end)
-    if _EMPTY_YAML.fullmatch(value):
-        return []
-    if value.startswith("["):
-        # A flow list that runs onto the next line is not read here; None keeps it scoped.
-        if not value.endswith("]"):
-            return None
-        items = [_unquote(item.strip(JS_WHITESPACE)) for item in value[1:-1].split(",")]
-        # A list of only empty items is not one of the empty forms, so it stays scoped.
-        return [item for item in items if item] or None
-    return [_unquote(value)]
-
-
-# A rule whose `paths:` lists a glob other than a match-everything one loads only
-# when Claude reads a file it matches, so it is not loaded at session start.
 def _is_path_scoped(text):
     lines = re.split(r"\r\n|\r|\n", text[1:] if text.startswith("﻿") else text)
     # Front matter that never closes is no front matter, so the whole file loads.
     if lines[0] != "---" or "---" not in lines[1:]:
         return False
-    end = lines.index("---", 1)
-    for i in range(1, end):
-        if lines[i].startswith("paths:"):
-            globs = _listed_globs(lines, i, end)
-            return globs is None or any(glob not in _MATCH_ALL_GLOBS for glob in globs)
+    for i in range(1, len(lines)):
+        if lines[i] == "---":
+            return False
+        if not lines[i].startswith("paths:"):
+            continue
+        rest = lines[i][len("paths:"):]
+        comment = re.search(r"(^|[ \t])#", rest)
+        inline = (rest[:comment.start()] if comment else rest).strip(JS_WHITESPACE)
+        if inline:
+            return not _EMPTY_YAML.fullmatch(inline)
+        following = [line for line in lines[i + 1:]
+                     if line.strip(JS_WHITESPACE) and not line.strip(JS_WHITESPACE).startswith("#")]
+        return (following[0] if following else "").strip(JS_WHITESPACE).startswith("- ")
     return False
 
 
