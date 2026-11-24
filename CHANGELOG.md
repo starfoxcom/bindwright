@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - **The tool-rules guard watches for over-long commit subjects and PR titles.** A `git commit -m` whose first line runs past 72 characters, and a `gh pr create` or `gh pr edit` title past 64 in a project whose PRs squash-merge, are now logged before the command runs, so a review round is not spent on them later. The rows start in observe mode, as every new row does: they log what they would refuse, which `/bindwright:doctor` reports, and refuse nothing until a later release. A message the shell would change (one holding `$(...)`, a variable or an escape) or one read from a file is left alone.
+- **The ci-watch row names the PR's review round.** The line above the prompt now reads `⏳ PR 14 · round 3 · 2/4 done`, so it shows how many rounds the PR has taken without asking `/ci-watch rounds`. A round is one pushed head whose checks settled, counted the same way as the step backs and the hard stop, so a head the count never records (someone else's push, a conflict with the base, a timeout) shows no number. `/ci-watch` and its phone text carry it too.
 
 ### Changed
 
@@ -25,6 +26,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- **`/bindwright:doctor` offers to bring the helper up to the plugin's version itself.** A helper left on an older version, after plugin auto-update moved the plugin in a session that ran no other Bindwright skill, was reported with `/bindwright:setup` or `/bindwright:update` as the fix, which only the user can start. The doctor now offers the one install command the other skills run, under the same install lock, and checks again with the new engine once it is in.
 - **The size check measures `.mts`, `.cts`, `.hxx` and `.inl` files with their own language's limits.** A language row in the size rule covers its file types whatever the rule's file list names, but these four were missing from their rows. So most projects did not measure them at all, and one whose list named them measured them against `Other`, where a TypeScript module could grow to 1 200 lines instead of 800. Now every project that keeps the JavaScript / TypeScript row measures `.mts` and `.cts`, and every one that keeps the C / C++ row measures `.hxx` and `.inl`, whether or not its list names them. A file already past its language's limits, a line over 120 characters included, shows as a new breach on the next PR, and a `.hxx` or `.inl` breach the baseline recorded under `Other` that now falls inside the C / C++ limits leaves a stale baseline line, which the check refuses. `python .github/scripts/size_check.py --write-baseline` settles both. `/bindwright:setup` now picks the size rule's file types from the longer list the clean code rule uses, so a project with Vue, Svelte, MQL5 or shell files gets them measured from its first setup. The template's own list stays as it was, since every project set up earlier has its own copy of that line and changing it would make each one's next update stop on a conflict there.
 
 ## [v7.17.1] — 2026-11-24
