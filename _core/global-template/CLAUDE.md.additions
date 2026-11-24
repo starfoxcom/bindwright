@@ -10,7 +10,7 @@ These are project-agnostic instructions that apply to every Claude Code session 
 While the project's chosen tool (`tools.code_research` in the bound configuration) is available, search code with it, never with an Explore agent or any other agent, whatever a skill recommends.
 
 <!-- TOGGLE:code_research:findwright START -->
-- FindWright's own guidance (`~/.claude/rules/findwright.md`, which `/findwright:setup` installs) holds the lookup sequence. Without FindWright on this computer, use Grep, Glob and Read.
+- `/findwright:find` holds FindWright's lookup sequence, and the guidance `/findwright:setup` installs repeats it for every session. When `/findwright:find` is not available, since FindWright is not installed on this computer, use Grep, Glob and Read.
 <!-- TOGGLE:code_research:findwright END -->
 <!-- TOGGLE:code_research:none START -->
 - This project has no code-research tool: the `/find` skill holds the Grep, Glob and Read sequence. Read the sources directly instead of starting an agent.
