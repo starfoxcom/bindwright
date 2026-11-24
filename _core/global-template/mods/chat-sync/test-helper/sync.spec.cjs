@@ -79,7 +79,7 @@ function moveToRepo(pc, origin, afterClone) {
   const childProcess = require('child_process')
   const realSpawn = childProcess.spawnSync
   const savedEnv = { ...process.env }
-  const scripts = ['sync.cjs', 'commands.cjs', 'move.cjs', 'paths.cjs', 'places.cjs']
+  const scripts = ['sync.cjs', 'commands.cjs', 'move.cjs', 'paths.cjs', 'places.cjs', 'lock.cjs']
     .map(name => require.resolve(path.join(SCRIPTS, name)))
   const reload = () => scripts.forEach(file => delete require.cache[file])
   childProcess.spawnSync = (command, args, options) => {
@@ -582,7 +582,7 @@ test('the user\'s own commit signing and hooks never run on the chat repo\'s com
   assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1', pushed: true })
 })
 
-test('a lock a stopped git left in the clone is cleared, and one still in use is named', () => {
+test('a lock a stopped git left in the clone is cleared, and a recent one shows git\'s own words', () => {
   const origin = bareRepo()
   const a = gitComputer('a', origin)
   const lock = path.join(a.dataDir, 'repo', '.git', 'index.lock')
@@ -596,7 +596,31 @@ test('a lock a stopped git left in the clone is cleared, and one still in use is
   writeChat(a, 's2', ['two'])
   fs.writeFileSync(lock, '')
   const answer = a.sync('out', path.join(a.chatDir, 's2.jsonl'), a.root)
-  assert.match(answer.pushError || '', /another chat-sync run is using the chat repo/)
+  assert.match(answer.pushError || '', /index\.lock/, 'git\'s own words reach the notice')
+})
+
+test('a run waits for another run on this computer, and takes over from one that was stopped', async () => {
+  const a = computer('a', tempDir('folder'))
+  const lock = path.join(a.dataDir, 'run.lock')
+  writeChat(a, 's1', ['one'])
+  fs.writeFileSync(lock, String(process.pid))
+  const running = execFileAsync(process.execPath, [SYNC, 'out', path.join(a.chatDir, 's1.jsonl'), a.root],
+    { env: a.env })
+  let finishedAt = 0
+  running.then(() => { finishedAt = Date.now() }, () => {})
+  await new Promise(resolve => setTimeout(resolve, 1_000))
+  const releasedAt = Date.now()
+  fs.rmSync(lock)
+  const run = await running
+  assert.ok(finishedAt >= releasedAt, 'the run finished only after the other one let go')
+  assert.deepStrictEqual(JSON.parse(run.stdout), { copied: 's1' })
+
+  const stopped = execFileSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'],
+    { encoding: 'utf8' })
+  fs.writeFileSync(lock, stopped)
+  writeChat(a, 's1', ['one', 'two'])
+  assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1' })
+  assert.ok(!fs.existsSync(lock), 'the lock is let go after the run')
 })
 
 test('a move into a repo that does not take the chats keeps them syncing where they did', () => {
@@ -610,4 +634,34 @@ test('a move into a repo that does not take the chats keeps them syncing where t
   })
   assert.match(answer.error || '', /still sync where they did/)
   assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(first))
+})
+
+test('a sync folder that went missing is reported and never made again here', () => {
+  const folder = tempDir('drive')
+  const a = computer('a', folder)
+  writeChat(a, 's1', ['one'])
+  fs.rmSync(folder, { recursive: true })
+  assert.match(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).error || '', /sync folder .* is missing/)
+  assert.ok(!fs.existsSync(folder), 'the folder is not made again')
+})
+
+test('a move away from a repo takes the copies other computers pushed since the last pull', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const b = gitComputer('b', origin)
+  writeChat(b, 's1', ['from b'])
+  assert.strictEqual(b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root).pushed, true)
+  const target = tempDir('target')
+  assert.strictEqual(a.sync('move', 'folder', target).moved, 1)
+  assert.strictEqual(fs.readdirSync(path.join(target, 'shop', 's1')).length, 1)
+})
+
+test('Google Drive is found under its folder name in the computer\'s language', () => {
+  const { syncPlaces } = require(path.join(SCRIPTS, 'places.cjs'))
+  for (const name of ['My Drive', 'Mi unidad', 'Meine Ablage']) {
+    const home = tempDir('home')
+    fs.mkdirSync(path.join(home, name))
+    const drive = syncPlaces(home).find(place => place.service === 'Google Drive')
+    assert.strictEqual(drive && drive.path, path.join(home, name), name)
+  }
 })

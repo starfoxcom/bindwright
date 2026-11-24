@@ -9,7 +9,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const {
-  compare, publish, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
+  compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
 } = require('./commands.cjs')
 const { copyPlainFile } = require('./paths.cjs')
 
@@ -140,6 +140,13 @@ function move([kind, where]) {
   if (ready.error) return ready
   if (describe(ready.place) === describe(old) && !isCloneMissing(old)) {
     return { error: `The chats already sync through ${describe(old)}.` }
+  }
+  // A clone holds only what it last pulled, so the newest copies come down first.
+  if (old.kind === 'git' && !isCloneMissing(old)) {
+    const pulled = pull(base.storeRoot(old))
+    if (pulled.error) {
+      return { error: `The chats were not moved, since the chat repo could not be read: ${pulled.error}` }
+    }
   }
   const copied = copyChats(base.storeRoot(old), ready.store)
   if (copied.missing.length) return { error: `These chats did not arrive: ${copied.missing.join(', ')}` }

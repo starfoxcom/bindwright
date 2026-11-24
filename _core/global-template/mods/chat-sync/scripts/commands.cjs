@@ -14,6 +14,7 @@ const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const paths = require('./paths.cjs')
 const { syncPlaces } = require('./places.cjs')
+const { withRunLock } = require('./lock.cjs')
 
 const {
   neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf, copyPlainFile,
@@ -23,8 +24,6 @@ const ID = /^[\w-]+$/
 const VISIBILITY_FRESH_MS = 60 * 60_000
 const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same time; '
   + 'this computer copies its chats again at the next turn.'
-const CLONE_BUSY = 'another chat-sync run is using the chat repo, so this chat goes out with the next copy; '
-  + 'a lock a stopped run left behind is cleared after 5 minutes.'
 
 // What another computer put in the sync place is read as input: a link there is
 // never followed, read or written through.
@@ -169,7 +168,7 @@ function clearUnlessPlain(file) {
   if (!entry.isFile()) removeQuietly(file)
 }
 
-// Only this mod's helpers work in the clone, and each git call is stopped
+// One run at a time works in the clone (lock.cjs), and each git call is stopped
 // within a minute, so a lock older than TEMP_STALE_MS was left by a git that
 // was stopped while it held it.
 function clearStaleLock(store) {
@@ -183,19 +182,14 @@ function clearStaleLock(store) {
   if (Date.now() - entry.mtimeMs > TEMP_STALE_MS) removeQuietly(lock)
 }
 
-// Git's own words, or what a lock held by another run means for this chat.
-function gitError(out) {
-  return /index\.lock/.test(out) ? CLONE_BUSY : out
-}
-
 // Commits what this computer wrote, brings the clone up to the repo and pushes.
 function publish(store, label) {
   clearStaleLock(store)
   const add = base.git(store, 'add', '-A')
-  if (!add.ok) return { pushError: gitError(add.out) }
+  if (!add.ok) return { pushError: add.out }
   if (!base.git(store, 'diff', '--cached', '--quiet').ok) {
     const commit = base.git(store, 'commit', '-q', '-m', `chat-sync: ${label}`)
-    if (!commit.ok) return { pushError: gitError(commit.out) }
+    if (!commit.ok) return { pushError: commit.out }
   }
   const pulled = pull(store)
   if (pulled.error) return { pushError: pulled.error }
@@ -235,7 +229,7 @@ function remoteBranch(store) {
 function pull(store) {
   clearStaleLock(store)
   const dropped = dropUncommitted(store)
-  if (dropped) return { error: gitError(dropped) }
+  if (dropped) return { error: dropped }
   const branch = remoteBranch(store)
   if (!branch) return {}
   const run = base.git(store, 'pull', '-q', '--rebase', 'origin', branch)
@@ -274,6 +268,12 @@ function openStore() {
   const place = base.readPlace()
   const store = base.storeRoot(place)
   if (!store) return { skipped: 'off' }
+  // A sync folder that is gone (the app unlinked, a drive not mounted) is never
+  // made again here, since chats written there would reach no other computer.
+  if (place.kind === 'folder' && !fs.statSync(store, { throwIfNoEntry: false })?.isDirectory()) {
+    return { error: `The sync folder ${store} is missing. Check that the sync app is running, `
+      + 'or pick another place with /chat-sync move folder <path>.' }
+  }
   if (place.kind === 'git') {
     if (!fs.existsSync(path.join(store, '.git'))) {
       return { error: 'The chat repo is not cloned here. Run /chat-sync move git <owner/repo> again.' }
@@ -539,9 +539,9 @@ function importCopy(copy, local, root, { localLines, before }) {
 
 function run([command, ...args]) {
   const { move } = require('./move.cjs')
-  if (command === 'out') return out(args)
-  if (command === 'in') return bringIn(args)
-  if (command === 'move') return move(args)
+  if (command === 'out') return withRunLock(() => out(args))
+  if (command === 'in') return withRunLock(() => bringIn(args))
+  if (command === 'move') return withRunLock(() => move(args))
   if (command === 'places') return { places: syncPlaces() }
   if (command === 'status') return status(args)
   return { error: `Unknown command: ${command || '(none)'}` }

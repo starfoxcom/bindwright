@@ -43,29 +43,37 @@ function dropboxFolders(home) {
   return [...found, path.join(home, 'Dropbox')]
 }
 
+// Drive for desktop names its My Drive folder in the computer's language.
+const MY_DRIVE = ['My Drive', 'Mi unidad', 'Meine Ablage', 'Mon Drive', 'Meu Drive', 'Il mio Drive',
+  'マイドライブ', '我的云端硬盘']
+
+function myDrives(folder) {
+  return MY_DRIVE.map(name => ({ service: 'Google Drive', path: path.join(folder, name) }))
+}
+
 // macOS keeps every File Provider app's folder under ~/Library/CloudStorage.
 function cloudStorage(home) {
   const root = path.join(home, 'Library', 'CloudStorage')
-  return children(root).map(name => {
+  return children(root).flatMap(name => {
     const folder = path.join(root, name)
-    if (/^GoogleDrive-/i.test(name)) return { service: 'Google Drive', path: path.join(folder, 'My Drive') }
-    if (/^OneDrive/i.test(name)) return { service: 'OneDrive', path: folder }
-    if (/^Dropbox/i.test(name)) return { service: 'Dropbox', path: folder }
-    return null
-  }).filter(Boolean)
+    if (/^GoogleDrive-/i.test(name)) return myDrives(folder)
+    if (/^OneDrive/i.test(name)) return [{ service: 'OneDrive', path: folder }]
+    if (/^Dropbox/i.test(name)) return [{ service: 'Dropbox', path: folder }]
+    return []
+  })
 }
 
 function windowsDrives() {
   if (process.platform !== 'win32') return []
-  return 'DEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => path.join(`${letter}:\\`, 'My Drive'))
+  return 'DEFGHIJKLMNOPQRSTUVWXYZ'.split('').flatMap(letter => myDrives(`${letter}:\\`))
 }
 
 // Each sync folder found here, as { service, path }, one entry per folder.
 function syncPlaces(home = os.homedir()) {
   const candidates = [
     ...cloudStorage(home),
-    { service: 'Google Drive', path: path.join(home, 'My Drive') },
-    ...windowsDrives().map(folder => ({ service: 'Google Drive', path: folder })),
+    ...myDrives(home),
+    ...windowsDrives(),
     ...children(home).filter(name => /^OneDrive( - .+)?$/.test(name))
       .map(name => ({ service: 'OneDrive', path: path.join(home, name) })),
     ...dropboxFolders(home).map(folder => ({ service: 'Dropbox', path: folder })),
