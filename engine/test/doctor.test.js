@@ -77,6 +77,13 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     const scoped = `﻿---\npaths:\n\n  # sources\n  - "src/**"\n---\n${"x".repeat(200000)}`;
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
+    const flow = `---\npaths: ["**",\n  "src/**"]\n---\n${"x".repeat(200000)}`;
+    const wrapped = await doctor(({ at }) => {
+      writeFileSync(at(".claude/rules/wrapped.md"), flow);
+      writeFileSync(at(".claude/rules/blank.md"), `---\npaths: [""]\n---\n${"x".repeat(200000)}`);
+    });
+    assert.ok(!failing(wrapped).includes("instructions"),
+      "a flow list that runs onto the next line, or holds only empty items, stays scoped");
     const loaded = await doctor(({ at }) => {
       writeFileSync(at(".claude/rules/spaced.md"), `---\npaths: [ ] # none yet\n---\n${"x".repeat(50000)}`);
       writeFileSync(at(".claude/rules/null.md"), `---\npaths: ~\n---\n${"x".repeat(49000)}`);
@@ -106,6 +113,18 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     assert.match(found.say, largest, "a linked folder is read once and a loop ends");
     assert.doesNotMatch(found.say, /client-notes/, "a personal rule's name stays out, however it is reached");
   });
+
+test("the instructions total is split between the repo and ~/.claude", needsPython, async () => {
+  const report = await doctor(({ at, config }) => {
+    mkdirSync(join(config, "rules"), { recursive: true });
+    writeFileSync(join(config, "CLAUDE.md"), "p".repeat(1000));
+    writeFileSync(join(config, "rules", "mine.md"), "p".repeat(2000));
+    writeFileSync(at(".claude/rules/big.md"), "x".repeat(60000));
+  });
+  const say = report.checks.find((c) => c.id === "instructions").say;
+  assert.match(say, /of it from this repo and 3\.0k from ~\/\.claude\. /);
+  assert.match(say, /The largest: \.claude\/rules\/big\.md \(60\.0k\)/);
+});
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
   const broken = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), "{"));

@@ -330,25 +330,28 @@ function readText(file) {
 
 // The instruction files Claude Code loads at session start for this repo and
 // config folder, as [name, characters in UTF-16 units, as Claude Code counts
-// them]: each CLAUDE.md and every rule without a `paths:` list. A rule in the
-// config folder (wherever the walk reached it from) is named only as such, so
-// its file name never reaches a bug report, and a file reached twice counts
-// once. A CLAUDE.md above the repo and files it imports are not counted.
+// them, whether it comes from ~/.claude]: each CLAUDE.md and every rule without
+// a `paths:` list. A rule in the config folder (wherever the walk reached it
+// from) is named only as such, so its file name never reaches a bug report, and
+// a file reached twice counts once. A CLAUDE.md above the repo and files it
+// imports are not counted.
 function startFiles(root, config) {
   const out = [];
   const counted = new Set();
   // `rule` is null for a CLAUDE.md, "repo" for a rule the repo's folder holds, "personal" for one in ~/.claude.
   // The personal rules are walked first, so a file both folders reach counts once, under the personal name.
-  const add = (name, path, rule = null) => {
+  const add = (name, path, rule = null, personal = false) => {
     const id = fileId(path);
     const text = id === null || counted.has(id) ? null : readText(path);
     if (text === null || (rule && isPathScoped(text))) return;
     counted.add(id);
-    out.push([rule === "personal" ? "a rule in ~/.claude/rules" : name, text.length]);
+    out.push([rule === "personal" ? "a rule in ~/.claude/rules" : name, text.length, personal]);
   };
   for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) add(name, join(root, ...name.split("/")));
-  add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"));
-  for (const [name, path] of markdownFiles(join(config, "rules"))) add(name, path, "personal");
+  add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"), null, true);
+  for (const [name, path] of markdownFiles(join(config, "rules"))) {
+    add(name, path, "personal", true);
+  }
   for (const [name, path] of markdownFiles(join(root, ".claude", "rules"))) add(`.claude/rules/${name}`, path, "repo");
   return out;
 }
@@ -356,13 +359,17 @@ function startFiles(root, config) {
 // Characters as thousands with one decimal, cut rather than rounded, so both engines print the same.
 const kilo = (n) => `${Math.floor(n / 1000)}.${Math.floor((n % 1000) / 100)}k`;
 
+const sumSizes = (files) => files.reduce((sum, [, size]) => sum + size, 0);
+
 function instructionsCheck(root, config) {
   const files = startFiles(root, config);
-  const total = files.reduce((sum, [, size]) => sum + size, 0);
+  const total = sumSizes(files);
+  const personal = sumSizes(files.filter(([, , fromPersonal]) => fromPersonal));
   const largest = [...files].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, 3);
+  const listed = largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none";
   const say = `Claude Code loads ${files.length} instruction files at session start, ${kilo(total)} characters `
-    + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. The largest: `
-    + `${largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none"}.`;
+    + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. ${kilo(total - personal)} of it from this repo `
+    + `and ${kilo(personal)} from ~/.claude. The largest: ${listed}.`;
   return total < INSTRUCTIONS_WARN_AT ? check("instructions", true, say) : check("instructions", false, say,
     FIX.instructions);
 }

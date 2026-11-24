@@ -305,24 +305,28 @@ def _markdown_files(folder, prefix="", seen=None):
     return out
 
 
+def _units(text):
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
+
+
 def _start_files(root, config):
     out = []
 
     counted = set()
 
-    def add(name, path, rule=None):
+    def add(name, path, rule=None, personal=False):
         id_ = _file_id(path)
         text = None if id_ is None or id_ in counted else _read_text(path)
         if text is None or (rule and _is_path_scoped(text)):
             return
         counted.add(id_)
         out.append(("a rule in ~/.claude/rules" if rule == "personal" else name,
-                    len(text.encode("utf-16-le", "surrogatepass")) // 2))
+                    _units(text), personal))
     for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
         add(name, os.path.join(root, *name.split("/")))
-    add("~/.claude/CLAUDE.md", os.path.join(config, "CLAUDE.md"))
+    add("~/.claude/CLAUDE.md", os.path.join(config, "CLAUDE.md"), personal=True)
     for name, path in _markdown_files(os.path.join(config, "rules")):
-        add(name, path, "personal")
+        add(name, path, "personal", personal=True)
     for name, path in _markdown_files(os.path.join(root, ".claude", "rules")):
         add(".claude/rules/" + name, path, "repo")
     return out
@@ -334,11 +338,14 @@ def _kilo(n):
 
 def _instructions_check(root, config):
     files = _start_files(root, config)
-    total = sum(size for _, size in files)
+    total = sum(size for _, size, _ in files)
+    personal = sum(size for _, size, from_personal in files if from_personal)
     largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
+    listed = ", ".join("%s (%s)" % (name, _kilo(size)) for name, size, _ in largest) or "none"
     say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
-           "The largest: %s." % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
-                                 ", ".join("%s (%s)" % (name, _kilo(size)) for name, size in largest) or "none"))
+           "%s of it from this repo and %s from ~/.claude. The largest: %s."
+           % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
+              _kilo(total - personal), _kilo(personal), listed))
     if total < INSTRUCTIONS_WARN_AT:
         return _check("instructions", True, say)
     return _check("instructions", False, say, FIX["instructions"])
