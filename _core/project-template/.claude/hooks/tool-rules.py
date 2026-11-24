@@ -366,20 +366,37 @@ def cased(pattern):
     return lambda text, shell: bool(compiled.search(bare(text, shell)))
 
 
-# Where the hook runs: the session's folder, from the hook's input.
-CWD = os.getcwd()
+# Where the hook runs: the session's folder, from the hook's input; "." until it says.
+CWD = "."
 # The commit format's subject limit, and the PR title limit where PRs squash-merge: GitHub adds ` (#123)`.
 SUBJECT_LIMIT = 72
 TITLE_LIMIT = 64
 COMMAND_END = re.compile(r"[\n;&|]")
-# Git's options before `commit`; `-c` and `-C` take a value. The two options never match the same text, so
-# a run of them that ends in no `commit` is given up in time linear in its length.
-COMMIT_HEAD = re.compile(r"\bgit\s+(?:-[cC]\s+\S+\s+|-(?![cC]\s)\S+\s+)*commit\b", re.I)
-# The first message option of a commit (`-m`, a short cluster ending in it such as `-am`, `--message`),
-# where a quote opens its value.
-COMMIT_MESSAGE = re.compile(r"(?<!\S)(?:-[A-Za-z]*m\s*|--message(?:=|\s+))(?=['\"])")
+GIT_WORD = re.compile(r"\bgit\s+", re.I)
+# Git's options before its command; `-c` and `-C` take a value. The two options never match the same text.
+GIT_OPTIONS = re.compile(r"(?:-[cC]\s+\S+\s+|-(?![cC]\s)\S+\s+)*")
+COMMIT_WORD = re.compile(r"commit\b", re.I)
+# The first message option of a commit (`-m`, a short cluster ending in it such as `-am`, `--message`).
+COMMIT_MESSAGE = re.compile(r"(?<!\S)(?:-[A-Za-z]*m\s*|--message(?:=|\s+))")
 PR_HEAD = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b", re.I)
-PR_TITLE = re.compile(r"(?<!\S)(?:--title|-t)(?:=|\s+)(?=['\"])")
+PR_TITLE = re.compile(r"(?<!\S)(?:--title|-t)(?:=|\s+)")
+
+
+def commit_heads(calls, end):
+    """Where each `git ... commit` ends. Each run of git's options is read once: a `git` that stands inside
+    an earlier one's options reaches the same `commit` or none, so it is not read again."""
+    read_to = 0
+    for git in GIT_WORD.finditer(calls, 0, end):
+        if git.start() < read_to:
+            continue
+        read_to = GIT_OPTIONS.match(calls, git.end(), end).end()
+        word = COMMIT_WORD.match(calls, read_to, end)
+        if word:
+            yield word.end()
+
+
+def pr_heads(calls, end):
+    return (found.end() for found in PR_HEAD.finditer(calls, 0, end))
 
 
 def string_text(match, shell):
@@ -395,23 +412,24 @@ def string_text(match, shell):
     return body.replace('""', '"') if shell == "powershell" else body
 
 
-def option_values(text, shell, head, option):
-    """The readable quoted value of `option` in each command that `head` starts, its first one only."""
+def option_values(text, shell, heads, option):
+    """The value of the first `option` in each command `heads` finds, when it is a quoted string the
+    shell passes as written; a first value that is not gives nothing for that command."""
     calls, end = masked_calls(text, shell)
     strings = {match.start(): match for match in quoted(text, shell)}
     # Each command's end, found once: a head searches no further than the first end after it.
     stops = [match.start() for match in COMMAND_END.finditer(calls, 0, end)] + [end]
     tried = set()
-    for found in head.finditer(calls, 0, end):
-        stop = stops[bisect.bisect_left(stops, found.end())]
+    for head_end in heads(calls, end):
+        stop = stops[bisect.bisect_left(stops, head_end)]
         if stop in tried:
             continue
         tried.add(stop)
-        value = option.search(calls, found.end(), stop)
-        if value and value.end() in strings:
-            value_text = string_text(strings[value.end()], shell)
-            if value_text is not None:
-                yield value_text
+        value = option.search(calls, head_end, stop)
+        string = strings.get(value.end()) if value else None
+        value_text = string_text(string, shell) if string else None
+        if value_text is not None:
+            yield value_text
 
 
 def first_line(message):
@@ -420,7 +438,10 @@ def first_line(message):
 
 def squash_merges():
     """Whether the repo the hook runs in squash-merges its PRs, by the answers Bindwright's setup saved."""
-    folder = os.path.abspath(CWD)
+    try:
+        folder = os.path.abspath(CWD)
+    except OSError:  # a "." whose folder was deleted
+        return False
     while True:
         try:
             with open(os.path.join(folder, ".bindwright", "project.json"), encoding="utf-8") as answers:
@@ -435,12 +456,12 @@ def squash_merges():
 
 
 def long_subject(text, shell):
-    values = option_values(text, shell, COMMIT_HEAD, COMMIT_MESSAGE)
+    values = option_values(text, shell, commit_heads, COMMIT_MESSAGE)
     return any(len(first_line(message)) > SUBJECT_LIMIT for message in values)
 
 
 def long_title(text, shell):
-    values = option_values(text, shell, PR_HEAD, PR_TITLE)
+    values = option_values(text, shell, pr_heads, PR_TITLE)
     return any(len(first_line(title)) > TITLE_LIMIT for title in values) and squash_merges()
 
 
@@ -555,7 +576,8 @@ def main():
         sys.exit(0)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
     global CWD
-    CWD = data.get("cwd") if isinstance(data.get("cwd"), str) else CWD
+    cwd = data.get("cwd")
+    CWD = cwd if isinstance(cwd, str) and cwd else CWD
     refused = refusal(text, shell)
     if refused:
         deny(*refused)

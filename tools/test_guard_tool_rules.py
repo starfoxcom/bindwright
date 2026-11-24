@@ -138,6 +138,8 @@ class LengthRowsTest(unittest.TestCase):
                     (f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
                     (f'git commit -m "{AT_LIMIT}"', "bash", False),
                     (f'git commit -m "short" -m "{LONG}"', "bash", False),
+                    (f'git commit -m wip -m "{LONG}"', "bash", False),
+                    (f"git commit -m $'x\\n\\ny' -m \"{LONG}\"", "bash", False),
                     (f'echo "git commit -m {LONG}"', "bash", False),
                     (f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
                     (f'git commit -m "{LONG} `$x"', "powershell", False),

@@ -54,6 +54,9 @@ class LongInputTest(unittest.TestCase):
              "git " + "-c " * 20000 + "x"),
             ("tool rules: a run of git's `-C` options in PowerShell", lambda t: self.rules.refusal(t, "powershell"),
              "git " + "-C -c " * 10000 + "x"),
+            *[(f"tool rules: a `git` inside each of many `{word}` options", lambda t: self.rules.refusal(t, "bash"),
+               word * 15000)
+              for word in ("git -c ", "git -C ")],
             ("attribution: one line of repeated `gh pr`", self.attribution.routes_in, "gh pr " * 3000),
             ("attribution: one line of repeated `git config`", self.attribution.routes_in, "git config " * 2000),
             ("attribution: a long separator run after `made by`", scan, "made by" + " " * 20000 + "x"),
