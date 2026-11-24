@@ -256,8 +256,11 @@ function pull(store) {
   // Named in full, so a branch the repo names with a leading dash is never read as an option.
   const run = base.git(store, 'pull', '-q', '--rebase', 'origin', `refs/heads/${branch}`)
   if (run.ok) return { branch }
+  // A rebase stopped on a conflict leaves its folder in the clone, in whatever
+  // language git speaks; a network or sign-in failure stops before it starts.
+  const isConflict = ['rebase-merge', 'rebase-apply'].some(name => fs.existsSync(path.join(store, '.git', name)))
   base.git(store, 'rebase', '--abort')
-  if (!/conflict/i.test(run.out)) return { error: run.out }
+  if (!isConflict) return { error: run.out }
   const reset = base.git(store, 'reset', '--hard', '-q', `origin/${branch}`)
   return { error: reset.ok ? CHANGED_MEANWHILE : reset.out }
 }

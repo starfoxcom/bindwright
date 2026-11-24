@@ -722,3 +722,20 @@ test('a computer with no git name set still commits and pushes its chats', () =>
   assert.deepStrictEqual(answer, { copied: 's1', pushed: true })
   assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
 })
+
+test('a pull that conflicts is reset to the repo whatever language git speaks', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin, { LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' })
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const other = tempDir('other')
+  const env = { ...process.env, ...GIT_ENV }
+  execFileSync('git', ['clone', '-q', origin, other], { env })
+  const own = committed(origin).find(file => file.startsWith('shop/s1/'))
+  fs.appendFileSync(path.join(other, own), '{"changed":"elsewhere"}\n')
+  execFileSync('git', ['-C', other, 'commit', '-qam', 'elsewhere'], { env })
+  execFileSync('git', ['-C', other, 'push', '-q', 'origin', 'HEAD'], { env })
+  writeChat(a, 's1', ['one', 'two'])
+  const answer = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.match(answer.pushError || '', /Another computer changed the chat repo/)
+})
