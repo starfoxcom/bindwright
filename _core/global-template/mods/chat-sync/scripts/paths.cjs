@@ -94,10 +94,52 @@ const DEPTH = { F: 1, E1: 1, E2: 2 }
 
 // `folder`'s segments as a chat file holds them in `form`: each escaped for its
 // JSON depth, so a `"` or `\` in a folder name keeps the line valid JSON.
-function written(parts, form, isWindows) {
+function written(parts, form, isWindows, depth = DEPTH[form]) {
   const escape = text => JSON.stringify(text).slice(1, -1)
-  const escaped = parts.map(part => Array.from({ length: DEPTH[form] }).reduce(escape, part))
+  const escaped = parts.map(part => Array.from({ length: depth }).reduce(escape, part))
   return escaped.join(isWindows ? FORMS[form] : '/')
+}
+
+// The spans [start, end) of a JSON line's top-level strings, quotes included.
+function stringSpans(line) {
+  const spans = []
+  for (let at = line.indexOf('"'); at >= 0; at = line.indexOf('"', at)) {
+    let end = at + 1
+    while (end < line.length && line[end] !== '"') end += line[end] === '\\' ? 2 : 1
+    spans.push([at, end + 1])
+    at = end + 1
+  }
+  return spans
+}
+
+// True when the JSON string literal `literal` holds a JSON object or array.
+function holdsJson(literal) {
+  try {
+    const text = JSON.parse(literal).trim()
+    if (!text.startsWith('{') && !text.startsWith('[')) return false
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// A folder whose name needs no escaping writes the same text inside a string
+// and inside a string held in another, so one placeholder, F, stands for both.
+// On the way in, F is escaped twice where it sits in a string that holds JSON.
+function expandLine(line, values, nestedValues) {
+  let spans = null
+  let span = 0
+  const isNested = new Map()
+  return line.replace(WRITTEN, (match, at) => {
+    if (!(match in nestedValues)) return values[match] ?? 'CHATSYNC_'
+    spans ??= stringSpans(line)
+    while (span < spans.length && spans[span][1] <= at) span++
+    const [start, end] = spans[span] ?? [at, at]
+    if (start > at) return values[match]
+    if (!isNested.has(span)) isNested.set(span, holdsJson(line.slice(start, end)))
+    return isNested.get(span) ? nestedValues[match] : values[match]
+  })
 }
 
 function applyRules(text, rules) {
@@ -128,7 +170,9 @@ function neutralize(root, home) {
 
 function expand(root, home) {
   const values = Object.fromEntries([...inValues('project', root), ...inValues('home', home)])
-  return text => text.replace(WRITTEN, match => values[match] ?? 'CHATSYNC_')
+  const nestedF = (name, folder) => [token(name, 'F'), written(segments(folder), 'F', isWindowsPath(folder), 2)]
+  const nestedValues = Object.fromEntries([nestedF('project', root), nestedF('home', home)])
+  return text => text.replace(/[^\n]*\n?/g, line => expandLine(line, values, nestedValues))
 }
 
 // Writes `src` through `change`, line by line, to `dst`. With `completeOnly`, a

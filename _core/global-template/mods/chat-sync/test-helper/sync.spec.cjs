@@ -192,6 +192,22 @@ test('a folder whose name holds a quote or a backslash keeps every line valid JS
   assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, odd)
 })
 
+test('a chat from a plain folder name arrives whole on a computer whose folder holds a quote or a backslash', () => {
+  const odd = '/home/sam/say "hi"\\x'
+  const back = expand(odd, '/home/sam')
+  const senders = [
+    ['a folder without drive letters', '/Users/sam/app', '/Users/sam', '/Users/sam/app'],
+    ['a Windows folder written with forward slashes', 'C:\\Users\\sam\\app', 'C:\\Users\\sam', 'C:/Users/sam/app'],
+  ]
+  for (const [name, root, home, written] of senders) {
+    const out = neutralize(root, home)
+    const top = JSON.stringify({ cwd: written, said: `cd "${written}"` })
+    const nested = JSON.stringify({ inner: JSON.stringify({ cwd: written }) })
+    assert.deepStrictEqual(JSON.parse(back(out(top))), { cwd: odd, said: `cd "${odd}"` }, `${name}: a top-level string`)
+    assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, odd, `${name}: a nested string`)
+  }
+})
+
 test('only this computer\'s own folders are swapped, never a longer path or name that holds them', () => {
   const windows = neutralize('C:\\work\\app', 'C:\\Users\\al')
   const posix = neutralize('/srv/app', '/home/sam')
