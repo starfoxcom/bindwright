@@ -14,6 +14,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Changed
 
 - **The review rules load less text at every session start.** How a PR that edits the review workflow merges, the steps for a repo's first setup PR and the recovery for a broken review gate moved from `review-tiers.md` into a new `review-workflow.md`, which loads only when a session reads a workflow or gate file. `review-tiers.md` drops from 12.4k to 8.1k characters and keeps a pointer that says when to read the new rule; `/bindwright:update` adds the new file.
+- **The git rules load less text at every session start.** How releases are numbered and tagged, the cascade that carries a release or hotfix back into the integration branch, and where a workflow change lands first moved from `git.md` into a new `releases.md`, which loads only when a session reads a changelog, a file that carries the version (`VERSION`, `package.json`, `pyproject.toml` and the like) or a workflow. `git.md` keeps a short section with the cascade rule, the branch a workflow change starts from and when to read the new rule, and drops from 16,451 to 14,416 characters in the template, or from 7,098 to 5,488 in a Gitflow bind with merge commits like this repo's; `/bindwright:update` adds the new file.
 
 ## [v7.16.1] — 2026-11-23
 
