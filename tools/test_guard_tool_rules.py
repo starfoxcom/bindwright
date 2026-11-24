@@ -123,6 +123,80 @@ class SecretWriteRowTest(unittest.TestCase):
                 self.assertIsNone(hook.refusal(command, "bash"))
 
 
+class LengthRowsTest(unittest.TestCase):
+    """A commit subject over 72 characters, and a PR title over 64 where PRs squash-merge, are logged when
+    they are the first message or title of a plain command; anything else, or a command the shell would
+    change, is not."""
+
+    SUBJECT = "a commit subject over 72 characters"
+    TITLE = "a PR title over 64 characters where PRs squash-merge"
+    LONG = "docs(changelog): say the four file types are now measured wherever their row stays"  # 82
+    AT_LIMIT = "x" * 72
+    TITLE_LONG = "fix(size-check): measure .mts, .cts, .hxx and .inl with their language"  # 70
+    SUBJECT_ROWS = (
+        ("-m, double quotes", f'git commit -m "{LONG}"', "bash", True),
+        ("a cluster ending in m", f"git commit -am '{LONG}'", "bash", True),
+        ("git's own options first", f'git -C sub commit -m "{LONG}"', "powershell", True),
+        ("--message=", f'git commit --message="{LONG}"', "bash", True),
+        ("a value stuck to -m", f'git commit -m"{LONG}"', "bash", True),
+        ("a flag before -m", f'git commit --amend -m "{LONG}"', "bash", True),
+        ("the second command of a line", f'git add . && git commit -m "{LONG}"', "bash", True),
+        ("a long body under a short subject", f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
+        ("exactly 72", f'git commit -m "{AT_LIMIT}"', "bash", False),
+        ("a second -m", f'git commit -m "short" -m "{LONG}"', "bash", False),
+        ("a bare first value", f'git commit -m wip -m "{LONG}"', "bash", False),
+        ("a bare value stuck to -m", f'git commit -mwip -m "{LONG}"', "bash", False),
+        ("a long path after the message", f'git commit -m "short" "{LONG}"', "bash", False),
+        ("ANSI-C quoting", f"git commit -m $'fix: x' \"{LONG}\"", "bash", False),
+        ("an escape", f'git commit -m \\a "{LONG}"', "bash", False),
+        ("a mention", f'echo "git commit -m {LONG}"', "bash", False),
+        ("a substitution", f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
+        ("a PowerShell variable", f'git commit -m "{LONG} `$x"', "powershell", False),
+        ("a comment", f"git commit -F msg.txt  # -m '{LONG}'", "bash", False),
+    )
+
+    def setUp(self):
+        self.hook = load_tool_rules()
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.hook.OBSERVED_LOG = os.path.join(self.folder, "tool-rules", "observed.jsonl")
+
+    def project(self, merge_style):
+        os.makedirs(os.path.join(self.folder, ".git"), exist_ok=True)
+        os.makedirs(os.path.join(self.folder, ".bindwright"), exist_ok=True)
+        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
+            json.dump({"advanced": {"mergeStyle": merge_style}}, answers)
+        self.hook.CWD = os.path.join(self.folder, "sub")
+
+    def logged(self, command, shell):
+        before = len(observed(self.hook))
+        self.assertIsNone(self.hook.refusal(command, shell))
+        return [entry["rule"] for entry in observed(self.hook)[before:]]
+
+    def test_a_long_subject_is_logged_and_the_rest_are_not(self):
+        for name, command, shell, want in self.SUBJECT_ROWS:
+            with self.subTest(name):
+                self.assertEqual(self.logged(command, shell), [self.SUBJECT] if want else [])
+
+    def test_a_long_title_is_logged_only_where_prs_squash_merge(self):
+        create = f'gh pr create --base develop --title "{self.TITLE_LONG}" --body-file b.md'
+        for name, style, shell, command, want in (
+                ("--title", "squash", "bash", create, True),
+                ("-t in PowerShell", "squash", "powershell", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
+                ("a short title", "squash", "bash", 'gh pr create --title "fix(x): short"', False),
+                ("a bare value stuck to -t", "squash", "bash", f'gh pr create -tshort --title "{self.TITLE_LONG}"',
+                 False),
+                ("ANSI-C quoting", "squash", "bash", f"gh pr create --title $'x' \"{self.TITLE_LONG}\"", False),
+                ("merge commits", "merge", "bash", create, False)):
+            with self.subTest(name):
+                self.project(style)
+                self.assertEqual(self.logged(command, shell), [self.TITLE] if want else [])
+        # Answers nested deeper than the JSON reader goes read as no squash, never as a crash.
+        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
+            answers.write("[" * 100000)
+        self.assertEqual(self.logged(create, "bash"), [])
+
+
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
     a comment or a here-document body, always passes, and the same trigger run as a command is
