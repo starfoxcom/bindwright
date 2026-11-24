@@ -35,6 +35,7 @@ Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
 """
 import bisect
+import collections
 import json
 import os
 import re
@@ -378,6 +379,9 @@ COMMAND_END = re.compile(r"[\n;&|]")
 UNPLAIN = re.compile(r"[$`\\]|''|\"\"")
 # Outside quotes, PowerShell reads these as an expression or a here-string, where shlex reads a word.
 POWERSHELL_UNPLAIN = re.compile(r"[()@]")
+# Anywhere in the text, PowerShell reads these as quotes where shlex does not: a here-string opener and
+# the typographic quotes.
+POWERSHELL_QUOTES = re.compile("@['\"]|[‘’‚‛“”„]")
 LONGEST_COMMAND = 10000  # a plain commit or PR command is shorter; a longer one is left unread
 
 
@@ -402,7 +406,7 @@ def plain_words(command, shape, shell):
     command = command.strip()
     if not command.startswith(("git", "gh")) or len(command) > LONGEST_COMMAND or UNPLAIN.search(command):
         return None
-    if shell == "powershell" and POWERSHELL_UNPLAIN.search(shape):
+    if shell == "powershell" and (POWERSHELL_UNPLAIN.search(shape) or POWERSHELL_QUOTES.search(command)):
         return None
     try:
         return shlex.split(command, comments=True)
@@ -424,11 +428,20 @@ def gh_pr_args(words):
     return words[3:] if words[:2] == ["gh", "pr"] and words[2:3] in (["create"], ["edit"]) else None
 
 
+# A length rule, read the way the command's own option parser reads it:
+# - args_of: the command's arguments, or None for another command;
+# - letter and name: its message option, short and long;
+# - value_letters: short options that take a value, the rest of their word or else the next word;
+# - attached_only: short options that take one only attached (git's `-S<keyid>`);
+# - value_names: long options that take the next word as their value whatever it starts with;
+# - attached_equals: whether an attached value drops a leading `=` (gh's flag parser does; git's keeps it).
+LengthRule = collections.namedtuple(
+    "LengthRule", "args_of letter name value_letters attached_only value_names attached_equals")
+
+
 def first_value(args, rule):
-    """The value of the first `--<name>`, or `-<letter>` alone or in a cluster of short options. A short
-    option in `value_letters` takes the rest of its word, or the next word, as its own value; one in
-    `attached_only` takes only the rest of its word."""
-    _, letter, name, value_letters, attached_only, attached_equals = rule
+    """The value of the first `--<name>`, or `-<letter>` alone or in a cluster of short options, skipping
+    every other option's value."""
     skip = False
     for index, arg in enumerate(args):
         following = args[index + 1] if index + 1 < len(args) else None
@@ -436,33 +449,38 @@ def first_value(args, rule):
             skip = False
         elif arg == "--":
             return None
-        elif arg == name:
+        elif arg == rule.name:
             return following
-        elif arg.startswith(name + "="):
-            return arg[len(name) + 1:]
+        elif arg.startswith(rule.name + "="):
+            return arg[len(rule.name) + 1:]
+        elif arg in rule.value_names:
+            skip = True
         elif len(arg) > 1 and arg[0] == "-" and arg[1].isalpha():
             for at, short in enumerate(arg[1:], 2):
-                if short == letter:
-                    attached = arg[at + 1:] if attached_equals and arg[at:at + 1] == "=" else arg[at:]
-                    return attached or following
-                if short in value_letters or short in attached_only or not short.isalpha():
-                    skip = short in value_letters and at == len(arg)
+                if short == rule.letter:
+                    equals = rule.attached_equals and arg[at:at + 1] == "="
+                    return (arg[at + 1:] if equals else arg[at:]) or following
+                if short in rule.value_letters or short in rule.attached_only or not short.isalpha():
+                    skip = short in rule.value_letters and at == len(arg)
                     break
     return None
 
 
-# Each length rule: the command's arguments, its message option, the short options that take a value
-# (the rest of their word or else the next word), those that take one only attached (git's `-S<keyid>`),
-# and whether an attached value drops a leading `=` (gh's flag parser does; git's keeps it).
-COMMIT_MESSAGE = (git_commit_args, "m", "--message", "cCFt", "Su", False)
-PR_TITLE = (gh_pr_args, "t", "--title", "aBbFHlmpRrT", "", True)
+COMMIT_MESSAGE = LengthRule(
+    git_commit_args, "m", "--message", "cCFt", "Su",
+    {"--author", "--date", "--trailer", "--file", "--template", "--fixup", "--squash", "--cleanup",
+     "--reuse-message", "--reedit-message", "--pathspec-from-file"}, False)
+PR_TITLE = LengthRule(
+    gh_pr_args, "t", "--title", "aBbFHlmpRrT", "",
+    {"--body", "--body-file", "--base", "--head", "--label", "--assignee", "--reviewer", "--milestone",
+     "--project", "--repo", "--template", "--recover", "--add-assignee", "--remove-assignee", "--add-label",
+     "--remove-label", "--add-reviewer", "--remove-reviewer", "--add-project", "--remove-project"}, True)
 
 
 def option_values(text, shell, rule):
-    args_of = rule[0]
     for command, shape in commands(text, shell):
         words = plain_words(command, shape, shell)
-        args = args_of(words) if words else None
+        args = rule.args_of(words) if words else None
         value = first_value(args, rule) if args is not None else None
         if value is not None:
             yield value
