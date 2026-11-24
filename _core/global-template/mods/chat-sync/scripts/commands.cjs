@@ -316,12 +316,19 @@ function privateRepoError(repo) {
 
 
 // The clone's own ignore list (never committed) leaves temporary copies out.
-function keepTempsOutOfGit(store) {
-  const exclude = path.join(store, '.git', 'info', 'exclude')
-  const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : ''
-  if (text.split('\n').includes('.*.tmp')) return
-  fs.mkdirSync(path.dirname(exclude), { recursive: true })
-  fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.*.tmp\n`)
+// Sets the clone's own git files, which outrank the repo's and the user's:
+// temporaries stay out of commits, and no attribute (a global `* text=auto`,
+// a committed .gitattributes) changes a chat file's line ends.
+function fitClone(store) {
+  addLine(path.join(store, '.git', 'info', 'exclude'), '.*.tmp')
+  addLine(path.join(store, '.git', 'info', 'attributes'), '* -text')
+}
+
+function addLine(file, line) {
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+  if (text.split('\n').includes(line)) return
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`)
 }
 
 const NO_GIT = 'The chats sync through a git repo here, but this session cannot find git, so nothing was copied. '
@@ -353,7 +360,7 @@ function openStore() {
       return { error: `The clone here is not of ${place.repo}, since a move stopped halfway. `
         + `Run /chat-sync move git ${place.repo} again.` }
     }
-    keepTempsOutOfGit(store)
+    fitClone(store)
   }
   return { place, store }
 }
@@ -691,5 +698,5 @@ function hasGit() {
 
 module.exports = {
   run, out, bringIn, compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain,
-  placeFile, inWorkFolder,
+  placeFile, inWorkFolder, fitClone,
 }

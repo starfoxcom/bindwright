@@ -36,11 +36,15 @@ function gitConfig(text) {
   return file
 }
 
-// Git that reads none of this computer's own settings or hooks.
-// It changes line ends on checkout, as git on Windows does by default.
+const ATTRIBUTES = path.join(tempDir('attributes'), 'attributes')
+fs.writeFileSync(ATTRIBUTES, '* text=auto eol=crlf\n')
+
+// Git that reads none of this computer's own settings or hooks. It changes
+// line ends on checkout, as git on Windows does by default, and through a
+// global attributes rule, as many people set one.
 const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: '1',
-  GIT_CONFIG_GLOBAL: gitConfig('[core]\n\tautocrlf = true\n'),
+  GIT_CONFIG_GLOBAL: gitConfig(`[core]\n\tautocrlf = true\n\tattributesFile = ${ATTRIBUTES.replace(/\\/g, '/')}\n`),
   GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
   GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com',
 }
@@ -854,7 +858,8 @@ function keyOfRepo(url, inside = '') {
 
 test('every spelling of one remote names one project, and two different projects never share a name', () => {
   const spellings = ['https://github.com/acme/shop.git', 'git@github.com:Acme/Shop.git',
-    'ssh://git@ssh.github.com:443/acme/shop.git', 'ssh://git@github.com:22/acme/shop']
+    'ssh://git@ssh.github.com:443/acme/shop.git', 'ssh://git@github.com:22/acme/shop',
+    'https://github.com/acme/shop.git/']
   assert.strictEqual(new Set(spellings.map(url => keyOfRepo(url))).size, 1, 'one remote, one name')
   const repo = 'git@github.com:o/r.git'
   const pairs = [

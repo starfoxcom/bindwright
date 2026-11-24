@@ -216,7 +216,7 @@ function remoteKey(url, insideParts) {
   const hasScheme = /^[a-z+]+:\/\//i.test(url)
   let bare = url.replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
   if (hasScheme) bare = bare.replace(/^([^/:]+):\d+\//, '$1/')
-  const parts = bare.replace(/\.git$/i, '').toLowerCase().split(/[:/]/).filter(Boolean)
+  const parts = bare.replace(/\/+$/, '').replace(/\.git$/i, '').toLowerCase().split(/[:/]/).filter(Boolean)
   if (parts[0] === 'ssh.github.com') parts[0] = 'github.com'
   const inside = insideParts.filter(Boolean)
   return keyOf([...parts, ...inside].join('-'), ['remote', parts, inside])

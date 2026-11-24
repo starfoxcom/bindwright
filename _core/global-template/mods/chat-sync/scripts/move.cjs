@@ -9,6 +9,7 @@ const path = require('path')
 const base = require('./sync.cjs')
 const {
   compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
+  fitClone,
 } = require('./commands.cjs')
 const { copyPlainFile } = require('./paths.cjs')
 
@@ -56,7 +57,10 @@ function clone(repo, folder) {
   const found = repoAddress(repo)
   if (found.error) return found.error
   fs.mkdirSync(folder, { recursive: true })
-  for (const args of [['init', '-q'], ['remote', 'add', 'origin', found.address], ['fetch', '-q', 'origin']]) {
+  const init = base.git(folder, 'init', '-q')
+  if (!init.ok) return `Could not clone ${repo}: ${init.out}`
+  fitClone(folder)
+  for (const args of [['remote', 'add', 'origin', found.address], ['fetch', '-q', 'origin']]) {
     const run = base.git(folder, ...args)
     if (!run.ok) return `Could not clone ${repo}: ${run.out}`
   }
