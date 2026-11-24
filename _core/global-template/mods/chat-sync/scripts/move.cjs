@@ -8,7 +8,10 @@ const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
-const { compare, publish, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile } = require('./commands.cjs')
+const {
+  compare, publish, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
+} = require('./commands.cjs')
+const { copyPlainFile } = require('./paths.cjs')
 
 // Neither part starts with a dash, so gh never reads the name as an option.
 const REPO = /^[\w.][\w.-]*\/[\w.][\w.-]*$/
@@ -59,18 +62,29 @@ function copyChats(from, to) {
       ensureFolder(path.join(to, project))
       ensureFolder(target)
       for (const name of chatFiles(path.join(from, project, id))) {
-        const source = path.join(from, project, id, name)
-        const dest = path.join(target, name)
-        clearUnlessPlain(dest)
-        const verdict = compare(source, dest)
-        if (verdict === 'new' || verdict === 'ahead') placeFile(source, dest)
-        if (verdict === 'diverged') placeFile(source, path.join(target, name.replace(/\.jsonl$/, '.moved')))
-        if (!fs.existsSync(dest)) missing.push(`${project}/${id}/${name}`)
+        const isCopied = copyOne(path.join(from, project, id, name), target, name)
+        if (!isCopied) missing.push(`${project}/${id}/${name}`)
       }
       moved += 1
     }
   }
   return { moved, missing }
+}
+
+// Copies one computer's copy into `target`. The old place's copy is read once,
+// through a checked handle, into a private folder, and everything after works
+// from that read. True when the copy is in `target`.
+function copyOne(source, target, name) {
+  return inWorkFolder(work => {
+    const read = path.join(work, 'copy')
+    if (!copyPlainFile(source, read)) return false
+    const dest = path.join(target, name)
+    clearUnlessPlain(dest)
+    const verdict = compare(read, dest)
+    if (verdict === 'new' || verdict === 'ahead') placeFile(read, dest)
+    if (verdict === 'diverged') placeFile(read, path.join(target, name.replace(/\.jsonl$/, '.moved')))
+    return fs.existsSync(dest)
+  })
 }
 
 // A folder as the user typed it, with a leading ~ as their home folder, or null

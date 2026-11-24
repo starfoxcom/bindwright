@@ -532,4 +532,5 @@ function hasGit() {
 
 module.exports = {
   run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile,
+  inWorkFolder,
 }
