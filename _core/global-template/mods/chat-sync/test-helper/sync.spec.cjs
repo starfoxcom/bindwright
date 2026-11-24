@@ -78,10 +78,6 @@ function gitComputer(name, origin, env = {}) {
 function moveToRepo(pc, origin, afterClone) {
   const childProcess = require('child_process')
   const realSpawn = childProcess.spawnSync
-  const savedEnv = { ...process.env }
-  const scripts = ['sync.cjs', 'commands.cjs', 'move.cjs', 'paths.cjs', 'places.cjs', 'lock.cjs']
-    .map(name => require.resolve(path.join(SCRIPTS, name)))
-  const reload = () => scripts.forEach(file => delete require.cache[file])
   childProcess.spawnSync = (command, args, options) => {
     if (command !== 'gh') return realSpawn(command, args, options)
     if (args[1] === 'view') return { status: 0, stdout: 'PRIVATE\n', stderr: '' }
@@ -90,15 +86,45 @@ function moveToRepo(pc, origin, afterClone) {
     afterClone(folder)
     return run
   }
+  try {
+    return inProcess(pc, () => require(path.join(SCRIPTS, 'move.cjs')).move(['git', 'me/chats']))
+  } finally {
+    childProcess.spawnSync = realSpawn
+  }
+}
+
+// Runs `work` inside this process as computer `pc`, with the helper's scripts
+// loaded fresh for it.
+function inProcess(pc, work) {
+  const savedEnv = { ...process.env }
+  const scripts = ['sync.cjs', 'commands.cjs', 'move.cjs', 'paths.cjs', 'places.cjs', 'lock.cjs']
+    .map(name => require.resolve(path.join(SCRIPTS, name)))
+  const reload = () => scripts.forEach(file => delete require.cache[file])
   Object.assign(process.env, pc.env)
   reload()
   try {
-    return require(path.join(SCRIPTS, 'move.cjs')).move(['git', 'me/chats'])
+    return work()
   } finally {
-    childProcess.spawnSync = realSpawn
     for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key]
     Object.assign(process.env, savedEnv)
     reload()
+  }
+}
+
+// Runs the helper as computer `pc` while every file under `folder` refuses to
+// open, as a file a sync app holds open does on Windows.
+function syncWithBusyFiles(pc, folder, ...args) {
+  const realOpen = fs.openSync
+  fs.openSync = (file, ...rest) => {
+    if (path.resolve(String(file)).startsWith(path.resolve(folder))) {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, open '${file}'`), { code: 'EBUSY' })
+    }
+    return realOpen(file, ...rest)
+  }
+  try {
+    return inProcess(pc, () => require(path.join(SCRIPTS, 'commands.cjs')).run(args))
+  } finally {
+    fs.openSync = realOpen
   }
 }
 
@@ -662,6 +688,65 @@ test('a sync folder that went missing is reported and never made again here', ()
   assert.ok(!fs.existsSync(folder), 'the folder is not made again')
   assert.match(a.sync('move', 'folder', tempDir('target')).error || '', /not moved, since the sync folder/)
   assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(folder), 'the place did not switch')
+})
+
+test('a newer copy that cannot be read yet is brought in once it can be', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  b.sync('in', b.chatDir, b.root, 'other')
+  writeChat(a, 's1', ['one', 'two'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const busy = syncWithBusyFiles(b, store, 'in', b.chatDir, b.root, 'other')
+  assert.match(busy.error || '', /could not read/)
+  assert.deepStrictEqual(busy.imported, [])
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
+})
+
+test('a run clears the private copies a stopped run left behind', () => {
+  const a = computer('a', tempDir('store'))
+  const left = path.join(a.dataDir, 'work', 'run-stopped')
+  fs.mkdirSync(left, { recursive: true })
+  fs.writeFileSync(path.join(left, 'mine'), 'a whole chat\n')
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.ok(!fs.existsSync(left), 'the stopped run\'s copies are gone')
+})
+
+test('a move out of a folder that holds other things copies only the chats', () => {
+  const first = tempDir('first')
+  const a = computer('a', first)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  fs.mkdirSync(path.join(first, 'photos', '2024'), { recursive: true })
+  const target = tempDir('target')
+  assert.strictEqual(a.sync('move', 'folder', target).moved, 1)
+  assert.deepStrictEqual(fs.readdirSync(target), ['shop'])
+})
+
+test('git asks no question of an ssh command set by the user, and signs in to GitHub through gh', () => {
+  const base = require(SYNC)
+  const rows = [
+    ['ssh with options', 'ssh -i key', 'ssh -i key -o BatchMode=yes'],
+    ['quoted ssh.exe', '"C:/Program Files/OpenSSH/ssh.exe" -i key', '"C:/Program Files/OpenSSH/ssh.exe" -i key -o BatchMode=yes'],
+    ['another program', 'plink -batch', 'plink -batch'],
+  ]
+  const saved = process.env.GIT_SSH_COMMAND
+  try {
+    for (const [name, command, expected] of rows) {
+      process.env.GIT_SSH_COMMAND = command
+      assert.strictEqual(base.quietEnv().GIT_SSH_COMMAND, expected, name)
+    }
+  } finally {
+    if (saved === undefined) delete process.env.GIT_SSH_COMMAND
+    else process.env.GIT_SSH_COMMAND = saved
+  }
+  const helper = execFileSync('git',
+    [...base.gitSettings(), 'config', '--get-urlmatch', 'credential.helper', 'https://github.com/me/chats'],
+    { env: { ...process.env, ...GIT_ENV }, encoding: 'utf8' })
+  assert.strictEqual(helper.trim(), '!gh auth git-credential')
 })
 
 test('a pull that a stopped run left half done is undone, and its commits still go up', () => {

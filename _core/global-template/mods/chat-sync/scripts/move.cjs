@@ -65,10 +65,13 @@ function copyChats(from, to) {
   const projects = projectFolders(from).filter(name => !isInside(to, path.join(from, name)))
   for (const project of projects) {
     for (const id of chatIds(path.join(from, project))) {
+      // A folder with no chat file is not a chat, so nothing is made or counted for it.
+      const names = chatFiles(path.join(from, project, id))
+      if (!names.length) continue
       const target = path.join(to, project, id)
       ensureFolder(path.join(to, project))
       ensureFolder(target)
-      for (const name of chatFiles(path.join(from, project, id))) {
+      for (const name of names) {
         const isCopied = copyOne(path.join(from, project, id, name), target, name)
         if (!isCopied) missing.push(`${project}/${id}/${name}`)
       }

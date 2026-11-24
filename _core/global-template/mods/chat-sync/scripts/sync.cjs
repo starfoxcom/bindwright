@@ -82,18 +82,31 @@ let sshCommand
 // fails the command at once instead of waiting, since no one is there to answer
 // it. Git asks an askpass program before the terminal, and an editor's terminal
 // sets one that opens a dialog, so none is passed on (core.askPass is emptied in
-// gitSettings). A user's own ssh program is kept, as its options may differ from ssh's.
+// gitSettings). A user's own ssh command is kept, with batch mode added when its
+// program is OpenSSH's; another program (plink, a wrapper) takes other options.
 function quietEnv() {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GH_PROMPT_DISABLED: '1' }
   for (const name of ['GIT_ASKPASS', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']) delete env[name]
-  if (env.GIT_SSH_COMMAND || env.GIT_SSH) return env
+  if (env.GIT_SSH && !env.GIT_SSH_COMMAND) return env
+  const own = env.GIT_SSH_COMMAND || configuredSshCommand()
+  env.GIT_SSH_COMMAND = !own ? 'ssh -o BatchMode=yes' : isOpenSsh(own) ? `${own} -o BatchMode=yes` : own
+  return env
+}
+
+function configuredSshCommand() {
   if (sshCommand === undefined) {
     const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
       { cwd: os.homedir(), encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
     sshCommand = (run.stdout || '').trim()
   }
-  if (!sshCommand) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
-  return env
+  return sshCommand
+}
+
+// Whether a command's program is ssh itself, by its file name, quoted or not.
+function isOpenSsh(command) {
+  const program = /^\s*(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(command)
+  const file = program ? (program[1] || program[2] || program[3]) : ''
+  return /^ssh(?:\.exe)?$/i.test(file.split(/[\\/]/).pop())
 }
 
 // Settings every git call of the mod runs with, the clone included: chat files
@@ -102,11 +115,13 @@ function quietEnv() {
 // which could ask for a passphrase or a key touch with no one there. The hooks
 // folder is never made, so git finds no hook in it. The mod commits under its
 // own name, so a computer signed in to gh with no git name set commits too. No
-// askpass program and no credential helper may ask for anything.
+// askpass program and no credential helper may ask for anything. GitHub hears
+// gh's sign-in after the user's own helpers, as `gh repo clone` does for the
+// clone, so a computer signed in only through gh pulls and pushes too.
 function gitSettings() {
   const settings = ['core.autocrlf=false', 'core.symlinks=false', 'commit.gpgsign=false',
     `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`, 'user.name=chat-sync', 'user.email=chat-sync@localhost',
-    'core.askPass=', 'credential.interactive=false']
+    'core.askPass=', 'credential.interactive=false', 'credential.https://github.com.helper=!gh auth git-credential']
   return settings.flatMap(setting => ['-c', setting])
 }
 
@@ -155,8 +170,8 @@ function safeName(text) {
 }
 
 module.exports = {
-  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git, stopReason,
-  projectKey, safeName,
+  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, isOpenSsh, gitSettings, git,
+  stopReason, projectKey, safeName,
 }
 
 if (require.main === module) {

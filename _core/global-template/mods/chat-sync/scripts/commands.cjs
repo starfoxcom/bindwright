@@ -150,9 +150,16 @@ function compareChat(local, stored, root) {
   })
 }
 
+// Private copies of chats live in the helper's own folder, never the system's
+// temporary one, and each run clears what a stopped run left there.
+function workRoot() {
+  return path.join(base.dataDir(), 'work')
+}
+
 // Runs `work` with a private folder of this computer's, removed after.
 function inWorkFolder(work) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-sync-'))
+  fs.mkdirSync(workRoot(), { recursive: true })
+  const dir = fs.mkdtempSync(path.join(workRoot(), 'run-'))
   try {
     return work(dir)
   } finally {
@@ -329,11 +336,15 @@ function otherCopies(folder) {
 }
 
 // Other computers' copies of one chat, each read once into the private folder
-// `work`, longest first, as { copy, read }; one that is no plain file is left out.
+// `work`, longest first, as { copy, read }; one that is no plain file is left
+// out. A plain file that cannot be read (a sync app holding it, a file kept
+// online only) stops the chat, so it is not marked as looked at and is tried
+// again at the next run.
 function* readCopies(folder, work) {
   for (const [at, copy] of otherCopies(folder).entries()) {
     const read = path.join(work, `copy-${at}`)
     if (copyPlainFile(copy, read)) yield { copy, read }
+    else if (isPlainFile(copy)) throw new Error(`could not read ${copy}; it is tried again at the next run`)
   }
 }
 
@@ -579,11 +590,19 @@ function importCopy(copy, local, root, { localLines, before }) {
   }
 }
 
+// Only one run works at a time, so the run holding the lock owns the work folder.
+function locked(work) {
+  return withRunLock(() => {
+    removeQuietly(workRoot())
+    return work()
+  })
+}
+
 function run([command, ...args]) {
   const { move } = require('./move.cjs')
-  if (command === 'out') return withRunLock(() => out(args))
-  if (command === 'in') return withRunLock(() => bringIn(args))
-  if (command === 'move') return withRunLock(() => move(args))
+  if (command === 'out') return locked(() => out(args))
+  if (command === 'in') return locked(() => bringIn(args))
+  if (command === 'move') return locked(() => move(args))
   if (command === 'places') return { places: syncPlaces() }
   if (command === 'status') return status(args)
   return { error: `Unknown command: ${command || '(none)'}` }
