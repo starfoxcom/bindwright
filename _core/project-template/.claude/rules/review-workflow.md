@@ -24,7 +24,18 @@ When such a PR merges into the default branch, an open PR whose review ran on th
 
 ### The first setup PR
 
-The PR that first adds the review workflows has no gate on its base branch to pass: the `Review gate` check fails on it, and the review app refuses its token because the default branch holds no copy of `claude-code-review.yml` yet. So it targets the GitHub default branch, never `develop` when `develop` is not the default, and it is reviewed and merged as the workflow-only path above, with one change: the routine reviewer takes its prompt from the PR's own `claude-code-review.yml`, the files setup wrote, since the base has none. `.github/scripts/setup-review-gate.sh` creates and repairs no ruleset while the default branch lacks `.github/scripts/review_gate.py`, and names any ruleset that already requires `Review gate`: that check comes off until the merge, by the maintainer in the repo's settings. Once it merges, cascade it into `develop` when the project has one (push `develop` first if it exists only on this computer, so the script finds it on GitHub), then run `.github/scripts/setup-review-gate.sh` to protect both branches, and the same command with `--check` to confirm.
+The PR that first adds the review workflows has no gate on its base branch to pass: the `Review gate` check fails on it, and the review app refuses its token because the default branch holds no copy of `claude-code-review.yml` yet. So it targets the GitHub default branch, and it is reviewed and merged as the workflow-only path above, with one change: the routine reviewer takes its prompt from the PR's own `claude-code-review.yml`, the files setup wrote, since the base has none. `.github/scripts/setup-review-gate.sh` creates and repairs no ruleset while the default branch lacks `.github/scripts/review_gate.py`, and names any ruleset that already requires `Review gate`: that check comes off until the merge, by the maintainer in the repo's settings.
+<!-- TOGGLE:branching_model_gitflow START -->
+<!-- TOGGLE:default_branch_is_dev:off START -->
+The default branch is `{{MAIN_BRANCH}}`, so the PR never targets `{{DEV_BRANCH}}`. Once it merges, cascade it into `{{DEV_BRANCH}}` (push `{{DEV_BRANCH}}` first if it exists only on this computer, so the script finds it on GitHub), then run `.github/scripts/setup-review-gate.sh` to protect both branches, and the same command with `--check` to confirm.
+<!-- TOGGLE:default_branch_is_dev:off END -->
+<!-- TOGGLE:default_branch_is_dev START -->
+The default branch is `{{DEV_BRANCH}}`, so the PR targets it. Once it merges, run `.github/scripts/setup-review-gate.sh --branch {{DEV_BRANCH}} --branch {{MAIN_BRANCH}}` to protect both branches (push `{{MAIN_BRANCH}}` first if it exists only on this computer), and the same command with `--check` to confirm; without the two `--branch` names the script protects only the default branch.
+<!-- TOGGLE:default_branch_is_dev END -->
+<!-- TOGGLE:branching_model_gitflow END -->
+<!-- TOGGLE:branching_model_trunk START -->
+Once it merges, run `.github/scripts/setup-review-gate.sh --branch {{MAIN_BRANCH}}` to protect `{{MAIN_BRANCH}}`, and the same command with `--check` to confirm.
+<!-- TOGGLE:branching_model_trunk END -->
 
 For any other failure, fix the cause.
 
