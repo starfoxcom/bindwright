@@ -60,10 +60,12 @@ function hasName(parts) {
 function outRules(name, folder) {
   const parts = segments(folder)
   if (!hasName(parts)) return []
-  const forms = isWindowsPath(folder) ? Object.keys(FORMS) : ['F']
-  const flags = isWindowsPath(folder) ? 'giu' : 'gu'
+  const isWindows = isWindowsPath(folder)
+  const forms = isWindows ? Object.keys(FORMS) : ['F', 'E2']
+  const flags = isWindows ? 'giu' : 'gu'
   return forms
-    .map(form => ({ text: parts.join(FORMS[form]), form }))
+    .map(form => ({ text: written(parts, form, isWindows), form }))
+    .filter((rule, i, all) => all.findIndex(other => other.text === rule.text) === i)
     .sort((a, b) => b.text.length - a.text.length)
     .map(({ text, form }) => ({
       pattern: new RegExp(`${startsAfter(text)}${escapeRegExp(text)}${ENDS_BEFORE}`, flags),
@@ -83,7 +85,19 @@ function formless(text) {
 function inValues(name, folder) {
   const parts = segments(folder)
   const isWindows = isWindowsPath(folder)
-  return Object.keys(FORMS).map(form => [token(name, form), parts.join(isWindows ? FORMS[form] : '/')])
+  return Object.keys(FORMS).map(form => [token(name, form), written(parts, form, isWindows)])
+}
+
+// How many times each form sits inside a JSON string: once for F and E1, twice
+// for E2, a JSON string held inside another.
+const DEPTH = { F: 1, E1: 1, E2: 2 }
+
+// `folder`'s segments as a chat file holds them in `form`: each escaped for its
+// JSON depth, so a `"` or `\` in a folder name keeps the line valid JSON.
+function written(parts, form, isWindows) {
+  const escape = text => JSON.stringify(text).slice(1, -1)
+  const escaped = parts.map(part => Array.from({ length: DEPTH[form] }).reduce(escape, part))
+  return escaped.join(isWindows ? FORMS[form] : '/')
 }
 
 function applyRules(text, rules) {

@@ -180,6 +180,18 @@ test('a Windows chat moved to a computer without drive letters gets its paths in
   assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, '/home/sam/dev/app')
 })
 
+test('a folder whose name holds a quote or a backslash keeps every line valid JSON both ways', () => {
+  const odd = '/Users/sam/code/say "hi"\\x'
+  const line = JSON.stringify({ cwd: odd, file: `${odd}/a.js` })
+  const nested = JSON.stringify({ inner: line })
+  const out = neutralize(odd, '/Users/sam')
+  assert.doesNotMatch(out(line), /say/, 'the folder is swapped for its placeholder on the way out')
+  assert.doesNotMatch(out(nested), /say/, 'and inside a nested string too')
+  const back = expand(odd, '/Users/sam')
+  assert.deepStrictEqual(JSON.parse(back(out(line))), { cwd: odd, file: `${odd}/a.js` })
+  assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, odd)
+})
+
 test('only this computer\'s own folders are swapped, never a longer path or name that holds them', () => {
   const windows = neutralize('C:\\work\\app', 'C:\\Users\\al')
   const posix = neutralize('/srv/app', '/home/sam')
