@@ -19,6 +19,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 - **The visual rule comes only where people see something.** `/bindwright:setup` used to write `visual.md` into every project. It now reads the repo and leaves the rule out of a library, a command-line tool, a service with no pages, scripts, docs or config, which saves about 2.1k characters at each session start. The plan names that answer, so it can be changed there. `task-tracking.md` no longer points at the visual checkpoints when the rule is off. A project set up earlier keeps its rule; set `uiRule` to `false` in `.bindwright/project.json` and run `/bindwright:update` to drop it.
 - **`/bindwright:update` offers to delete every file the setup no longer writes.** A file the templates or the saved answers stopped producing was offered for deletion only when the repo had never changed it; one with the repo's own edits was just mentioned, and after that update no record named it, so it kept loading at every session start. The update now shows what the repo changed in such a file and offers to delete it too, and says it will not name either kind again. It also offers to take out the global instructions sections the additions no longer ship, which only `/bindwright:setup` offered before.
 
+### Fixed
+
+- **The size check measures `.mts`, `.cts`, `.hxx` and `.inl` files with their own language's limits.** A project whose size rule listed them had them measured against the `Other` row, so a TypeScript module could grow to 1 200 lines instead of 800 before the check failed. Where such a file is already past its language's limit, the check now reports it; record it with `python .github/scripts/size_check.py --write-baseline` until it shrinks. `/bindwright:setup` now picks the size rule's file types from the longer list the clean code rule uses, so a project with Vue, Svelte, MQL5 or shell files gets them measured from its first setup. The template's own list stays as it was, since every project set up earlier has its own copy of that line and changing it would make each one's next update stop on a conflict there.
+
 ## [v7.17.1] — 2026-11-24
 
 ### Fixed
