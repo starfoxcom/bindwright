@@ -2,13 +2,26 @@
 
 The work state lives in GitHub issues, not in the repo. The repo holds the rules; the issues hold where each piece of work stands.
 
-The board is `advanced.trackerProject` in `.bindwright/project.json`, written `"<owner>/<number>"`. `null` means the project has no board: issues alone, with project status in a pinned issue (see Project status updates).
+<!-- TOGGLE:tracker_board START -->
+The board is `advanced.trackerProject` in `.bindwright/project.json`, written `"<owner>/<number>"`.
+<!-- TOGGLE:tracker_board END -->
+<!-- TOGGLE:tracker_board:off START -->
+This project has no board (`advanced.trackerProject` is `null` in `.bindwright/project.json`): issues alone, with project status in a pinned issue (see Project status updates).
+<!-- TOGGLE:github_actions START -->
+To add a board, write it there as `"<owner>/<number>"` and run `/bindwright:update`, which brings in its commands.
+<!-- TOGGLE:github_actions END -->
+<!-- TOGGLE:tracker_board:off END -->
 
 The issues live in this repo unless `advanced.trackerRepo` names another, written `"<owner>/<repo>"`: a private repo that keeps the work items apart from code that is public. Then every `gh issue` command below takes `--repo <that repo>`.
+<!-- TOGGLE:tracker_board:off START -->
+A public repo's issues are public, so a project with public code keeps its full-detail issues in a private `trackerRepo`.
+<!-- TOGGLE:tracker_board:off END -->
+<!-- TOGGLE:tracker_board START -->
 
 ## Board visibility
 
 The board holds the project's full engineering details, so it stays private. Before every board read (the open items, the newest status update), check its visibility: `gh project view <number> --owner <owner> --format json --jq .public`. When it prints `true`, open the reply with a plain warning, before anything else: the board is public, so anyone, crawlers included, can read its fields, status updates and item notes. The fix is `gh project edit <number> --owner <owner> --visibility PRIVATE`; a clean public copy (`advanced.publicRoadmap`) is the safe way to show outsiders the plan. Warn on every read, since the board can be made public on GitHub at any time. A public repo's issues are public whatever the board's setting, so a project with public code keeps its full-detail issues in a private `trackerRepo`.
+<!-- TOGGLE:tracker_board END -->
 
 ## Work items
 
@@ -57,15 +70,30 @@ At session close, after the issues are updated, run `python3 .github/scripts/pub
 <!-- TOGGLE:public_roadmap END -->
 ## Commands
 
+<!-- TOGGLE:tracker_board START -->
 Board commands need the `project` scope: `gh auth refresh -s project` adds it. Write every body to a file first and pass it with `--body-file`, or `-F body=@<file>` for `gh api`.
 
-| Job | With a board | Without one |
-|---|---|---|
-| Open items | `gh project item-list <number> --owner <owner> --format json --limit 200`, in board order; when its `totalCount` is larger than the items it returned, run it again with a `--limit` above that count. Skip items whose `status` is `Done`, those whose `content.type` is not `Issue` (pull requests, drafts), those whose `content.repository` is not the tracker repo (`advanced.trackerRepo`, or this one when it is `null`: `gh repo view --json nameWithOwner -q .nameWithOwner`; a board can span repos, and the commands below act on that one), and issues the read below shows closed | `gh issue list --state open --assignee @me --limit 1000` (without `--limit` it stops at 30); when it returns exactly 1000, run it again with a higher `--limit` |
-| Read an item | `gh issue view <n> --json title,state,body,labels` | Same |
-| Update its state | `gh issue edit <n> --body-file <file>` | Same |
-| New item | `gh issue create --assignee @me --title <title> --body-file <file>`, then `gh project item-add <number> --owner <owner> --url <issue url>` | The same `gh issue create`; the `--assignee @me` is what lets the open-items list find it |
-| Newest status update | `gh api graphql -f query='query($o:String!,$n:Int!){repositoryOwner(login:$o){... on ProjectV2Owner{projectV2(number:$n){id statusUpdates(first:1,orderBy:{field:CREATED_AT,direction:DESC}){nodes{createdAt status body}}}}}}' -f o=<owner> -F n=<number>`; the order must be explicit, since `last:1` without it returns the oldest | The newest comment on the pinned `Project status` issue |
-| Post a status update | The query above gives the board's `id`; then `gh api graphql -f query='mutation($p:ID!,$s:ProjectV2StatusUpdateStatus!,$b:String!){createProjectV2StatusUpdate(input:{projectId:$p,status:$s,body:$b}){statusUpdate{id}}}' -f p=<id> -f s=<ON_TRACK, AT_RISK, OFF_TRACK or COMPLETE> -F b=@<file>` | `gh issue comment <status issue> --body-file <file>`; create and pin the issue (`gh issue pin`) the first time |
+| Job | Command |
+|---|---|
+| Open items | `gh project item-list <number> --owner <owner> --format json --limit 200`, in board order; when its `totalCount` is larger than the items it returned, run it again with a `--limit` above that count. Skip items whose `status` is `Done`, those whose `content.type` is not `Issue` (pull requests, drafts), those whose `content.repository` is not the tracker repo (`advanced.trackerRepo`, or this one when it is `null`: `gh repo view --json nameWithOwner -q .nameWithOwner`; a board can span repos, and the commands below act on that one), and issues the read below shows closed |
+| Read an item | `gh issue view <n> --json title,state,body,labels` |
+| Update its state | `gh issue edit <n> --body-file <file>` |
+| New item | `gh issue create --assignee @me --title <title> --body-file <file>`, then `gh project item-add <number> --owner <owner> --url <issue url>` |
+| Newest status update | `gh api graphql -f query='query($o:String!,$n:Int!){repositoryOwner(login:$o){... on ProjectV2Owner{projectV2(number:$n){id statusUpdates(first:1,orderBy:{field:CREATED_AT,direction:DESC}){nodes{createdAt status body}}}}}}' -f o=<owner> -F n=<number>`; the order must be explicit, since `last:1` without it returns the oldest |
+| Post a status update | The query above gives the board's `id`; then `gh api graphql -f query='mutation($p:ID!,$s:ProjectV2StatusUpdateStatus!,$b:String!){createProjectV2StatusUpdate(input:{projectId:$p,status:$s,body:$b}){statusUpdate{id}}}' -f p=<id> -f s=<ON_TRACK, AT_RISK, OFF_TRACK or COMPLETE> -F b=@<file>` |
+<!-- TOGGLE:tracker_board END -->
+<!-- TOGGLE:tracker_board:off START -->
+Write every body to a file first and pass it with `--body-file`.
+
+| Job | Command |
+|---|---|
+| Open items | `gh issue list --state open --assignee @me --limit 1000` (without `--limit` it stops at 30); when it returns exactly 1000, run it again with a higher `--limit` |
+| Read an item | `gh issue view <n> --json title,state,body,labels` |
+| Update its state | `gh issue edit <n> --body-file <file>` |
+| New item | `gh issue create --assignee @me --title <title> --body-file <file>`; the `--assignee @me` is what lets the open-items list find it |
+| Newest status update | The newest comment on the pinned `Project status` issue |
+| Post a status update | `gh issue comment <status issue> --body-file <file>`; create and pin the issue (`gh issue pin`) the first time |
+<!-- TOGGLE:tracker_board:off END -->
+
 
 Offline or signed out, say the tracker cannot be read and plan from git alone. At close, write what could not be posted (each issue's new current state, any status update) to `.bindwright/pending-tracker.md`, and the first time add that path to the file `git rev-parse --git-path info/exclude` prints, so no commit picks it up; the next `/start-session` posts it once the tracker answers, then deletes the file.

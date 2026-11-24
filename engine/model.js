@@ -369,6 +369,7 @@ export function flagsFor(a) {
     version_check: adv.versioning !== "none",
     code_size_check: adv.codeSizeCheck,
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
+    tracker_board: adv.tracker === "github" && typeof adv.trackerProject === "string",
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     pr_reviewers: Array.isArray(adv.prReviewers),
     local_review: adv.localReview,
