@@ -44,8 +44,8 @@ Run it with `--update <repo root>`. It prints one line of JSON:
 | `staged` | New in the templates, but the repo already has a file there; the new text is at `.bindwright/incoming/<path>` | Merge it (step 3) |
 | `conflict` | Both sides changed the same lines, or the merge would lose a kept section; the repo's copy is untouched and the merge, with all three versions at each clash, is at `.bindwright/incoming/<path>` | Settle it (step 3) |
 | `renamed` | Pairs of `[old path, new path]`: the templates moved the file, so its copy, the repo's edits included, now sits at the new path (and in the list above that says how it merged), and the old file is gone | Nothing, beyond what that list asks |
-| `removed` | The templates dropped a file the repo never changed | Say whether to delete it |
-| `removed_edited` | The templates dropped a file the repo changed; it stays | Nothing, or delete it by hand |
+| `removed` | Today's templates, with the saved answers, no longer write a file the repo never changed | Say whether to delete it (step 5) |
+| `removed_edited` | The same, for a file the repo changed; it stays unless the user says to delete it | Say whether to delete it (step 5) |
 | `deleted` | The repo deleted a file setup wrote; it stays deleted | Nothing |
 | `owned` | Listed in `.bindwright/owned`; never touched | Nothing, beyond step 3 for the ones `owned_changed` names |
 | `owned_changed` | The owned files whose template text changed since the last setup or update; the repo's copy never gets that change by itself, so the new text waits at `.bindwright/incoming/<path>` | Review it (step 3) |
@@ -76,7 +76,9 @@ When `advanced.tracker` in `.bindwright/project.json` is `github` and the repo r
 
 ## 5. Offer the removals
 
-For each path in `removed`, say in one line what the file was for and delete it only on a yes. Mention the `removed_edited` paths: the templates no longer ship them, and the repo keeps its copy.
+For each path in `removed`, say in one line what the file was for and delete it only on a yes. For each path in `removed_edited`, say what it was for and what the repo changed in it, read against its text under `files` in the last commit's record (`git show HEAD:.bindwright/pristine.json`), and delete it only on a yes; on a no it stays as the project's own file. Say that this is the only time an update names these files: the new record no longer holds them, so a file kept now loads as the project's own from then on.
+
+Then, when `~/.claude/CLAUDE.md` holds a section that setup's step 7 (**Global instructions**, `${CLAUDE_PLUGIN_ROOT}/skills/setup/SKILL.md`) names as one the additions no longer ship, offer to take each out, and do it on a yes.
 
 When `docs/lazy/README.md` is in `removed_edited`, or `docs/lazy/` holds any file other than that README, the project moved rules there the way older setups described, and `CLAUDE.md` no longer carries the "Rules loaded on demand" pointer that told sessions to read them. Say so, and offer to add that pointer back to `CLAUDE.md` in the project's own words, or to move each rule into `.claude/rules/` with a `paths:` list of the files it is about.
 
