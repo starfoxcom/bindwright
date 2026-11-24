@@ -336,29 +336,81 @@ def _kilo(n):
     return "%d.%dk" % (n // 1000, n % 1000 // 100)
 
 
-def _instructions_check(root, config):
+# Auto memory's index, MEMORY.md, loaded at session start beside the instruction files.
+MEMORY_LINES = 200
+# The 25KB limit is read as 25,000 bytes.
+MEMORY_BYTES = 25000
+
+
+# The text's first `count` lines, each keeping its line ending.
+def _first_lines(text, count):
+    end = 0
+    for _ in range(count):
+        newline = text.find("\n", end)
+        if newline == -1:
+            return text
+        end = newline + 1
+    return text[:end]
+
+
+# The first `limit` bytes, backing up so that no character is cut in two.
+def _first_bytes(data, limit):
+    cut = min(len(data), limit)
+    while cut < len(data) and (data[cut] & 0xC0) == 0x80:
+        cut -= 1
+    return data[:cut]
+
+
+# What Claude Code keeps of the index as UTF-16 units, and whether the file is past either limit.
+def _loaded_index(data):
+    text = data.decode("utf-8", errors="replace")
+    head = _first_lines(text, MEMORY_LINES)
+    kept = _first_bytes(head.encode("utf-8"), MEMORY_BYTES).decode("utf-8")
+    # `kept` is always a start of `text`, so one test covers both cuts.
+    return _units(kept), len(kept) < len(text)
+
+
+# The sentence about the index at `index`; doctor.js says why the path is taken, never worked out.
+def _memory_note(index):
+    if not index:
+        return ""
+    try:
+        with open(index, "rb") as handle:
+            data = handle.read()
+    except (OSError, ValueError):
+        return ""
+    units, past = _loaded_index(data)
+    sentence = "Auto memory's index (MEMORY.md) adds %s more." % _kilo(units)
+    if not past:
+        return sentence
+    return sentence + (" It is past the 200 lines or 25KB Claude Code loads, "
+                       "so the rest of it never reaches a session.")
+
+
+def _instructions_check(root, config, memory_index):
     files = _start_files(root, config)
     total = sum(size for _, size, _ in files)
     personal = sum(size for _, size, from_personal in files if from_personal)
     largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
     listed = ", ".join("%s (%s)" % (name, _kilo(size)) for name, size, _ in largest) or "none"
+    note = _memory_note(memory_index)
     say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
-           "%s of it from this repo and %s from ~/.claude. The largest: %s."
+           "%s of it from this repo and %s from ~/.claude. The largest: %s.%s"
            % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
-              _kilo(total - personal), _kilo(personal), listed))
+              _kilo(total - personal), _kilo(personal), listed, " " + note if note else ""))
     if total < INSTRUCTIONS_WARN_AT:
         return _check("instructions", True, say)
     return _check("instructions", False, say, FIX["instructions"])
 
 
-def run_doctor(root, config, plugin_version, cli_version):
+def run_doctor(root, config, plugin_version, cli_version, memory_index=None):
     """See runDoctor in doctor.js."""
     state = _state_checks(root)
     checks = list(state["checks"]) + [_hooks_check(config)]
     if "answers" in state:
         checks += [_version_check(state["pristine"], plugin_version),
                    _guard_check(root, state["answers"], state["pristine"])]
-        checks += [_staged_check(root), _instructions_check(root, config)]
+        checks += [_staged_check(root), _instructions_check(root, config, memory_index)]
         if state["answers"]["advanced"]["tracker"] == "file":
             checks.append(_roadmap_check(root))
         settings = _settings_checks(root, config)
