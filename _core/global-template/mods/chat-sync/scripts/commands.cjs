@@ -78,9 +78,10 @@ function tempOf(own) {
 // stopped before it renamed them. One younger than a helper's longest run may
 // belong to another session's helper still writing it, so it stays.
 const TEMP_STALE_MS = 5 * 60_000
-// A session start's helper is stopped at 120 s, so its chats get 50 s and the
-// commit, pull and push the rest; CHAT_SYNC_RUN_BUDGET_MS sets another budget.
-const RUN_BUDGET_MS = 50_000
+// A session start's helper is stopped at 120 s, so its lock wait and chats get
+// 40 s and the privacy check, commit, pull and push the rest;
+// CHAT_SYNC_RUN_BUDGET_MS sets another budget.
+const RUN_BUDGET_MS = 40_000
 
 function runBudgetMs() {
   const set = process.env.CHAT_SYNC_RUN_BUDGET_MS
@@ -241,9 +242,9 @@ function isAhead(store) {
 // Brings the clone up to the repo, naming the branch, so a clone made while the
 // repo was empty catches up too. Files never committed (a copy cut short) are
 // dropped first: each is this computer's own and is written again from its chat
-// folder. Every commit touches only its own computer's files, so a pull that
-// still fails is reset to the repo's copy, and this computer's next copy out
-// writes its files again.
+// folder. Every commit touches only its own computer's files, so a pull whose
+// rebase still conflicts is reset to the repo's copy, and this computer's next
+// copy out writes its files again. Any other failure keeps the local commits.
 function pull(store) {
   clearStaleLock(store)
   const dropped = dropUncommitted(store)
@@ -256,9 +257,9 @@ function pull(store) {
   const run = base.git(store, 'pull', '-q', '--rebase', 'origin', `refs/heads/${branch}`)
   if (run.ok) return { branch }
   base.git(store, 'rebase', '--abort')
+  if (!/conflict/i.test(run.out)) return { error: run.out }
   const reset = base.git(store, 'reset', '--hard', '-q', `origin/${branch}`)
-  const isConflict = /conflict/i.test(run.out)
-  return { error: reset.ok && isConflict ? CHANGED_MEANWHILE : run.out || reset.out }
+  return { error: reset.ok ? CHANGED_MEANWHILE : reset.out }
 }
 
 // The repo is checked again before a push, at most once an hour, in case it was
@@ -412,7 +413,8 @@ function bringIn([chatDir, root, openId]) {
   if (!opened.store) return opened
   const { place, store } = opened
   const isGit = place.kind === 'git'
-  const deadline = Date.now() + runBudgetMs()
+  // Counted from the helper's start, so a wait for another run's lock uses it too.
+  const deadline = performance.timeOrigin + runBudgetMs()
   const pulled = isGit ? pull(store) : {}
   const key = base.projectKey(root)
   const dir = path.join(store, key)

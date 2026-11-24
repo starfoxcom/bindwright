@@ -124,7 +124,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
     const description = 'Chat sync: status, sync folders, or move the chats to another place.'
-    await $.command.register({ name: COMMAND, description, argumentHint: HINT })
+    // A command that cannot be added never stops the chats coming in.
+    await $.command.register({ name: COMMAND, description, argumentHint: HINT }).catch(() => undefined)
     await bringIn($)
     return result
   })

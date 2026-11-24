@@ -97,10 +97,11 @@ function quietEnv() {
 // byte for byte whatever the user's line-end setting is, a committed link
 // checked out as a plain file, and none of the user's hooks or commit signing,
 // which could ask for a passphrase or a key touch with no one there. The hooks
-// folder is never made, so git finds no hook in it.
+// folder is never made, so git finds no hook in it. The mod commits under its
+// own name, so a computer signed in to gh with no git name set commits too.
 function gitSettings() {
   const settings = ['core.autocrlf=false', 'core.symlinks=false', 'commit.gpgsign=false',
-    `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`]
+    `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`, 'user.name=chat-sync', 'user.email=chat-sync@localhost']
   return settings.flatMap(setting => ['-c', setting])
 }
 

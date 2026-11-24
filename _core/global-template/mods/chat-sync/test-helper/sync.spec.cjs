@@ -709,3 +709,16 @@ test('a push that failed goes up with the next copy, though the chat did not cha
   assert.strictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushed, true)
   assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
 })
+
+test('a computer with no git name set still commits and pushes its chats', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const env = { ...a.env, GIT_CONFIG_GLOBAL: gitConfig('[user]\n\tuseConfigOnly = true\n') }
+  const identity = ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL']
+  for (const name of identity) delete env[name]
+  writeChat(a, 's1', ['one'])
+  const answer = JSON.parse(execFileSync(process.execPath, [SYNC, 'out', path.join(a.chatDir, 's1.jsonl'), a.root],
+    { env, encoding: 'utf8' }))
+  assert.deepStrictEqual(answer, { copied: 's1', pushed: true })
+  assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
+})
