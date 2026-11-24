@@ -72,6 +72,42 @@ function gitComputer(name, origin, env = {}) {
   return pc
 }
 
+// Runs `move git` inside this process as computer `pc`, with gh answering that
+// the repo is private and cloning the bare repo `origin`; `afterClone` gets the
+// new clone's folder.
+function moveToRepo(pc, origin, afterClone) {
+  const childProcess = require('child_process')
+  const realSpawn = childProcess.spawnSync
+  const savedEnv = { ...process.env }
+  const scripts = ['sync.cjs', 'commands.cjs', 'move.cjs', 'paths.cjs', 'places.cjs']
+    .map(name => require.resolve(path.join(SCRIPTS, name)))
+  const reload = () => scripts.forEach(file => delete require.cache[file])
+  childProcess.spawnSync = (command, args, options) => {
+    if (command !== 'gh') return realSpawn(command, args, options)
+    if (args[1] === 'view') return { status: 0, stdout: 'PRIVATE\n', stderr: '' }
+    const [, , , folder, , ...settings] = args
+    const run = realSpawn('git', [...settings, 'clone', '-q', origin, folder], options)
+    afterClone(folder)
+    return run
+  }
+  Object.assign(process.env, pc.env)
+  reload()
+  try {
+    return require(path.join(SCRIPTS, 'move.cjs')).move(['git', 'me/chats'])
+  } finally {
+    childProcess.spawnSync = realSpawn
+    for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key]
+    Object.assign(process.env, savedEnv)
+    reload()
+  }
+}
+
+// The files committed on the bare repo's main branch.
+function committed(origin) {
+  return execFileSync('git', ['--git-dir', origin, 'ls-tree', '-r', '--name-only', 'main'], { encoding: 'utf8' })
+    .split('\n').filter(Boolean)
+}
+
 function bareRepo() {
   const origin = tempDir('origin')
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin], { env: { ...process.env, ...GIT_ENV } })
@@ -544,4 +580,34 @@ test('the user\'s own commit signing and hooks never run on the chat repo\'s com
   const a = gitComputer('a', bareRepo(), { GIT_CONFIG_GLOBAL: config })
   writeChat(a, 's1', ['one'])
   assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1', pushed: true })
+})
+
+test('a lock a stopped git left in the clone is cleared, and one still in use is named', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const lock = path.join(a.dataDir, 'repo', '.git', 'index.lock')
+  writeChat(a, 's1', ['one'])
+  fs.writeFileSync(lock, '')
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60_000)
+  fs.utimesSync(lock, tenMinutesAgo, tenMinutesAgo)
+  assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1', pushed: true })
+  assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
+
+  writeChat(a, 's2', ['two'])
+  fs.writeFileSync(lock, '')
+  const answer = a.sync('out', path.join(a.chatDir, 's2.jsonl'), a.root)
+  assert.match(answer.pushError || '', /another chat-sync run is using the chat repo/)
+})
+
+test('a move into a repo that does not take the chats keeps them syncing where they did', () => {
+  const first = tempDir('first')
+  const a = computer('a', first)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const origin = bareRepo()
+  const answer = moveToRepo(a, origin, folder => {
+    execFileSync('git', ['-C', folder, 'remote', 'set-url', '--push', 'origin', path.join(first, 'no-repo')])
+  })
+  assert.match(answer.error || '', /still sync where they did/)
+  assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(first))
 })

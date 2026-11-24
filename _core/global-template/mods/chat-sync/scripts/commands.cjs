@@ -23,6 +23,8 @@ const ID = /^[\w-]+$/
 const VISIBILITY_FRESH_MS = 60 * 60_000
 const CHANGED_MEANWHILE = 'Another computer changed the chat repo at the same time; '
   + 'this computer copies its chats again at the next turn.'
+const CLONE_BUSY = 'another chat-sync run is using the chat repo, so this chat goes out with the next copy; '
+  + 'a lock a stopped run left behind is cleared after 5 minutes.'
 
 // What another computer put in the sync place is read as input: a link there is
 // never followed, read or written through.
@@ -167,12 +169,33 @@ function clearUnlessPlain(file) {
   if (!entry.isFile()) removeQuietly(file)
 }
 
+// Only this mod's helpers work in the clone, and each git call is stopped
+// within a minute, so a lock older than TEMP_STALE_MS was left by a git that
+// was stopped while it held it.
+function clearStaleLock(store) {
+  const lock = path.join(store, '.git', 'index.lock')
+  let entry
+  try {
+    entry = fs.lstatSync(lock)
+  } catch {
+    return
+  }
+  if (Date.now() - entry.mtimeMs > TEMP_STALE_MS) removeQuietly(lock)
+}
+
+// Git's own words, or what a lock held by another run means for this chat.
+function gitError(out) {
+  return /index\.lock/.test(out) ? CLONE_BUSY : out
+}
+
 // Commits what this computer wrote, brings the clone up to the repo and pushes.
 function publish(store, label) {
-  base.git(store, 'add', '-A')
+  clearStaleLock(store)
+  const add = base.git(store, 'add', '-A')
+  if (!add.ok) return { pushError: gitError(add.out) }
   if (!base.git(store, 'diff', '--cached', '--quiet').ok) {
     const commit = base.git(store, 'commit', '-q', '-m', `chat-sync: ${label}`)
-    if (!commit.ok) return { pushError: commit.out }
+    if (!commit.ok) return { pushError: gitError(commit.out) }
   }
   const pulled = pull(store)
   if (pulled.error) return { pushError: pulled.error }
@@ -183,11 +206,17 @@ function publish(store, label) {
 }
 
 // A clone with no commit yet has nothing to reset to, and git refuses to pull
-// into it while its index holds anything, so its index goes instead.
+// into it while its index holds anything, so its index goes instead. Returns
+// git's words when the clone could not be cleared.
 function dropUncommitted(store) {
-  if (base.git(store, 'rev-parse', '--verify', '-q', 'HEAD').ok) base.git(store, 'reset', '--hard', '-q')
-  else removeQuietly(path.join(store, '.git', 'index'))
-  base.git(store, 'clean', '-fdq')
+  if (base.git(store, 'rev-parse', '--verify', '-q', 'HEAD').ok) {
+    const reset = base.git(store, 'reset', '--hard', '-q')
+    if (!reset.ok) return reset.out
+  } else {
+    removeQuietly(path.join(store, '.git', 'index'))
+  }
+  const clean = base.git(store, 'clean', '-fdq')
+  return clean.ok ? null : clean.out
 }
 
 // The repo's default branch, or null while nothing has been pushed to it.
@@ -204,7 +233,9 @@ function remoteBranch(store) {
 // still fails is reset to the repo's copy, and this computer's next copy out
 // writes its files again.
 function pull(store) {
-  dropUncommitted(store)
+  clearStaleLock(store)
+  const dropped = dropUncommitted(store)
+  if (dropped) return { error: gitError(dropped) }
   const branch = remoteBranch(store)
   if (!branch) return {}
   const run = base.git(store, 'pull', '-q', '--rebase', 'origin', branch)

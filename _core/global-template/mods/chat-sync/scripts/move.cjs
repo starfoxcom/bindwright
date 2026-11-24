@@ -117,11 +117,10 @@ function prepare(kind, where) {
 // The git place always lives at repo/; a new clone takes that name once the
 // chats are copied, and an old one is renamed aside, never deleted.
 function settleClone(place) {
-  if (place.kind !== 'git') return base.storeRoot(place)
+  if (place.kind !== 'git') return
   const repo = base.storeRoot(place)
   if (fs.existsSync(repo)) fs.renameSync(repo, `${repo}-old-${Date.now()}`)
   fs.renameSync(path.join(base.dataDir(), 'repo-next'), repo)
-  return repo
 }
 
 // A git place whose clone is gone (deleted, or a move cut short) is cloned
@@ -144,9 +143,14 @@ function move([kind, where]) {
   }
   const copied = copyChats(base.storeRoot(old), ready.store)
   if (copied.missing.length) return { error: `These chats did not arrive: ${copied.missing.join(', ')}` }
-  const store = settleClone(ready.place)
+  // A repo holds the copies only once they are pushed, so the place switches
+  // after that, and the old place stays in use when the push fails.
+  const pushed = ready.place.kind === 'git' ? publish(ready.store, `move ${copied.moved} chats in`) : {}
+  if (pushed.pushError) {
+    return { error: `The chats still sync where they did, since the repo did not take them: ${pushed.pushError}` }
+  }
+  settleClone(ready.place)
   base.writeJson(placeFile, ready.place)
-  const pushed = ready.place.kind === 'git' ? publish(store, `move ${copied.moved} chats in`) : {}
   return { moved: copied.moved, from: describe(old), to: describe(ready.place), ...pushed }
 }
 
