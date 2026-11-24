@@ -72,7 +72,12 @@ function chatIds(projectDir) {
 // This computer's id as a file name in the sync place, in the same letters the
 // readers accept, whatever machine.json holds.
 function ownName() {
-  return `${base.machineId().replace(/[^\w-]+/g, '-')}.jsonl`
+  return copyName(base.machineId())
+}
+
+// The name of a computer's copy of a chat in the sync place.
+function copyName(machine) {
+  return `${machine.replace(/[^\w-]+/g, '-')}.jsonl`
 }
 
 // A temporary copy of this computer's, named the way sync apps name theirs.
@@ -677,9 +682,68 @@ function run([command, ...args]) {
   if (command === 'out') return locked(() => out(args), copyLimitMs)
   if (command === 'in') return locked(() => bringIn(args), copyLimitMs)
   if (command === 'move') return locked(() => move(args), MOVE_LIMIT_MS)
-  if (command === 'places') return { places: syncPlaces() }
+  if (command === 'places') return places()
   if (command === 'status') return status(args)
   return { error: `Unknown command: ${command || '(none)'}` }
+}
+
+// Each sync folder found here, with what other computers keep in its
+// `Claude chats` folder (`others`, null when nothing), so setup can offer the
+// place a second computer joins. Read only, like `status`; a machine file
+// that cannot be read leaves every copy counted as another computer's.
+function places() {
+  let machine = null
+  try {
+    const id = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id
+    if (typeof id === 'string' && id) machine = copyName(id).slice(0, -'.jsonl'.length)
+  } catch {
+    // Read again by the first copy, which says what is wrong with it.
+  }
+  const found = syncPlaces().map(place => {
+    const others = othersChats(path.join(place.path, 'Claude chats'), machine)
+    return { ...place, others }
+  })
+  return { places: found }
+}
+
+// The computer a copy in the sync place belongs to, a copy a move kept aside
+// (`<computer>-moved-<time>.jsonl`) included.
+function computerOf(copy) {
+  return copy.slice(0, -'.jsonl'.length).replace(/(-moved-\d+)+$/, '')
+}
+
+// What other computers keep in the store `chats`, read the way a sync reads
+// a store, so no link is followed: the number of projects and some of the
+// computers' names, or null when it holds no copy but `ownMachine`'s or cannot
+// be read (an offline cloud folder, a folder the app keeps private). A project
+// counts at its first chat that holds another computer's copy, so a large
+// store stays quick, and the names are the computers in those chats only.
+function othersChats(chats, ownMachine) {
+  const computers = new Set()
+  let projects = 0
+  try {
+    if (!isRealFolder(chats)) return null
+    for (const project of projectFolders(chats)) {
+      for (const id of chatIds(path.join(chats, project))) {
+        const others = chatFiles(path.join(chats, project, id)).map(computerOf).filter(name => name !== ownMachine)
+        if (!others.length) continue
+        projects += 1
+        for (const name of others) computers.add(name)
+        break
+      }
+    }
+  } catch {
+    return null
+  }
+  return projects ? { folder: chats, projects, computers: [...computers].sort() } : null
+}
+
+// The project folders of a store: plain folders not named with a leading dot.
+function projectFolders(store) {
+  if (!store || !fs.existsSync(store)) return []
+  return fs.readdirSync(store, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map(entry => entry.name)
 }
 
 function status([root]) {
@@ -698,5 +762,5 @@ function hasGit() {
 
 module.exports = {
   run, out, bringIn, compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain,
-  placeFile, inWorkFolder, fitClone,
+  placeFile, inWorkFolder, fitClone, projectFolders, othersChats,
 }

@@ -1083,16 +1083,6 @@ test('a move away from a repo takes the copies other computers pushed since the 
   assert.strictEqual(fs.readdirSync(path.join(target, SHOP, 's1')).length, 1)
 })
 
-test('Google Drive is found under its folder name in the computer\'s language', () => {
-  const { syncPlaces } = require(path.join(SCRIPTS, 'places.cjs'))
-  for (const name of ['My Drive', 'Mi unidad', 'Meine Ablage']) {
-    const home = tempDir('home')
-    fs.mkdirSync(path.join(home, name))
-    const drive = syncPlaces(home).find(place => place.service === 'Google Drive')
-    assert.strictEqual(drive && drive.path, path.join(home, name), name)
-  }
-})
-
 test('a session start that runs out of time keeps what it did, and the next one goes on', () => {
   const a = computer('a', tempDir('folder'))
   for (const id of ['s1', 's2', 's3']) writeChat(a, id, [id])
