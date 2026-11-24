@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -23,7 +23,8 @@ const STAGING = ".bindwright/incoming/";
 
 // A repo bound and set up as of today's VERSION; `change(at)` breaks it.
 async function scene(change) {
-  const root = mkdtempSync(join(tmpdir(), "bw-doctor-"));
+  // Resolved, so a short-form temp path (Windows' RUNNER~1) matches the long form git writes for a worktree.
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "bw-doctor-")));
   const repo = join(root, "repo");
   const config = join(root, "config");
   const files = await bind(defaults(), { readFile, coreFiles, year: 2026, version: VERSION });
@@ -33,21 +34,27 @@ async function scene(change) {
     if (dest.startsWith(STAGING)) writeFileSync(at(dest.slice(STAGING.length)), text);
   }
   rmSync(at(STAGING), { recursive: true, force: true });
-  change({ at, config });
-  return { root, repo, config };
+  // A change may name another folder for the doctor to check; by default it is the repo.
+  const target = change({ at, config, repo }) ?? repo;
+  return { root, repo, config, target };
 }
 
 const engines = [[process.execPath, [join(engine, "cli.js")]], [python, ["-I", join(engine, "bind.py")]]];
+// The variables that switch or move auto memory; every run starts without them.
+const MEMORY_ENV = ["CLAUDE_CODE_DISABLE_AUTO_MEMORY", "CLAUDE_CODE_PROJECT_DIR_NAME",
+  "CLAUDE_CODE_REMOTE_MEMORY_DIR", "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"];
 
 // Both engines' --doctor on identical scenes; returns the shared report.
-async function doctor(change = () => {}, agent = "claude-code_2-1-316_agent") {
+async function doctor(change = () => {}, agent = "claude-code_2-1-316_agent", extraEnv = {}) {
   const outs = [];
   for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
     const s = await scene(change);
     try {
       const env = { ...process.env, CLAUDE_CONFIG_DIR: s.config, AI_AGENT: agent };
-      const out = spawnSync(cmd, [...args, "--doctor", s.repo], { env, encoding: "utf8" });
-      outs.push(out.stdout.replaceAll(JSON.stringify(s.repo).slice(1, -1), "<repo>"));
+      for (const name of MEMORY_ENV) delete env[name];
+      Object.assign(env, extraEnv);
+      const out = spawnSync(cmd, [...args, "--doctor", s.target], { env, encoding: "utf8" });
+      outs.push(out.stdout.replaceAll(JSON.stringify(s.target).slice(1, -1), "<repo>"));
     } finally {
       rmSync(s.root, { recursive: true, force: true });
     }
@@ -125,6 +132,111 @@ test("the instructions total is split between the repo and ~/.claude", needsPyth
   assert.match(say, /of it from this repo and 3\.0k from ~\/\.claude\. /);
   assert.match(say, /The largest: \.claude\/rules\/big\.md \(60\.0k\)/);
 });
+
+const writeJson = (file, value) => {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(value));
+};
+const slugOf = (path) => path.replace(/[^A-Za-z0-9]/gu, "-");
+// The index lives under the slug of the main checkout's path, which is the repo in every row.
+const writeIndex = ({ repo, config }, text) => {
+  const file = join(config, "projects", slugOf(repo), "memory", "MEMORY.md");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text);
+};
+const PAST = "It is past the 200 lines or 25KB Claude Code loads, so the rest of it never reaches a session.";
+const INDEX_3000 = "x".repeat(3000);
+
+// A linked worktree of the scene's repo, with the repo's files committed so the worktree is set up too.
+function linkedWorktree({ repo }) {
+  const git = (...args) => {
+    const run = spawnSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", ...args],
+      { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+  };
+  git("init", "-q");
+  git("config", "core.autocrlf", "false");
+  git("add", "-A");
+  git("commit", "-q", "-m", "setup");
+  const worktree = join(dirname(repo), "worktree");
+  git("worktree", "add", "-q", worktree);
+  return worktree;
+}
+
+// Each row is one scene; `index` is the memory index's text, `setup` the rest of the scene, and `note` the
+// sentence the instructions check ends with, or null when no note is shown.
+const MEMORY_ROWS = [
+  {
+    name: "a 3,000-character index adds 3.0k",
+    index: INDEX_3000,
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "250 short lines count the first 200 lines and pass the line limit",
+    index: `${"x".repeat(99)}\n`.repeat(250),
+    note: `Auto memory's index (MEMORY.md) adds 20.0k more. ${PAST}`,
+  },
+  {
+    name: "30,000 bytes in 10 lines count 25,000 and pass the byte limit",
+    index: `${"x".repeat(2999)}\n`.repeat(10),
+    note: `Auto memory's index (MEMORY.md) adds 25.0k more. ${PAST}`,
+  },
+  {
+    name: "autoMemoryEnabled false in settings.local.json turns the note off",
+    index: INDEX_3000,
+    setup: ({ at }) => writeJson(at(".claude/settings.local.json"), { autoMemoryEnabled: false }),
+    note: null,
+  },
+  {
+    name: "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 turns the note off",
+    index: INDEX_3000,
+    env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" },
+    note: null,
+  },
+  {
+    name: "CLAUDE_CODE_DISABLE_AUTO_MEMORY=0 shows the note over autoMemoryEnabled false",
+    index: INDEX_3000,
+    setup: ({ at }) => writeJson(at(".claude/settings.local.json"), { autoMemoryEnabled: false }),
+    env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "0" },
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "autoMemoryDirectory in the config folder's settings.json turns the note off",
+    index: INDEX_3000,
+    setup: ({ config }) => writeJson(join(config, "settings.json"),
+      { autoMemoryDirectory: "/elsewhere" }),
+    note: null,
+  },
+  {
+    name: "CLAUDE_CODE_PROJECT_DIR_NAME set turns the note off",
+    index: INDEX_3000,
+    env: { CLAUDE_CODE_PROJECT_DIR_NAME: "x" },
+    note: null,
+  },
+  {
+    name: "a linked worktree reads the main checkout's index",
+    index: INDEX_3000,
+    setup: linkedWorktree,
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  { name: "no index file means no note", note: null },
+];
+
+test("auto memory's index is noted in the instructions check, and the cases that turn it off",
+  needsPython, async (t) => {
+    const plain = (await doctor()).checks.find((c) => c.id === "instructions").say;
+    for (const row of MEMORY_ROWS) {
+      await t.test(row.name, async () => {
+        const change = (ctx) => {
+          if (row.index !== undefined) writeIndex(ctx, row.index);
+          return row.setup?.(ctx);
+        };
+        const report = await doctor(change, undefined, row.env);
+        const say = report.checks.find((c) => c.id === "instructions").say;
+        assert.equal(say, row.note ? `${plain} ${row.note}` : plain);
+      });
+    }
+  });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
   const broken = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), "{"));
@@ -219,7 +331,9 @@ test("answers saved before a key was added still pass the doctor", needsPython, 
 
 // An old CLI is named for the guard hooks it would let fail open, and for the mods it cannot load.
 // Each row: the scene, the session's agent name, and the text the finding holds (null: no finding).
-const withMods = ({ config }) => mkdirSync(join(config, "mods", "session-facts"), { recursive: true });
+const withMods = ({ config }) => {
+  mkdirSync(join(config, "mods", "session-facts"), { recursive: true });
+};
 const guardsAtHome = (also = () => {}) => (scene) => {
   const answers = JSON.parse(readFileSync(scene.at(".bindwright/project.json"), "utf8"));
   answers.advanced.hookLocation = "home";

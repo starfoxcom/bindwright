@@ -1,6 +1,7 @@
 # Python twin of doctor.js: the same checks, in the same order and words.
 # Standard library only.
 
+import json
 import os
 import re
 
@@ -336,16 +337,137 @@ def _kilo(n):
     return "%d.%dk" % (n // 1000, n % 1000 // 100)
 
 
+# Auto memory's index, MEMORY.md, loaded at session start beside the instruction files.
+MEMORY_LINES = 200
+# The 25KB limit is read as 25,000 bytes.
+MEMORY_BYTES = 25000
+MEMORY_TRUE = ("1", "true", "yes", "on")
+MEMORY_FALSE = ("0", "false", "no", "off")
+MEMORY_MOVED_VARS = ("CLAUDE_CODE_PROJECT_DIR_NAME", "CLAUDE_CODE_REMOTE_MEMORY_DIR",
+                     "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
+
+
+# The main checkout's folder: a linked worktree's `.git` file points into the main git folder.
+def _main_checkout(root):
+    first = ((_read_text(os.path.join(root, ".git")) or "").split("\n")[0]).rstrip("\r")
+    link = re.match(r"gitdir: (.*)$", first)
+    if link is None:
+        return root
+    try:
+        gitdir = os.path.normpath(os.path.join(root, link.group(1).strip()))
+        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as handle:
+            common = handle.readline().strip()
+        return os.path.dirname(os.path.normpath(os.path.join(gitdir, common)))
+    except OSError:
+        return root
+
+
+# Settings files that can switch auto memory, highest precedence first; unreadable ones are empty.
+def _memory_settings(root, config):
+    files = [os.path.join(root, ".claude", "settings.local.json"),
+             os.path.join(root, ".claude", "settings.json"),
+             os.path.join(config, "settings.json")]
+    return [_read_settings_json(path) for path in files]
+
+
+def _read_settings_json(path):
+    text = _read_text(path)
+    try:
+        value = None if text is None else json.loads(text)
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+# True or False for a variable's on or off word, None when it is unset or another word.
+def _env_flag(value):
+    word = (value or "").strip().lower()
+    if word in MEMORY_TRUE:
+        return True
+    return False if word in MEMORY_FALSE else None
+
+
+# The environment decides first; then the first settings file that sets the switch decides.
+def _auto_memory_on(settings):
+    disabled = _env_flag(os.environ.get("CLAUDE_CODE_DISABLE_AUTO_MEMORY"))
+    if disabled is not None:
+        return not disabled
+    for layer in settings:
+        if isinstance(layer.get("autoMemoryEnabled"), bool):
+            return layer["autoMemoryEnabled"]
+    return True
+
+
+# Whether a setting or a variable has moved the memory folder somewhere else.
+def _memory_moved(settings):
+    dir_set = any(isinstance(layer.get("autoMemoryDirectory"), str)
+                  and layer["autoMemoryDirectory"] != "" for layer in settings)
+    return dir_set or any(os.environ.get(name) for name in MEMORY_MOVED_VARS)
+
+
+# The index's path under the config folder. Each character of the main checkout's path that is not an
+# ASCII letter or digit becomes a dash, one per code point as this engine counts them.
+def _memory_index_file(root, config):
+    slug = re.sub(r"[^A-Za-z0-9]", "-", _main_checkout(root))
+    return os.path.join(config, "projects", slug, "memory", "MEMORY.md")
+
+
+# The text's first `count` lines, each keeping its line ending.
+def _first_lines(text, count):
+    end = 0
+    for _ in range(count):
+        newline = text.find("\n", end)
+        if newline == -1:
+            return text
+        end = newline + 1
+    return text[:end]
+
+
+# The first `limit` bytes, backing up so that no character is cut in two.
+def _first_bytes(data, limit):
+    cut = min(len(data), limit)
+    while cut < len(data) and (data[cut] & 0xC0) == 0x80:
+        cut -= 1
+    return data[:cut]
+
+
+# What Claude Code keeps of the index as UTF-16 units, and whether the file is past either limit.
+def _loaded_index(data):
+    text = data.decode("utf-8", errors="replace")
+    head = _first_lines(text, MEMORY_LINES)
+    kept = _first_bytes(head.encode("utf-8"), MEMORY_BYTES).decode("utf-8")
+    return _units(kept), len(head) < len(text) or len(data) > MEMORY_BYTES
+
+
+# The sentence about the index, or "" when auto memory is off, moved, or the index is missing.
+def _memory_note(root, config):
+    settings = _memory_settings(root, config)
+    if not _auto_memory_on(settings) or _memory_moved(settings):
+        return ""
+    try:
+        with open(_memory_index_file(root, config), "rb") as handle:
+            data = handle.read()
+    except OSError:
+        return ""
+    units, past = _loaded_index(data)
+    sentence = "Auto memory's index (MEMORY.md) adds %s more." % _kilo(units)
+    if not past:
+        return sentence
+    return sentence + (" It is past the 200 lines or 25KB Claude Code loads, "
+                       "so the rest of it never reaches a session.")
+
+
 def _instructions_check(root, config):
     files = _start_files(root, config)
     total = sum(size for _, size, _ in files)
     personal = sum(size for _, size, from_personal in files if from_personal)
     largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
     listed = ", ".join("%s (%s)" % (name, _kilo(size)) for name, size, _ in largest) or "none"
+    note = _memory_note(root, config)
     say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
-           "%s of it from this repo and %s from ~/.claude. The largest: %s."
+           "%s of it from this repo and %s from ~/.claude. The largest: %s.%s"
            % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
-              _kilo(total - personal), _kilo(personal), listed))
+              _kilo(total - personal), _kilo(personal), listed, " " + note if note else ""))
     if total < INSTRUCTIONS_WARN_AT:
         return _check("instructions", True, say)
     return _check("instructions", False, say, FIX["instructions"])
