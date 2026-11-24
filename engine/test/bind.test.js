@@ -194,9 +194,14 @@ test("the first-setup steps follow the branch model", async () => {
   const a = defaults();
   const gitflow = (await run(a)).get(".claude/rules/review-workflow.md");
   assert.match(gitflow, /Once it merges, cascade it into `develop`/);
+  a.advanced.devIsDefault = true;
+  const devDefault = (await run(a)).get(".claude/rules/review-workflow.md");
+  assert.match(devDefault, /setup-review-gate\.sh --branch develop --branch main` to protect both branches/);
+  assert.doesNotMatch(devDefault, /cascade it into/);
+  a.advanced.devIsDefault = false;
   a.advanced.branching = "trunk";
   const trunk = (await run(a)).get(".claude/rules/review-workflow.md");
-  assert.match(trunk, /Once it merges, run `\.github\/scripts\/setup-review-gate\.sh` to protect `main`/);
+  assert.match(trunk, /Once it merges, run `\.github\/scripts\/setup-review-gate\.sh --branch main` to protect `main`/);
   const firstSetup = trunk.slice(trunk.indexOf("### The first setup PR"), trunk.indexOf("## If the gate"));
   assert.doesNotMatch(firstSetup, /develop|cascade/, "a trunk bind has no integration branch to cascade into");
 });

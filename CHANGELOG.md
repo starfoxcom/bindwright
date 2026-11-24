@@ -18,7 +18,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **A trunk-based project's first setup PR no longer points at a `develop` branch.** The steps for the PR that first adds the review workflows told every project to cascade it into `develop` and protect both branches. A trunk-based bind now says to protect `main` once it merges, and a Gitflow bind keeps the cascade, worded for whichever branch is the default.
+- **A trunk-based project's first setup PR no longer points at a `develop` branch.** The steps for the PR that first adds the review workflows told every project to cascade it into `develop` and protect both branches. A trunk-based bind now says to protect `main` once it merges, and a Gitflow bind keeps the cascade, worded for whichever branch is the default. Where `develop` is the default, the steps now name both branches to the setup script, which on its own protected only `develop`.
 
 ## [v7.16.1] — 2026-11-23
 
