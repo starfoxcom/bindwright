@@ -136,6 +136,15 @@ const OUT_OF_TIME = 'Chat sync ran out of time for this run; the next one goes o
 // A file in a clone's .git folder naming the repo it is a clone of.
 const CLONE_OF = 'chat-sync-repo'
 
+// The repo the clone at `store` was made of; null when the clone has no record.
+function cloneOf(store) {
+  try {
+    return fs.readFileSync(path.join(store, '.git', CLONE_OF), 'utf8').trim()
+  } catch {
+    return null
+  }
+}
+
 // Runs git or gh with the environment from `quietEnv(envCwd)`. The timeout is
 // taken once that environment is built, since building it can run git too.
 // Null when no time is left, as a timeout of 0 would mean no limit at all.
@@ -169,27 +178,22 @@ const NO_GIT_HERE = 'This project is a git repo, but this session cannot find gi
 // The project's name in the sync place, the same on every computer whatever is
 // installed on it: its git remote, else its name in .bindwright/project.json,
 // else its folder name. A project outside any git repo never asks git. Inside
-// one, the remote setting decides: set (exit code 0) names it, unset (exit
-// code 1, on every git version) moves on to the other two, and any other end
-// (git missing, refused, out of time) stops the run, since a guessed name
-// would split the project's chats from those of a computer whose git answered.
-// A project in a folder below the repo's top adds that folder's path, so two
-// projects of one repo (a monorepo's packages, projects under a home folder
-// that is a repo) keep their chats apart. The remote is read in lower case,
-// as GitHub reads it.
+// one, the repo's own remote setting decides: set (exit code 0) names it,
+// unset (exit code 1, on every git version) moves on to the other two, and any
+// other end (git missing, out of time, or a folder git will not take as a repo,
+// such as one owned by another user, which `--local` turns into an error)
+// stops the run, since a guessed name would split the project's chats from
+// those of a computer whose git answered.
 function projectKey(root) {
   const top = repoTop(root)
-  const remote = top ? git(root, 'config', '--get', 'remote.origin.url') : { code: 1 }
+  const remote = top ? git(root, 'config', '--local', '--get', 'remote.origin.url') : { code: 1 }
   if (remote.code !== 0 && remote.code !== 1) {
     if (remote.isMissing) throw new Error(NO_GIT_HERE)
     if (remote.out === OUT_OF_TIME) throw new Error(OUT_OF_TIME)
     throw new Error(`Chat sync could not read this project's git remote, so it did nothing this run: ${remote.out}`)
   }
   if (remote.code === 0 && remote.out) {
-    const bare = remote.out.split('\n')[0].replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
-    const inside = path.relative(top, path.resolve(root)).split(path.sep).join('/')
-    const repo = bare.replace(/:/g, '/').replace(/\.git$/i, '').toLowerCase()
-    return safeName(inside ? `${repo}/${inside}` : repo)
+    return remoteKey(remote.out.split('\n')[0], path.relative(top, path.resolve(root)).split(path.sep))
   }
   let project = {}
   try {
@@ -199,6 +203,22 @@ function projectKey(root) {
   }
   const name = project.project && project.project.name
   return safeName(typeof name === 'string' && name.trim() ? name : folderName(root))
+}
+
+// A project's name from its remote: host, owner and repo in lower case, as
+// GitHub reads them, then the path of the project's folder below the repo's
+// top, so two projects of one repo (a monorepo's packages) keep their chats
+// apart. The parts are joined with `~`, which no part holds once made safe, so
+// two different projects never share a name. Every spelling of one remote
+// gives one name: https or ssh, any user or port, and GitHub's ssh over port
+// 443 (ssh.github.com).
+function remoteKey(url, insideParts) {
+  const hasScheme = /^[a-z+]+:\/\//i.test(url)
+  let bare = url.replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
+  if (hasScheme) bare = bare.replace(/^([^/:]+):\d+\//, '$1/')
+  const parts = bare.replace(/\.git$/i, '').toLowerCase().split(/[:/]/).filter(Boolean)
+  if (parts[0] === 'ssh.github.com') parts[0] = 'github.com'
+  return [...parts, ...insideParts.filter(Boolean)].map(safeName).join('~')
 }
 
 // The nearest folder at or above `root` that holds `.git` (a folder, or the
@@ -226,7 +246,7 @@ function safeName(text) {
 
 module.exports = {
   configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git,
-  setDeadline, callTimeout, timedRun, OUT_OF_TIME, CLONE_OF, stopReason, projectKey, safeName,
+  setDeadline, callTimeout, timedRun, OUT_OF_TIME, CLONE_OF, cloneOf, stopReason, projectKey, safeName,
 }
 
 // Starts `out` in a process of its own and returns at once, for a session's

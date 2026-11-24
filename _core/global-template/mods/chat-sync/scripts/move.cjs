@@ -172,9 +172,14 @@ function settleClone(place) {
 }
 
 // A git place whose clone is gone (deleted, or a move cut short) is cloned
-// again by a move to the same repo.
+// again by a move to the same repo. A clone of another repo, left by a move
+// stopped before its switch was saved, counts as gone too.
 function isCloneMissing(place) {
-  return place.kind === 'git' && !fs.existsSync(path.join(base.storeRoot(place), '.git'))
+  if (place.kind !== 'git') return false
+  const store = base.storeRoot(place)
+  if (!fs.existsSync(path.join(store, '.git'))) return true
+  const recorded = base.cloneOf(store)
+  return recorded !== null && recorded !== place.repo
 }
 
 // A move carries the chats out of the old place, so one that cannot be read
@@ -213,7 +218,7 @@ function move([kind, where]) {
       return { error: `The chats were not moved, since the chat repo could not be read: ${pulled.error}` }
     }
   }
-  const copied = copyChats(base.storeRoot(old), ready.store)
+  const copied = isCloneMissing(old) ? { moved: 0, missing: [] } : copyChats(base.storeRoot(old), ready.store)
   if (copied.missing.length) return { error: `These chats did not arrive: ${copied.missing.join(', ')}` }
   // A repo holds the copies only once they are pushed, so the place switches
   // after that, and the old place stays in use when the push fails.
