@@ -57,13 +57,14 @@ All of it is plain text you can read and edit. `/bindwright:remove` takes it bac
 
 ## Privacy
 
-The plugin sends nothing about you or your code. It makes five kinds of network call of its own:
+The plugin sends nothing about you or your code, unless you turn on the opt-in `chat-sync` mod (below). It makes five kinds of network call of its own, plus chat sync's:
 
 - **The helper install**, after your yes, downloads the helper file the plugin pins from the plugin's release at `github.com/starfoxcom/bindwright/releases`.
 - **The helper follow** (the helper's `hooks/follow.mjs`), at `/start-session` once the plugin has moved ahead of its helper, downloads the file the new plugin pins from the same place and installs it without asking, checked against its SHA-256; after a failure it tries again at most once a day.
 - **The version check** (the helper's `hooks/notice.mjs`) reads one version number a day from `https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION`.
 - **The tool release check** (the helper's `hooks/tool-versions.mjs`), when setup or `/bindwright:doctor` runs, reads the newest release numbers of the tools this computer has: Node from `nodejs.org` and its release schedule from `raw.githubusercontent.com`, Git for Windows, the GitHub CLI and uv from GitHub's API, and the Claude Code CLI from the npm registry.
 - **Review counts** (the helper's `hooks/counts.mjs`) are off unless you say yes at setup. Then, once a day, each project you picked sends a random id, a project kind, eleven numbers (review counts, red review rounds, rebuilds and dropped pull requests) and the time span they cover to `https://bindwright-counter.starfoxcom.workers.dev`, a Cloudflare Worker that also keeps the country Cloudflare reads from the connection. To count, it reads your own merged pull requests, and those closed without merging that carry a `dropped:` label, with the GitHub CLI already on your computer; nothing else leaves your computer, your code included.
+- **Chat sync** (the `chat-sync` mod) is off until you turn it on and pick a place. Then, at session start, after a turn (at most once a minute) and at session end, each chat of the project goes whole, code, command output and anything pasted in included, to that place: a folder your own sync app sends on, or a private GitHub repo of yours, which it checks is private with `gh` and then fetches, pulls and pushes with `git`. `/chat-sync move off` stops it; the copies already made stay in the place until you delete them.
 
 Setup itself may run the install commands you approve (Git, Node or Python) and `gh` commands on your repo when you pick GitHub features. The full list of network calls is in the [README](https://github.com/starfoxcom/bindwright#privacy).
 

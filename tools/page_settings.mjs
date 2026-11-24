@@ -73,8 +73,8 @@ const CARDS = /([ \t]*<!-- mods:cards -->\n)[\s\S]*?([ \t]*<!-- \/mods:cards -->
 const ALL_CARD = [
   `          <li class="mod-card" id="m-all">`,
   `            <h3 data-t="mods.all.title">All together</h3>`,
-  `            <p data-t="mods.all.text">Every mod on at once: the setup this project is built with.</p>`,
-  `            <span class="setting-value"><b data-t="mods.all.value">All 10 on</b></span>`,
+  `            <p data-t="mods.all.text">Every mod on at once.</p>`,
+  `            <span class="setting-value"><b data-t="mods.all.value">All ${MODS_ROWS.length} on</b></span>`,
   "          </li>",
 ].join("\n");
 
