@@ -42,6 +42,11 @@ function clone(repo, folder) {
   return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim() || base.stopReason('gh', run)}`
 }
 
+function isInside(folder, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(folder))
+  return !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
 // The project folders in a sync place, each holding chat files.
 function projectFolders(store) {
   if (!store || !fs.existsSync(store)) return []
@@ -56,7 +61,9 @@ function projectFolders(store) {
 function copyChats(from, to) {
   let moved = 0
   const missing = []
-  for (const project of projectFolders(from)) {
+  // A new place inside the old one is not one of its projects.
+  const projects = projectFolders(from).filter(name => !isInside(to, path.join(from, name)))
+  for (const project of projects) {
     for (const id of chatIds(path.join(from, project))) {
       const target = path.join(to, project, id)
       ensureFolder(path.join(to, project))

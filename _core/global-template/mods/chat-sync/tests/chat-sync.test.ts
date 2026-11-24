@@ -56,6 +56,13 @@ test('a session start brings newer chats in, and says how to load the open chat 
   expect(seen.toasts[0]).toContain('start a new session in this project, then /resume this chat')
 })
 
+test('a session start that ran out of time says the next one goes on', async ($, on) => {
+  const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['a'], more: true } })
+  await start($)
+  expect(seen.toasts).toEqual(
+    ['Chat sync: more chats are still to sync, and the next session start goes on with them.'])
+})
+
 test('a push that fails at session start says so, and so does a helper that stops', async ($, on) => {
   const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['other'], pushError: 'rejected' } },
     { out: 1 })

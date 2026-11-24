@@ -665,3 +665,26 @@ test('Google Drive is found under its folder name in the computer\'s language', 
     assert.strictEqual(drive && drive.path, path.join(home, name), name)
   }
 })
+
+test('a session start that runs out of time keeps what it did, and the next one goes on', () => {
+  const a = computer('a', tempDir('folder'))
+  for (const id of ['s1', 's2', 's3']) writeChat(a, id, [id])
+  const out = execFileSync(process.execPath, [SYNC, 'in', a.chatDir, a.root, 'other'],
+    { env: { ...a.env, CHAT_SYNC_RUN_BUDGET_MS: '0' }, encoding: 'utf8' })
+  const first = JSON.parse(out)
+  assert.strictEqual(first.more, true)
+  assert.ok(first.sent.length < 3, 'the run stopped at its deadline')
+  const second = a.sync('in', a.chatDir, a.root, 'other')
+  assert.strictEqual(second.more, undefined)
+  assert.strictEqual(first.sent.length + second.sent.length, 3, 'the next start sent only the rest')
+})
+
+test('a move into a folder inside the old place copies each chat once and makes no stray folders', () => {
+  const first = tempDir('first')
+  const a = computer('a', first)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const inner = path.join(first, 'z-new')
+  assert.strictEqual(a.sync('move', 'folder', inner).moved, 1)
+  assert.deepStrictEqual(fs.readdirSync(inner), ['shop'])
+})

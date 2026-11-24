@@ -78,6 +78,14 @@ function tempOf(own) {
 // stopped before it renamed them. One younger than a helper's longest run may
 // belong to another session's helper still writing it, so it stays.
 const TEMP_STALE_MS = 5 * 60_000
+// A session start's helper is stopped at 120 s, so its chats get 50 s and the
+// commit, pull and push the rest; CHAT_SYNC_RUN_BUDGET_MS sets another budget.
+const RUN_BUDGET_MS = 50_000
+
+function runBudgetMs() {
+  const set = process.env.CHAT_SYNC_RUN_BUDGET_MS
+  return set && Number(set) >= 0 ? Number(set) : RUN_BUDGET_MS
+}
 
 function sweepTemps(own) {
   const prefix = `.${path.basename(own)}.`
@@ -232,7 +240,8 @@ function pull(store) {
   if (dropped) return { error: dropped }
   const branch = remoteBranch(store)
   if (!branch) return {}
-  const run = base.git(store, 'pull', '-q', '--rebase', 'origin', branch)
+  // Named in full, so a branch the repo names with a leading dash is never read as an option.
+  const run = base.git(store, 'pull', '-q', '--rebase', 'origin', `refs/heads/${branch}`)
   if (run.ok) return { branch }
   base.git(store, 'rebase', '--abort')
   const reset = base.git(store, 'reset', '--hard', '-q', `origin/${branch}`)
@@ -390,6 +399,7 @@ function bringIn([chatDir, root, openId]) {
   if (!opened.store) return opened
   const { place, store } = opened
   const isGit = place.kind === 'git'
+  const deadline = Date.now() + runBudgetMs()
   const pulled = isGit ? pull(store) : {}
   const key = base.projectKey(root)
   const dir = path.join(store, key)
@@ -403,7 +413,7 @@ function bringIn([chatDir, root, openId]) {
     if (answer.verdict === 'imported') result.imported.push(id)
     if (answer.verdict === 'open') result.behind.push(id)
     if (answer.isConflict) result.conflicts.push(id)
-  })
+  }, deadline)
   const refused = isGit ? privateRepoError(place.repo) : null
   if (refused) addError(result, refused)
   const localIds = refused ? [] : chatFiles(chatDir).map(name => name.slice(0, -'.jsonl'.length))
@@ -414,7 +424,7 @@ function bringIn([chatDir, root, openId]) {
     if (seen[sentKey] === sentStamp(stamp, ownCopy(dir, id))) return
     if (sendChat(local, root, dir)) result.sent.push(id)
     seen[sentKey] = sentStamp(stamp, ownCopy(dir, id))
-  })
+  }, deadline)
   base.writeJson(seenFile(), seen)
   if (isGit && !refused) Object.assign(result, publish(store, `${result.sent.length} chats from ${base.machineId()}`))
   return result
@@ -460,8 +470,14 @@ function markSeen(stamps, seen, key) {
 
 // Runs `step` for each chat id; one that fails is named in the answer's error
 // and the others still go.
-function forEachChat(ids, result, step) {
+// Stops at the run's deadline and says so, so a run with more chats than its
+// time allows still saves and pushes what it did, and the next start goes on.
+function forEachChat(ids, result, step, deadline) {
   for (const id of ids) {
+    if (Date.now() > deadline) {
+      result.more = true
+      return
+    }
     try {
       step(id)
     } catch (error) {

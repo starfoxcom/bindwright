@@ -54,10 +54,36 @@ function tryTake(file) {
     if (error.code !== 'EEXIST') throw error
   }
   const held = readLock(file)
-  // Removed only while it still holds what was judged stale, so a lock another
-  // run took meanwhile stays.
-  if (held && isStale(held) && readLock(file)?.text === held.text) fs.rmSync(file, { force: true })
+  if (held && isStale(held)) takeOver(file, held)
   return false
+}
+
+// Moves a stale lock aside under a name of this run's own, which only one run
+// can do to a given file, then checks what it moved: a lock that another run
+// took after it was judged stale goes back. Between the move and the putting
+// back, a third run can take the name too; making that impossible needs an
+// operating-system lock, which Node does not offer on every system.
+function takeOver(file, held) {
+  const aside = `${file}.${process.pid}.stale`
+  try {
+    fs.renameSync(file, aside)
+  } catch {
+    return
+  }
+  const moved = readLock(aside)
+  if (moved && moved.text !== held.text) {
+    try {
+      fs.linkSync(aside, file)
+    } catch {
+      // A third run took the name meanwhile, so the lock it made holds.
+    }
+  }
+  fs.rmSync(aside, { force: true })
+}
+
+// Lets the lock go only while it is still this run's own.
+function release(file) {
+  if (readLock(file)?.text === String(process.pid)) fs.rmSync(file, { force: true })
 }
 
 // Runs `work` while holding the lock. Before any place is chosen, the helper's
@@ -73,7 +99,7 @@ function withRunLock(work) {
   try {
     return work()
   } finally {
-    fs.rmSync(file, { force: true })
+    release(file)
   }
 }
 

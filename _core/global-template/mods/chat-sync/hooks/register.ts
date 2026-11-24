@@ -76,6 +76,7 @@ function bringInNote(answer: Answer): string | undefined {
     parts.push('this chat has newer messages on your other computer: start a new session in this project, '
       + 'then /resume this chat to load them')
   }
+  if (answer.more) parts.push('more chats are still to sync, and the next session start goes on with them')
   if (answer.pushError) parts.push(`could not push the chat repo: ${String(answer.pushError).slice(0, 200)}`)
   if (answer.error) parts.push(`could not sync: ${answer.error.slice(0, 200)}`)
   return parts.length ? `Chat sync: ${parts.join('; ')}.` : undefined
@@ -137,8 +138,11 @@ export const register: Register = on => {
     // Stays queued until the copy has finished, so a turn that ends meanwhile
     // never starts a second helper beside it.
     $.clock.after(wait, async () => {
+      // The timer does not wait on this callback, so its failures end here.
       try {
         if (!hasEnded) await copyOut($, false)
+      } catch (error) {
+        $.ui.toast(`Chat sync: could not copy this chat out: ${String(error).slice(0, 200)}`)
       } finally {
         isOutQueued = false
       }
