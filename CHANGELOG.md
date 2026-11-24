@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.17.1] — 2026-11-24
+
+### Fixed
+
+- **The deep review reads `review-workflow.md` too.** The deep review prompt named only `review-tiers.md` as the project's review rules, so the steps that moved into `review-workflow.md` in v7.17.0 (how a PR that edits the review workflow merges, the first setup PR, a broken gate) never reached the deep reviewer. It now reads both when the project has them; `/bindwright:update` brings the change.
+
 ## [v7.17.0] — 2026-11-24
 
 ### Added
