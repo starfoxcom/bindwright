@@ -179,6 +179,6 @@ See [`mods/README.md`](mods/README.md) for what each mod does, its default and o
 
 After merging, start a fresh Claude Code session in any project and ask:
 
-> "What's the no-Explore-agents-for-code-research rule, and where is per-project memory stored?"
+> "What's the rule for code research in this project?"
 
 Claude should answer from the global `~/.claude/CLAUDE.md`, not by reading files. If it answers correctly, the global setup is good.
