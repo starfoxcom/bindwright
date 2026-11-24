@@ -175,6 +175,10 @@ class LengthRowsTest(unittest.TestCase):
             with self.subTest(style=style, command=command):
                 self.project(style)
                 self.assertEqual(self.logged(command, shell), [self.TITLE] if want else [])
+        # Answers nested deeper than the JSON reader goes read as no squash, never as a crash.
+        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
+            answers.write("[" * 100000)
+        self.assertEqual(self.logged(create, "bash"), [])
 
 
 class ToolRulesSweepTest(unittest.TestCase):

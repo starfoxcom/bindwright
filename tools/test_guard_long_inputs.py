@@ -48,7 +48,12 @@ class LongInputTest(unittest.TestCase):
              "cat <<EOF\n" + "(" * 100000 + "\nEOF"),
             *[(f"tool rules: one line of repeated `{word}`", lambda t: self.rules.refusal(t, "bash"),
                (word + " ") * (100000 // len(word)))
-              for word in ("gh pr merge", "gh run rerun", "git stash", "gh pr create", "git show")],
+              for word in ("gh pr merge", "gh run rerun", "git stash", "gh pr create", "git show", "git commit -m",
+                           "gh pr edit --title")],
+            ("tool rules: a run of git's `-c` options with no `commit`", lambda t: self.rules.refusal(t, "bash"),
+             "git " + "-c " * 20000 + "x"),
+            ("tool rules: a run of git's `-C` options in PowerShell", lambda t: self.rules.refusal(t, "powershell"),
+             "git " + "-C -c " * 10000 + "x"),
             ("attribution: one line of repeated `gh pr`", self.attribution.routes_in, "gh pr " * 3000),
             ("attribution: one line of repeated `git config`", self.attribution.routes_in, "git config " * 2000),
             ("attribution: a long separator run after `made by`", scan, "made by" + " " * 20000 + "x"),

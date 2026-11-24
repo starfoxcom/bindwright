@@ -372,7 +372,9 @@ CWD = os.getcwd()
 SUBJECT_LIMIT = 72
 TITLE_LIMIT = 64
 COMMAND_END = re.compile(r"[\n;&|]")
-COMMIT_HEAD = re.compile(r"\bgit\s+(?:-[cC]\s+\S+\s+|-\S+\s+)*commit\b", re.I)
+# Git's options before `commit`; `-c` and `-C` take a value. The two options never match the same text, so
+# a run of them that ends in no `commit` is given up in time linear in its length.
+COMMIT_HEAD = re.compile(r"\bgit\s+(?:-[cC]\s+\S+\s+|-(?![cC]\s)\S+\s+)*commit\b", re.I)
 # The first message option of a commit (`-m`, a short cluster ending in it such as `-am`, `--message`),
 # where a quote opens its value.
 COMMIT_MESSAGE = re.compile(r"(?<!\S)(?:-[A-Za-z]*m\s*|--message(?:=|\s+))(?=['\"])")
@@ -423,7 +425,8 @@ def squash_merges():
         try:
             with open(os.path.join(folder, ".bindwright", "project.json"), encoding="utf-8") as answers:
                 return json.load(answers).get("advanced", {}).get("mergeStyle") == "squash"
-        except (OSError, ValueError, AttributeError):
+        # RecursionError: JSON nested deeper than the reader goes.
+        except (OSError, ValueError, AttributeError, RecursionError):
             pass
         parent = os.path.dirname(folder)
         if parent == folder or os.path.exists(os.path.join(folder, ".git")):
