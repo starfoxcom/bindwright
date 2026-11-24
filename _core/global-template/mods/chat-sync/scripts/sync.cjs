@@ -92,15 +92,12 @@ function quietEnv(cwd = os.homedir()) {
   return env
 }
 
-const sshCommands = new Map()
-
+// Read again for every call, since a folder's answer changes once its remote is
+// set (a conditional include can name the remote's address).
 function configuredSshCommand(cwd) {
-  if (!sshCommands.has(cwd)) {
-    const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
-      { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
-    sshCommands.set(cwd, (run.stdout || '').trim())
-  }
-  return sshCommands.get(cwd)
+  const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
+    { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
+  return (run.stdout || '').trim()
 }
 
 // Settings every git call of the mod runs with, the clone included: chat files

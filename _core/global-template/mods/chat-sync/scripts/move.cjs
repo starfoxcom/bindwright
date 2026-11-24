@@ -9,7 +9,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const {
-  compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
+  compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
 } = require('./commands.cjs')
 const { copyPlainFile } = require('./paths.cjs')
 
@@ -34,12 +34,36 @@ function checkPrivate(repo) {
   return `${repo} is ${visibility.toLowerCase() || 'not confirmed private'}, and chats go only to a private repo.`
 }
 
-// The clone gets the mod's own git settings from its first checkout on.
+// The repo's address as gh would clone it: its ssh address when gh's git
+// protocol is ssh, else its https one.
+function repoAddress(repo) {
+  const options = { encoding: 'utf8', timeout: 30_000, env: base.quietEnv() }
+  const protocol = spawnSync('gh', ['config', 'get', 'git_protocol', '-h', 'github.com'], options)
+  const field = (protocol.stdout || '').trim() === 'ssh' ? 'sshUrl' : 'url'
+  const view = spawnSync('gh', ['repo', 'view', repo, '--json', field, '--jq', `.${field}`], options)
+  const address = (view.stdout || '').trim()
+  if (view.status === 0 && address) return { address }
+  return { error: `Could not find ${repo}: ${(view.stderr || '').trim() || base.stopReason('gh', view)}` }
+}
+
+// Made the way git reads its settings: the remote is set before anything is
+// fetched, so a setting the user keeps for that address (a conditional include
+// with a per-account ssh key) applies from the first fetch. Every call runs
+// with the mod's own git settings, the checkout's line ends included.
 function clone(repo, folder) {
   fs.rmSync(folder, { recursive: true, force: true })
-  const args = ['repo', 'clone', repo, folder, '--', ...base.gitSettings()]
-  const run = spawnSync('gh', args, { encoding: 'utf8', timeout: 120_000, env: base.quietEnv() })
-  return run.status === 0 ? null : `Could not clone ${repo}: ${(run.stderr || '').trim() || base.stopReason('gh', run)}`
+  const found = repoAddress(repo)
+  if (found.error) return found.error
+  fs.mkdirSync(folder, { recursive: true })
+  for (const args of [['init', '-q'], ['remote', 'add', 'origin', found.address], ['fetch', '-q', 'origin']]) {
+    const run = base.git(folder, ...args)
+    if (!run.ok) return `Could not clone ${repo}: ${run.out}`
+  }
+  const remote = remoteBranch(folder)
+  if (remote.error) return `Could not clone ${repo}: ${remote.error}`
+  if (!remote.branch) return null
+  const checkout = base.git(folder, 'checkout', '-q', '-B', remote.branch, `refs/remotes/origin/${remote.branch}`)
+  return checkout.ok ? null : `Could not clone ${repo}: ${checkout.out}`
 }
 
 function isInside(folder, parent) {

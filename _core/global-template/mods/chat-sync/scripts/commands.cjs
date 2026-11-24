@@ -627,6 +627,6 @@ function hasGit() {
 }
 
 module.exports = {
-  run, out, bringIn, compare, publish, pull, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile,
-  inWorkFolder,
+  run, out, bringIn, compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain,
+  placeFile, inWorkFolder,
 }

@@ -73,17 +73,19 @@ function gitComputer(name, origin, env = {}) {
 }
 
 // Runs `move git` inside this process as computer `pc`, with gh answering that
-// the repo is private and cloning the bare repo `origin`; `afterClone` gets the
-// new clone's folder.
-function moveToRepo(pc, origin, afterClone) {
+// the repo is private and lives at the bare repo `origin`; `afterClone` gets the
+// new clone's folder once it is fetched, and `sshUsed` the ssh command each
+// fetch or clone ran with.
+function moveToRepo(pc, origin, afterClone = () => {}, sshUsed = []) {
   const childProcess = require('child_process')
   const realSpawn = childProcess.spawnSync
+  const answer = stdout => ({ status: 0, stdout: `${stdout}\n`, stderr: '' })
   childProcess.spawnSync = (command, args, options) => {
-    if (command !== 'gh') return realSpawn(command, args, options)
-    if (args[1] === 'view') return { status: 0, stdout: 'PRIVATE\n', stderr: '' }
-    const [, , , folder, , ...settings] = args
-    const run = realSpawn('git', [...settings, 'clone', '-q', origin, folder], options)
-    afterClone(folder)
+    if (command === 'gh') return answer(args[0] === 'config' ? '' : args.includes('visibility') ? 'PRIVATE' : origin)
+    const isFetch = command === 'git' && (args.includes('fetch') || args.includes('clone'))
+    if (isFetch) sshUsed.push(options.env.GIT_SSH_COMMAND)
+    const run = realSpawn(command, args, options)
+    if (isFetch) afterClone(args[args.indexOf('-C') + 1])
     return run
   }
   try {
@@ -686,6 +688,17 @@ test('a move into a repo that does not take the chats keeps them syncing where t
   })
   assert.match(answer.error || '', /still sync where they did/)
   assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(first))
+})
+
+test('the first clone uses the ssh command a conditional include keeps for the repo', () => {
+  const origin = bareRepo().replace(/\\/g, '/')
+  const included = gitConfig('[core]\n\tsshCommand = ssh -i work-key\n').replace(/\\/g, '/')
+  const config = gitConfig(`[includeIf "hasconfig:remote.*.url:**/${path.basename(origin)}"]\n\tpath = ${included}\n`)
+  const a = computer('a', null, { env: { GIT_CONFIG_GLOBAL: config } })
+  const sshUsed = []
+  const answer = moveToRepo(a, origin, undefined, sshUsed)
+  assert.ok(!answer.error, answer.error)
+  assert.deepStrictEqual(sshUsed, [undefined], 'git picks the included command itself')
 })
 
 test('a sync folder that went missing is reported and never made again here', () => {
