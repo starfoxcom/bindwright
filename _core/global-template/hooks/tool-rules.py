@@ -13,8 +13,8 @@ here-document, only when its `<<` stands outside quotes, and PowerShell
 here-strings, and refuses one only where an interpreter reads its script from
 standard input (`python -`, `cat <<EOF | node`): fed to a script file, the text
 is data. It also reads the script of a `python -c` or `node -e` call that
-stands outside quotes and comments. The length rules read a plain command (no
-expansion, escape or doubled quote) split into words as the shell splits it,
+stands outside quotes and comments. The length rules read a plain Bash command
+(no expansion or escape) split into words as Bash splits it,
 and take the first `-m` of a `git commit` or the `--title` of `gh pr create` or
 `edit`. Where the reading is unsure (a quote that
 never closes, a double-quoted string holding `$(`, a `<<` inside one), the
@@ -374,15 +374,13 @@ CWD = "."
 SUBJECT_LIMIT = 72
 TITLE_LIMIT = 64
 COMMAND_END = re.compile(r"[\n;&|]")
-# What the shell would change, so the length rules leave the command unread: an expansion, an escape, or a
-# doubled quote (PowerShell's quote inside a string). Without them, shlex splits a command as both shells do.
-UNPLAIN = re.compile(r"[$`\\]|''|\"\"")
+# The length rules read Bash commands only: how PowerShell hands words to git or gh changes with its
+# version and settings, so no splitter outside PowerShell matches it. What Bash would change, an expansion
+# or an escape, leaves the command unread too.
+UNPLAIN = re.compile(r"[$`\\]")
 # The only characters a command may hold outside quotes and comments to be read. Any other (a glob, a
-# tilde, a bracket, PowerShell's array comma or `@`) can make the shell pass other words than shlex finds.
-PLAIN_OUTSIDE = {"bash": re.compile(r"[\w \t./:=+,%@-]*"), "powershell": re.compile(r"[\w \t./:=+%-]*")}
-# Anywhere in the text, PowerShell reads these as quotes where shlex does not: a here-string opener and
-# the typographic quotes.
-POWERSHELL_QUOTES = re.compile("@['\"]|[‘’‚‛“”„]")
+# tilde, a bracket, a redirection) can make Bash pass other words than shlex finds.
+PLAIN_OUTSIDE = re.compile(r"[\w \t./:=+,%@-]*")
 LONGEST_COMMAND = 10000  # a plain commit or PR command is shorter; a longer one is left unread
 
 
@@ -402,14 +400,12 @@ def commands(text, shell):
     yield text[start:end], shape[start:]
 
 
-def plain_words(command, shape, shell):
-    """The command's words as the shell passes them, or None when the shell would change any of them."""
+def plain_words(command, shape):
+    """The Bash command's words as Bash passes them, or None when Bash would change any of them."""
     command = command.strip()
     if not command.startswith(("git", "gh")) or len(command) > LONGEST_COMMAND or UNPLAIN.search(command):
         return None
-    if not PLAIN_OUTSIDE[shell].fullmatch(shape.strip(" \t\r")):
-        return None
-    if shell == "powershell" and POWERSHELL_QUOTES.search(command):
+    if not PLAIN_OUTSIDE.fullmatch(shape.strip(" \t\r")):
         return None
     try:
         return shlex.split(command, comments=True)
@@ -461,7 +457,8 @@ def first_value(args, rule):
         elif len(arg) > 1 and arg[0] == "-" and arg[1].isalpha():
             for at, short in enumerate(arg[1:], 2):
                 if short == rule.letter:
-                    equals = rule.attached_equals and arg[at:at + 1] == "="
+                    # gh's flag parser drops the `=` of `-t=x`, but a bare `-t=` has `=` as its value.
+                    equals = rule.attached_equals and arg[at:at + 1] == "=" and len(arg) > at + 1
                     return (arg[at + 1:] if equals else arg[at:]) or following
                 if short in rule.value_letters or short in rule.attached_only or not short.isalpha():
                     skip = short in rule.value_letters and at == len(arg)
@@ -481,8 +478,10 @@ PR_TITLE = LengthRule(
 
 
 def option_values(text, shell, rule):
+    if shell != "bash":
+        return
     for command, shape in commands(text, shell):
-        words = plain_words(command, shape, shell)
+        words = plain_words(command, shape)
         args = rule.args_of(words) if words else None
         value = first_value(args, rule) if args is not None else None
         if value is not None:

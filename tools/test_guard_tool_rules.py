@@ -125,7 +125,7 @@ class SecretWriteRowTest(unittest.TestCase):
 
 class LengthRowsTest(unittest.TestCase):
     """A commit subject over 72 characters, and a PR title over 64 where PRs squash-merge, are logged when
-    they are the first message or title of a plain command; anything else, or a command the shell would
+    they are the first message or title of a plain Bash command; anything else, or a command Bash would
     change, is not."""
 
     SUBJECT = "a commit subject over 72 characters"
@@ -136,22 +136,19 @@ class LengthRowsTest(unittest.TestCase):
     SUBJECT_ROWS = (
         ("-m, double quotes", f'git commit -m "{LONG}"', "bash", True),
         ("a cluster ending in m", f"git commit -am '{LONG}'", "bash", True),
-        ("git's own options first", f'git -C sub commit -m "{LONG}"', "powershell", True),
+        ("git's own options first", f'git -C sub commit -m "{LONG}"', "bash", True),
         ("--message=", f'git commit --message="{LONG}"', "bash", True),
         ("a value stuck to -m", f'git commit -m"{LONG}"', "bash", True),
         ("a flag before -m", f'git commit --amend -m "{LONG}"', "bash", True),
         ("the second command of a line", f'git add . && git commit -m "{LONG}"', "bash", True),
         ("a body under a long subject", f'git commit -m "{LONG}\n\nWhy it changed."', "bash", True),
-        ("a body under a long subject, PowerShell", f"git commit -m '{LONG}\n\nWhy.'", "powershell", True),
         ("a bare -S before -m", f'git commit -S -m "{LONG}"', "bash", True),
         ("a bare -u before -m", f'git commit -u -m "{LONG}"', "bash", True),
         ("an attached -S key holding an m", f'git commit -Sabcm "{LONG}"', "bash", False),
         ("a long body under a short subject", f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
         ("an example command in a quoted body", f"git commit -m \"short\n\ngit commit -m '{LONG}'\"", "bash", False),
-        ("a PowerShell expression", f"git commit -m ('{LONG[:71]}')", "powershell", False),
-        ("a PowerShell array", f"git commit -m 'short','{LONG}'", "powershell", False),
+        ("PowerShell, whose word splitting changes by version", f"git commit -m '{LONG}'", "powershell", False),
         ("a glob", f'git commit -m "{LONG}" src/*.py', "bash", False),
-        ("a typographic quote in PowerShell", f"git commit -m 'keep the user’s and {LONG}'", "powershell", False),
         ("a dash-led value of a long option", f'git commit --author "-m{LONG}" -m "short"', "bash", False),
         ("exactly 72", f'git commit -m "{AT_LIMIT}"', "bash", False),
         ("a second -m", f'git commit -m "short" -m "{LONG}"', "bash", False),
@@ -162,7 +159,6 @@ class LengthRowsTest(unittest.TestCase):
         ("an escape", f'git commit -m \\a "{LONG}"', "bash", False),
         ("a mention", f'echo "git commit -m {LONG}"', "bash", False),
         ("a substitution", f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
-        ("a PowerShell variable", f'git commit -m "{LONG} `$x"', "powershell", False),
         ("a comment", f"git commit -F msg.txt  # -m '{LONG}'", "bash", False),
     )
 
@@ -193,16 +189,14 @@ class LengthRowsTest(unittest.TestCase):
         create = f'gh pr create --base develop --title "{self.TITLE_LONG}" --body-file b.md'
         for name, style, shell, command, want in (
                 ("--title", "squash", "bash", create, True),
-                ("-t in PowerShell", "squash", "powershell", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
+                ("-t", "squash", "bash", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
+                ("a bare -t=, whose value is =", "squash", "bash", f'gh pr edit -t= "{self.TITLE_LONG}"', False),
                 ("a short title", "squash", "bash", 'gh pr create --title "fix(x): short"', False),
                 ("a line break quoted before the title", "squash", "bash",
                  f'gh pr create --label "a\nb" --title "{self.TITLE_LONG}"', True),
                 ("-t= at exactly 64", "squash", "bash", f'gh pr create -t="{self.TITLE_LONG[:64]}"', False),
                 ("a dash-led body before the title", "squash", "bash",
                  f'gh pr create --body-file b.md --label "-t{self.TITLE_LONG}" --title "short"', False),
-                ("a PowerShell here-string", "squash", "powershell",
-                 f"gh pr create --body-file b.md --label @'\nIt's ready: gh pr edit 5 -t \"{self.TITLE_LONG}\"\n"
-                 "That's all.\n'@ --title \"short\"", False),
                 ("a bare value stuck to -t", "squash", "bash", f'gh pr create -tshort --title "{self.TITLE_LONG}"',
                  False),
                 ("ANSI-C quoting", "squash", "bash", f"gh pr create --title $'x' \"{self.TITLE_LONG}\"", False),
