@@ -96,7 +96,7 @@ When the guidance {{TOOLS_CODE_RESEARCH_NAME}} installed for the agent names a s
 <!-- TOGGLE:code_research_first END -->
 ## The reply style's close step
 
-When `~/.claude/hooks/reply-style.py` exists, run it with `--report` (with `python3`, or `python` on Windows). It prints `{goal, sessions, assess, worst}`: `sessions` are the newest sessions that measured five replies or more, newest first, each with its `rate` in percent. Say in one line how this session's replies did against the goal, as the latest restated reply style names it. When `assess` is true, the last three sessions all fell short: name `worst`, the rule they broke most, with its count, and propose a change to the reply style's text in `~/.claude/output-styles/` that would prevent it; change the file only on the user's yes.
+When `~/.claude/hooks/reply-style.py` exists, run it with `--report` (with `python3`, or `python` on Windows). It prints `{goal, sessions, assess, worst}`: `sessions` are the newest sessions that measured five replies or more, newest first, each with its `rate` in percent. Say in one line how this session's replies did against the goal: the latest restated reply style names this session's count once it has measured a reply ("held in N of M replies of this session", or "This session so far: N of M"), counted up to the reply before that prompt. When it names none, say no reply was measured yet. Never give a figure it names for "the last session" as this one's. When `assess` is true, the last three sessions all fell short: name `worst`, the rule they broke most, with its count, and propose a change to the reply style's text in `~/.claude/output-styles/` that would prevent it; change the file only on the user's yes.
 
 ## Pruning pass
 

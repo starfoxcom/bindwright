@@ -190,6 +190,10 @@ test("a session at or above the goal gets a pointer, and the whole text once it 
     assert.match(full, /Answer first, in plain words\./);
     assert.match(full, /5 of 6 replies kept the measured rules \(83%\)/);
     assert.ok(full.endsWith("so this one avoids them: an em dash."));
+    // 43 of 48 is 89.6%: it shows as 90 but falls short of the goal, so the whole text comes back.
+    const folder = join(layout.home, ".bindwright", "reply-style");
+    writeFileSync(join(folder, "s-9.record"), JSON.stringify({ checked: 48, clean: 43, slips: {} }));
+    assert.match(promptOf(layout, "s-9"), /Answer first, in plain words\.\n\nThis session so far: 43 of 48 .*\(90%\)/);
     // The record holds counts, never the reply's words.
     const record = readFileSync(join(layout.home, ".bindwright", "reply-style", "s-1.record"), "utf8");
     assert.deepEqual(JSON.parse(record), { checked: 6, clean: 5, slips: { "an em dash": 1 } });

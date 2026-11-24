@@ -298,7 +298,13 @@ def add_to_record(session, reply):
 
 
 def percent(record):
+    """The record's share of clean replies, rounded for display only."""
     return round(100 * record["clean"] / record["checked"])
+
+
+def meets(record, target):
+    """Whether the record's exact share of clean replies is at or above the goal."""
+    return 100 * record["clean"] >= target * record["checked"]
 
 
 def standing(session, own):
@@ -319,7 +325,7 @@ def restatement(session, name, body, slips):
     target, own = goal(), read_record(session_file(session, ".record") or "")
     found = standing(session, own)
     whose = None
-    if found and percent(found[0]) >= target:
+    if found and meets(found[0], target):
         record, whose = found
         text = POINTER.format(name=name, clean=record["clean"], checked=record["checked"], whose=whose,
                               rate=percent(record), goal=target)
@@ -336,7 +342,7 @@ def report():
     target = goal()
     measured = [record for _, record in records() if record["checked"] >= MIN_REPLIES]
     sessions = [{"rate": percent(r), "clean": r["clean"], "checked": r["checked"]} for r in measured[:3]]
-    short = len(measured) >= 3 and all(percent(r) < target for r in measured[:3])
+    short = len(measured) >= 3 and not any(meets(r, target) for r in measured[:3])
     totals = {}
     for record in measured[:3]:
         for label, count in record["slips"].items():
