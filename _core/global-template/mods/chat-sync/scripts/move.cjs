@@ -136,6 +136,21 @@ function isCloneMissing(place) {
   return place.kind === 'git' && !fs.existsSync(path.join(base.storeRoot(place), '.git'))
 }
 
+// A move carries the chats out of the old place, so one that cannot be read
+// stops it before anything is made or cloned. A move to the same repo is how a
+// missing clone comes back.
+function unreadableOld(old, kind, where) {
+  if (old.kind === 'folder' && !fs.statSync(old.path, { throwIfNoEntry: false })?.isDirectory()) {
+    return `The chats were not moved, since the sync folder ${old.path} is missing. Check that the sync app `
+      + 'is running, or run /chat-sync move off first to start over in the new place.'
+  }
+  if (isCloneMissing(old) && !(kind === 'git' && where === old.repo)) {
+    return `The chats were not moved, since the clone of ${describe(old)} is missing. `
+      + `Run /chat-sync move git ${old.repo} to clone it again, then move.`
+  }
+  return null
+}
+
 function move([kind, where]) {
   const old = base.readPlace()
   const placeFile = path.join(base.dataDir(), 'place.json')
@@ -143,6 +158,8 @@ function move([kind, where]) {
     base.writeJson(placeFile, { kind: 'off' })
     return { moved: 0, from: describe(old), to: 'off' }
   }
+  const unreadable = unreadableOld(old, kind, where)
+  if (unreadable) return { error: unreadable }
   const ready = prepare(kind, where)
   if (ready.error) return ready
   if (describe(ready.place) === describe(old) && !isCloneMissing(old)) {

@@ -64,7 +64,7 @@ function chatIds(projectDir) {
 }
 
 // This computer's id as a file name in the sync place, in the same letters the
-// readers accept, for an id saved before ids were limited to them too.
+// readers accept, whatever machine.json holds.
 function ownName() {
   return `${base.machineId().replace(/[^\w-]+/g, '-')}.jsonl`
 }
@@ -239,6 +239,11 @@ function isAhead(store) {
   return count.ok && Number(count.out) > 0
 }
 
+// A rebase in progress leaves its folder in the clone, in whatever language git speaks.
+function isRebasing(store) {
+  return ['rebase-merge', 'rebase-apply'].some(name => fs.existsSync(path.join(store, '.git', name)))
+}
+
 // Brings the clone up to the repo, naming the branch, so a clone made while the
 // repo was empty catches up too. Files never committed (a copy cut short) are
 // dropped first: each is this computer's own and is written again from its chat
@@ -247,6 +252,9 @@ function isAhead(store) {
 // copy out writes its files again. Any other failure keeps the local commits.
 function pull(store) {
   clearStaleLock(store)
+  // A run stopped in the middle of a pull left its rebase half done; undoing it
+  // puts back the commits it was replaying. Only one run works in the clone.
+  if (isRebasing(store)) base.git(store, 'rebase', '--abort')
   const dropped = dropUncommitted(store)
   if (dropped) return { error: dropped }
   const remote = remoteBranch(store)
@@ -256,9 +264,9 @@ function pull(store) {
   // Named in full, so a branch the repo names with a leading dash is never read as an option.
   const run = base.git(store, 'pull', '-q', '--rebase', 'origin', `refs/heads/${branch}`)
   if (run.ok) return { branch }
-  // A rebase stopped on a conflict leaves its folder in the clone, in whatever
-  // language git speaks; a network or sign-in failure stops before it starts.
-  const isConflict = ['rebase-merge', 'rebase-apply'].some(name => fs.existsSync(path.join(store, '.git', name)))
+  // A rebase stopped on a conflict is still in progress; a network or sign-in
+  // failure stops before it starts.
+  const isConflict = isRebasing(store)
   base.git(store, 'rebase', '--abort')
   if (!isConflict) return { error: run.out }
   const reset = base.git(store, 'reset', '--hard', '-q', `origin/${branch}`)

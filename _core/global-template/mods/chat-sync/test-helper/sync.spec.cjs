@@ -8,7 +8,7 @@ const os = require('os')
 const path = require('path')
 const http = require('http')
 const { promisify } = require('util')
-const { execFile, execFileSync } = require('child_process')
+const { execFile, execFileSync, spawnSync } = require('child_process')
 
 const execFileAsync = promisify(execFile)
 
@@ -660,6 +660,28 @@ test('a sync folder that went missing is reported and never made again here', ()
   fs.rmSync(folder, { recursive: true })
   assert.match(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).error || '', /sync folder .* is missing/)
   assert.ok(!fs.existsSync(folder), 'the folder is not made again')
+  assert.match(a.sync('move', 'folder', tempDir('target')).error || '', /not moved, since the sync folder/)
+  assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(folder), 'the place did not switch')
+})
+
+test('a pull that a stopped run left half done is undone, and its commits still go up', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const clone = path.join(a.dataDir, 'repo')
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  execFileSync('git', ['-C', clone, 'remote', 'set-url', '--push', 'origin', path.join(a.home, 'gone')])
+  writeChat(a, 's1', ['one', 'two'])
+  assert.ok(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushError, 'the second copy stays local')
+  execFileSync('git', ['-C', clone, 'remote', 'set-url', '--push', 'origin', origin])
+  const stopped = spawnSync('git', ['-C', clone, 'rebase', '-q', '--exec', 'false', 'HEAD~1'],
+    { env: { ...process.env, ...GIT_ENV } })
+  assert.notStrictEqual(stopped.status, 0, 'the rebase stopped part way')
+  const answer = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.strictEqual(answer.pushed, true, JSON.stringify(answer))
+  const own = committed(origin).find(file => file.startsWith('shop/s1/'))
+  const text = execFileSync('git', ['--git-dir', origin, 'show', `main:${own}`], { encoding: 'utf8' })
+  assert.match(text, /two/, 'the local commit reached the repo')
 })
 
 test('a move away from a repo takes the copies other computers pushed since the last pull', () => {
