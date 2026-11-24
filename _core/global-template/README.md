@@ -18,8 +18,7 @@ global-template/
 │   ├── no-ai-attribution.py               # PreToolUse hook that blocks AI attribution in commits and PRs
 │   ├── no_ai_attribution/                 # Its modules: the shell reader, the file reader, the hook routes
 │   ├── reply-style.py                     # UserPromptSubmit, PostToolUse and Stop hook that restates the reply style
-│   ├── session-title.py                   # SessionStart and UserPromptSubmit hook that names each session
-│   └── time-injection.snippet.md          # Optional UserPromptSubmit hook — injects [time] ... per prompt
+│   └── session-title.py                   # SessionStart and UserPromptSubmit hook that names each session
 └── mods/                                  # Optional function-hook plugins (Claude Code 2.1.287+)
     ├── README.md                          # What each mod does, install, options, tests
     ├── ci-watch/                          # Watches a pushed PR's checks, wakes the session once
@@ -147,18 +146,6 @@ This hook is installed only for profiles whose `hook.source` is `bindwright`. It
 
 ---
 
-## 4. Install the time-injection hook (optional, recommended)
-
-Claude Code has no built-in time-of-day awareness across turns — every prompt looks the same to the model regardless of whether ten minutes or ten hours passed since the last one. The `UserPromptSubmit` hook documented in `hooks/time-injection.snippet.md` fixes this by prepending a `[time] YYYY-MM-DD HH:MM:SS <zone>` line to every prompt (zone resolved from the OS at call time — IANA via the Node command, OS-localized abbreviation via the Python fallback; see the snippet file for the trade-off).
-
-It's project-agnostic, parameter-free (the zone comes from the OS at call time — no per-project bind substitution), costs ~50 ms per prompt, and has no side effects. Recommended for any non-trivial project; load-bearing for multi-day sessions, polling loops, and any reasoning that depends on wall-clock truth.
-
-To install, follow the worked example in `hooks/time-injection.snippet.md` — it documents the Node command (with a Python fallback), the JSON entry to append to `~/.claude/settings.json` under `hooks.UserPromptSubmit`, and the verification step. The hook composes cleanly with the code-research-first hook from § 3; they register under different slots and never conflict.
-
-The AI-side counterpart — instructions that tell the model to attend to the `[time]` lines rather than ignore them — lives in `CLAUDE.md.additions` under the "Time-of-day awareness" section, so step 1 above already covered it.
-
----
-
 ## 4b. Install the push guard (recommended)
 
 The project's deny rules match command text, so a force push written as a bundle of short flags (`git push -qf`) gets past them. `hooks/push-guard.py` reads the command's text with quoting removed and blocks a `git push` carrying `--force`, `-f` inside any flag bundle, `--mirror` or a `+` refspec, wherever it appears in the command. `--force-with-lease` and `--force-if-includes` stay allowed. It only ever blocks or stays silent, never asks. Text that only mentions a force push (a commit message, a script) is blocked too, as, rarely, is a plain push chained after a quoted string that spans lines or in a Bash command with a `\` ending a line when a force word follows it anywhere, and the message says to pass such text in a file, or to put such a command on one line or run the push as its own command. It is a safety net for force pushes written the ordinary way, not a sandbox; its docstring lists what stays out of reach.
@@ -183,7 +170,7 @@ By default a bind ships both guards inside the project instead (`.claude/hooks/`
 
 ## 4d. Mods (optional, Claude Code 2.1.287+)
 
-`mods/` holds ten function-hook plugins that run inside Claude Code: session facts on every prompt, a session row (model, project, branch), a compaction hand-off, a local CI watcher, an in-process guard, a shared-machine work queue, skill step checks, task-list upkeep, a plan-usage pause and a local CI runner row. Each is optional; every mod but `runners` and `shared-pc` is recommended for everyone, and `session-facts` supersedes the time-injection hook from § 4. They install globally through `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` and keep their data under `~/.claude/mods-data/<mod>/`. Four of them draw rows above the prompt that take the place of a status line, in the terminal and in the Desktop app (see `mods/README.md`).
+`mods/` holds ten function-hook plugins that run inside Claude Code: session facts on every prompt, a session row (model, project, branch), a compaction hand-off, a local CI watcher, an in-process guard, a shared-machine work queue, skill step checks, task-list upkeep, a plan-usage pause and a local CI runner row. Each is optional; every mod but `runners` and `shared-pc` is recommended for everyone, and `session-facts` puts the date and time on every prompt. They install globally through `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` and keep their data under `~/.claude/mods-data/<mod>/`. Four of them draw rows above the prompt that take the place of a status line, in the terminal and in the Desktop app (see `mods/README.md`).
 
 See [`mods/README.md`](mods/README.md) for what each mod does, its default and options, how to install, test and validate it, and notes for writing your own.
 
