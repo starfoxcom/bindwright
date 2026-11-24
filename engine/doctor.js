@@ -3,7 +3,7 @@
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
 import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
@@ -245,7 +245,42 @@ function hooksCheck(config) {
 // An empty list, an empty string and YAML's null forms list no path.
 const EMPTY_YAML = /^(?:\[[ \t]*\]|""|''|~|null|Null|NULL)$/;
 
-// A rule whose front matter lists at least one path under `paths:` loads only
+// Globs that match every file, so a rule listing only them loads for any read.
+const MATCH_ALL_GLOBS = new Set(["**", "**/*", "*"]);
+
+// A YAML value's text without its trailing comment or surrounding whitespace.
+const bareValue = (text) => {
+  const comment = text.search(/(^|[ \t])#/);
+  return (comment === -1 ? text : text.slice(0, comment)).trim();
+};
+
+// A YAML scalar with its quotes removed.
+const unquote = (text) => text.replace(/^(["'])(.*)\1$/, "$2");
+
+// The `- ` items from `start` up to the first other line; blank and comment lines are skipped.
+function blockItems(lines, start, end) {
+  const items = [];
+  for (const line of lines.slice(start, end)) {
+    const text = line.trim();
+    if (!text || text.startsWith("#")) continue;
+    if (!text.startsWith("- ")) break;
+    items.push(unquote(bareValue(text.slice(2))));
+  }
+  return items;
+}
+
+// The globs the `paths:` key at `start` lists: a flow list, one scalar, or the items below it.
+function listedGlobs(lines, start, end) {
+  const value = bareValue(lines[start].slice("paths:".length));
+  if (value === "") return blockItems(lines, start + 1, end);
+  if (EMPTY_YAML.test(value)) return [];
+  if (value.startsWith("[")) {
+    return value.slice(1, -1).split(",").map((item) => unquote(item.trim())).filter(Boolean);
+  }
+  return [unquote(value)];
+}
+
+// A rule whose `paths:` lists a glob other than a match-everything one loads only
 // when Claude reads a file it matches, so it is not loaded at session start.
 function isPathScoped(text) {
   const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
@@ -253,13 +288,9 @@ function isPathScoped(text) {
   const end = lines.indexOf("---", 1);
   if (lines[0] !== "---" || end === -1) return false;
   for (let i = 1; i < end; i++) {
-    if (!lines[i].startsWith("paths:")) continue;
-    const rest = lines[i].slice("paths:".length);
-    const comment = rest.search(/(^|[ \t])#/);
-    const inline = (comment === -1 ? rest : rest.slice(0, comment)).trim();
-    if (inline) return !EMPTY_YAML.test(inline);
-    const next = lines.slice(i + 1).find((line) => line.trim() && !line.trim().startsWith("#"));
-    return (next ?? "").trim().startsWith("- ");
+    if (lines[i].startsWith("paths:")) {
+      return listedGlobs(lines, i, end).some((glob) => !MATCH_ALL_GLOBS.has(glob));
+    }
   }
   return false;
 }
@@ -330,25 +361,28 @@ function readText(file) {
 
 // The instruction files Claude Code loads at session start for this repo and
 // config folder, as [name, characters in UTF-16 units, as Claude Code counts
-// them]: each CLAUDE.md and every rule without a `paths:` list. A rule in the
-// config folder (wherever the walk reached it from) is named only as such, so
-// its file name never reaches a bug report, and a file reached twice counts
-// once. A CLAUDE.md above the repo and files it imports are not counted.
+// them, whether it comes from ~/.claude]: each CLAUDE.md and every rule without
+// a `paths:` list. A rule in the config folder (wherever the walk reached it
+// from) is named only as such, so its file name never reaches a bug report, and
+// a file reached twice counts once. A CLAUDE.md above the repo and files it
+// imports are not counted.
 function startFiles(root, config) {
   const out = [];
   const counted = new Set();
   // `rule` is null for a CLAUDE.md, "repo" for a rule the repo's folder holds, "personal" for one in ~/.claude.
   // The personal rules are walked first, so a file both folders reach counts once, under the personal name.
-  const add = (name, path, rule = null) => {
+  const add = (name, path, rule = null, personal = false) => {
     const id = fileId(path);
     const text = id === null || counted.has(id) ? null : readText(path);
     if (text === null || (rule && isPathScoped(text))) return;
     counted.add(id);
-    out.push([rule === "personal" ? "a rule in ~/.claude/rules" : name, text.length]);
+    out.push([rule === "personal" ? "a rule in ~/.claude/rules" : name, text.length, personal]);
   };
   for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) add(name, join(root, ...name.split("/")));
-  add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"));
-  for (const [name, path] of markdownFiles(join(config, "rules"))) add(name, path, "personal");
+  add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"), null, true);
+  for (const [name, path] of markdownFiles(join(config, "rules"))) {
+    add(name, path, "personal", true);
+  }
   for (const [name, path] of markdownFiles(join(root, ".claude", "rules"))) add(`.claude/rules/${name}`, path, "repo");
   return out;
 }
@@ -356,13 +390,28 @@ function startFiles(root, config) {
 // Characters as thousands with one decimal, cut rather than rounded, so both engines print the same.
 const kilo = (n) => `${Math.floor(n / 1000)}.${Math.floor((n % 1000) / 100)}k`;
 
+const sumSizes = (files) => files.reduce((sum, [, size]) => sum + size, 0);
+
+// The memory index Claude Code loads for the repo at `root`, from `config`'s projects folder.
+// That folder is named by the repo's absolute path, each character outside [A-Za-z0-9] as `-`.
+// Null when the file does not exist.
+function memoryIndex(root, config) {
+  const slug = resolve(root).replace(/[^A-Za-z0-9]/gu, "-");
+  return readText(join(config, "projects", slug, "memory", "MEMORY.md"));
+}
+
 function instructionsCheck(root, config) {
   const files = startFiles(root, config);
-  const total = files.reduce((sum, [, size]) => sum + size, 0);
+  const total = sumSizes(files);
+  const personal = sumSizes(files.filter(([, , fromPersonal]) => fromPersonal));
   const largest = [...files].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, 3);
+  const memory = memoryIndex(root, config);
+  const memoryNote = memory === null ? "" : ` The memory index (MEMORY.md) loads too: `
+    + `${kilo(memory.length)}.`;
+  const listed = largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none";
   const say = `Claude Code loads ${files.length} instruction files at session start, ${kilo(total)} characters `
-    + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. The largest: `
-    + `${largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none"}.`;
+    + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. ${kilo(total - personal)} of it from this repo `
+    + `and ${kilo(personal)} from ~/.claude. The largest: ${listed}.${memoryNote}`;
   return total < INSTRUCTIONS_WARN_AT ? check("instructions", true, say) : check("instructions", false, say,
     FIX.instructions);
 }

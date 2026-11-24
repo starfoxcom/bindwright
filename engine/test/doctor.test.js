@@ -33,7 +33,7 @@ async function scene(change) {
     if (dest.startsWith(STAGING)) writeFileSync(at(dest.slice(STAGING.length)), text);
   }
   rmSync(at(STAGING), { recursive: true, force: true });
-  change({ at, config });
+  change({ at, config, repo });
   return { root, repo, config };
 }
 
@@ -105,6 +105,36 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
       + "(?!a rule in)[^,]+\\.$");
     assert.match(found.say, largest, "a linked folder is read once and a loop ends");
     assert.doesNotMatch(found.say, /client-notes/, "a personal rule's name stays out, however it is reached");
+  });
+
+test("instructions split by origin, and a match-all rule loads", needsPython,
+  async () => {
+    const setup = ({ at, config }) => {
+      mkdirSync(join(config, "rules"), { recursive: true });
+      writeFileSync(join(config, "CLAUDE.md"), "p".repeat(1000));
+      writeFileSync(join(config, "rules", "mine.md"), "p".repeat(2000));
+      writeFileSync(at(".claude/rules/all.md"), `---\npaths: ["**/*"]\n---\n${"x".repeat(60000)}`);
+      writeFileSync(at(".claude/rules/star.md"), `---\npaths:\n  - "*"\n---\n${"x".repeat(55000)}`);
+      writeFileSync(at(".claude/rules/mixed.md"),
+        `---\npaths: ["**/*", "src/**"]\n---\n${"x".repeat(70000)}`);
+    };
+    const sayOf = (report) => report.checks.find((c) => c.id === "instructions").say;
+    const bare = sayOf(await doctor(setup));
+    assert.match(bare, /of it from this repo and 3\.0k from ~\/\.claude\. The largest: /);
+    // Match-all globs load for any read, so both count; a rule with any other glob stays out.
+    assert.match(bare, /The largest: \.claude\/rules\/all\.md \(60\.0k\), /);
+    assert.match(bare, /\.claude\/rules\/star\.md \(55\.0k\)/);
+    assert.doesNotMatch(bare, /mixed|MEMORY/);
+
+    // The memory index is noted after the total, which it does not change.
+    const indexed = sayOf(await doctor((scene) => {
+      setup(scene);
+      const slug = scene.repo.replace(/[^A-Za-z0-9]/g, "-");
+      const memory = join(scene.config, "projects", slug, "memory");
+      mkdirSync(memory, { recursive: true });
+      writeFileSync(join(memory, "MEMORY.md"), "m".repeat(2500));
+    }));
+    assert.equal(indexed, `${bare} The memory index (MEMORY.md) loads too: 2.5k.`);
   });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
