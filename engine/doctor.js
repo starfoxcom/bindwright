@@ -249,8 +249,10 @@ const EMPTY_YAML = /^(?:\[[ \t]*\]|""|''|~|null|Null|NULL)$/;
 
 function isPathScoped(text) {
   const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
-  if (lines[0] !== "---") return false;
-  for (let i = 1; i < lines.length && lines[i] !== "---"; i++) {
+  // Front matter that never closes is no front matter, so the whole file loads.
+  const end = lines.indexOf("---", 1);
+  if (lines[0] !== "---" || end === -1) return false;
+  for (let i = 1; i < end; i++) {
     if (!lines[i].startsWith("paths:")) continue;
     const rest = lines[i].slice("paths:".length);
     const comment = rest.search(/(^|[ \t])#/);
@@ -262,23 +264,33 @@ function isPathScoped(text) {
   return false;
 }
 
-// A file's identity on its disk, the same however a path spells it (case,
-// links, short names). A disk that numbers no files reports inode 0, so there
-// the real path stands in. Null when the file cannot be read.
+// A file's or folder's identity on its disk, the same however a path spells it
+// (case, links, short names). A disk that numbers no files reports inode 0, so
+// there its canonical path stands in. Null when it cannot be read.
 function fileId(path) {
   try {
     const stat = statSync(path, { bigint: true });
-    return stat.ino === 0n ? `path:${realPath(path) ?? path}` : `${stat.dev}:${stat.ino}`;
+    return stat.ino === 0n ? `path:${canonicalPath(path)}` : `${stat.dev}:${stat.ino}`;
   } catch {
     return null;
   }
 }
 
-function realPath(path) {
+// On Windows, the name Windows itself gives a path (case as on disk, long
+// names), as Python's realpath asks for it; elsewhere, or where Windows cannot
+// say, the path with its links resolved one by one.
+function canonicalPath(path) {
+  if (process.platform === "win32") {
+    try {
+      return realpathSync.native(path);
+    } catch {
+      // Some network and user-mode file systems refuse the call.
+    }
+  }
   try {
     return realpathSync(path);
   } catch {
-    return null;
+    return path;
   }
 }
 
@@ -286,9 +298,9 @@ function realPath(path) {
 // followed as Claude Code follows them; a folder already walked is skipped, so
 // a link back up the tree ends. None when the folder cannot be read.
 function markdownFiles(dir, prefix = "", seen = new Set()) {
-  const real = realPath(dir);
-  if (real === null || seen.has(real)) return [];
-  seen.add(real);
+  const id = fileId(dir);
+  if (id === null || seen.has(id)) return [];
+  seen.add(id);
   let names;
   try {
     names = readdirSync(dir).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));

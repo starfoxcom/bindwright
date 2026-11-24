@@ -77,11 +77,15 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     const scoped = `﻿---\npaths:\n\n  # sources\n  - "src/**"\n---\n${"x".repeat(200000)}`;
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
-    const empty = await doctor(({ at }) => {
-      writeFileSync(at(".claude/rules/spaced.md"), `---\npaths: [ ] # none yet\n---\n${"x".repeat(65000)}`);
-      writeFileSync(at(".claude/rules/null.md"), `---\npaths: ~\n---\n${"x".repeat(65000)}`);
+    const loaded = await doctor(({ at }) => {
+      writeFileSync(at(".claude/rules/spaced.md"), `---\npaths: [ ] # none yet\n---\n${"x".repeat(50000)}`);
+      writeFileSync(at(".claude/rules/null.md"), `---\npaths: ~\n---\n${"x".repeat(49000)}`);
+      writeFileSync(at(".claude/rules/open.md"), `---\npaths:\n  - "src/**"\n${"x".repeat(48000)}`);
     });
-    assert.ok(failing(empty).includes("instructions"), "an empty or null paths: lists no path, so the rule loads");
+    // An empty or null paths: lists no path, and front matter that never closes is none, so each rule loads.
+    const named = new RegExp("The largest: \\.claude/rules/spaced\\.md \\(50\\.0k\\), "
+      + "\\.claude/rules/null\\.md \\(49\\.0k\\), \\.claude/rules/open\\.md \\(48\\.0k\\)\\.$");
+    assert.match(loaded.checks.find((c) => c.id === "instructions").say, named);
 
     const loud = await doctor(({ at, config }) => {
       writeFileSync(at("CLAUDE.md"), "é".repeat(110000));

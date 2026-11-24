@@ -247,7 +247,8 @@ _EMPTY_YAML = re.compile(r"\[[ \t]*\]|\"\"|''|~|null|Null|NULL")
 
 def _is_path_scoped(text):
     lines = re.split(r"\r\n|\r|\n", text[1:] if text.startswith("﻿") else text)
-    if lines[0] != "---":
+    # Front matter that never closes is no front matter, so the whole file loads.
+    if lines[0] != "---" or "---" not in lines[1:]:
         return False
     for i in range(1, len(lines)):
         if lines[i] == "---":
@@ -268,17 +269,10 @@ def _is_path_scoped(text):
 def _file_id(path):
     try:
         stat = os.stat(path)
-        # A disk that numbers no files reports inode 0, so there the real path stands in.
+        # A disk that numbers no files reports inode 0, so there its canonical path stands in.
         if stat.st_ino == 0:
             return "path:" + os.path.realpath(path)
         return "%d:%d" % (stat.st_dev, stat.st_ino)
-    except OSError:
-        return None
-
-
-def _real_path(path):
-    try:
-        return os.path.realpath(path) if os.path.exists(path) else None
     except OSError:
         return None
 
@@ -293,10 +287,10 @@ def _read_text(path):
 
 def _markdown_files(folder, prefix="", seen=None):
     seen = set() if seen is None else seen
-    real = _real_path(folder)
-    if real is None or real in seen:
+    id_ = _file_id(folder)
+    if id_ is None or id_ in seen:
         return []
-    seen.add(real)
+    seen.add(id_)
     try:
         names = sorted(os.listdir(folder), key=_code_units)
     except OSError:
