@@ -60,6 +60,9 @@ function clone(repo, folder) {
     const run = base.git(folder, ...args)
     if (!run.ok) return `Could not clone ${repo}: ${run.out}`
   }
+  // Inside .git, so never committed: which repo this clone is, checked at every
+  // run, so a move stopped between its switch steps never pushes to the wrong one.
+  fs.writeFileSync(path.join(folder, '.git', base.CLONE_OF), repo)
   const remote = remoteBranch(folder)
   if (remote.error) return `Could not clone ${repo}: ${remote.error}`
   if (!remote.branch) return null
@@ -156,8 +159,16 @@ function prepare(kind, where) {
 function settleClone(place) {
   if (place.kind !== 'git') return
   const repo = base.storeRoot(place)
-  if (fs.existsSync(repo)) fs.renameSync(repo, `${repo}-old-${Date.now()}`)
-  fs.renameSync(path.join(base.dataDir(), 'repo-next'), repo)
+  const old = `${repo}-old-${Date.now()}`
+  const hadOld = fs.existsSync(repo)
+  if (hadOld) fs.renameSync(repo, old)
+  try {
+    fs.renameSync(path.join(base.dataDir(), 'repo-next'), repo)
+  } catch (error) {
+    // The old clone goes back, so the old place stays in use.
+    if (hadOld) fs.renameSync(old, repo)
+    throw error
+  }
 }
 
 // A git place whose clone is gone (deleted, or a move cut short) is cloned

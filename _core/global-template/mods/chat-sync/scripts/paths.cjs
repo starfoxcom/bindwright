@@ -101,12 +101,15 @@ const WRITTEN = /__CHATSYNC_(?:PROJECT|HOME)_(?:F|E1|E2)__|CHATSYNC_LIT_/g
 // The deeper of the two folders goes first, as the longest prefix wins: the
 // project usually sits inside the home folder, but a session started in /home
 // or C:\Users holds the home folder inside the project.
+// The rules match the folders as the escape leaves them, so a folder whose
+// own name holds the placeholders' prefix is still swapped.
 function neutralize(root, home) {
-  const project = outRules('project', root)
-  const homeRules = outRules('home', home)
+  const escape = text => text.replace(LITERAL, 'CHATSYNC_LIT_')
+  const project = outRules('project', escape(root))
+  const homeRules = outRules('home', escape(home))
   const isHomeDeeper = segments(home).length > segments(root).length
   const rules = isHomeDeeper ? [...homeRules, ...project] : [...project, ...homeRules]
-  return text => applyRules(text.replace(LITERAL, 'CHATSYNC_LIT_'), rules)
+  return text => applyRules(escape(text), rules)
 }
 
 function expand(root, home) {

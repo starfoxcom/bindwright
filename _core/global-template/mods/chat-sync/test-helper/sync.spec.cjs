@@ -250,6 +250,13 @@ test('a Windows chat continued on Linux comes back to Windows whole, and both si
   }
 })
 
+test('a project or home folder whose name holds the placeholders\' prefix is still swapped', () => {
+  const text = '{"cwd":"/srv/CHATSYNC_app/src","log":"/home/CHATSYNC_sam/notes"}\n'
+  const out = neutralize('/srv/CHATSYNC_app', '/home/CHATSYNC_sam')(text)
+  assert.ok(!out.includes('CHATSYNC_app') && !out.includes('CHATSYNC_sam'), out)
+  assert.strictEqual(expand('/work/shop', '/home/kim')(out), '{"cwd":"/work/shop/src","log":"/home/kim/notes"}\n')
+})
+
 test('a chat that quotes the placeholders keeps them as text and reads the same on both computers', () => {
   const store = tempDir('store')
   const a = computer('a', store)
@@ -834,6 +841,15 @@ test('projects in folders of one repo keep their names apart, and a remote\'s ca
     return [projectKey(https), projectKey(path.join(https, 'packages', 'api')), projectKey(ssh)]
   })
   assert.deepStrictEqual(keys, ['github.com-acme-shop', 'github.com-acme-shop-packages-api', 'github.com-acme-shop'])
+})
+
+test('a clone of another repo than the place names, left by a move stopped halfway, is never pushed to', () => {
+  const a = gitComputer('a', bareRepo())
+  writeChat(a, 's1', ['one'])
+  fs.writeFileSync(path.join(a.dataDir, 'repo', '.git', 'chat-sync-repo'), 'me/other')
+  const answer = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  assert.match(answer.error || '', /not of me\/chats/)
+  assert.ok(!fs.existsSync(path.join(a.dataDir, 'repo', 'shop')), 'nothing was written into the clone')
 })
 
 test('a repo place on a computer without git says so and writes nothing into the clone', () => {

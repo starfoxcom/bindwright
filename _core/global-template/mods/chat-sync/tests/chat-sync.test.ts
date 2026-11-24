@@ -93,6 +93,8 @@ test('turns copy the chat out at most once a minute, and a copy that fails says 
   await seen.clock.advance(1)
   expect(outs()).toEqual([['out', TRANSCRIPT, ROOT]])
   expect(seen.toasts.at(-1)).toContain('could not copy this chat out: EBUSY')
+  // The helper's answer is due 2 s before the hook stops it.
+  expect(seen.limits.at(-1)).toEqual({ answerInMs: 118_000, timeoutMs: 120_000 })
 
   await endTurn($)
   await endTurn($)
@@ -141,4 +143,5 @@ test('a folder path with spaces reaches the helper whole', async ($, on) => {
   await $.command.run({ command: 'chat-sync', args: 'move folder "C:/Users/al/My Drive/Claude chats"' } as never)
 
   expect(seen.runs.at(-1)).toEqual(['move', 'folder', 'C:/Users/al/My Drive/Claude chats'])
+  expect(seen.limits.at(-1)).toEqual({ answerInMs: 298_000, timeoutMs: 300_000 })
 })

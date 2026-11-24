@@ -133,6 +133,9 @@ function callTimeout(ownMs) {
 
 const OUT_OF_TIME = 'Chat sync ran out of time for this run; the next one goes on.'
 
+// A file in a clone's .git folder naming the repo it is a clone of.
+const CLONE_OF = 'chat-sync-repo'
+
 // Runs git or gh with the environment from `quietEnv(envCwd)`. The timeout is
 // taken once that environment is built, since building it can run git too.
 // Null when no time is left, as a timeout of 0 would mean no limit at all.
@@ -223,7 +226,7 @@ function safeName(text) {
 
 module.exports = {
   configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git,
-  setDeadline, callTimeout, timedRun, OUT_OF_TIME, stopReason, projectKey, safeName,
+  setDeadline, callTimeout, timedRun, OUT_OF_TIME, CLONE_OF, stopReason, projectKey, safeName,
 }
 
 // Starts `out` in a process of its own and returns at once, for a session's
