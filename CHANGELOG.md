@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The ci-watch row names the PR's review round.** The line above the prompt now reads `⏳ PR 14 · round 3 · 2/4 done`, so it shows how many rounds the PR has taken without asking `/ci-watch rounds`. A round is one pushed head whose checks settled, counted the same way as the step backs and the hard stop. The phone text carries it too.
+
 ### Changed
 
 - **Less text loads at session start.** The global instructions drop "Auto memory", which repeated Claude Code's own memory instructions, and "Time-of-day awareness", which explained a `[time]` hook the session-facts mod replaced; the code-research section becomes a short pointer at the chosen tool's own guidance, under the new heading "Code research: the project's tool, not agents". The time-injection snippet is retired with them. `/bindwright:setup` offers to take the three old sections out of `~/.claude/CLAUDE.md`, and `/bindwright:remove` takes them out with the rest.

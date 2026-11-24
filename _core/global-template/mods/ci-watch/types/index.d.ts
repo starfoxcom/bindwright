@@ -46,6 +46,8 @@ export type Watch = {
    * (`routine error, deep none`). Such a round is not counted, and its wake says why.
    */
   noVerdict?: string
+  /** On the band's copy only: which round of its PR this head is, counting from 1. */
+  round?: number
 }
 
 /** A background run (a shell or a subagent) this session started and has not heard back from. */

@@ -3,7 +3,8 @@ import { type Engine, expect, test } from 'claude-code/testing'
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import {
-  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundsText, roundsToResearch, withTopic,
+  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundOf, roundsText, roundsToResearch,
+  withTopic,
 } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { type Seen, world } from './world'
@@ -32,6 +33,19 @@ test('a round that passed but did not merge counts red once another head follows
   expect(redStreak(of([true, false]))).toBe(0)
   expect(redStreak({ rounds: [] })).toBe(0)
 })
+
+const ROUND_CASES: { name: string; pr: PrRounds | undefined; sha: string; round: number }[] = [
+  { name: 'a PR with no rounds yet', pr: undefined, sha: 'c0', round: 1 },
+  { name: 'a head still running after two settled rounds', pr: of([true, true]), sha: 'c2', round: 3 },
+  { name: 'a head that already settled', pr: of([true, true, false]), sha: 'c1', round: 2 },
+  { name: 'the newest settled head', pr: of([true, false]), sha: 'c1', round: 2 },
+]
+
+for (const { name, pr, sha, round } of ROUND_CASES) {
+  test(`round of ${name}`, () => {
+    expect(roundOf(pr, sha)).toBe(round)
+  })
+}
 
 // Red, red, passed, red: the streak jumps from 0 to 4 and steps over the 3rd, which still owes its step back.
 test('a streak that jumps past a research step still asks for it', () => {
@@ -438,9 +452,11 @@ test("a round adds to the count file as read right before its write", async ($, 
   seed(seen, reds(5))
   seen.order = []
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
-  // The wake then reads the count once more, for its research step.
+  // The band and the wake read the count too, at other times; the write follows its own read directly.
   const steps = seen.order.filter(step => step.endsWith('/rounds.json'))
-  expect(steps).toEqual([`read ${path}`, `write ${path}`, `read ${path}`])
+  const write = steps.indexOf(`write ${path}`)
+  expect(steps.filter(step => step.startsWith('write'))).toEqual([`write ${path}`])
+  expect(steps[write - 1]).toBe(`read ${path}`)
   expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(6)
 })
 

@@ -53,6 +53,12 @@ const SUMMARY_CASES: { name: string; watch: Partial<Watch>; text: string; color:
     color: 'yellow',
   },
   { name: 'no checks yet', watch: {}, text: '⏳ PR 7 · 0/0 done', color: 'yellow' },
+  {
+    name: 'third round running',
+    watch: { checks: { a: 'pass', b: 'pending' }, round: 3 },
+    text: '⏳ PR 7 · round 3 · 1/2 done',
+    color: 'yellow',
+  },
 ]
 
 for (const { name, watch, text, color } of SUMMARY_CASES) {
@@ -85,7 +91,7 @@ for (const surface of SURFACES) {
     await clock.advance(60_000)
     const ui = await $.ui.mount({ plugin: 'ci-watch', surface, component: 'AbovePrompt', props: PROPS })
     // The build still runs, so the row says so beside the failure.
-    expect(await ui.find({ type: 'Text', text: /PR 7 · 1\/2 done · failed so far: review/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /PR 7 · round 1 · 1\/2 done · failed so far: review/ })).toBeDefined()
     expect(await ui.find({ type: 'Link', href: 'https://github.com/o/r/pull/7' } as never)).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /❌ review/ })).toBeUndefined()
     await ui.press({ key: 'ci-watch-checks-o/r#7' })
@@ -132,6 +138,16 @@ test('a stop pressed in an instance a newer load replaced is left to the newer o
   const before = seen.files.get(STATE)
   await ui.press({ key: 'ci-watch-stop-o/r#7' })
   expect(seen.files.get(STATE)).toBe(before)
+})
+
+test('the row names the round its head is, after the rounds already settled on the PR', async ($, on) => {
+  const { seen } = world(on)
+  seen.isReadable = true
+  const rounds = [{ sha: 'c0', red: true }, { sha: 'c1', red: true }]
+  seen.files.set('C:/Users/me/.claude/mods-data/ci-watch/rounds.json', JSON.stringify({ 'o/r#7': { rounds } }))
+  await pushed($, 'terminal')
+  const ui = await $.ui.mount({ plugin: 'ci-watch', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
+  expect(await ui.find({ type: 'Text', text: /PR 7 · round 3 · / })).toBeDefined()
 })
 
 test('with nothing watched the band draws nothing of its own', async ($, on) => {

@@ -5,7 +5,8 @@ import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './br
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsText, stepBackOf, withTopic,
+  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundOf, roundsText, stepBackOf,
+  withTopic,
 } from './rounds'
 import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
@@ -106,7 +107,9 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
 const shown = atom({ plugin: 'ci-watch', key: 'watches' } as const, [])
 
 async function publish($: EngineInterface): Promise<void> {
-  await update($, shown, () => live.watches.map(w => ({ ...w })))
+  const rounds = await readRounds($)
+  const round = (w: Watch) => roundOf(rounds[`${w.repo}#${w.number}`], w.headSha)
+  await update($, shown, () => live.watches.map(w => ({ ...w, round: round(w) })))
 }
 
 async function save($: EngineInterface): Promise<void> {

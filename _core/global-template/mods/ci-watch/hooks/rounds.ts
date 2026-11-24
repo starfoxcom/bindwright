@@ -37,6 +37,14 @@ export function redStreak(pr: PrRounds | undefined): number {
   return rounds.at(-1)?.red ? rounds.length : 0
 }
 
+/** Which round head `sha` is for its PR, counting from 1: its place among the rounds kept, or the one
+ * after them when its checks have not settled yet. */
+export function roundOf(pr: PrRounds | undefined, sha: string): number {
+  const rounds = Array.isArray(pr?.rounds) ? pr.rounds : []
+  const at = rounds.findIndex(r => r.sha === sha)
+  return (at < 0 ? rounds.length : at) + 1
+}
+
 /** The count's file, `{ "<owner/name>#<number>": PrRounds }`, written by the mod as watches settle and
  * spared by the sweep (it is named by no session). */
 export const ROUNDS_FILE = 'rounds.json'
