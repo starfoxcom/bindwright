@@ -50,9 +50,14 @@ class LongInputTest(unittest.TestCase):
                (word + " ") * (100000 // len(word)))
               for word in ("gh pr merge", "gh run rerun", "git stash", "gh pr create", "git show", "git commit -m",
                            "gh pr edit --title")],
+            # Just under the length rows' 10 000-character cap, so each is split and read in full.
             *[(f"tool rules: one plain command of many `{word}` words", lambda t: self.rules.refusal(t, "bash"),
-               "git " + word * 15000 + "commit -m 'x'")
-              for word in ("-c ", "-C ")],
+               "git " + word * 1980 + "commit -m 'x'")
+              for word in ("-c x ", "-C x ")],
+            ("tool rules: a commit of many short-option clusters", lambda t: self.rules.refusal(t, "bash"),
+             "git commit " + "-av " * 2470 + "-m 'x'"),
+            ("tool rules: a PR edit of many titles", lambda t: self.rules.refusal(t, "bash"),
+             "gh pr edit " + "-t x " * 1975),
             ("attribution: one line of repeated `gh pr`", self.attribution.routes_in, "gh pr " * 3000),
             ("attribution: one line of repeated `git config`", self.attribution.routes_in, "git config " * 2000),
             ("attribution: a long separator run after `made by`", scan, "made by" + " " * 20000 + "x"),

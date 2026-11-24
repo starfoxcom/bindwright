@@ -433,48 +433,65 @@ def gh_pr_args(words):
 # - value_letters: short options that take a value, the rest of their word or else the next word;
 # - attached_only: short options that take one only attached (git's `-S<keyid>`);
 # - value_names: long options that take the next word as their value whatever it starts with;
-# - attached_equals: whether an attached value drops a leading `=` (gh's flag parser does; git's keeps it).
+# - attached_equals: whether an attached value drops a leading `=` (gh's flag parser does; git's keeps it);
+# - last_wins: whether the option given twice keeps its last value (gh's title) or its first (git's
+#   subject, since each `-m` adds a paragraph).
 LengthRule = collections.namedtuple(
-    "LengthRule", "args_of letter name value_letters attached_only value_names attached_equals")
+    "LengthRule", "args_of letter name value_letters attached_only value_names attached_equals last_wins")
 
 
-def first_value(args, rule):
-    """The value of the first `--<name>`, or `-<letter>` alone or in a cluster of short options, skipping
-    every other option's value."""
-    skip = False
-    for index, arg in enumerate(args):
+def short_options(arg, rule):
+    """For a cluster of short options: the message letter's attached value ("" when it takes the next
+    word) or None, and whether the cluster ends in an option that takes the next word."""
+    for at, short in enumerate(arg[1:], 2):
+        if short == rule.letter:
+            # gh's flag parser drops the `=` of `-t=x`, but a bare `-t=` has `=` as its value.
+            equals = rule.attached_equals and arg[at:at + 1] == "=" and len(arg) > at + 1
+            attached = arg[at + 1:] if equals else arg[at:]
+            return attached, not attached
+        if short in rule.value_letters or short in rule.attached_only or not short.isalpha():
+            return None, short in rule.value_letters and at == len(arg)
+    return None, False
+
+
+def message_values(args, rule):
+    """Each value the message option is given, in order, skipping every other option's value."""
+    index = 0
+    while index < len(args):
+        arg = args[index]
         following = args[index + 1] if index + 1 < len(args) else None
-        if skip:
-            skip = False
-        elif arg == "--":
-            return None
-        elif arg == rule.name:
-            return following
+        index += 1
+        if arg == "--":
+            return
+        if arg == rule.name:
+            yield following
+            index += 1
         elif arg.startswith(rule.name + "="):
-            return arg[len(rule.name) + 1:]
+            yield arg[len(rule.name) + 1:]
         elif arg in rule.value_names:
-            skip = True
+            index += 1
         elif len(arg) > 1 and arg[0] == "-" and arg[1].isalpha():
-            for at, short in enumerate(arg[1:], 2):
-                if short == rule.letter:
-                    # gh's flag parser drops the `=` of `-t=x`, but a bare `-t=` has `=` as its value.
-                    equals = rule.attached_equals and arg[at:at + 1] == "=" and len(arg) > at + 1
-                    return (arg[at + 1:] if equals else arg[at:]) or following
-                if short in rule.value_letters or short in rule.attached_only or not short.isalpha():
-                    skip = short in rule.value_letters and at == len(arg)
-                    break
-    return None
+            attached, takes_next = short_options(arg, rule)
+            if attached is not None:
+                yield attached or following
+            index += 1 if takes_next else 0
+
+
+def message_value(args, rule):
+    """The value git or gh keeps for the message option, or None."""
+    values = list(message_values(args, rule))
+    return (values[-1] if rule.last_wins else values[0]) if values else None
 
 
 COMMIT_MESSAGE = LengthRule(
     git_commit_args, "m", "--message", "cCFt", "Su",
     {"--author", "--date", "--trailer", "--file", "--template", "--fixup", "--squash", "--cleanup",
-     "--reuse-message", "--reedit-message", "--pathspec-from-file"}, False)
+     "--reuse-message", "--reedit-message", "--pathspec-from-file"}, False, False)
 PR_TITLE = LengthRule(
     gh_pr_args, "t", "--title", "aBbFHlmpRrT", "",
     {"--body", "--body-file", "--base", "--head", "--label", "--assignee", "--reviewer", "--milestone",
      "--project", "--repo", "--template", "--recover", "--add-assignee", "--remove-assignee", "--add-label",
-     "--remove-label", "--add-reviewer", "--remove-reviewer", "--add-project", "--remove-project"}, True)
+     "--remove-label", "--add-reviewer", "--remove-reviewer", "--add-project", "--remove-project"}, True, True)
 
 
 def option_values(text, shell, rule):
@@ -483,7 +500,7 @@ def option_values(text, shell, rule):
     for command, shape in commands(text, shell):
         words = plain_words(command, shape)
         args = rule.args_of(words) if words else None
-        value = first_value(args, rule) if args is not None else None
+        value = message_value(args, rule) if args is not None else None
         if value is not None:
             yield value
 

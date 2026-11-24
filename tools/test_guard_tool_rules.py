@@ -197,8 +197,10 @@ class LengthRowsTest(unittest.TestCase):
                 ("-t= at exactly 64", "squash", "bash", f'gh pr create -t="{self.TITLE_LONG[:64]}"', False),
                 ("a dash-led body before the title", "squash", "bash",
                  f'gh pr create --body-file b.md --label "-t{self.TITLE_LONG}" --title "short"', False),
-                ("a bare value stuck to -t", "squash", "bash", f'gh pr create -tshort --title "{self.TITLE_LONG}"',
-                 False),
+                ("a later title wins, as in gh", "squash", "bash", f'gh pr create -tshort --title "{self.TITLE_LONG}"',
+                 True),
+                ("a short title after a long one", "squash", "bash",
+                 f'gh pr edit 5 --title "{self.TITLE_LONG}" --title "fix(x): short"', False),
                 ("ANSI-C quoting", "squash", "bash", f"gh pr create --title $'x' \"{self.TITLE_LONG}\"", False),
                 ("merge commits", "merge", "bash", create, False)):
             with self.subTest(name):
