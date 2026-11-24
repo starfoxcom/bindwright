@@ -13,7 +13,10 @@ here-document, only when its `<<` stands outside quotes, and PowerShell
 here-strings, and refuses one only where an interpreter reads its script from
 standard input (`python -`, `cat <<EOF | node`): fed to a script file, the text
 is data. It also reads the script of a `python -c` or `node -e` call that
-stands outside quotes and comments. Where the reading is unsure (a quote that
+stands outside quotes and comments. The length rules read a plain Bash command
+(no expansion or escape) split into words as Bash splits it,
+and take the first `-m` of a `git commit` or the `--title` of `gh pr create` or
+`edit`. Where the reading is unsure (a quote that
 never closes, a double-quoted string holding `$(`, a `<<` inside one), the
 text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
@@ -32,9 +35,11 @@ Exit contract: JSON permissionDecision=deny on stdout, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
 """
 import bisect
+import collections
 import json
 import os
 import re
+import shlex
 import sys
 import time
 
@@ -363,6 +368,176 @@ def cased(pattern):
     return lambda text, shell: bool(compiled.search(bare(text, shell)))
 
 
+# Where the hook runs: the session's folder, from the hook's input; "." until it says.
+CWD = "."
+# The commit format's subject limit, and the PR title limit where PRs squash-merge: GitHub adds ` (#123)`.
+SUBJECT_LIMIT = 72
+TITLE_LIMIT = 64
+COMMAND_END = re.compile(r"[\n;&|]")
+# The length rules read Bash commands only: how PowerShell hands words to git or gh changes with its
+# version and settings, so no splitter outside PowerShell matches it. What Bash would change, an expansion
+# or an escape, leaves the command unread too.
+UNPLAIN = re.compile(r"[$`\\]")
+# The only characters a command may hold outside quotes and comments to be read. Any other (a glob, a
+# tilde, a bracket, a redirection) can make Bash pass other words than shlex finds.
+PLAIN_OUTSIDE = re.compile(r"[\w \t./:=+,%@-]*")
+LONGEST_COMMAND = 10000  # a plain commit or PR command is shorter; a longer one is left unread
+
+
+def commands(text, shell):
+    """Each command's text and its shape, cut at a separator outside quotes and comments. The shape is
+    the text with every character the shell's scan finds inside quotes or a comment, a line break
+    included, written as `x`, so only a separator the shell reads can cut it."""
+    _, end = masked_calls(text, shell)
+    shape = list(text[:end])
+    for found in quoted(text[:end], shell):
+        shape[found.start():found.end()] = "x" * (found.end() - found.start())
+    shape = "".join(shape)
+    start = 0
+    for found in COMMAND_END.finditer(shape):
+        yield text[start:found.start()], shape[start:found.start()]
+        start = found.end()
+    yield text[start:end], shape[start:]
+
+
+def plain_words(command, shape):
+    """The Bash command's words as Bash passes them, or None when Bash would change any of them."""
+    command = command.strip()
+    if not command.startswith(("git", "gh")) or len(command) > LONGEST_COMMAND or UNPLAIN.search(command):
+        return None
+    if not PLAIN_OUTSIDE.fullmatch(shape.strip(" \t\r")):
+        return None
+    try:
+        return shlex.split(command, comments=True)
+    except ValueError:  # a quote that never closes
+        return None
+
+
+def git_commit_args(words):
+    """The arguments after `commit` in `git [options] commit ...`; `-c` and `-C` take the next word."""
+    if words[0] != "git":
+        return None
+    index = 1
+    while index < len(words) and words[index].startswith("-"):
+        index += 2 if words[index] in ("-c", "-C") else 1
+    return words[index + 1:] if index < len(words) and words[index] == "commit" else None
+
+
+def gh_pr_args(words):
+    return words[3:] if words[:2] == ["gh", "pr"] and words[2:3] in (["create"], ["edit"]) else None
+
+
+# A length rule, read the way the command's own option parser reads it:
+# - args_of: the command's arguments, or None for another command;
+# - letter and name: its message option, short and long;
+# - value_letters: short options that take a value, the rest of their word or else the next word;
+# - attached_only: short options that take one only attached (git's `-S<keyid>`);
+# - value_names: long options that take the next word as their value whatever it starts with;
+# - attached_equals: whether an attached value drops a leading `=` (gh's flag parser does; git's keeps it);
+# - last_wins: whether the option given twice keeps its last value (gh's title) or its first (git's
+#   subject, since each `-m` adds a paragraph).
+LengthRule = collections.namedtuple(
+    "LengthRule", "args_of letter name value_letters attached_only value_names attached_equals last_wins")
+
+
+def short_options(arg, rule):
+    """For a cluster of short options: the message letter's attached value ("" when it takes the next
+    word) or None, and whether the cluster ends in an option that takes the next word."""
+    for at, short in enumerate(arg[1:], 2):
+        if short == rule.letter:
+            # gh's flag parser drops the `=` of `-t=x`, but a bare `-t=` has `=` as its value.
+            equals = rule.attached_equals and arg[at:at + 1] == "=" and len(arg) > at + 1
+            attached = arg[at + 1:] if equals else arg[at:]
+            return attached, not attached
+        if short in rule.value_letters or short in rule.attached_only or not short.isalpha():
+            return None, short in rule.value_letters and at == len(arg)
+    return None, False
+
+
+def message_values(args, rule):
+    """Each value the message option is given, in order, skipping every other option's value."""
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        following = args[index + 1] if index + 1 < len(args) else None
+        index += 1
+        if arg == "--":
+            return
+        if arg == rule.name:
+            yield following
+            index += 1
+        elif arg.startswith(rule.name + "="):
+            yield arg[len(rule.name) + 1:]
+        elif arg in rule.value_names:
+            index += 1
+        elif len(arg) > 1 and arg[0] == "-" and arg[1].isalpha():
+            attached, takes_next = short_options(arg, rule)
+            if attached is not None:
+                yield attached or following
+            index += 1 if takes_next else 0
+
+
+def message_value(args, rule):
+    """The value git or gh keeps for the message option, or None."""
+    values = list(message_values(args, rule))
+    return (values[-1] if rule.last_wins else values[0]) if values else None
+
+
+COMMIT_MESSAGE = LengthRule(
+    git_commit_args, "m", "--message", "cCFt", "Su",
+    {"--author", "--date", "--trailer", "--file", "--template", "--fixup", "--squash", "--cleanup",
+     "--reuse-message", "--reedit-message", "--pathspec-from-file"}, False, False)
+PR_TITLE = LengthRule(
+    gh_pr_args, "t", "--title", "aBbFHlmpRrT", "",
+    {"--body", "--body-file", "--base", "--head", "--label", "--assignee", "--reviewer", "--milestone",
+     "--project", "--repo", "--template", "--recover", "--add-assignee", "--remove-assignee", "--add-label",
+     "--remove-label", "--add-reviewer", "--remove-reviewer", "--add-project", "--remove-project"}, True, True)
+
+
+def option_values(text, shell, rule):
+    if shell != "bash":
+        return
+    for command, shape in commands(text, shell):
+        words = plain_words(command, shape)
+        args = rule.args_of(words) if words else None
+        value = message_value(args, rule) if args is not None else None
+        if value is not None:
+            yield value
+
+
+def first_line(message):
+    return message.split("\n", 1)[0].strip()
+
+
+def squash_merges():
+    """Whether the repo the hook runs in squash-merges its PRs, by the answers Bindwright's setup saved."""
+    try:
+        folder = os.path.abspath(CWD)
+    except OSError:  # a "." whose folder was deleted
+        return False
+    while True:
+        try:
+            with open(os.path.join(folder, ".bindwright", "project.json"), encoding="utf-8") as answers:
+                return json.load(answers).get("advanced", {}).get("mergeStyle") == "squash"
+        # RecursionError: JSON nested deeper than the reader goes.
+        except (OSError, ValueError, AttributeError, RecursionError):
+            pass
+        parent = os.path.dirname(folder)
+        if parent == folder or os.path.exists(os.path.join(folder, ".git")):
+            return False
+        folder = parent
+
+
+def long_subject(text, shell):
+    messages = option_values(text, shell, COMMIT_MESSAGE)
+    return any(len(first_line(message)) > SUBJECT_LIMIT for message in messages)
+
+
+def long_title(text, shell):
+    titles = option_values(text, shell, PR_TITLE)
+    return any(len(first_line(title)) > TITLE_LIMIT for title in titles) and squash_merges()
+
+
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = Followed(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b", r"\n|;&", r"\s[\w./@~^-]+:\.[^/\s.]")
 
@@ -422,6 +597,10 @@ RULES = [
      "other sessions share it, and nothing cleans it up. Use the session's scratchpad instead.", OBSERVE),
     ("`jq` in Git Bash", lambda text, shell: GIT_BASH and shell == "bash" and JQ.search(bare(text, shell)),
      "Git Bash has no `jq`. Filter with the `--jq` option of `gh`, or with Python.", OBSERVE),
+    ("a commit subject over 72 characters", long_subject,
+     "the commit format caps the first line at 72. Shorten it, and put the detail in the body.", OBSERVE),
+    ("a PR title over 64 characters where PRs squash-merge", long_title,
+     "the title becomes the commit subject, and GitHub adds ` (#123)` to it. Shorten it to 64.", OBSERVE),
 ]
 
 
@@ -469,6 +648,9 @@ def main():
     if not isinstance(text, str):
         sys.exit(0)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
+    global CWD
+    cwd = data.get("cwd")
+    CWD = cwd if isinstance(cwd, str) and cwd else CWD
     refused = refusal(text, shell)
     if refused:
         deny(*refused)
