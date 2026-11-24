@@ -3,7 +3,7 @@
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
 import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
@@ -393,7 +393,8 @@ function memorySettings(root, config) {
   ];
   return files.map((file) => {
     try {
-      const value = JSON.parse(readText(file) ?? "null");
+      // The layer reader refuses what the Python twin's reader cannot take, so both engines agree.
+      const value = readLayerFile(file, basename(file));
       return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
     } catch {
       return {};

@@ -219,6 +219,35 @@ const MEMORY_ROWS = [
     setup: linkedWorktree,
     note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
   },
+  {
+    name: "a settings file holding NaN is not JSON in either engine, so the note shows",
+    index: INDEX_3000,
+    setup: ({ at }) => writeFileSync(at(".claude/settings.local.json"), '{"autoMemoryEnabled": false, "x": NaN}'),
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "a settings file nested past the depth limit is not read, so the note shows",
+    index: INDEX_3000,
+    setup: ({ at }) => writeFileSync(at(".claude/settings.local.json"),
+      `{"autoMemoryEnabled": false, "x": ${"[".repeat(3000)}${"]".repeat(3000)}}`),
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "a NUL in the .git file's gitdir line falls back to the repo's own index",
+    index: INDEX_3000,
+    setup: ({ at }) => writeFileSync(at(".git"), "gitdir: bad\u0000dir\n"),
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "a commondir holding bytes that are not UTF-8 reads alike in both engines",
+    index: INDEX_3000,
+    setup: ({ at }) => {
+      mkdirSync(at("gitdir"), { recursive: true });
+      writeFileSync(at("gitdir/commondir"), Buffer.from([0xff, 0xfe, 0x0a]));
+      writeFileSync(at(".git"), "gitdir: gitdir\n");
+    },
+    note: null,
+  },
   { name: "no index file means no note", note: null },
 ];
 

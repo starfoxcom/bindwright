@@ -1,7 +1,6 @@
 # Python twin of doctor.js: the same checks, in the same order and words.
 # Standard library only.
 
-import json
 import os
 import re
 
@@ -354,11 +353,15 @@ def _main_checkout(root):
     if link is None:
         return root
     try:
-        gitdir = os.path.normpath(os.path.join(root, link.group(1).strip()))
-        with open(os.path.join(gitdir, "commondir"), encoding="utf-8") as handle:
-            common = handle.readline().strip()
+        gitdir = os.path.normpath(os.path.join(root, link.group(1).strip(JS_WHITESPACE)))
+        # Read as readFileSync reads it: bad bytes replaced, never a decode error.
+        text = _read_text(os.path.join(gitdir, "commondir"))
+        if text is None:
+            return root
+        common = text.split("\n")[0].rstrip("\r").strip(JS_WHITESPACE)
         return os.path.dirname(os.path.normpath(os.path.join(gitdir, common)))
-    except OSError:
+    except (OSError, ValueError):
+        # ValueError: a NUL in the path, which open() refuses as readFileSync does.
         return root
 
 
@@ -371,17 +374,17 @@ def _memory_settings(root, config):
 
 
 def _read_settings_json(path):
-    text = _read_text(path)
+    # The layer reader refuses what JSON.parse refuses, and nesting Python's reader cannot take.
     try:
-        value = None if text is None else json.loads(text)
-    except ValueError:
+        value = _read_layer_file(path, os.path.basename(path))
+    except Exception:
         return {}
     return value if isinstance(value, dict) else {}
 
 
 # True or False for a variable's on or off word, None when it is unset or another word.
 def _env_flag(value):
-    word = (value or "").strip().lower()
+    word = (value or "").strip(JS_WHITESPACE).lower()
     if word in MEMORY_TRUE:
         return True
     return False if word in MEMORY_FALSE else None
@@ -447,7 +450,7 @@ def _memory_note(root, config):
     try:
         with open(_memory_index_file(root, config), "rb") as handle:
             data = handle.read()
-    except OSError:
+    except (OSError, ValueError):
         return ""
     units, past = _loaded_index(data)
     sentence = "Auto memory's index (MEMORY.md) adds %s more." % _kilo(units)
