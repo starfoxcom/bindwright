@@ -250,11 +250,23 @@ def _is_path_scoped(text):
             return False
         if not lines[i].startswith("paths:"):
             continue
-        inline = lines[i][len("paths:"):].strip(JS_WHITESPACE)
+        rest = lines[i][len("paths:"):]
+        comment = re.search(r"(^|[ \t])#", rest)
+        inline = (rest[:comment.start()] if comment else rest).strip(JS_WHITESPACE)
         if inline:
-            return inline != "[]"
-        return (lines[i + 1] if i + 1 < len(lines) else "").strip(JS_WHITESPACE).startswith("- ")
+            return inline not in ("[]", '""', "''")
+        following = [line for line in lines[i + 1:]
+                     if line.strip(JS_WHITESPACE) and not line.strip(JS_WHITESPACE).startswith("#")]
+        return (following[0] if following else "").strip(JS_WHITESPACE).startswith("- ")
     return False
+
+
+def _file_id(path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return "%d:%d" % (stat.st_dev, stat.st_ino)
 
 
 def _real_path(path):
@@ -296,17 +308,14 @@ def _start_files(root, config):
     out = []
 
     counted = set()
-    personal = _real_path(config)
 
     def add(name, path, rule=None):
-        real = _real_path(path)
-        text = None if real is None or real in counted else _read_text(path)
+        id_ = _file_id(path)
+        text = None if id_ is None or id_ in counted else _read_text(path)
         if text is None or (rule and _is_path_scoped(text)):
             return
-        counted.add(real)
-        is_personal = rule == "personal" or bool(rule and personal is not None
-                                                 and real.startswith(personal + os.sep))
-        out.append(("a rule in ~/.claude/rules" if is_personal else name,
+        counted.add(id_)
+        out.append(("a rule in ~/.claude/rules" if rule == "personal" else name,
                     len(text.encode("utf-16-le", "surrogatepass")) // 2))
     for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
         add(name, os.path.join(root, *name.split("/")))

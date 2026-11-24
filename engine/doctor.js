@@ -3,7 +3,7 @@
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
 import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
@@ -249,11 +249,25 @@ function isPathScoped(text) {
   if (lines[0] !== "---") return false;
   for (let i = 1; i < lines.length && lines[i] !== "---"; i++) {
     if (!lines[i].startsWith("paths:")) continue;
-    const inline = lines[i].slice("paths:".length).trim();
-    if (inline) return inline !== "[]";
-    return (lines[i + 1] ?? "").trim().startsWith("- ");
+    const rest = lines[i].slice("paths:".length);
+    const comment = rest.search(/(^|[ \t])#/);
+    const inline = (comment === -1 ? rest : rest.slice(0, comment)).trim();
+    if (inline) return !["[]", '""', "''"].includes(inline);
+    const next = lines.slice(i + 1).find((line) => line.trim() && !line.trim().startsWith("#"));
+    return (next ?? "").trim().startsWith("- ");
   }
   return false;
+}
+
+// A file's identity on its disk, the same however a path spells it (case,
+// links, short names); null when it cannot be read.
+function fileId(path) {
+  try {
+    const stat = statSync(path, { bigint: true });
+    return `${stat.dev}:${stat.ino}`;
+  } catch {
+    return null;
+  }
 }
 
 function realPath(path) {
@@ -307,15 +321,14 @@ function readText(file) {
 function startFiles(root, config) {
   const out = [];
   const counted = new Set();
-  const personal = realPath(config);
   // `rule` is null for a CLAUDE.md, "repo" for a rule the repo's folder holds, "personal" for one in ~/.claude.
+  // The personal rules are walked first, so a file both folders reach counts once, under the personal name.
   const add = (name, path, rule = null) => {
-    const real = realPath(path);
-    const text = real === null || counted.has(real) ? null : readText(path);
+    const id = fileId(path);
+    const text = id === null || counted.has(id) ? null : readText(path);
     if (text === null || (rule && isPathScoped(text))) return;
-    counted.add(real);
-    const isPersonal = rule === "personal" || (rule && personal !== null && real.startsWith(personal + sep));
-    out.push([isPersonal ? "a rule in ~/.claude/rules" : name, text.length]);
+    counted.add(id);
+    out.push([rule === "personal" ? "a rule in ~/.claude/rules" : name, text.length]);
   };
   for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) add(name, join(root, ...name.split("/")));
   add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"));

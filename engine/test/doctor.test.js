@@ -74,7 +74,7 @@ test("a healthy repo passes every check", needsPython, async () => {
 test("instruction files near Claude Code's limit are named, and a rule loaded by path is not counted", needsPython,
   async () => {
     // Saved with a byte-order mark, as some Windows editors do.
-    const scoped = `﻿---\npaths:\n  - "src/**"\n---\n${"x".repeat(200000)}`;
+    const scoped = `﻿---\npaths:\n\n  # sources\n  - "src/**"\n---\n${"x".repeat(200000)}`;
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
 
