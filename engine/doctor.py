@@ -340,87 +340,6 @@ def _kilo(n):
 MEMORY_LINES = 200
 # The 25KB limit is read as 25,000 bytes.
 MEMORY_BYTES = 25000
-MEMORY_TRUE = ("1", "true", "yes", "on")
-MEMORY_FALSE = ("0", "false", "no", "off")
-MEMORY_MOVED_VARS = ("CLAUDE_CODE_PROJECT_DIR_NAME", "CLAUDE_CODE_REMOTE_MEMORY_DIR",
-                     "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
-
-
-# An absolute path as Node's path.resolve gives it, which folds the two leading
-# slashes that POSIX normpath keeps.
-def _resolve(base, path):
-    resolved = os.path.abspath(os.path.join(base, path))
-    if os.name != "nt" and resolved.startswith("//"):
-        resolved = "/" + resolved.lstrip("/")
-    return resolved
-
-
-# The main checkout's folder: a linked worktree's `.git` file points into the main git folder.
-def _main_checkout(root):
-    first = (_read_text(os.path.join(root, ".git")) or "").split("\n")[0]
-    link = re.match(r"gitdir: (.*)\Z", first, re.DOTALL)
-    if link is None:
-        return root
-    try:
-        gitdir = _resolve(root, link.group(1).strip(JS_WHITESPACE))
-        # Read as readFileSync reads it: bad bytes replaced, never a decode error.
-        text = _read_text(os.path.join(gitdir, "commondir"))
-        if text is None:
-            return root
-        return os.path.dirname(_resolve(gitdir, text.split("\n")[0].strip(JS_WHITESPACE)))
-    except (OSError, ValueError):
-        # ValueError: a NUL in the path, which open() refuses as readFileSync does.
-        return root
-
-
-# Settings files that can switch auto memory, highest precedence first; unreadable ones are empty.
-def _memory_settings(root, config):
-    files = [os.path.join(root, ".claude", "settings.local.json"),
-             os.path.join(root, ".claude", "settings.json"),
-             os.path.join(config, "settings.json")]
-    return [_read_settings_json(path) for path in files]
-
-
-def _read_settings_json(path):
-    # The layer reader refuses what JSON.parse refuses, and nesting Python's reader cannot take.
-    try:
-        value = _read_layer_file(path, os.path.basename(path))
-    except Exception:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-# True or False for a variable's on or off word, None when it is unset or another word.
-def _env_flag(value):
-    word = (value or "").strip(JS_WHITESPACE).lower()
-    if word in MEMORY_TRUE:
-        return True
-    return False if word in MEMORY_FALSE else None
-
-
-# The environment decides first; then the first settings file that sets the switch decides.
-def _auto_memory_on(settings):
-    disabled = _env_flag(os.environ.get("CLAUDE_CODE_DISABLE_AUTO_MEMORY"))
-    if disabled is not None:
-        return not disabled
-    for layer in settings:
-        if isinstance(layer.get("autoMemoryEnabled"), bool):
-            return layer["autoMemoryEnabled"]
-    return True
-
-
-# Whether a setting or a variable has moved the memory folder somewhere else.
-def _memory_moved(settings):
-    dir_set = any(isinstance(layer.get("autoMemoryDirectory"), str)
-                  and layer["autoMemoryDirectory"] != "" for layer in settings)
-    return dir_set or any(os.environ.get(name) for name in MEMORY_MOVED_VARS)
-
-
-# The index's path under the config folder. Each character of the main checkout's path that is not an
-# ASCII letter or digit becomes a dash, one per code point as this engine counts them.
-def _memory_index_file(root, config):
-    slug = re.sub(r"[^A-Za-z0-9]", "-", _main_checkout(root))
-    return os.path.join(config, "projects", slug, "memory", "MEMORY.md")
 
 
 # The text's first `count` lines, each keeping its line ending.
@@ -451,13 +370,12 @@ def _loaded_index(data):
     return _units(kept), len(kept) < len(text)
 
 
-# The sentence about the index, or "" when auto memory is off, moved, or the index is missing.
-def _memory_note(root, config):
-    settings = _memory_settings(root, config)
-    if not _auto_memory_on(settings) or _memory_moved(settings):
+# The sentence about the index at `index`; doctor.js says why the path is taken, never worked out.
+def _memory_note(index):
+    if not index:
         return ""
     try:
-        with open(_memory_index_file(root, config), "rb") as handle:
+        with open(index, "rb") as handle:
             data = handle.read()
     except (OSError, ValueError):
         return ""
@@ -469,13 +387,13 @@ def _memory_note(root, config):
                        "so the rest of it never reaches a session.")
 
 
-def _instructions_check(root, config):
+def _instructions_check(root, config, memory_index):
     files = _start_files(root, config)
     total = sum(size for _, size, _ in files)
     personal = sum(size for _, size, from_personal in files if from_personal)
     largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
     listed = ", ".join("%s (%s)" % (name, _kilo(size)) for name, size, _ in largest) or "none"
-    note = _memory_note(root, config)
+    note = _memory_note(memory_index)
     say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
            "%s of it from this repo and %s from ~/.claude. The largest: %s.%s"
            % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
@@ -485,14 +403,14 @@ def _instructions_check(root, config):
     return _check("instructions", False, say, FIX["instructions"])
 
 
-def run_doctor(root, config, plugin_version, cli_version):
+def run_doctor(root, config, plugin_version, cli_version, memory_index=None):
     """See runDoctor in doctor.js."""
     state = _state_checks(root)
     checks = list(state["checks"]) + [_hooks_check(config)]
     if "answers" in state:
         checks += [_version_check(state["pristine"], plugin_version),
                    _guard_check(root, state["answers"], state["pristine"])]
-        checks += [_staged_check(root), _instructions_check(root, config)]
+        checks += [_staged_check(root), _instructions_check(root, config, memory_index)]
         if state["answers"]["advanced"]["tracker"] == "file":
             checks.append(_roadmap_check(root))
         settings = _settings_checks(root, config)

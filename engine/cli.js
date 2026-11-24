@@ -10,7 +10,7 @@
 //   node engine/cli.js --audit DIR                   -> how its rules held up in recent sessions (audit.js)
 //   node engine/cli.js --export DIR < choices.json   -> the project's setup object written (share.js)
 //   node engine/cli.js --remember DIR --layer L < choices.json -> one person's choices written to layer L
-//   node engine/cli.js --doctor DIR                  -> a health check of that repo and this machine (doctor.js)
+//   node engine/cli.js --doctor DIR [--memory-index FILE] -> a health check of that repo and this machine (doctor.js)
 //   node engine/cli.js --remove-plan DIR             -> what setup wrote there, sorted for removal (remove.js)
 //   node engine/cli.js --remove-files DIR < {"paths": [...], "state": true} -> those files removed
 //   node engine/cli.js --clean-staging DIR [--discard-incoming] -> setup's staging folders removed (staging.js)
@@ -85,7 +85,7 @@ async function run(argv) {
   const held = option(argv, "--keep-base");
   if (held !== undefined) return keepBase(held, pathsFromStdin("--keep-base"));
   if (report !== undefined) return reportRepo(report, config);
-  if (doctor !== undefined) return doctorRepo(doctor, config);
+  if (doctor !== undefined) return doctorRepo(doctor, config, option(argv, "--memory-index"));
   if (update !== undefined) return updateRepo(update);
   if (settings !== undefined) return runSettings(settings, config);
   if (audit !== undefined) return runAudit(audit, config);
@@ -132,9 +132,10 @@ function reportRepo(folder, config) {
 }
 
 // The doctor, for the CLI this session runs (its AI_AGENT) and this plugin's VERSION.
-function doctorRepo(folder, config) {
+function doctorRepo(folder, config, memoryIndex) {
   const pluginVersion = readFileSync(join(root, "VERSION"), "utf8").trim().replace(/^v+/, "");
-  return runDoctor(folder, config, { pluginVersion, cliVersion: cliVersionFrom(process.env.AI_AGENT) });
+  const cliVersion = cliVersionFrom(process.env.AI_AGENT);
+  return runDoctor(folder, config, { pluginVersion, cliVersion, memoryIndex });
 }
 
 // The {"paths": [file, ...]} a command takes on standard input.

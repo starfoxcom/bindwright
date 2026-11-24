@@ -14,7 +14,7 @@
 #   python engine/bind.py --audit DIR                    -> how its rules held up in recent sessions (audit.py)
 #   python engine/bind.py --export DIR < choices.json    -> the project's setup object written (share.py)
 #   python engine/bind.py --remember DIR --layer L < choices.json -> one person's choices written to layer L
-#   python engine/bind.py --doctor DIR                   -> a health check of that repo and this machine (doctor.py)
+#   python engine/bind.py --doctor DIR [--memory-index FILE] -> a health check of that repo and this machine (doctor.py)
 #   python engine/bind.py --remove-plan DIR              -> what setup wrote, sorted for removal
 #   python engine/bind.py --remove-files DIR < {"paths": [...], "state": true} -> files removed
 #   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
@@ -394,7 +394,8 @@ def _doctor(argv, read_file):
         folder = _option(argv, "--doctor")
         version = read_file("VERSION").strip(JS_WHITESPACE).lstrip("v")
         config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-        return run_doctor(folder, config, version, cli_version_from(os.environ.get("AI_AGENT")))
+        return run_doctor(folder, config, version, cli_version_from(os.environ.get("AI_AGENT")),
+                          _option(argv, "--memory-index"))
     except Exception as e:  # every failure is reported, as the JS engine throws it
         return {"error": str(e)}
 

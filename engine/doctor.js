@@ -3,7 +3,7 @@
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
 import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
@@ -365,72 +365,6 @@ const sumSizes = (files) => files.reduce((sum, [, size]) => sum + size, 0);
 const MEMORY_LINES = 200;
 // The 25KB limit is read as 25,000 bytes.
 const MEMORY_BYTES = 25000;
-const MEMORY_TRUE = ["1", "true", "yes", "on"];
-const MEMORY_FALSE = ["0", "false", "no", "off"];
-const MEMORY_MOVED_VARS = ["CLAUDE_CODE_PROJECT_DIR_NAME", "CLAUDE_CODE_REMOTE_MEMORY_DIR",
-  "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"];
-
-// The main checkout's folder: a linked worktree's `.git` file points into the main git folder.
-function mainCheckout(root) {
-  // Split on LF alone and match any character, as the Python twin does; trim() drops a CR.
-  const first = readText(join(root, ".git"))?.split("\n")[0] ?? "";
-  const link = /^gitdir: ([^]*)$/.exec(first);
-  if (!link) return root;
-  try {
-    const gitdir = resolve(root, link[1].trim());
-    const common = readFileSync(join(gitdir, "commondir"), "utf8").split("\n")[0].trim();
-    return dirname(resolve(gitdir, common));
-  } catch {
-    return root;
-  }
-}
-
-// Settings files that can switch auto memory, highest precedence first; unreadable ones are empty.
-function memorySettings(root, config) {
-  const files = [
-    join(root, ".claude", "settings.local.json"),
-    join(root, ".claude", "settings.json"),
-    join(config, "settings.json"),
-  ];
-  return files.map((file) => {
-    try {
-      // The layer reader refuses what the Python twin's reader cannot take, so both engines agree.
-      const value = readLayerFile(file, basename(file));
-      return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
-    } catch {
-      return {};
-    }
-  });
-}
-
-// true or false for a variable's on or off word, null when it is unset or another word.
-function envFlag(value) {
-  const word = (value ?? "").trim().toLowerCase();
-  if (MEMORY_TRUE.includes(word)) return true;
-  return MEMORY_FALSE.includes(word) ? false : null;
-}
-
-// The environment decides first; then the first settings file that sets the switch decides.
-function autoMemoryOn(settings) {
-  const disabled = envFlag(process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY);
-  if (disabled !== null) return !disabled;
-  const layer = settings.find((s) => typeof s.autoMemoryEnabled === "boolean");
-  return layer ? layer.autoMemoryEnabled : true;
-}
-
-// Whether a setting or a variable has moved the memory folder somewhere else.
-function memoryMoved(settings) {
-  const dirSet = settings.some((s) => typeof s.autoMemoryDirectory === "string"
-    && s.autoMemoryDirectory !== "");
-  return dirSet || MEMORY_MOVED_VARS.some((name) => Boolean(process.env[name]));
-}
-
-// The index's path under the config folder. Each character of the main checkout's path that is not an
-// ASCII letter or digit becomes a dash, one per code point as the Python twin counts them.
-function memoryIndexFile(root, config) {
-  const slug = mainCheckout(root).replace(/[^A-Za-z0-9]/gu, "-");
-  return join(config, "projects", slug, "memory", "MEMORY.md");
-}
 
 // The text's first `count` lines, each keeping its line ending.
 function firstLines(text, count) {
@@ -459,13 +393,14 @@ function loadedIndex(bytes) {
   return { units: kept.length, past: kept.length < text.length };
 }
 
-// The sentence about the index, or "" when auto memory is off, moved, or the index is missing.
-function memoryNote(root, config) {
-  const settings = memorySettings(root, config);
-  if (!autoMemoryOn(settings) || memoryMoved(settings)) return "";
+// The sentence about the index at `index`, the path the session says Claude Code loaded it from,
+// or "" when no path is given or the file cannot be read. The path is taken, never worked out:
+// Claude Code's own naming of the memory folder is not documented in full.
+function memoryNote(index) {
+  if (!index) return "";
   let bytes;
   try {
-    bytes = readFileSync(memoryIndexFile(root, config));
+    bytes = readFileSync(index);
   } catch {
     return "";
   }
@@ -477,13 +412,13 @@ function memoryNote(root, config) {
     : sentence;
 }
 
-function instructionsCheck(root, config) {
+function instructionsCheck(root, config, memoryIndex) {
   const files = startFiles(root, config);
   const total = sumSizes(files);
   const personal = sumSizes(files.filter(([, , fromPersonal]) => fromPersonal));
   const largest = [...files].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, 3);
   const listed = largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none";
-  const note = memoryNote(root, config);
+  const note = memoryNote(memoryIndex);
   const say = `Claude Code loads ${files.length} instruction files at session start, ${kilo(total)} characters `
     + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. ${kilo(total - personal)} of it from this repo `
     + `and ${kilo(personal)} from ~/.claude. The largest: ${listed}.${note ? ` ${note}` : ""}`;
@@ -492,13 +427,14 @@ function instructionsCheck(root, config) {
 }
 
 // Every check for the repo at `root` and the config folder `config`.
-// `pluginVersion` is "x.y.z"; `cliVersion` [major, minor, patch] or null.
-export function runDoctor(root, config, { pluginVersion, cliVersion }) {
+// `pluginVersion` is "x.y.z"; `cliVersion` [major, minor, patch] or null; `memoryIndex` the
+// auto-memory index the session loaded, or undefined.
+export function runDoctor(root, config, { pluginVersion, cliVersion, memoryIndex }) {
   const state = stateChecks(root);
   const checks = [...state.checks, hooksCheck(config)];
   if (state.answers) {
     checks.push(versionCheck(state.pristine, pluginVersion), guardCheck(root, state.answers, state.pristine));
-    checks.push(stagedCheck(root), instructionsCheck(root, config));
+    checks.push(stagedCheck(root), instructionsCheck(root, config, memoryIndex));
     if (state.answers.advanced.tracker === "file") checks.push(roadmapCheck(root));
     const settings = settingsChecks(root, config);
     const guards = hasGuards(state.answers, state.pristine, settings.installed);
