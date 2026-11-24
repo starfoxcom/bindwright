@@ -1,8 +1,3 @@
----
-paths:
-  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
----
-
 # Architecture — MVC (Model-View-Controller)
 
 Classic three-role split, most useful for server-rendered web apps and traditional desktop GUIs.

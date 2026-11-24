@@ -7,7 +7,7 @@ These are project-agnostic instructions that apply to every Claude Code session 
 
 ## Code research: the project's tool, not agents
 
-Search code with the project's chosen tool (`tools.code_research` in the bound configuration), never with an Explore agent or any other agent, whatever a skill recommends.
+While the project's chosen tool (`tools.code_research` in the bound configuration) is available, search code with it, never with an Explore agent or any other agent, whatever a skill recommends.
 
 <!-- TOGGLE:code_research:findwright START -->
 - FindWright's own guidance (`~/.claude/rules/findwright.md`, which `/findwright:setup` installs) holds the lookup sequence. Without FindWright on this computer, use Grep, Glob and Read.

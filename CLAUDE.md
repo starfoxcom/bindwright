@@ -20,6 +20,7 @@ Downstream projects install these templates verbatim, so a malicious change land
 - The deep review fires by itself on any PR touching `_core/` (its hooks included) or `engine/`, the surfaces with the widest reach.
 - Our own PRs merge on green without waiting for the maintainer. A PR carrying a commit from outside our sessions also needs the maintainer's read of its whole diff.
 - A PR that edits `.github/workflows/claude-code-review.yml` holds only that file and merges as `.claude/rules/review-workflow.md` says.
+- `.claude/` and any `CLAUDE.md` or `AGENTS.md` always get a review, even in an otherwise docs-only PR. A PR title is at most 64 characters, since it becomes the merge commit's subject.
 
 The live `claude-code-review.yml` and `claude.yml` are the resolved bind of `_core/project-template/.github/workflows/*.yml.template`.
 

@@ -1,8 +1,3 @@
----
-paths:
-  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
----
-
 # Architecture — Domain-Driven Design (DDD)
 
 Organize around **bounded contexts** — explicit domain boundaries where the ubiquitous language is consistent. DDD is heaviest of the patterns here; pick it when the domain is genuinely complex and worth modeling carefully.
