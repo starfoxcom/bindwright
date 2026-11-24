@@ -761,6 +761,34 @@ test('a run waits for another run on this computer, and takes over from one that
   assert.ok(!fs.existsSync(lock), 'the lock is let go after the run')
 })
 
+test('a copy whose git remote lookup does not finish writes nothing under a stand-in name', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  writeChat(a, 's1', ['one'])
+  const childProcess = require('child_process')
+  const realSpawn = childProcess.spawnSync
+  childProcess.spawnSync = (command, args, options) => {
+    const isRemoteLookup = args.includes('get-url')
+    if (!isRemoteLookup) return realSpawn(command, args, options)
+    return { status: null, stdout: '', stderr: '', error: { code: 'ETIMEDOUT', message: 'timed out' } }
+  }
+  const copy = () => require(path.join(SCRIPTS, 'commands.cjs')).run(['out', path.join(a.chatDir, 's1.jsonl'), a.root])
+  let answer
+  try {
+    answer = inProcess(a, () => {
+      try {
+        return copy()
+      } catch (error) {
+        return { error: error.message }
+      }
+    })
+  } finally {
+    childProcess.spawnSync = realSpawn
+  }
+  assert.match(answer.error || '', /git remote/)
+  assert.deepStrictEqual(fs.readdirSync(store), [], 'nothing was written to the sync place')
+})
+
 test('a run waiting for another one stops waiting at the deadline the hook passed', () => {
   const a = computer('a', tempDir('folder'))
   writeChat(a, 's1', ['one'])

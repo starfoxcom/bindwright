@@ -147,7 +147,7 @@ function git(cwd, ...args) {
   if (!run) return { ok: false, out: OUT_OF_TIME }
   const ok = run.status === 0
   const out = `${run.stdout || ''}${run.stderr || ''}`.trim()
-  return { ok, out: ok || out ? out : stopReason(`git ${args[0]}`, run) }
+  return { ok, code: run.status, out: ok || out ? out : stopReason(`git ${args[0]}`, run) }
 }
 
 // Why a command that printed nothing failed: it timed out, could not start, or
@@ -160,8 +160,15 @@ function stopReason(name, run) {
 
 // The project's name in the sync place, the same on every computer: its git
 // remote, else its name in .bindwright/project.json, else its folder name.
+// A lookup that ended with no exit code (out of time, stopped, never started)
+// is no answer, so it stops the run: no chat is ever written under a name that
+// stands in for a remote nobody could read.
 function projectKey(root) {
   const remote = git(root, 'remote', 'get-url', 'origin')
+  if (!Number.isInteger(remote.code)) {
+    if (remote.out === OUT_OF_TIME) throw new Error(OUT_OF_TIME)
+    throw new Error(`Chat sync could not read this project's git remote, so it did nothing this run: ${remote.out}`)
+  }
   if (remote.ok && remote.out) {
     const bare = remote.out.split('\n')[0].replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
     return safeName(bare.replace(/:/g, '/').replace(/\.git$/i, ''))
