@@ -525,7 +525,7 @@ def set_plugin_auto_update(home, state, repo=None):
 # most-read rows go last, nearest the prompt. Mods with no row follow. A mod of the user's own
 # keeps its place and a new one of theirs goes last.
 MOD_ORDER = ("shared-pc", "runners", "usage-guard", "ci-watch", "tasks", "session-info",
-             "session-facts", "compact-handoff", "skill-check", "chat-sync", "mods")
+             "session-facts", "compact-handoff", "skill-check", "mods")
 
 
 def _mod_rank(folder):

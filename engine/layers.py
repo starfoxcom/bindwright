@@ -42,7 +42,7 @@ SETTING_EXTRAS = {
     "plugin-auto-update": _wrights_auto_update,
 }
 MODS = [
-    "chat-sync", "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
+    "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
     "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ]
 EXTRAS = sorted(list(EXTRA_FILES) + list(SETTING_EXTRAS) + MODS, key=_code_units)
