@@ -713,11 +713,11 @@ function computerOf(copy) {
 }
 
 // What other computers keep in the store `chats`, read the way a sync reads
-// a store, so no link is followed: the number of projects and the computers'
-// names, or null when it holds no copy but `ownMachine`'s or cannot be read
-// (an offline cloud folder, a folder the app keeps private). A project counts
-// at its first chat that holds another computer's copy, so a large store
-// stays quick.
+// a store, so no link is followed: the number of projects and some of the
+// computers' names, or null when it holds no copy but `ownMachine`'s or cannot
+// be read (an offline cloud folder, a folder the app keeps private). A project
+// counts at its first chat that holds another computer's copy, so a large
+// store stays quick, and the names are the computers in those chats only.
 function othersChats(chats, ownMachine) {
   const computers = new Set()
   let projects = 0
