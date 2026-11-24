@@ -191,19 +191,26 @@ test("default-branch choice flips the workflow-change guidance", async () => {
 });
 
 test("the first-setup steps follow the branch model", async () => {
-  const a = defaults();
-  const gitflow = (await run(a)).get(".claude/rules/review-workflow.md");
-  assert.match(gitflow, /Once it merges, cascade it into `develop`/);
-  a.advanced.devIsDefault = true;
-  const devDefault = (await run(a)).get(".claude/rules/review-workflow.md");
-  assert.match(devDefault, /setup-review-gate\.sh --branch develop --branch main` to protect both branches/);
-  assert.doesNotMatch(devDefault, /cascade it into/);
-  a.advanced.devIsDefault = false;
-  a.advanced.branching = "trunk";
-  const trunk = (await run(a)).get(".claude/rules/review-workflow.md");
-  assert.match(trunk, /Once it merges, run `\.github\/scripts\/setup-review-gate\.sh --branch main` to protect `main`/);
-  const firstSetup = trunk.slice(trunk.indexOf("### The first setup PR"), trunk.indexOf("## If the gate"));
-  assert.doesNotMatch(firstSetup, /develop|cascade/, "a trunk bind has no integration branch to cascade into");
+  // Each branch model's own sentence; a bind shows its own and none of the others.
+  const models = [
+    { name: "gitflow, main default", branching: "gitflow", devIsDefault: false,
+      own: /Once it merges, cascade it into `develop`/ },
+    { name: "gitflow, develop default", branching: "gitflow", devIsDefault: true,
+      own: /so the PR targets it\. Once it merges, run `[^`]*--branch develop --branch main` to protect both/ },
+    { name: "trunk", branching: "trunk", devIsDefault: false,
+      own: /Once it merges, run `[^`]*--branch main` to protect `main`/ },
+  ];
+  for (const model of models) {
+    const a = defaults();
+    a.advanced.branching = model.branching;
+    a.advanced.devIsDefault = model.devIsDefault;
+    const text = (await run(a)).get(".claude/rules/review-workflow.md");
+    const firstSetup = text.slice(text.indexOf("### The first setup PR"), text.indexOf("## If the gate"));
+    assert.match(firstSetup, model.own, `${model.name}: its own steps`);
+    for (const other of models.filter((m) => m !== model)) {
+      assert.doesNotMatch(firstSetup, other.own, `${model.name}: no ${other.name} steps`);
+    }
+  }
 });
 
 test("rules carry no stale model names or polling loops", async () => {
