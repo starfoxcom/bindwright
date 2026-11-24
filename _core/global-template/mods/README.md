@@ -114,7 +114,7 @@ Load each mod once. A folder enabled for hot reload elsewhere (a development cop
 
 ## Where data lives
 
-Each mod keeps its files under `~/.claude/mods-data/<mod>/` (or under `$CLAUDE_CONFIG_DIR/mods-data/` when that is set), with hard caps and its own cleanup:
+Each mod keeps its files under `~/.claude/mods-data/<mod>/` (or under `$CLAUDE_CONFIG_DIR/mods-data/` when that is set). The table says what each one keeps, how long, and which files are never swept:
 
 | Mod | Files |
 |---|---|
