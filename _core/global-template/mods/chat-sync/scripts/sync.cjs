@@ -4,6 +4,7 @@
 // computer's project folder and home folder become placeholders; on the way in
 // the other computer's paths become this one's.
 //   node sync.cjs out <transcript> <projectRoot>
+//   node sync.cjs out-later <transcript> <projectRoot>
 //   node sync.cjs in <chatDir> <projectRoot> [<openSessionId>]
 //   node sync.cjs move folder <path> | move git <owner/repo> | move off
 //   node sync.cjs places
@@ -14,7 +15,7 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { spawnSync } = require('child_process')
+const { spawn, spawnSync } = require('child_process')
 
 const GIT_TIMEOUT_MS = 60_000
 
@@ -169,8 +170,13 @@ const NO_GIT_HERE = 'This project is a git repo, but this session cannot find gi
 // code 1, on every git version) moves on to the other two, and any other end
 // (git missing, refused, out of time) stops the run, since a guessed name
 // would split the project's chats from those of a computer whose git answered.
+// A project in a folder below the repo's top adds that folder's path, so two
+// projects of one repo (a monorepo's packages, projects under a home folder
+// that is a repo) keep their chats apart. The remote is read in lower case,
+// as GitHub reads it.
 function projectKey(root) {
-  const remote = isInRepo(root) ? git(root, 'config', '--get', 'remote.origin.url') : { code: 1 }
+  const top = repoTop(root)
+  const remote = top ? git(root, 'config', '--get', 'remote.origin.url') : { code: 1 }
   if (remote.code !== 0 && remote.code !== 1) {
     if (remote.isMissing) throw new Error(NO_GIT_HERE)
     if (remote.out === OUT_OF_TIME) throw new Error(OUT_OF_TIME)
@@ -178,7 +184,9 @@ function projectKey(root) {
   }
   if (remote.code === 0 && remote.out) {
     const bare = remote.out.split('\n')[0].replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
-    return safeName(bare.replace(/:/g, '/').replace(/\.git$/i, ''))
+    const inside = path.relative(top, path.resolve(root)).split(path.sep).join('/')
+    const repo = bare.replace(/:/g, '/').replace(/\.git$/i, '').toLowerCase()
+    return safeName(inside ? `${repo}/${inside}` : repo)
   }
   let project = {}
   try {
@@ -190,14 +198,15 @@ function projectKey(root) {
   return safeName(typeof name === 'string' && name.trim() ? name : folderName(root))
 }
 
-// True when `root` or a folder above it holds `.git` (a folder, or the file a
-// worktree or submodule keeps), found without running git.
-function isInRepo(root) {
+// The nearest folder at or above `root` that holds `.git` (a folder, or the
+// file a worktree or submodule keeps), found without running git; null when
+// there is none.
+function repoTop(root) {
   let folder = path.resolve(root)
   for (;;) {
-    if (fs.existsSync(path.join(folder, '.git'))) return true
+    if (fs.existsSync(path.join(folder, '.git'))) return folder
     const parent = path.dirname(folder)
-    if (parent === folder) return false
+    if (parent === folder) return null
     folder = parent
   }
 }
@@ -217,11 +226,29 @@ module.exports = {
   setDeadline, callTimeout, timedRun, OUT_OF_TIME, stopReason, projectKey, safeName,
 }
 
+// Starts `out` in a process of its own and returns at once, for a session's
+// end: the end gives its hooks well under 2 s and stops what they wait on, so
+// the copy runs on after Claude Code exits, on its own limit, and never stops
+// halfway through a commit. Nothing is left to show its answer to; whatever
+// it could not send goes at the next session start.
+function startOutLater(args) {
+  const env = { ...process.env }
+  delete env.CHAT_SYNC_DEADLINE
+  const child = spawn(process.execPath, [__filename, 'out', ...args],
+    { detached: true, stdio: 'ignore', windowsHide: true, env })
+  child.unref()
+  return { started: 'out' }
+}
+
+function main([command, ...args]) {
+  if (command === 'out-later') return startOutLater(args)
+  return require('./commands.cjs').run([command, ...args])
+}
+
 if (require.main === module) {
-  const { run } = require('./commands.cjs')
   let answer
   try {
-    answer = run(process.argv.slice(2))
+    answer = main(process.argv.slice(2))
   } catch (error) {
     answer = { error: String(error && error.message ? error.message : error) }
   }

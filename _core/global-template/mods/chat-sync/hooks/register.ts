@@ -8,8 +8,9 @@ import type { EngineInterface, Register } from 'claude-code'
 const SCRIPT = 'scripts/sync.cjs'
 // At most one copy out a minute: a long chat is read whole on every copy.
 const OUT_EVERY_MS = 60_000
-// The session's end gives every hook one short shared bound.
-const END_TIMEOUT_MS = 8_000
+// The session's end gives every hook one short shared bound (1.5 s by
+// default), enough to start the copy that runs on after it.
+const END_TIMEOUT_MS = 1_500
 // The helper's answer is due this long before the hook stops it, so the answer
 // is still read.
 const ANSWER_RESERVE_MS = 2_000
@@ -109,10 +110,10 @@ function outNote(answer: Answer): string | undefined {
   return undefined
 }
 
-async function copyOut($: EngineInterface, isEnding: boolean): Promise<void> {
+async function copyOut($: EngineInterface): Promise<void> {
   const here = await where($)
   if (!here) return
-  const answer = await runSync($, ['out', here.transcript, here.root], isEnding ? END_TIMEOUT_MS : 120_000)
+  const answer = await runSync($, ['out', here.transcript, here.root])
   lastOutAt = Date.now()
   const note = outNote(answer)
   if (note) $.ui.toast(note)
@@ -138,7 +139,15 @@ export const register: Register = on => {
     const description = 'Chat sync: status, sync folders, or move the chats to another place.'
     // A command that cannot be added never stops the chats coming in.
     await $.command.register({ name: COMMAND, description, argumentHint: HINT }).catch(() => undefined)
-    await bringIn($)
+    // The first prompt never waits on a pull or a push: the chats come in
+    // beside it, and a toast says what came.
+    $.clock.after(0, async () => {
+      try {
+        await bringIn($)
+      } catch (error) {
+        $.ui.toast(`Chat sync: could not sync: ${String(error).slice(0, 200)}`)
+      }
+    })
     return result
   })
 
@@ -155,7 +164,7 @@ export const register: Register = on => {
       try {
         if (hasEnded) return
         isCopying = true
-        await copyOut($, false)
+        await copyOut($)
       } catch (error) {
         $.ui.toast(`Chat sync: could not copy this chat out: ${String(error).slice(0, 200)}`)
       } finally {
@@ -166,9 +175,17 @@ export const register: Register = on => {
     return result
   })
 
+  // The end gives all its hooks one short shared bound and stops what they wait
+  // on, so the copy is only started here and runs on after the exit; the hooks
+  // beneath still get their time. Anything it misses goes at the next start.
   on('session.end', async ($, e, next) => {
     hasEnded = true
-    if (!isCopying) await copyOut($, true)
+    try {
+      const here = isCopying ? null : await where($)
+      if (here) await runSync($, ['out-later', here.transcript, here.root], END_TIMEOUT_MS)
+    } catch {
+      // A session that is gone has no one to tell; the next start sends the chat.
+    }
     return next(e)
   })
 

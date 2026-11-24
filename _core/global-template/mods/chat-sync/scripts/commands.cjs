@@ -16,9 +16,9 @@ const paths = require('./paths.cjs')
 const { syncPlaces } = require('./places.cjs')
 const { withRunLock, isAlive } = require('./lock.cjs')
 
-// The hook stops a copy's helper after 120 s (8 s at a session's end) and a
-// move's after 300 s, and passes the moment its answer is due in
-// CHAT_SYNC_DEADLINE. These are the limits when no deadline is passed.
+// The hook stops a copy's helper after 120 s and a move's after 300 s, and
+// passes the moment its answer is due in CHAT_SYNC_DEADLINE. These are the
+// limits when no deadline is passed, as for the copy a session's end starts.
 const COPY_LIMIT_MS = 110_000
 const MOVE_LIMIT_MS = 290_000
 

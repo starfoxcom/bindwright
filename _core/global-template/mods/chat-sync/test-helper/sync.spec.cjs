@@ -804,6 +804,38 @@ test('a repo\'s chats go only under the name git gave, and a project outside any
   }
 })
 
+test('a session end\'s copy runs on after the command that started it returns', async () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  writeChat(a, 's1', ['one'])
+  const args = [SYNC, 'out-later', path.join(a.chatDir, 's1.jsonl'), a.root]
+  const answer = JSON.parse(execFileSync(process.execPath, args, { env: a.env, encoding: 'utf8' }))
+  assert.deepStrictEqual(answer, { started: 'out' })
+  const copy = path.join(store, 'shop', 's1')
+  for (let waited = 0; !fs.existsSync(copy) && waited < 20_000; waited += 200) {
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
+  assert.deepStrictEqual(fs.readdirSync(copy).length, 1, 'the copy reached the sync place')
+})
+
+test('projects in folders of one repo keep their names apart, and a remote\'s case does not split one', () => {
+  const env = { ...process.env, ...GIT_ENV }
+  const repo = (url) => {
+    const top = tempDir('repo')
+    execFileSync('git', ['init', '-q', top], { env })
+    execFileSync('git', ['-C', top, 'remote', 'add', 'origin', url], { env })
+    fs.mkdirSync(path.join(top, 'packages', 'api'), { recursive: true })
+    return top
+  }
+  const https = repo('https://github.com/acme/shop.git')
+  const ssh = repo('git@github.com:Acme/Shop.git')
+  const keys = inProcess({ env: {} }, () => {
+    const { projectKey } = require(SYNC)
+    return [projectKey(https), projectKey(path.join(https, 'packages', 'api')), projectKey(ssh)]
+  })
+  assert.deepStrictEqual(keys, ['github.com-acme-shop', 'github.com-acme-shop-packages-api', 'github.com-acme-shop'])
+})
+
 test('a repo place on a computer without git says so and writes nothing into the clone', () => {
   const a = gitComputer('a', bareRepo())
   writeChat(a, 's1', ['one'])

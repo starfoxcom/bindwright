@@ -82,7 +82,8 @@ function projectFolders(store) {
 
 // Copies every computer's copy of each chat into `to`. Where `to` already holds
 // that copy, the newer one wins, and two that both changed are both kept, the
-// one moved in beside the other as `<computer>.moved`.
+// one moved in beside the other as `<computer>-moved-<time>.jsonl`, which every
+// computer then reads as one more copy of the chat.
 function copyChats(from, to) {
   let moved = 0
   const missing = []
@@ -117,7 +118,8 @@ function copyOne(source, target, name) {
     clearUnlessPlain(dest)
     const verdict = compare(read, dest)
     if (verdict === 'new' || verdict === 'ahead') placeFile(read, dest)
-    if (verdict === 'diverged') placeFile(read, path.join(target, name.replace(/\.jsonl$/, '.moved')))
+    const keptName = name.replace(/\.jsonl$/, `-moved-${Date.now()}.jsonl`)
+    if (verdict === 'diverged') placeFile(read, path.join(target, keptName))
     return fs.existsSync(dest)
   })
 }

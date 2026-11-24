@@ -44,9 +44,13 @@ function world(on: On, answers: Record<string, unknown> = {}, stops: Record<stri
   return seen
 }
 
-async function start($: Engine): Promise<void> {
+// Starts the session, then lets the chats come in, which runs beside the first prompt.
+async function start($: Engine, seen: World): Promise<void> {
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await seen.clock.advance(0)
 }
+
+const copies = (seen: World) => seen.runs.filter(args => args[0] === 'out' || args[0] === 'out-later')
 
 async function endTurn($: Engine): Promise<void> {
   await $.turn.complete({ turnId: 't', answer: '', durationMs: 1, isAborted: false, reason: 'answer' } as never)
@@ -54,7 +58,7 @@ async function endTurn($: Engine): Promise<void> {
 
 test('a session start brings newer chats in, and says how to load the open chat when it is behind', async ($, on) => {
   const seen = world(on, { in: { imported: ['other'], conflicts: [], behind: ['sess-1'], sent: [] } })
-  await start($)
+  await start($, seen)
 
   expect(seen.runs).toEqual([['in', CHATS, ROOT, 'sess-1']])
   expect(seen.toasts).toHaveLength(1)
@@ -64,24 +68,25 @@ test('a session start brings newer chats in, and says how to load the open chat 
 
 test('a session start that ran out of time says the next one goes on', async ($, on) => {
   const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['a'], more: true } })
-  await start($)
+  await start($, seen)
   expect(seen.toasts).toEqual(
     ['Chat sync: more chats are still to sync, and the next session start goes on with them.'])
 })
 
-test('a push that fails at session start says so, and so does a helper that stops', async ($, on) => {
+test('a push that fails at session start says so, and so does a copy whose helper stops', async ($, on) => {
   const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['other'], pushError: 'rejected' } },
     { out: 1 })
-  await start($)
+  await start($, seen)
   expect(seen.toasts).toEqual(['Chat sync: could not push the chat repo: rejected.'])
 
-  await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
+  await endTurn($)
+  await seen.clock.advance(1)
   expect(seen.toasts.at(-1)).toContain('the helper stopped (exit code 1)')
 })
 
 test('turns copy the chat out at most once a minute, and a copy that fails says so', async ($, on) => {
   const seen = world(on, { out: { error: 'EBUSY: the sync folder is locked' } })
-  await start($)
+  await start($, seen)
   const outs = () => seen.runs.filter(args => args[0] === 'out')
 
   await endTurn($)
@@ -100,40 +105,39 @@ test('turns copy the chat out at most once a minute, and a copy that fails says 
 test('a turn or the session end while a copy is still running starts no second copy', async ($, on) => {
   let finish = () => {}
   const seen = world(on, { out: { same: 'sess-1' } }, {}, new Promise<void>(resolve => { finish = resolve }))
-  await start($)
+  await start($, seen)
   await endTurn($)
   await seen.clock.advance(1)
   await endTurn($)
   await seen.clock.advance(MINUTE * 2)
   await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
-  expect(seen.runs.filter(args => args[0] === 'out')).toHaveLength(1)
+  expect(copies(seen)).toHaveLength(1)
   finish()
 })
 
-test('the session end copies the chat out', async ($, on) => {
-  const seen = world(on, { out: { same: 'sess-1' } })
-  await start($)
+test('the session end only starts the chat\'s copy, inside its short bound', async ($, on) => {
+  const seen = world(on, { 'out-later': { started: 'out' } })
+  await start($, seen)
   await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
 
-  expect(seen.runs.at(-1)).toEqual(['out', TRANSCRIPT, ROOT])
+  expect(seen.runs.at(-1)).toEqual(['out-later', TRANSCRIPT, ROOT])
+  expect(seen.limits.at(-1)?.timeoutMs).toBe(1_500)
   expect(seen.toasts).toEqual([])
-  // The helper must answer inside the session end's short bound, with room left.
-  expect(seen.limits.at(-1)).toEqual({ answerInMs: 6_000, timeoutMs: 8_000 })
 })
 
 test('a copy queued by the last turn does not run after the session end sent the chat', async ($, on) => {
   const seen = world(on, { out: { same: 'sess-1' } })
-  await start($)
+  await start($, seen)
   await endTurn($)
   await $.session.end({ reason: 'other', sessionId: 'sess-1' } as never)
   await seen.clock.advance(MINUTE)
 
-  expect(seen.runs.filter(args => args[0] === 'out')).toEqual([['out', TRANSCRIPT, ROOT]])
+  expect(copies(seen)).toEqual([['out-later', TRANSCRIPT, ROOT]])
 })
 
 test('a folder path with spaces reaches the helper whole', async ($, on) => {
   const seen = world(on, { move: { moved: 0 } })
-  await start($)
+  await start($, seen)
   await $.command.run({ command: 'chat-sync', args: 'move folder "C:/Users/al/My Drive/Claude chats"' } as never)
 
   expect(seen.runs.at(-1)).toEqual(['move', 'folder', 'C:/Users/al/My Drive/Claude chats'])
