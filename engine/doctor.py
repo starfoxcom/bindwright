@@ -281,7 +281,8 @@ def _listed_globs(lines, start, end):
         if not value.endswith("]"):
             return None
         items = [_unquote(item.strip(JS_WHITESPACE)) for item in value[1:-1].split(",")]
-        return [item for item in items if item]
+        # A list of only empty items is not one of the empty forms, so it stays scoped.
+        return [item for item in items if item] or None
     return [_unquote(value)]
 
 
@@ -370,25 +371,16 @@ def _kilo(n):
     return "%d.%dk" % (n // 1000, n % 1000 // 100)
 
 
-def _memory_index(root, config):
-    slug = re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(root))
-    return _read_text(os.path.join(config, "projects", slug, "memory", "MEMORY.md"))
-
-
 def _instructions_check(root, config):
     files = _start_files(root, config)
     total = sum(size for _, size, _ in files)
     personal = sum(size for _, size, from_personal in files if from_personal)
     largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
-    memory = _memory_index(root, config)
-    memory_note = ""
-    if memory is not None:
-        memory_note = " The memory index (MEMORY.md) loads too: %s." % _kilo(_units(memory))
     listed = ", ".join("%s (%s)" % (name, _kilo(size)) for name, size, _ in largest) or "none"
     say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
-           "%s of it from this repo and %s from ~/.claude. The largest: %s.%s"
+           "%s of it from this repo and %s from ~/.claude. The largest: %s."
            % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
-              _kilo(total - personal), _kilo(personal), listed, memory_note))
+              _kilo(total - personal), _kilo(personal), listed))
     if total < INSTRUCTIONS_WARN_AT:
         return _check("instructions", True, say)
     return _check("instructions", False, say, FIX["instructions"])

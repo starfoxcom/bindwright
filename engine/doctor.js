@@ -3,7 +3,7 @@
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
 import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
@@ -277,7 +277,9 @@ function listedGlobs(lines, start, end) {
   if (value.startsWith("[")) {
     // A flow list that runs onto the next line is not read here; null keeps it scoped.
     if (!value.endsWith("]")) return null;
-    return value.slice(1, -1).split(",").map((item) => unquote(item.trim())).filter(Boolean);
+    const items = value.slice(1, -1).split(",").map((item) => unquote(item.trim())).filter(Boolean);
+    // A list of only empty items is not one of the empty forms, so it stays scoped.
+    return items.length ? items : null;
   }
   return [unquote(value)];
 }
@@ -395,26 +397,15 @@ const kilo = (n) => `${Math.floor(n / 1000)}.${Math.floor((n % 1000) / 100)}k`;
 
 const sumSizes = (files) => files.reduce((sum, [, size]) => sum + size, 0);
 
-// The memory index Claude Code loads for the repo at `root`, from `config`'s projects folder.
-// That folder is named by the repo's absolute path, each character outside [A-Za-z0-9] as `-`.
-// Null when the file does not exist.
-function memoryIndex(root, config) {
-  const slug = resolve(root).replace(/[^A-Za-z0-9]/gu, "-");
-  return readText(join(config, "projects", slug, "memory", "MEMORY.md"));
-}
-
 function instructionsCheck(root, config) {
   const files = startFiles(root, config);
   const total = sumSizes(files);
   const personal = sumSizes(files.filter(([, , fromPersonal]) => fromPersonal));
   const largest = [...files].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, 3);
-  const memory = memoryIndex(root, config);
-  const memoryNote = memory === null ? "" : ` The memory index (MEMORY.md) loads too: `
-    + `${kilo(memory.length)}.`;
   const listed = largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none";
   const say = `Claude Code loads ${files.length} instruction files at session start, ${kilo(total)} characters `
     + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. ${kilo(total - personal)} of it from this repo `
-    + `and ${kilo(personal)} from ~/.claude. The largest: ${listed}.${memoryNote}`;
+    + `and ${kilo(personal)} from ~/.claude. The largest: ${listed}.`;
   return total < INSTRUCTIONS_WARN_AT ? check("instructions", true, say) : check("instructions", false, say,
     FIX.instructions);
 }

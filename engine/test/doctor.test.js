@@ -78,8 +78,12 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
     const flow = `---\npaths: ["**",\n  "src/**"]\n---\n${"x".repeat(200000)}`;
-    const wrapped = await doctor(({ at }) => writeFileSync(at(".claude/rules/wrapped.md"), flow));
-    assert.ok(!failing(wrapped).includes("instructions"), "a flow list that runs onto the next line stays scoped");
+    const wrapped = await doctor(({ at }) => {
+      writeFileSync(at(".claude/rules/wrapped.md"), flow);
+      writeFileSync(at(".claude/rules/blank.md"), `---\npaths: [""]\n---\n${"x".repeat(200000)}`);
+    });
+    assert.ok(!failing(wrapped).includes("instructions"),
+      "a flow list that runs onto the next line, or holds only empty items, stays scoped");
     const loaded = await doctor(({ at }) => {
       writeFileSync(at(".claude/rules/spaced.md"), `---\npaths: [ ] # none yet\n---\n${"x".repeat(50000)}`);
       writeFileSync(at(".claude/rules/null.md"), `---\npaths: ~\n---\n${"x".repeat(49000)}`);
@@ -127,17 +131,7 @@ test("instructions split by origin, and a match-all rule loads", needsPython,
     // Match-all globs load for any read, so both count; a rule with any other glob stays out.
     assert.match(bare, /The largest: \.claude\/rules\/all\.md \(60\.0k\), /);
     assert.match(bare, /\.claude\/rules\/star\.md \(55\.0k\)/);
-    assert.doesNotMatch(bare, /mixed|MEMORY/);
-
-    // The memory index is noted after the total, which it does not change.
-    const indexed = sayOf(await doctor((scene) => {
-      setup(scene);
-      const slug = scene.repo.replace(/[^A-Za-z0-9]/g, "-");
-      const memory = join(scene.config, "projects", slug, "memory");
-      mkdirSync(memory, { recursive: true });
-      writeFileSync(join(memory, "MEMORY.md"), "m".repeat(2500));
-    }));
-    assert.equal(indexed, `${bare} The memory index (MEMORY.md) loads too: 2.5k.`);
+    assert.doesNotMatch(bare, /mixed/);
   });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
