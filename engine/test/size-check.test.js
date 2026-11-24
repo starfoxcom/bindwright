@@ -239,6 +239,21 @@ test("the shipped rule's tables parse: named rows, Other, and spaced thousands",
   assert.doesNotMatch(r.out, /d\.ts/);
 });
 
+test("module TypeScript and C++ header and inline files get their language's rows, not Other", { skip }, () => {
+  // Line endings dropped first: a Windows checkout may give the rule CRLF.
+  const rule = readFileSync(RULE, "utf8").replace(/\r\n/g, "\n")
+    .replace(/^paths:\n {2}- ".*"$/m, 'paths:\n  - "**/*.{mts,cts,hxx,inl}"');
+  assert.ok(rule.includes("mts,cts,hxx,inl"), "the rule's paths line was replaced");
+  const files = { "a.mts": lines(801), "b.cts": lines(801), "c.hxx": lines(1501), "d.inl": lines(1501) };
+  const { root } = makeRepo(files, rule);
+  const r = check(root);
+  assert.equal(r.code, 1, r.out);
+  for (const [name, size, limit] of [["a.mts", 801, 800], ["b.cts", 801, 800], ["c.hxx", 1501, 1500],
+    ["d.inl", 1501, 1500]]) {
+    assert.ok(r.out.includes(`${name}: file - = ${size} (hard limit ${limit})`), `${name}\n${r.out}`);
+  }
+});
+
 test("a TypeScript file that is not UTF-8 is measured, not a crash", { skip }, () => {
   const { root } = makeRepo({ "a.ts": Buffer.from("// caf\xe9\nconst a = 1\n", "latin1") },
     readFileSync(RULE, "utf8"));

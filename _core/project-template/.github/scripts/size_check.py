@@ -41,12 +41,12 @@ LIZARD_VENV = os.path.join(os.path.expanduser("~"), ".bindwright", "size-check-v
 # The extensions each row of the rule's language table covers. "Other" takes
 # every extension in the rule's `paths:` list that no named row claims.
 LANGUAGE_EXTENSIONS = {
-    "C / C++": (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp"),
+    "C / C++": (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl"),
     "C# / Java / Kotlin": (".cs", ".java", ".kt", ".kts"),
     "Dart": (".dart",),
     "GDScript": (".gd",),
     "Go": (".go",),
-    "JavaScript / TypeScript": (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"),
+    "JavaScript / TypeScript": (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"),
     "Python": (".py",),
     "Rust": (".rs",),
 }
@@ -156,7 +156,7 @@ def functions(path):
     if lizard.get_reader_for(path) is None:
         return False
     full = os.path.join(ROOT, path)
-    if path.endswith((".ts", ".tsx")):
+    if path.endswith((".ts", ".tsx", ".mts", ".cts")):
         found = typescript_functions(lizard, full)
     else:
         found = lizard.analyze_file(full).function_list
