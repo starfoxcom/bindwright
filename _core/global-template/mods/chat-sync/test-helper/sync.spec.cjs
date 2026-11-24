@@ -761,12 +761,12 @@ test('a run waits for another run on this computer, and takes over from one that
   assert.ok(!fs.existsSync(lock), 'the lock is let go after the run')
 })
 
-// Copies chat s1 out as computer `pc` while the remote lookup fails with `error`.
+// Copies chat s1 out as computer `pc`; with `error`, the remote lookup fails with it.
 function copyWithRemoteLookup(pc, error) {
   const childProcess = require('child_process')
   const realSpawn = childProcess.spawnSync
   childProcess.spawnSync = (command, args, options) => {
-    if (!args.includes('get-url')) return realSpawn(command, args, options)
+    if (!error || !args.includes('remote.origin.url')) return realSpawn(command, args, options)
     return { status: null, stdout: '', stderr: '', error }
   }
   const commands = () => require(path.join(SCRIPTS, 'commands.cjs'))
@@ -783,14 +783,19 @@ function copyWithRemoteLookup(pc, error) {
   }
 }
 
-test('a remote lookup git did not finish writes nothing, and one without git uses the saved name', () => {
+test('a repo\'s chats go only under the name git gave, and a project outside any repo needs no git', () => {
+  const timedOut = { code: 'ETIMEDOUT', message: 'timed out' }
+  const noGit = { code: 'ENOENT', message: 'spawnSync git ENOENT' }
   const cases = [
-    { name: 'git timed out', error: { code: 'ETIMEDOUT', message: 'timed out' }, refused: /git remote/, files: [] },
-    { name: 'git not installed', error: { code: 'ENOENT', message: 'spawnSync git ENOENT' }, files: ['shop'] },
+    { name: 'in a repo, git timed out', isRepo: true, error: timedOut, refused: /git remote/, files: [] },
+    { name: 'in a repo, git not installed', isRepo: true, error: noGit, refused: /cannot find git/, files: [] },
+    { name: 'in a repo with no remote', isRepo: true, error: null, files: ['shop'] },
+    { name: 'outside any repo, git not installed', isRepo: false, error: noGit, files: ['shop'] },
   ]
   for (const row of cases) {
     const store = tempDir('store')
     const a = computer('a', store)
+    if (row.isRepo) execFileSync('git', ['init', '-q', a.root], { env: { ...process.env, ...GIT_ENV } })
     writeChat(a, 's1', ['one'])
     const answer = copyWithRemoteLookup(a, row.error)
     if (row.refused) assert.match(answer.error || '', row.refused, row.name)

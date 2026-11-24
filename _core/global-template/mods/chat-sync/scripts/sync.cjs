@@ -159,20 +159,24 @@ function stopReason(name, run) {
   return `${name} failed (exit code ${run.status}).`
 }
 
-// The project's name in the sync place, the same on every computer: its git
-// remote, else its name in .bindwright/project.json, else its folder name.
-// A failed lookup is one of three: git answered with an exit code (no remote,
-// not a repo), git is not installed (so no remote can be read, and a folder
-// place needs no git), or git started and did not finish (out of time,
-// stopped). Only the last is no answer, so it stops the run: no chat is ever
-// written under a name that stands in for a remote nobody could read.
+const NO_GIT_HERE = 'This project is a git repo, but this session cannot find git to read its remote, '
+  + 'so chat sync did nothing. Install git, or make sure it is on the PATH Claude Code starts with.'
+
+// The project's name in the sync place, the same on every computer whatever is
+// installed on it: its git remote, else its name in .bindwright/project.json,
+// else its folder name. A project outside any git repo never asks git. Inside
+// one, the remote setting decides: set (exit code 0) names it, unset (exit
+// code 1, on every git version) moves on to the other two, and any other end
+// (git missing, refused, out of time) stops the run, since a guessed name
+// would split the project's chats from those of a computer whose git answered.
 function projectKey(root) {
-  const remote = git(root, 'remote', 'get-url', 'origin')
-  if (!Number.isInteger(remote.code) && !remote.isMissing) {
+  const remote = isInRepo(root) ? git(root, 'config', '--get', 'remote.origin.url') : { code: 1 }
+  if (remote.code !== 0 && remote.code !== 1) {
+    if (remote.isMissing) throw new Error(NO_GIT_HERE)
     if (remote.out === OUT_OF_TIME) throw new Error(OUT_OF_TIME)
     throw new Error(`Chat sync could not read this project's git remote, so it did nothing this run: ${remote.out}`)
   }
-  if (remote.ok && remote.out) {
+  if (remote.code === 0 && remote.out) {
     const bare = remote.out.split('\n')[0].replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
     return safeName(bare.replace(/:/g, '/').replace(/\.git$/i, ''))
   }
@@ -184,6 +188,18 @@ function projectKey(root) {
   }
   const name = project.project && project.project.name
   return safeName(typeof name === 'string' && name.trim() ? name : folderName(root))
+}
+
+// True when `root` or a folder above it holds `.git` (a folder, or the file a
+// worktree or submodule keeps), found without running git.
+function isInRepo(root) {
+  let folder = path.resolve(root)
+  for (;;) {
+    if (fs.existsSync(path.join(folder, '.git'))) return true
+    const parent = path.dirname(folder)
+    if (parent === folder) return false
+    folder = parent
+  }
 }
 
 // The last folder of a path, split on either separator, so one path gives one
