@@ -27,7 +27,7 @@ const HELP = [
   '/chat-sync move off: stop syncing; the copies already made stay.',
 ].join('\n')
 
-type Answer = Record<string, unknown> & { error?: string }
+type Answer = Record<string, unknown> & { error?: string; refused?: string }
 
 let lastOutAt = 0
 let isOutQueued = false
@@ -92,6 +92,9 @@ function bringInNote(answer: Answer): string | undefined {
   if (answer.more) parts.push('more chats are still to sync, and the next session start goes on with them')
   if (answer.pushError) parts.push(`could not push the chat repo: ${String(answer.pushError).slice(0, 200)}`)
   if (answer.error) parts.push(`could not sync: ${answer.error.slice(0, 200)}`)
+  // The helper's own sentence, shown whole: it names the folder to rename. The
+  // cut above is for what git and gh print.
+  if (answer.refused) parts.push(answer.refused)
   return parts.length ? `Chat sync: ${parts.join('; ')}.` : undefined
 }
 

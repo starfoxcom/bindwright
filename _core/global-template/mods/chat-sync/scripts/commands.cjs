@@ -468,7 +468,6 @@ function stampOf(file) {
 function unsyncable(root) {
   const folder = paths.escapedFolder(root, os.homedir())
   if (!folder) return null
-  // The advice comes first, since the session-start note keeps only the start.
   return `rename the folder ${folder} to sync this project's chats, which stay on this computer `
     + 'while its name holds a quote, a backslash or a control character'
 }
@@ -507,7 +506,7 @@ function bringIn([chatDir, root, openId]) {
   if (!opened.store) return opened
   const { place, store } = opened
   const unsafe = unsyncable(root)
-  if (unsafe) return { error: unsafe }
+  if (unsafe) return { refused: unsafe }
   const isGit = place.kind === 'git'
   // Counted from the helper's start, so a wait for another run's lock uses it too.
   const deadline = performance.timeOrigin + runBudgetMs()

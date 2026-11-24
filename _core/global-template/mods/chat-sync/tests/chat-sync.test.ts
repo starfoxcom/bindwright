@@ -66,6 +66,13 @@ test('a session start brings newer chats in, and says how to load the open chat 
   expect(seen.toasts[0]).toContain('start a new session in this project, then /resume this chat')
 })
 
+test('a session start that refuses a folder shows the folder to rename whole, however long', async ($, on) => {
+  const refused = `rename the folder /home/sam/${'deep/'.repeat(60)}say "hi" to sync this project's chats`
+  const seen = world(on, { in: { refused } })
+  await start($, seen)
+  expect(seen.toasts).toEqual([`Chat sync: ${refused}.`])
+})
+
 test('a session start that ran out of time says the next one goes on', async ($, on) => {
   const seen = world(on, { in: { imported: [], conflicts: [], behind: [], sent: ['a'], more: true } })
   await start($, seen)

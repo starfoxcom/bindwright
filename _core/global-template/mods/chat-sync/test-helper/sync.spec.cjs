@@ -192,7 +192,7 @@ test('a computer whose project or home folder name holds a quote or a backslash 
     writeChat(pc, 's1', ['one'])
     const sent = pc.sync('out', path.join(pc.chatDir, 's1.jsonl'), pc.root)
     assert.deepStrictEqual(sent, { skipped: 'folder name' }, label)
-    const said = pc.sync('in', pc.chatDir, pc.root, 'other').error || ''
+    const said = pc.sync('in', pc.chatDir, pc.root, 'other').refused || ''
     assert.ok(said.startsWith(`rename the folder ${named} to sync`), `${label}: ${said}`)
     assert.deepStrictEqual(fs.readdirSync(store), [], `${label}: nothing reaches the sync place`)
   }
