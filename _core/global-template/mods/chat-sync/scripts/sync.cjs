@@ -107,8 +107,8 @@ function configuredSshCommand(cwd) {
 // folder is never made, so git finds no hook in it. The mod commits under its
 // own name, so a computer signed in to gh with no git name set commits too. No
 // askpass program and no credential helper may ask for anything. GitHub hears
-// gh's sign-in after the user's own helpers, as `gh repo clone` does for the
-// clone, so a computer signed in only through gh pulls and pushes too.
+// gh's sign-in after the user's own helpers, so a computer signed in only
+// through gh clones, pulls and pushes too.
 function gitSettings() {
   const settings = ['core.autocrlf=false', 'core.symlinks=false', 'commit.gpgsign=false',
     `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`, 'user.name=chat-sync', 'user.email=chat-sync@localhost',
