@@ -38,7 +38,9 @@ let hasEnded = false
 let isCopying = false
 
 // The helper gets the moment its answer is due, so every git and gh call it
-// makes ends before the hook stops it.
+// makes ends before the hook stops it. `env` adds to the session's own
+// environment (the mod API's ProcessRunInit: "Variables set over the host
+// process's own environment"), so PATH and the git and gh settings stay.
 async function runSync($: EngineInterface, args: string[], timeoutMs = 120_000): Promise<Answer> {
   try {
     const deadline = (await $.clock.now()) + timeoutMs - ANSWER_RESERVE_MS
