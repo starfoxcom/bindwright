@@ -125,6 +125,7 @@ def _included(path, a, flags):
         ".claude/rules/tracker.md": github,
         ".github/ISSUE_TEMPLATE/work-item.md": github,
         ".claude/scripts/research-adherence.py": flags["code_research_count"],
+        "docs/ci-watching.md": flags["ci_checks"],
         ".github/scripts/size_check.py": flags["code_size_check"],
         ".github/workflows/size-check.yml": flags["code_size_check"],
         ".github/size-check/exceptions.txt": flags["code_size_check"],

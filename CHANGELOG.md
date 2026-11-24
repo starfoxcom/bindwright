@@ -10,6 +10,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 - **Less text loads at session start.** The global instructions drop "Auto memory", which repeated Claude Code's own memory instructions, and "Time-of-day awareness", which explained a `[time]` hook the session-facts mod replaced; the code-research section becomes a short pointer at the chosen tool's own guidance, under the new heading "Code research: the project's tool, not agents". The time-injection snippet is retired with them. `/bindwright:setup` offers to take the three old sections out of `~/.claude/CLAUDE.md`, and `/bindwright:remove` takes them out with the rest.
 - **The project `CLAUDE.md` loses three repeats.** "Code research" (the same rule as `token-efficiency.md`), the "During" line of Sessions (`task-tracking.md`) and "Rules loaded on demand" go, and `docs/lazy/README.md` stops shipping: rules with a `paths:` line took its place. `/bindwright:update` offers to delete an unedited copy. When the project keeps rules in `docs/lazy/`, it says the pointer to them is gone and offers to add one back or to move each rule into `.claude/rules/` with a `paths:` list.
+- **The CI-watching fallback moves out of `token-efficiency.md`.** The Monitor steps and the background loop, needed only where the ci-watch mod is not loaded, now live in `docs/ci-watching.md`, word for word, and § Watching CI points there. Each session loads about 1k characters less.
 
 ## [v7.17.1] — 2026-11-24
 
