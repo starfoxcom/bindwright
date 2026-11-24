@@ -2,7 +2,7 @@
 // and this machine. Each check says what it found and, when something is
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
@@ -26,7 +26,15 @@ const FIX = {
     + "and the Next id line is above every id in use.",
   hooks: "Run /bindwright:setup again to reinstall them, "
     + "or fix the paths in the settings file named.",
+  instructions: "Move what a session needs only for some files into rules with a `paths:` line, which load "
+    + "only when Claude reads a matching file, or into the skill that uses it. Past the limit Claude Code "
+    + "warns at every session start.",
 };
+
+// Claude Code's limit on the instruction files it loads at session start, in
+// characters, and the share of it past which the doctor warns.
+const INSTRUCTIONS_LIMIT = 150000;
+const INSTRUCTIONS_WARN_AT = 120000;
 
 // The first CLI with mods; older ones load none of them.
 export const MODS_SINCE = [2, 1, 287];
@@ -234,6 +242,131 @@ function hooksCheck(config) {
     : check("hooks", true, "Every hook's program is on this computer.");
 }
 
+// An empty list, an empty string and YAML's null forms list no path.
+const EMPTY_YAML = /^(?:\[[ \t]*\]|""|''|~|null|Null|NULL)$/;
+
+// A rule whose front matter lists at least one path under `paths:` loads only
+// when Claude reads a file it matches, so it is not loaded at session start.
+function isPathScoped(text) {
+  const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
+  // Front matter that never closes is no front matter, so the whole file loads.
+  const end = lines.indexOf("---", 1);
+  if (lines[0] !== "---" || end === -1) return false;
+  for (let i = 1; i < end; i++) {
+    if (!lines[i].startsWith("paths:")) continue;
+    const rest = lines[i].slice("paths:".length);
+    const comment = rest.search(/(^|[ \t])#/);
+    const inline = (comment === -1 ? rest : rest.slice(0, comment)).trim();
+    if (inline) return !EMPTY_YAML.test(inline);
+    const next = lines.slice(i + 1).find((line) => line.trim() && !line.trim().startsWith("#"));
+    return (next ?? "").trim().startsWith("- ");
+  }
+  return false;
+}
+
+// A file's or folder's identity on its disk, the same however a path spells it
+// (case, links, short names). A disk that numbers no files reports inode 0, so
+// there its canonical path stands in. Null when it cannot be read.
+function fileId(path) {
+  try {
+    const stat = statSync(path, { bigint: true });
+    return stat.ino === 0n ? `path:${canonicalPath(path)}` : `${stat.dev}:${stat.ino}`;
+  } catch {
+    return null;
+  }
+}
+
+// On Windows, the name Windows itself gives a path (case as on disk, long
+// names), as Python's realpath asks for it; elsewhere, or where Windows cannot
+// say, the path with its links resolved one by one.
+function canonicalPath(path) {
+  if (process.platform === "win32") {
+    try {
+      return realpathSync.native(path);
+    } catch {
+      // Some network and user-mode file systems refuse the call.
+    }
+  }
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+// Each Markdown file under `dir`, sorted, as [path below `dir`, full path],
+// links followed as Claude Code follows them; a folder already walked is
+// skipped, so a link back up the tree ends. Empty when the folder cannot be read.
+function markdownFiles(dir, prefix = "", seen = new Set()) {
+  const id = fileId(dir);
+  if (id === null || seen.has(id)) return [];
+  seen.add(id);
+  let names;
+  try {
+    names = readdirSync(dir).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  } catch {
+    return [];
+  }
+  return names.flatMap((name) => {
+    const path = join(dir, name);
+    let stat;
+    try {
+      stat = statSync(path);
+    } catch {
+      return [];
+    }
+    if (stat.isDirectory()) return markdownFiles(path, `${prefix}${name}/`, seen);
+    return stat.isFile() && name.endsWith(".md") ? [[`${prefix}${name}`, path]] : [];
+  });
+}
+
+function readText(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+// The instruction files Claude Code loads at session start for this repo and
+// config folder, as [name, characters in UTF-16 units, as Claude Code counts
+// them]: each CLAUDE.md and every rule without a `paths:` list. A rule in the
+// config folder (wherever the walk reached it from) is named only as such, so
+// its file name never reaches a bug report, and a file reached twice counts
+// once. A CLAUDE.md above the repo and files it imports are not counted.
+function startFiles(root, config) {
+  const out = [];
+  const counted = new Set();
+  // `rule` is null for a CLAUDE.md, "repo" for a rule the repo's folder holds, "personal" for one in ~/.claude.
+  // The personal rules are walked first, so a file both folders reach counts once, under the personal name.
+  const add = (name, path, rule = null) => {
+    const id = fileId(path);
+    const text = id === null || counted.has(id) ? null : readText(path);
+    if (text === null || (rule && isPathScoped(text))) return;
+    counted.add(id);
+    out.push([rule === "personal" ? "a rule in ~/.claude/rules" : name, text.length]);
+  };
+  for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) add(name, join(root, ...name.split("/")));
+  add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"));
+  for (const [name, path] of markdownFiles(join(config, "rules"))) add(name, path, "personal");
+  for (const [name, path] of markdownFiles(join(root, ".claude", "rules"))) add(`.claude/rules/${name}`, path, "repo");
+  return out;
+}
+
+// Characters as thousands with one decimal, cut rather than rounded, so both engines print the same.
+const kilo = (n) => `${Math.floor(n / 1000)}.${Math.floor((n % 1000) / 100)}k`;
+
+function instructionsCheck(root, config) {
+  const files = startFiles(root, config);
+  const total = files.reduce((sum, [, size]) => sum + size, 0);
+  const largest = [...files].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, 3);
+  const say = `Claude Code loads ${files.length} instruction files at session start, ${kilo(total)} characters `
+    + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. The largest: `
+    + `${largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none"}.`;
+  return total < INSTRUCTIONS_WARN_AT ? check("instructions", true, say) : check("instructions", false, say,
+    FIX.instructions);
+}
+
 // Every check for the repo at `root` and the config folder `config`.
 // `pluginVersion` is "x.y.z"; `cliVersion` [major, minor, patch] or null.
 export function runDoctor(root, config, { pluginVersion, cliVersion }) {
@@ -241,7 +374,7 @@ export function runDoctor(root, config, { pluginVersion, cliVersion }) {
   const checks = [...state.checks, hooksCheck(config)];
   if (state.answers) {
     checks.push(versionCheck(state.pristine, pluginVersion), guardCheck(root, state.answers, state.pristine));
-    checks.push(stagedCheck(root));
+    checks.push(stagedCheck(root), instructionsCheck(root, config));
     if (state.answers.advanced.tracker === "file") checks.push(roadmapCheck(root));
     const settings = settingsChecks(root, config);
     const guards = hasGuards(state.answers, state.pristine, settings.installed);

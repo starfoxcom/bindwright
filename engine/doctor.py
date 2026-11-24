@@ -26,7 +26,13 @@ FIX = {
                "and the Next id line is above every id in use.",
     "hooks": "Run /bindwright:setup again to reinstall them, "
              "or fix the paths in the settings file named.",
+    "instructions": "Move what a session needs only for some files into rules with a `paths:` line, which load "
+                    "only when Claude reads a matching file, or into the skill that uses it. Past the limit "
+                    "Claude Code warns at every session start.",
 }
+
+INSTRUCTIONS_LIMIT = 150000
+INSTRUCTIONS_WARN_AT = 120000
 
 
 MODS_SINCE = [2, 1, 287]
@@ -235,6 +241,109 @@ def _hooks_check(config):
     return _check("hooks", True, "Every hook's program is on this computer.")
 
 
+# An empty list, an empty string and YAML's null forms list no path.
+_EMPTY_YAML = re.compile(r"\[[ \t]*\]|\"\"|''|~|null|Null|NULL")
+
+
+def _is_path_scoped(text):
+    lines = re.split(r"\r\n|\r|\n", text[1:] if text.startswith("﻿") else text)
+    # Front matter that never closes is no front matter, so the whole file loads.
+    if lines[0] != "---" or "---" not in lines[1:]:
+        return False
+    for i in range(1, len(lines)):
+        if lines[i] == "---":
+            return False
+        if not lines[i].startswith("paths:"):
+            continue
+        rest = lines[i][len("paths:"):]
+        comment = re.search(r"(^|[ \t])#", rest)
+        inline = (rest[:comment.start()] if comment else rest).strip(JS_WHITESPACE)
+        if inline:
+            return not _EMPTY_YAML.fullmatch(inline)
+        following = [line for line in lines[i + 1:]
+                     if line.strip(JS_WHITESPACE) and not line.strip(JS_WHITESPACE).startswith("#")]
+        return (following[0] if following else "").strip(JS_WHITESPACE).startswith("- ")
+    return False
+
+
+def _file_id(path):
+    try:
+        stat = os.stat(path)
+        # A disk that numbers no files reports inode 0, so there its canonical path stands in.
+        if stat.st_ino == 0:
+            return "path:" + os.path.realpath(path)
+        return "%d:%d" % (stat.st_dev, stat.st_ino)
+    except OSError:
+        return None
+
+
+def _read_text(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace", newline="") as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def _markdown_files(folder, prefix="", seen=None):
+    seen = set() if seen is None else seen
+    id_ = _file_id(folder)
+    if id_ is None or id_ in seen:
+        return []
+    seen.add(id_)
+    try:
+        names = sorted(os.listdir(folder), key=_code_units)
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        path = os.path.join(folder, name)
+        if os.path.isdir(path):
+            out += _markdown_files(path, prefix + name + "/", seen)
+        elif os.path.isfile(path) and name.endswith(".md"):
+            out.append((prefix + name, path))
+    return out
+
+
+def _start_files(root, config):
+    out = []
+
+    counted = set()
+
+    def add(name, path, rule=None):
+        id_ = _file_id(path)
+        text = None if id_ is None or id_ in counted else _read_text(path)
+        if text is None or (rule and _is_path_scoped(text)):
+            return
+        counted.add(id_)
+        out.append(("a rule in ~/.claude/rules" if rule == "personal" else name,
+                    len(text.encode("utf-16-le", "surrogatepass")) // 2))
+    for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
+        add(name, os.path.join(root, *name.split("/")))
+    add("~/.claude/CLAUDE.md", os.path.join(config, "CLAUDE.md"))
+    for name, path in _markdown_files(os.path.join(config, "rules")):
+        add(name, path, "personal")
+    for name, path in _markdown_files(os.path.join(root, ".claude", "rules")):
+        add(".claude/rules/" + name, path, "repo")
+    return out
+
+
+def _kilo(n):
+    return "%d.%dk" % (n // 1000, n % 1000 // 100)
+
+
+def _instructions_check(root, config):
+    files = _start_files(root, config)
+    total = sum(size for _, size in files)
+    largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
+    say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
+           "The largest: %s." % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
+                                 ", ".join("%s (%s)" % (name, _kilo(size)) for name, size in largest) or "none"))
+    if total < INSTRUCTIONS_WARN_AT:
+        return _check("instructions", True, say)
+    return _check("instructions", False, say, FIX["instructions"])
+
+
 def run_doctor(root, config, plugin_version, cli_version):
     """See runDoctor in doctor.js."""
     state = _state_checks(root)
@@ -242,7 +351,7 @@ def run_doctor(root, config, plugin_version, cli_version):
     if "answers" in state:
         checks += [_version_check(state["pristine"], plugin_version),
                    _guard_check(root, state["answers"], state["pristine"])]
-        checks.append(_staged_check(root))
+        checks += [_staged_check(root), _instructions_check(root, config)]
         if state["answers"]["advanced"]["tracker"] == "file":
             checks.append(_roadmap_check(root))
         settings = _settings_checks(root, config)

@@ -182,12 +182,35 @@ test("merge style picks the matching merge command", async () => {
 
 test("default-branch choice flips the workflow-change guidance", async () => {
   const a = defaults();
-  const mainDefault = (await run(a)).get(".claude/rules/git.md");
+  const mainDefault = (await run(a)).get(".claude/rules/releases.md");
   assert.match(mainDefault, /lands on `main` first as a `hotfix\/<name>` PR/);
   a.advanced.devIsDefault = true;
-  const devDefault = (await run(a)).get(".claude/rules/git.md");
-  assert.match(devDefault, /workflow changes are ordinary work PRs into `develop`/);
-  assert.doesNotMatch(devDefault, /always pass `--base develop`/);
+  const devFiles = await run(a);
+  assert.match(devFiles.get(".claude/rules/releases.md"), /workflow changes are ordinary work PRs into `develop`/);
+  assert.doesNotMatch(devFiles.get(".claude/rules/git.md"), /always pass `--base develop`/);
+});
+
+test("the first-setup steps follow the branch model", async () => {
+  // Each branch model's own sentence; a bind shows its own and none of the others.
+  const models = [
+    { name: "gitflow, main default", branching: "gitflow", devIsDefault: false,
+      own: /Once it merges, cascade it into `develop`/ },
+    { name: "gitflow, develop default", branching: "gitflow", devIsDefault: true,
+      own: /so the PR targets it\. Once it merges, run `[^`]*--branch develop --branch main` to protect both/ },
+    { name: "trunk", branching: "trunk", devIsDefault: false,
+      own: /Once it merges, run `[^`]*--branch main` to protect `main`/ },
+  ];
+  for (const model of models) {
+    const a = defaults();
+    a.advanced.branching = model.branching;
+    a.advanced.devIsDefault = model.devIsDefault;
+    const text = (await run(a)).get(".claude/rules/review-workflow.md");
+    const firstSetup = text.slice(text.indexOf("### The first setup PR"), text.indexOf("## If the gate"));
+    assert.match(firstSetup, model.own, `${model.name}: its own steps`);
+    for (const other of models.filter((m) => m !== model)) {
+      assert.doesNotMatch(firstSetup, other.own, `${model.name}: no ${other.name} steps`);
+    }
+  }
 });
 
 test("rules carry no stale model names or polling loops", async () => {
@@ -1060,6 +1083,7 @@ test("the repo URL is used whole, and git.md names review-tiers.md only with AI 
   const off = await run(a);
   assertClean(off);
   assert.ok(!off.has(".claude/rules/review-tiers.md"));
+  assert.ok(!off.has(".claude/rules/review-workflow.md"));
   assert.ok(!off.get(".claude/rules/git.md").includes("review-tiers.md"));
   assert.ok(off.get(".claude/rules/git.md").includes("CI watching lives in `token-efficiency.md`."));
 });

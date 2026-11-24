@@ -73,6 +73,7 @@ function included(path, a, flags) {
     ".claude/rules/shipped-text.md": adv.plainWriting,
     ".claude/rules/visual.md": adv.uiRule,
     ".claude/rules/review-tiers.md": adv.aiReview,
+    ".claude/rules/review-workflow.md": adv.aiReview,
     ".claude/rules/tracker.md": github,
     ".github/ISSUE_TEMPLATE/work-item.md": github,
     ".claude/scripts/research-adherence.py": flags.code_research_count,
