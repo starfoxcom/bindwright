@@ -753,14 +753,15 @@ test('this computer\'s own copy that cannot be read never brings a deleted chat 
 
 test('git asks no question of an ssh command set by the user, and signs in to GitHub through gh', () => {
   const quoted = '"C:/Program Files/OpenSSH/ssh.exe" -i key'
-  const configured = gitConfig('[core]\n\tsshCommand = ssh -i key\n')
+  const configured = { GIT_SSH: 'plink', GIT_CONFIG_GLOBAL: gitConfig('[core]\n\tsshCommand = ssh -i key\n') }
+  const program = 'C:\\Windows\\OpenSSH\\ssh.exe'
   const rows = [
     ['ssh with options', { GIT_SSH_COMMAND: 'ssh -i key' }, 'ssh -i key -o BatchMode=yes'],
     ['quoted ssh.exe', { GIT_SSH_COMMAND: quoted }, `${quoted} -o BatchMode=yes`],
     ['another program', { GIT_SSH_COMMAND: 'plink -batch' }, 'plink -batch'],
-    ['GIT_SSH naming ssh.exe', { GIT_SSH: 'C:\\Windows\\OpenSSH\\ssh.exe' }, '\'C:\\Windows\\OpenSSH\\ssh.exe\' -o BatchMode=yes'],
+    ['GIT_SSH naming ssh.exe', { GIT_SSH: program }, `'${program}' -o BatchMode=yes`],
     ['GIT_SSH naming another program', { GIT_SSH: 'plink' }, undefined],
-    ['core.sshCommand beside GIT_SSH', { GIT_SSH: 'plink', GIT_CONFIG_GLOBAL: configured }, 'ssh -i key -o BatchMode=yes'],
+    ['core.sshCommand beside GIT_SSH', configured, 'ssh -i key -o BatchMode=yes'],
     ['nothing set', {}, 'ssh -o BatchMode=yes'],
   ]
   for (const [name, env, expected] of rows) {
