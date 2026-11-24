@@ -275,6 +275,8 @@ function listedGlobs(lines, start, end) {
   if (value === "") return blockItems(lines, start + 1, end);
   if (EMPTY_YAML.test(value)) return [];
   if (value.startsWith("[")) {
+    // A flow list that runs onto the next line is not read here; null keeps it scoped.
+    if (!value.endsWith("]")) return null;
     return value.slice(1, -1).split(",").map((item) => unquote(item.trim())).filter(Boolean);
   }
   return [unquote(value)];
@@ -289,7 +291,8 @@ function isPathScoped(text) {
   if (lines[0] !== "---" || end === -1) return false;
   for (let i = 1; i < end; i++) {
     if (lines[i].startsWith("paths:")) {
-      return listedGlobs(lines, i, end).some((glob) => !MATCH_ALL_GLOBS.has(glob));
+      const globs = listedGlobs(lines, i, end);
+      return globs === null || globs.some((glob) => !MATCH_ALL_GLOBS.has(glob));
     }
   }
   return false;

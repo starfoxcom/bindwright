@@ -77,6 +77,9 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     const scoped = `﻿---\npaths:\n\n  # sources\n  - "src/**"\n---\n${"x".repeat(200000)}`;
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
+    const flow = `---\npaths: ["**",\n  "src/**"]\n---\n${"x".repeat(200000)}`;
+    const wrapped = await doctor(({ at }) => writeFileSync(at(".claude/rules/wrapped.md"), flow));
+    assert.ok(!failing(wrapped).includes("instructions"), "a flow list that runs onto the next line stays scoped");
     const loaded = await doctor(({ at }) => {
       writeFileSync(at(".claude/rules/spaced.md"), `---\npaths: [ ] # none yet\n---\n${"x".repeat(50000)}`);
       writeFileSync(at(".claude/rules/null.md"), `---\npaths: ~\n---\n${"x".repeat(49000)}`);

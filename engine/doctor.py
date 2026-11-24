@@ -277,6 +277,9 @@ def _listed_globs(lines, start, end):
     if _EMPTY_YAML.fullmatch(value):
         return []
     if value.startswith("["):
+        # A flow list that runs onto the next line is not read here; None keeps it scoped.
+        if not value.endswith("]"):
+            return None
         items = [_unquote(item.strip(JS_WHITESPACE)) for item in value[1:-1].split(",")]
         return [item for item in items if item]
     return [_unquote(value)]
@@ -292,7 +295,8 @@ def _is_path_scoped(text):
     end = lines.index("---", 1)
     for i in range(1, end):
         if lines[i].startswith("paths:"):
-            return any(glob not in _MATCH_ALL_GLOBS for glob in _listed_globs(lines, i, end))
+            globs = _listed_globs(lines, i, end)
+            return globs is None or any(glob not in _MATCH_ALL_GLOBS for glob in globs)
     return False
 
 
