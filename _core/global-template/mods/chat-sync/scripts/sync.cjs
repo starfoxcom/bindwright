@@ -80,9 +80,12 @@ let sshCommand
 
 // The environment for git and gh: a password, passphrase or host-key question
 // fails the command at once instead of waiting, since no one is there to answer
-// it. A user's own ssh program is kept, as its options may differ from ssh's.
+// it. Git asks an askpass program before the terminal, and an editor's terminal
+// sets one that opens a dialog, so none is passed on (core.askPass is emptied in
+// gitSettings). A user's own ssh program is kept, as its options may differ from ssh's.
 function quietEnv() {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GH_PROMPT_DISABLED: '1' }
+  for (const name of ['GIT_ASKPASS', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']) delete env[name]
   if (env.GIT_SSH_COMMAND || env.GIT_SSH) return env
   if (sshCommand === undefined) {
     const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
@@ -98,10 +101,12 @@ function quietEnv() {
 // checked out as a plain file, and none of the user's hooks or commit signing,
 // which could ask for a passphrase or a key touch with no one there. The hooks
 // folder is never made, so git finds no hook in it. The mod commits under its
-// own name, so a computer signed in to gh with no git name set commits too.
+// own name, so a computer signed in to gh with no git name set commits too. No
+// askpass program and no credential helper may ask for anything.
 function gitSettings() {
   const settings = ['core.autocrlf=false', 'core.symlinks=false', 'commit.gpgsign=false',
-    `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`, 'user.name=chat-sync', 'user.email=chat-sync@localhost']
+    `core.hooksPath=${path.join(dataDir(), 'no-hooks')}`, 'user.name=chat-sync', 'user.email=chat-sync@localhost',
+    'core.askPass=', 'credential.interactive=false']
   return settings.flatMap(setting => ['-c', setting])
 }
 

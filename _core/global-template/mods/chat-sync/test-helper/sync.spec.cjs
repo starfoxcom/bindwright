@@ -484,22 +484,39 @@ test('a chat repo that cannot be confirmed private at session start says so and 
   assert.deepStrictEqual(answer.sent, [])
 })
 
+// A password prompt program, as an editor's terminal sets one, that would keep
+// git waiting; it leaves a mark when git starts it.
+function waitingAskpass() {
+  const folder = tempDir('askpass')
+  const mark = path.join(folder, 'asked').replace(/\\/g, '/')
+  const program = path.join(folder, 'askpass.sh')
+  fs.writeFileSync(program, `#!/bin/sh\necho asked > "${mark}"\nsleep 120\n`, { mode: 0o755 })
+  return { program: program.replace(/\\/g, '/'), mark }
+}
+
 test('a chat repo that asks for a password fails at once instead of waiting on a prompt', async () => {
   const server = http.createServer((request, response) => {
     response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="chats"' })
     response.end()
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  const plain = () => ({})
+  const fromEnv = askpass => ({ GIT_ASKPASS: askpass.program, SSH_ASKPASS: askpass.program })
+  const fromConfig = askpass => ({ GIT_CONFIG_GLOBAL: gitConfig(`[core]\n\taskPass = ${askpass.program}\n`) })
   try {
-    const a = gitComputer('a', bareRepo())
-    const url = `http://127.0.0.1:${server.address().port}/chats.git`
-    execFileSync('git', ['-C', path.join(a.dataDir, 'repo'), 'remote', 'set-url', 'origin', url])
-    writeChat(a, 's1', ['one'])
-    const started = Date.now()
-    const run = await execFileAsync(process.execPath, [SYNC, 'in', a.chatDir, a.root, 'other'],
-      { env: a.env, timeout: 50_000 })
-    assert.match(JSON.parse(run.stdout).pushError || '', /terminal prompts disabled/)
-    assert.ok(Date.now() - started < 20_000, 'no git call waited out its time limit')
+    for (const [name, env] of [['no prompt program', plain], ['GIT_ASKPASS', fromEnv], ['core.askPass', fromConfig]]) {
+      const askpass = waitingAskpass()
+      const a = gitComputer('a', bareRepo(), env(askpass))
+      const url = `http://127.0.0.1:${server.address().port}/chats.git`
+      execFileSync('git', ['-C', path.join(a.dataDir, 'repo'), 'remote', 'set-url', 'origin', url])
+      writeChat(a, 's1', ['one'])
+      const started = Date.now()
+      const run = await execFileAsync(process.execPath, [SYNC, 'in', a.chatDir, a.root, 'other'],
+        { env: a.env, timeout: 50_000 })
+      assert.match(JSON.parse(run.stdout).pushError || '', /terminal prompts disabled|password from user/, name)
+      assert.ok(Date.now() - started < 20_000, `${name}: no git call waited out its time limit`)
+      assert.ok(!fs.existsSync(askpass.mark), `${name}: no prompt program was started`)
+    }
   } finally {
     server.close()
   }
