@@ -242,15 +242,26 @@ def _hooks_check(config):
 
 
 def _is_path_scoped(text):
-    lines = re.split(r"\r\n|\r|\n", text)
+    lines = re.split(r"\r\n|\r|\n", text[1:] if text.startswith("﻿") else text)
     if lines[0] != "---":
         return False
-    for line in lines[1:]:
-        if line == "---":
+    for i in range(1, len(lines)):
+        if lines[i] == "---":
             return False
-        if line.startswith("paths:"):
-            return True
+        if not lines[i].startswith("paths:"):
+            continue
+        inline = lines[i][len("paths:"):].strip()
+        if inline:
+            return inline != "[]"
+        return (lines[i + 1] if i + 1 < len(lines) else "").strip().startswith("- ")
     return False
+
+
+def _real_path(path):
+    try:
+        return os.path.realpath(path) if os.path.exists(path) else None
+    except OSError:
+        return None
 
 
 def _read_text(path):
@@ -261,7 +272,12 @@ def _read_text(path):
         return None
 
 
-def _markdown_files(folder, prefix=""):
+def _markdown_files(folder, prefix="", seen=None):
+    seen = set() if seen is None else seen
+    real = _real_path(folder)
+    if real is None or real in seen:
+        return []
+    seen.add(real)
     try:
         names = sorted(os.listdir(folder), key=_code_units)
     except OSError:
@@ -269,10 +285,8 @@ def _markdown_files(folder, prefix=""):
     out = []
     for name in names:
         path = os.path.join(folder, name)
-        if os.path.islink(path):
-            continue
         if os.path.isdir(path):
-            out += _markdown_files(path, prefix + name + "/")
+            out += _markdown_files(path, prefix + name + "/", seen)
         elif os.path.isfile(path) and name.endswith(".md"):
             text = _read_text(path)
             if text is not None:
@@ -285,15 +299,20 @@ def _start_files(root, config):
 
     def add(name, text):
         if text is not None:
-            out.append((name, len(text)))
+            out.append((name, len(text.encode("utf-16-le", "surrogatepass")) // 2))
+    repo_claude = os.path.join(root, ".claude")
+    same_folder = _real_path(repo_claude) is not None and _real_path(repo_claude) == _real_path(config)
     for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
         add(name, _read_text(os.path.join(root, *name.split("/"))))
+    for name, text in _markdown_files(os.path.join(repo_claude, "rules")):
+        if not _is_path_scoped(text):
+            add(".claude/rules/" + name, text)
+    if same_folder:
+        return out
     add("~/.claude/CLAUDE.md", _read_text(os.path.join(config, "CLAUDE.md")))
-    for where, folder in ((".claude/rules/", os.path.join(root, ".claude", "rules")),
-                          ("~/.claude/rules/", os.path.join(config, "rules"))):
-        for name, text in _markdown_files(folder):
-            if not _is_path_scoped(text):
-                add(where + name, text)
+    for _, text in _markdown_files(os.path.join(config, "rules")):
+        if not _is_path_scoped(text):
+            add("a rule in ~/.claude/rules", text)
     return out
 
 

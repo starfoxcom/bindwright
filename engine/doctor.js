@@ -2,7 +2,7 @@
 // and this machine. Each check says what it found and, when something is
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
@@ -33,7 +33,7 @@ const FIX = {
 
 // Claude Code's limit on the instruction files it loads at session start, in
 // characters, and the share of it past which the doctor warns.
-export const INSTRUCTIONS_LIMIT = 150000;
+const INSTRUCTIONS_LIMIT = 150000;
 const INSTRUCTIONS_WARN_AT = 120000;
 
 // The first CLI with mods; older ones load none of them.
@@ -242,33 +242,52 @@ function hooksCheck(config) {
     : check("hooks", true, "Every hook's program is on this computer.");
 }
 
-// A rule whose front matter has a `paths:` line loads only when Claude reads a
-// file it matches, so it is not loaded at session start.
+// A rule whose front matter lists at least one path under `paths:` loads only
+// when Claude reads a file it matches, so it is not loaded at session start.
 function isPathScoped(text) {
-  const lines = text.split(/\r\n|\r|\n/);
+  const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
   if (lines[0] !== "---") return false;
-  for (const line of lines.slice(1)) {
-    if (line === "---") return false;
-    if (line.startsWith("paths:")) return true;
+  for (let i = 1; i < lines.length && lines[i] !== "---"; i++) {
+    if (!lines[i].startsWith("paths:")) continue;
+    const inline = lines[i].slice("paths:".length).trim();
+    if (inline) return inline !== "[]";
+    return (lines[i + 1] ?? "").trim().startsWith("- ");
   }
   return false;
 }
 
-// Each Markdown file under `dir`, sorted, as [path below `dir`, text]; none
-// when the folder is missing or cannot be read.
-function markdownFiles(dir, prefix = "") {
-  let entries;
+function realPath(path) {
   try {
-    entries = readdirSync(dir, { withFileTypes: true });
+    return realpathSync(path);
+  } catch {
+    return null;
+  }
+}
+
+// Each Markdown file under `dir`, sorted, as [path below `dir`, text], links
+// followed as Claude Code follows them; a folder already walked is skipped, so
+// a link back up the tree ends. None when the folder cannot be read.
+function markdownFiles(dir, prefix = "", seen = new Set()) {
+  const real = realPath(dir);
+  if (real === null || seen.has(real)) return [];
+  seen.add(real);
+  let names;
+  try {
+    names = readdirSync(dir).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   } catch {
     return [];
   }
-  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  return entries.flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) return markdownFiles(path, `${prefix}${entry.name}/`);
-    const text = entry.isFile() && entry.name.endsWith(".md") ? readText(path) : null;
-    return text === null ? [] : [[`${prefix}${entry.name}`, text]];
+  return names.flatMap((name) => {
+    const path = join(dir, name);
+    let stat;
+    try {
+      stat = statSync(path);
+    } catch {
+      return [];
+    }
+    if (stat.isDirectory()) return markdownFiles(path, `${prefix}${name}/`, seen);
+    const text = stat.isFile() && name.endsWith(".md") ? readText(path) : null;
+    return text === null ? [] : [[`${prefix}${name}`, text]];
   });
 }
 
@@ -281,19 +300,25 @@ function readText(file) {
 }
 
 // The instruction files Claude Code loads at session start for this repo and
-// config folder, as [name, characters]: each CLAUDE.md and every rule with no
-// `paths:` line. A CLAUDE.md in a folder above the repo and files it imports
-// are not counted.
+// config folder, as [name, characters in UTF-16 units, as Claude Code counts
+// them]: each CLAUDE.md and every rule without a `paths:` list. A rule in the
+// config folder is named only as such, so its file name never reaches a bug
+// report. A CLAUDE.md above the repo and files it imports are not counted.
 function startFiles(root, config) {
   const out = [];
-  const add = (name, text) => text !== null && out.push([name, [...text].length]);
+  const add = (name, text) => text !== null && out.push([name, text.length]);
+  const repoClaude = join(root, ".claude");
+  const sameFolder = realPath(repoClaude) !== null && realPath(repoClaude) === realPath(config);
   for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) {
     add(name, readText(join(root, ...name.split("/"))));
   }
+  for (const [name, text] of markdownFiles(join(repoClaude, "rules"))) {
+    if (!isPathScoped(text)) add(`.claude/rules/${name}`, text);
+  }
+  if (sameFolder) return out;
   add("~/.claude/CLAUDE.md", readText(join(config, "CLAUDE.md")));
-  const ruleFolders = [[".claude/rules/", join(root, ".claude", "rules")], ["~/.claude/rules/", join(config, "rules")]];
-  for (const [where, dir] of ruleFolders) {
-    for (const [name, text] of markdownFiles(dir)) if (!isPathScoped(text)) add(`${where}${name}`, text);
+  for (const [, text] of markdownFiles(join(config, "rules"))) {
+    if (!isPathScoped(text)) add("a rule in ~/.claude/rules", text);
   }
   return out;
 }

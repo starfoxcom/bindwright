@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -73,18 +73,24 @@ test("a healthy repo passes every check", needsPython, async () => {
 
 test("instruction files near Claude Code's limit are named, and a rule loaded by path is not counted", needsPython,
   async () => {
-    const scoped = `---\npaths:\n  - "src/**"\n---\n${"x".repeat(200000)}`;
+    // Saved with a byte-order mark, as some Windows editors do.
+    const scoped = `﻿---\npaths:\n  - "src/**"\n---\n${"x".repeat(200000)}`;
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
 
     const loud = await doctor(({ at, config }) => {
       writeFileSync(at("CLAUDE.md"), "é".repeat(110000));
+      const shared = join(config, "..", "shared-rules");
+      mkdirSync(shared, { recursive: true });
+      writeFileSync(join(shared, "client-notes.md"), "y".repeat(15000));
       mkdirSync(join(config, "rules"), { recursive: true });
-      writeFileSync(join(config, "rules", "mine.md"), "y".repeat(15000));
+      symlinkSync(shared, join(config, "rules", "shared"), "junction");
+      symlinkSync(join(config, "rules"), join(config, "rules", "loop"), "junction");
     });
     const found = loud.checks.find((c) => c.id === "instructions");
     assert.equal(found.ok, false);
-    assert.match(found.say, /The largest: CLAUDE\.md \(110\.0k\), ~\/\.claude\/rules\/mine\.md \(15\.0k\)/);
+    assert.match(found.say, /The largest: CLAUDE\.md \(110\.0k\), a rule in ~\/\.claude\/rules \(15\.0k\)/,
+      "a linked folder is read, a loop ends, and a personal rule's name stays out");
   });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
