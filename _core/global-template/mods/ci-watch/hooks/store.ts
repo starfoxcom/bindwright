@@ -1,7 +1,9 @@
 // Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import { crossedResearch, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED } from './rounds'
+import {
+  crossedResearch, mayBeRound, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED,
+} from './rounds'
 import type { PrRounds } from './rounds'
 import { givenDir } from './settings'
 
@@ -53,8 +55,7 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
   const stepBacks = new Map<string, number>()
   for (const w of settled) {
     // A silent watch follows a head someone else pushed: no round of this session's.
-    if (w.isSilent || w.noVerdict !== undefined || w.isConflicting) continue
-    if (w.outcome !== 'failed' && w.outcome !== 'passed') continue
+    if (!mayBeRound(w) || w.outcome === undefined) continue
     const red = w.outcome === 'failed'
     const key = `${w.repo}#${w.number}`
     const counted = (pr?: PrRounds) => {
@@ -67,10 +68,12 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
   return stepBacks
 }
 
-// The watches as shown, each with the round its head is (`roundOf`), from one read of the count file.
+// The watches as shown, each that may be a round with the round its head is (`roundOf`), from one read
+// of the count file. A head the count never records shows no number.
 export async function roundsLookup($: EngineInterface): Promise<(watches: Watch[]) => Watch[]> {
   const rounds = await readRounds($)
-  return watches => watches.map(w => ({ ...w, round: roundOf(rounds[`${w.repo}#${w.number}`], w.headSha) }))
+  const round = (w: Watch) => roundOf(rounds[`${w.repo}#${w.number}`], w.headSha)
+  return watches => watches.map(w => (mayBeRound(w) ? { ...w, round: round(w) } : w))
 }
 
 export async function redRoundsOf($: EngineInterface, pr: { repo: string; number: number }): Promise<number> {

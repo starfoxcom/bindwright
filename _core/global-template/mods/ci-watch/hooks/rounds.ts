@@ -38,10 +38,18 @@ export function redStreak(pr: PrRounds | undefined): number {
 }
 
 /** Which round head `sha` is for its PR, counting from 1: the one after every other head's round, where
- * `recordRound` puts it, so a head pushed again after later rounds counts as the newest. */
+ * `recordRound` puts it, so a head pushed again after later rounds counts as the newest, and no further
+ * than the rounds it keeps. */
 export function roundOf(pr: PrRounds | undefined, sha: string): number {
   const rounds = Array.isArray(pr?.rounds) ? pr.rounds : []
-  return rounds.filter(r => r.sha !== sha).length + 1
+  return Math.min(rounds.filter(r => r.sha !== sha).length + 1, KEPT)
+}
+
+/** Whether a watch's head is, or may still become, one round of the count: the session's own push, not
+ * conflicting with its base, and judged on its code. A settled one counts once its checks passed or failed. */
+export function mayBeRound(w: Watch): boolean {
+  const judged = w.outcome === undefined || w.outcome === 'passed' || w.outcome === 'failed'
+  return !w.isSilent && !w.isConflicting && w.noVerdict === undefined && judged
 }
 
 /** The count's file, `{ "<owner/name>#<number>": PrRounds }`, written by the mod as watches settle and

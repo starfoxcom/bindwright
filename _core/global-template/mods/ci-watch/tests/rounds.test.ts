@@ -3,7 +3,8 @@ import { type Engine, expect, test } from 'claude-code/testing'
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import {
-  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundOf, roundsText, roundsToResearch,
+  crossedResearch, isResearchDue, mayBeRound, type PrRounds, recordRound, redStreak, roundOf, roundsText,
+  roundsToResearch,
   withTopic,
 } from '../hooks/rounds'
 import type { Watch } from '../types'
@@ -38,12 +39,35 @@ const ROUND_CASES: { name: string; pr: PrRounds | undefined; sha: string; round:
   { name: 'a PR with no rounds yet', pr: undefined, sha: 'c0', round: 1 },
   { name: 'a head still running after two settled rounds', pr: of([true, true]), sha: 'c2', round: 3 },
   { name: 'a head pushed again after a later round', pr: of([true, true]), sha: 'c0', round: 2 },
+  { name: 'a new head once the 50 rounds kept are full', pr: of(Array(50).fill(true)), sha: 'new', round: 50 },
   { name: 'the newest settled head', pr: of([true, false]), sha: 'c1', round: 2 },
 ]
 
 for (const { name, pr, sha, round } of ROUND_CASES) {
   test(`round of ${name}`, () => {
     expect(roundOf(pr, sha)).toBe(round)
+  })
+}
+
+// The heads the count records, and so the ones a row numbers: the same rule for both.
+const HEAD: Watch = { repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: {}, stablePolls: 0 }
+const MAY_BE_ROUND: { name: string; watch: Partial<Watch>; counts: boolean }[] = [
+  { name: 'running', watch: {}, counts: true },
+  { name: 'passed', watch: { outcome: 'passed' }, counts: true },
+  { name: 'failed', watch: { outcome: 'failed' }, counts: true },
+  { name: 'timed out', watch: { outcome: 'timeout' }, counts: false },
+  { name: "someone else's head", watch: { isSilent: true }, counts: false },
+  { name: 'conflicting with its base', watch: { isConflicting: true, outcome: 'passed' }, counts: false },
+  {
+    name: 'failed on a review that never posted',
+    watch: { outcome: 'failed', noVerdict: 'routine error' },
+    counts: false,
+  },
+]
+
+for (const { name, watch, counts } of MAY_BE_ROUND) {
+  test(`a watch ${name} ${counts ? 'is' : 'is not'} a round`, () => {
+    expect(mayBeRound({ ...HEAD, ...watch })).toBe(counts)
   })
 }
 

@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **The ci-watch row names the PR's review round.** The line above the prompt now reads `⏳ PR 14 · round 3 · 2/4 done`, so it shows how many rounds the PR has taken without asking `/ci-watch rounds`. A round is one pushed head whose checks settled, counted the same way as the step backs and the hard stop. The phone text carries it too.
+- **The ci-watch row names the PR's review round.** The line above the prompt now reads `⏳ PR 14 · round 3 · 2/4 done`, so it shows how many rounds the PR has taken without asking `/ci-watch rounds`. A round is one pushed head whose checks settled, counted the same way as the step backs and the hard stop, so a head the count never records (someone else's push, a conflict with the base, a timeout) shows no number. `/ci-watch` and its phone text carry it too.
 
 ### Changed
 
