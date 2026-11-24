@@ -11,7 +11,6 @@ import { dirname, resolve } from "node:path";
 export const LOCAL_FOLDERS = [
   { path: ".claude/", always: true },
   { path: ".bindwright/", always: true },
-  { path: "docs/lazy/" },
   { path: ".github/size-check/" },
 ];
 // Files the sessions write when the work state lives in the repo, listed on every run.

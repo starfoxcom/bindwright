@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
+---
+
 # Architecture — Clean Architecture (Uncle Bob)
 
 Concentric layers; dependencies point INWARD only. The further inside, the more stable.

@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
+---
+
 # Architecture — Hexagonal / Ports & Adapters
 
 Domain at the center, **ports** (interfaces) defined by the domain, **adapters** (implementations) on the outside. The domain doesn't know what concrete tech sits on the other side of any port.

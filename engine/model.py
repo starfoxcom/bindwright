@@ -471,7 +471,6 @@ def flags_for(a):
         "license_file": not a["client"],
         "audit_trail_commits": a["client"] and a["private"],
         "definition_of_done_verification": True,
-        "lazy_rules_folder": True,
         "memory_system": True,
     }
 

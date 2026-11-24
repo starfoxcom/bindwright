@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
+---
+
 # Architecture — ECS (Entity Component System)
 
 For games and simulations. Entities are IDs; components are plain data; systems operate on entities that have a specific component combination. The dominant architecture in modern game engines (Bevy, Unity DOTS, EnTT, flecs).

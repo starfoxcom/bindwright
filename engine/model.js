@@ -377,7 +377,6 @@ export function flagsFor(a) {
     license_file: !a.client,
     audit_trail_commits: a.client && a.private,
     definition_of_done_verification: true,
-    lazy_rules_folder: true,
     memory_system: true,
   };
 }

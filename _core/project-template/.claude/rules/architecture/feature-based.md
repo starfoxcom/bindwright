@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
+---
+
 # Architecture — Feature-based / Vertical Slice
 
 Organize by feature (`auth/`, `cart/`, `checkout/`, `inventory/`), not by technical role (`controllers/`, `services/`, `models/`). Each feature owns its full vertical: routes, business logic, data access, DTOs, tests.

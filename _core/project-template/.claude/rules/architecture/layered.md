@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.{js,jsx,ts,tsx,mjs,cjs,py,go,rs,java,kt,kts,cs,c,cc,cpp,h,hpp,swift,dart,rb,php,gd,lua,ex,exs,scala}"
+---
+
 # Architecture — Layered (3-tier)
 
 The classic three-tier split. Simple, well-understood, good for CRUD-heavy services with thin business logic. Don't over-engineer toward Clean / Hexagonal if this fits.
