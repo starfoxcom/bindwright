@@ -140,6 +140,9 @@ class LengthRowsTest(unittest.TestCase):
                     (f'git commit -m "short" -m "{LONG}"', "bash", False),
                     (f'git commit -m wip -m "{LONG}"', "bash", False),
                     (f"git commit -m $'x\\n\\ny' -m \"{LONG}\"", "bash", False),
+                    (f"git commit -m $'fix: x' \"{LONG}\"", "bash", False),
+                    (f'git commit -m \\a "{LONG}"', "bash", False),
+                    (f'git commit -m"{LONG}"', "bash", True),
                     (f'echo "git commit -m {LONG}"', "bash", False),
                     (f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
                     (f'git commit -m "{LONG} `$x"', "powershell", False),
@@ -173,6 +176,8 @@ class LengthRowsTest(unittest.TestCase):
         for style, shell, command, want in (("squash", "bash", create, True),
                                             ("squash", "powershell", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
                                             ("squash", "bash", 'gh pr create --title "fix(x): short"', False),
+                                            ("squash", "bash", f"gh pr create --title $'x' \"{self.TITLE_LONG}\"",
+                                             False),
                                             ("merge", "bash", create, False)):
             with self.subTest(style=style, command=command):
                 self.project(style)

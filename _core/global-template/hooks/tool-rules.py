@@ -376,10 +376,16 @@ GIT_WORD = re.compile(r"\bgit\s+", re.I)
 # Git's options before its command; `-c` and `-C` take a value. The two options never match the same text.
 GIT_OPTIONS = re.compile(r"(?:-[cC]\s+\S+\s+|-(?![cC]\s)\S+\s+)*")
 COMMIT_WORD = re.compile(r"commit\b", re.I)
-# The first message option of a commit (`-m`, a short cluster ending in it such as `-am`, `--message`).
-COMMIT_MESSAGE = re.compile(r"(?<!\S)(?:-[A-Za-z]*m\s*|--message(?:=|\s+))")
+# The first message option of a commit: `-m`, a short cluster ending in it such as `-am` (its value may
+# follow with no space), or `--message`.
+COMMIT_MESSAGE = re.compile(r"(?<!\S)(?:(?P<attached>-[A-Za-z]*m)|--message)(?![\w-])")
 PR_HEAD = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b", re.I)
-PR_TITLE = re.compile(r"(?<!\S)(?:--title|-t)(?:=|\s+)")
+PR_TITLE = re.compile(r"(?<!\S)(?:--title|-t)(?![\w-])")
+# Between an option and its value, read in the command as written.
+ATTACHED_GAP = re.compile(r"[ \t]*")
+SEPARATE_GAP = re.compile(r"=|[ \t]+")
+# What may follow a word: a blank, the line's end, a command separator or a redirection.
+WORD_END = re.compile(r"$|[\s;&|()<>]")
 
 
 def commit_heads(calls, end):
@@ -412,6 +418,15 @@ def string_text(match, shell):
     return body.replace('""', '"') if shell == "powershell" else body
 
 
+def value_string(text, strings, option):
+    """The quoted string that is the whole next word after `option`, read in the command as written, so
+    a value the mask blanked (`$'...'`, an escape) is never skipped to reach the argument after it."""
+    gap = ATTACHED_GAP if option.groupdict().get("attached") else SEPARATE_GAP
+    spaced = gap.match(text, option.end())
+    string = strings.get(spaced.end()) if spaced else None
+    return string if string and WORD_END.match(text, string.end()) else None
+
+
 def option_values(text, shell, heads, option):
     """The value of the first `option` in each command `heads` finds, when it is a quoted string the
     shell passes as written; a first value that is not gives nothing for that command."""
@@ -425,8 +440,8 @@ def option_values(text, shell, heads, option):
         if stop in tried:
             continue
         tried.add(stop)
-        value = option.search(calls, head_end, stop)
-        string = strings.get(value.end()) if value else None
+        found = option.search(calls, head_end, stop)
+        string = value_string(text, strings, found) if found else None
         value_text = string_text(string, shell) if string else None
         if value_text is not None:
             yield value_text
