@@ -1083,43 +1083,6 @@ test('a move away from a repo takes the copies other computers pushed since the 
   assert.strictEqual(fs.readdirSync(path.join(target, SHOP, 's1')).length, 1)
 })
 
-test('Google Drive is found under its folder name in the computer\'s language', () => {
-  const { syncPlaces } = require(path.join(SCRIPTS, 'places.cjs'))
-  for (const name of ['My Drive', 'Mi unidad', 'Meine Ablage']) {
-    const home = tempDir('home')
-    fs.mkdirSync(path.join(home, name))
-    const drive = syncPlaces(home).find(place => place.service === 'Google Drive')
-    assert.strictEqual(drive && drive.path, path.join(home, name), name)
-  }
-})
-
-test('a sync folder where another computer keeps chats is told apart from one with none', () => {
-  const { othersChats } = require(path.join(SCRIPTS, 'commands.cjs'))
-  // A chats folder whose one project holds chat s1 with the given copies.
-  const withCopies = (copies) => {
-    const chats = path.join(tempDir('drive'), 'Claude chats')
-    fs.mkdirSync(path.join(chats, 'shop-1', 's1'), { recursive: true })
-    for (const copy of copies) fs.writeFileSync(path.join(chats, 'shop-1', 's1', copy), '{}\n')
-    return chats
-  }
-  const projectLink = withCopies([])
-  fs.symlinkSync(path.join(withCopies(['desk-1.jsonl']), 'shop-1'), path.join(projectLink, 'shop-2'), 'junction')
-  const chatsLink = path.join(tempDir('drive'), 'Claude chats')
-  fs.symlinkSync(withCopies(['desk-1.jsonl']), chatsLink, 'junction')
-  const cases = [
-    { name: 'another computer\'s copy', chats: withCopies(['desk-1.jsonl', 'me-2.jsonl']),
-      want: { projects: 1, computers: ['desk-1'] } },
-    { name: 'only this computer\'s copy', chats: withCopies(['me-2.jsonl']), want: null },
-    { name: 'no chats folder', chats: path.join(tempDir('drive'), 'Claude chats'), want: null },
-    { name: 'a project folder that is a link', chats: projectLink, want: null },
-    { name: 'a chats folder that is a link', chats: chatsLink, want: null },
-  ]
-  for (const row of cases) {
-    const found = othersChats(row.chats, 'me-2.jsonl')
-    assert.deepStrictEqual(found && { projects: found.projects, computers: found.computers }, row.want, row.name)
-  }
-})
-
 test('a session start that runs out of time keeps what it did, and the next one goes on', () => {
   const a = computer('a', tempDir('folder'))
   for (const id of ['s1', 's2', 's3']) writeChat(a, id, [id])

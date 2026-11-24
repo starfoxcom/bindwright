@@ -146,6 +146,7 @@ node --test ci-watch/test-helper/sweep.spec.cjs   # ci-watch's data-folder sweep
 node --test tasks/test-helper/sweep.spec.cjs   # tasks' data-folder sweep
 node --test session-facts/test-helper/sweep.spec.cjs   # session-facts' data-folder sweep
 node --test chat-sync/test-helper/sync.spec.cjs   # chat-sync's copy, compare and move helper
+node --test chat-sync/test-helper/places.spec.cjs # the sync folders chat-sync's setup offers
 ```
 
 Validation reports one warning per mod (no `author` field); that is expected.

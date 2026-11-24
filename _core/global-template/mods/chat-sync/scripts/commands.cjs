@@ -694,34 +694,46 @@ function run([command, ...args]) {
 function places() {
   let machine = null
   try {
-    machine = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id || null
+    const id = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id
+    if (typeof id === 'string' && id) machine = copyName(id).slice(0, -'.jsonl'.length)
   } catch {
     // Read again by the first copy, which says what is wrong with it.
   }
-  const ownFile = machine ? copyName(machine) : null
   const found = syncPlaces().map(place => {
-    const others = othersChats(path.join(place.path, 'Claude chats'), ownFile)
+    const others = othersChats(path.join(place.path, 'Claude chats'), machine)
     return { ...place, others }
   })
   return { places: found }
 }
 
+// The computer a copy in the sync place belongs to, a copy a move kept aside
+// (`<computer>-moved-<time>.jsonl`) included.
+function computerOf(copy) {
+  return copy.slice(0, -'.jsonl'.length).replace(/(-moved-\d+)+$/, '')
+}
+
 // What other computers keep in the store `chats`, read the way a sync reads
 // a store, so no link is followed: the number of projects and the computers'
-// names, or null when it holds no copy but `ownFile`. A project counts at its
-// first chat that holds another computer's copy, so a large store stays quick.
-function othersChats(chats, ownFile) {
-  if (!isRealFolder(chats)) return null
+// names, or null when it holds no copy but `ownMachine`'s or cannot be read
+// (an offline cloud folder, a folder the app keeps private). A project counts
+// at its first chat that holds another computer's copy, so a large store
+// stays quick.
+function othersChats(chats, ownMachine) {
   const computers = new Set()
   let projects = 0
-  for (const project of projectFolders(chats)) {
-    for (const id of chatIds(path.join(chats, project))) {
-      const others = chatFiles(path.join(chats, project, id)).filter(name => name !== ownFile)
-      if (!others.length) continue
-      projects += 1
-      for (const name of others) computers.add(name.slice(0, -'.jsonl'.length))
-      break
+  try {
+    if (!isRealFolder(chats)) return null
+    for (const project of projectFolders(chats)) {
+      for (const id of chatIds(path.join(chats, project))) {
+        const others = chatFiles(path.join(chats, project, id)).map(computerOf).filter(name => name !== ownMachine)
+        if (!others.length) continue
+        projects += 1
+        for (const name of others) computers.add(name)
+        break
+      }
     }
+  } catch {
+    return null
   }
   return projects ? { folder: chats, projects, computers: [...computers].sort() } : null
 }
