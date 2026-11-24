@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The tool-rules guard watches for over-long commit subjects and PR titles.** A `git commit -m` whose first line runs past 72 characters, and a `gh pr create` or `gh pr edit` title past 64 in a project whose PRs squash-merge, are now logged before the command runs, so a review round is not spent on them later. The rows start in observe mode, as every new row does: they log what they would refuse, which `/bindwright:doctor` reports, and refuse nothing until a later release. A message the shell would change (one holding `$(...)`, a variable or an escape) or one read from a file is left alone.
+
 ### Changed
 
 - **Less text loads at session start.** The global instructions drop "Auto memory", which repeated Claude Code's own memory instructions, and "Time-of-day awareness", which explained a `[time]` hook the session-facts mod replaced; the code-research section becomes a short pointer at the chosen tool's own guidance, under the new heading "Code research: the project's tool, not agents". The time-injection snippet is retired with them. `/bindwright:setup` offers to take the three old sections out of `~/.claude/CLAUDE.md`, and `/bindwright:remove` takes them out with the rest.

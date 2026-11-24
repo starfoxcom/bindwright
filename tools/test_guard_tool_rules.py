@@ -123,6 +123,60 @@ class SecretWriteRowTest(unittest.TestCase):
                 self.assertIsNone(hook.refusal(command, "bash"))
 
 
+class LengthRowsTest(unittest.TestCase):
+    """A commit subject over 72 characters, and a PR title over 64 where PRs squash-merge, are logged; a
+    short one, a mention, a second `-m` and a message the shell would change are not."""
+
+    SUBJECT = "a commit subject over 72 characters"
+    TITLE = "a PR title over 64 characters where PRs squash-merge"
+    LONG = "docs(changelog): say the four file types are now measured wherever their row stays"  # 82
+    AT_LIMIT = "x" * 72
+    TITLE_LONG = "fix(size-check): measure .mts, .cts, .hxx and .inl with their language"  # 70
+    SUBJECT_ROWS = ((f'git commit -m "{LONG}"', "bash", True), (f"git commit -am '{LONG}'", "bash", True),
+                    (f'git -C sub commit -m "{LONG}"', "powershell", True),
+                    (f'git commit --message="{LONG}"', "bash", True),
+                    (f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
+                    (f'git commit -m "{AT_LIMIT}"', "bash", False),
+                    (f'git commit -m "short" -m "{LONG}"', "bash", False),
+                    (f'echo "git commit -m {LONG}"', "bash", False),
+                    (f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
+                    (f'git commit -m "{LONG} `$x"', "powershell", False),
+                    (f"git commit -F msg.txt  # -m '{LONG}'", "bash", False))
+
+    def setUp(self):
+        self.hook = load_tool_rules()
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.hook.OBSERVED_LOG = os.path.join(self.folder, "tool-rules", "observed.jsonl")
+
+    def project(self, merge_style):
+        os.makedirs(os.path.join(self.folder, ".git"), exist_ok=True)
+        os.makedirs(os.path.join(self.folder, ".bindwright"), exist_ok=True)
+        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
+            json.dump({"advanced": {"mergeStyle": merge_style}}, answers)
+        self.hook.CWD = os.path.join(self.folder, "sub")
+
+    def logged(self, command, shell):
+        before = len(observed(self.hook))
+        self.assertIsNone(self.hook.refusal(command, shell))
+        return [entry["rule"] for entry in observed(self.hook)[before:]]
+
+    def test_a_long_subject_is_logged_and_the_rest_are_not(self):
+        for command, shell, want in self.SUBJECT_ROWS:
+            with self.subTest(command=command, shell=shell):
+                self.assertEqual(self.logged(command, shell), [self.SUBJECT] if want else [])
+
+    def test_a_long_title_is_logged_only_where_prs_squash_merge(self):
+        create = f'gh pr create --base develop --title "{self.TITLE_LONG}" --body-file b.md'
+        for style, shell, command, want in (("squash", "bash", create, True),
+                                            ("squash", "powershell", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
+                                            ("squash", "bash", 'gh pr create --title "fix(x): short"', False),
+                                            ("merge", "bash", create, False)):
+            with self.subTest(style=style, command=command):
+                self.project(style)
+                self.assertEqual(self.logged(command, shell), [self.TITLE] if want else [])
+
+
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
     a comment or a here-document body, always passes, and the same trigger run as a command is

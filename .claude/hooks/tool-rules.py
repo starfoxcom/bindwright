@@ -13,7 +13,10 @@ here-document, only when its `<<` stands outside quotes, and PowerShell
 here-strings, and refuses one only where an interpreter reads its script from
 standard input (`python -`, `cat <<EOF | node`): fed to a script file, the text
 is data. It also reads the script of a `python -c` or `node -e` call that
-stands outside quotes and comments. Where the reading is unsure (a quote that
+stands outside quotes and comments. The length rules read one quoted value of
+a call standing outside quotes: the first `-m` message of a `git commit`, and
+the `--title` of `gh pr create` or `edit`, only where the shell passes it as
+written (no escape, no expansion). Where the reading is unsure (a quote that
 never closes, a double-quoted string holding `$(`, a `<<` inside one), the
 text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
@@ -363,6 +366,81 @@ def cased(pattern):
     return lambda text, shell: bool(compiled.search(bare(text, shell)))
 
 
+# Where the hook runs: the session's folder, from the hook's input.
+CWD = os.getcwd()
+# The commit format's subject limit, and the PR title limit where PRs squash-merge: GitHub adds ` (#123)`.
+SUBJECT_LIMIT = 72
+TITLE_LIMIT = 64
+COMMAND_END = re.compile(r"[\n;&|]")
+COMMIT_HEAD = re.compile(r"\bgit\s+(?:-[cC]\s+\S+\s+|-\S+\s+)*commit\b", re.I)
+# The first message option of a commit (`-m`, a short cluster ending in it such as `-am`, `--message`),
+# where a quote opens its value.
+COMMIT_MESSAGE = re.compile(r"(?<!\S)(?:-[A-Za-z]*m\s*|--message(?:=|\s+))(?=['\"])")
+PR_HEAD = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b", re.I)
+PR_TITLE = re.compile(r"(?<!\S)(?:--title|-t)(?:=|\s+)(?=['\"])")
+
+
+def string_text(match, shell):
+    """A quoted string's text, or None where the shell would change it: an escape or an expansion."""
+    raw = match.group()
+    if len(raw) < 2 or raw[0] not in "'\"" or raw[-1] != raw[0]:
+        return None
+    body = raw[1:-1]
+    if raw[0] == "'":
+        return body.replace("''", "'") if shell == "powershell" else body
+    if re.search(r"[$`\\]" if shell == "bash" else r"[$`]", body):
+        return None
+    return body.replace('""', '"') if shell == "powershell" else body
+
+
+def option_values(text, shell, head, option):
+    """The readable quoted value of `option` in each command that `head` starts, its first one only."""
+    calls, end = masked_calls(text, shell)
+    strings = {match.start(): match for match in quoted(text, shell)}
+    # Each command's end, found once: a head searches no further than the first end after it.
+    stops = [match.start() for match in COMMAND_END.finditer(calls, 0, end)] + [end]
+    tried = set()
+    for found in head.finditer(calls, 0, end):
+        stop = stops[bisect.bisect_left(stops, found.end())]
+        if stop in tried:
+            continue
+        tried.add(stop)
+        value = option.search(calls, found.end(), stop)
+        if value and value.end() in strings:
+            value_text = string_text(strings[value.end()], shell)
+            if value_text is not None:
+                yield value_text
+
+
+def first_line(message):
+    return message.split("\n", 1)[0].strip()
+
+
+def squash_merges():
+    """Whether the repo the hook runs in squash-merges its PRs, by the answers Bindwright's setup saved."""
+    folder = os.path.abspath(CWD)
+    while True:
+        try:
+            with open(os.path.join(folder, ".bindwright", "project.json"), encoding="utf-8") as answers:
+                return json.load(answers).get("advanced", {}).get("mergeStyle") == "squash"
+        except (OSError, ValueError, AttributeError):
+            pass
+        parent = os.path.dirname(folder)
+        if parent == folder or os.path.exists(os.path.join(folder, ".git")):
+            return False
+        folder = parent
+
+
+def long_subject(text, shell):
+    values = option_values(text, shell, COMMIT_HEAD, COMMIT_MESSAGE)
+    return any(len(first_line(message)) > SUBJECT_LIMIT for message in values)
+
+
+def long_title(text, shell):
+    values = option_values(text, shell, PR_HEAD, PR_TITLE)
+    return any(len(first_line(title)) > TITLE_LIMIT for title in values) and squash_merges()
+
+
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = Followed(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b", r"\n|;&", r"\s[\w./@~^-]+:\.[^/\s.]")
 
@@ -422,6 +500,10 @@ RULES = [
      "other sessions share it, and nothing cleans it up. Use the session's scratchpad instead.", OBSERVE),
     ("`jq` in Git Bash", lambda text, shell: GIT_BASH and shell == "bash" and JQ.search(bare(text, shell)),
      "Git Bash has no `jq`. Filter with the `--jq` option of `gh`, or with Python.", OBSERVE),
+    ("a commit subject over 72 characters", long_subject,
+     "the commit format caps the first line at 72. Shorten it, and put the detail in the body.", OBSERVE),
+    ("a PR title over 64 characters where PRs squash-merge", long_title,
+     "the title becomes the commit subject, and GitHub adds ` (#123)` to it. Shorten it to 64.", OBSERVE),
 ]
 
 
@@ -469,6 +551,8 @@ def main():
     if not isinstance(text, str):
         sys.exit(0)
     shell = "powershell" if data.get("tool_name") == "PowerShell" else "bash"
+    global CWD
+    CWD = data.get("cwd") if isinstance(data.get("cwd"), str) else CWD
     refused = refusal(text, shell)
     if refused:
         deny(*refused)
