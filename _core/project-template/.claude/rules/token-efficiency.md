@@ -22,24 +22,7 @@ For a job that changes a web page, add the layout check to the brief's test comm
 <!-- TOGGLE:ci_checks START -->
 ## Watching CI
 
-After every push, watch the PR's checks; never use `gh run watch`. When the `ci-watch` mod is loaded, it watches the PR after `git push` or `gh pr create` and wakes the session once all checks settle; follow the mod and start no second watcher. Otherwise use the **Monitor tool** where it exists:
-
-- One monitor per PR, timeout one hour, so a stuck check becomes a loud timeout instead of a silent wait.
-- Inside it, poll `gh pr checks <pr> --json name,bucket` about every 60 seconds. Filter on the `bucket` field with `gh`'s own `--jq` (the standalone `jq` binary is missing on some shells, and an empty result looks exactly like "still running").
-- Print each check as it settles and finish with an explicit "all checks settled" line.
-- On a new push to the same PR, stop the old monitor and start a new one.
-
-Monitor is missing on some cloud providers and when non-essential traffic is disabled. Without it, run this as one Bash call with `run_in_background` and act when it exits. It stops after about nine minutes; if checks are still pending, run it again.
-
-```bash
-sleep 45
-for i in $(seq 8); do
-  state=$(gh pr checks <pr> --json bucket --jq 'if length == 0 then "none" else ([.[] | select(.bucket == "pending")] | length | tostring) end')
-  [ "$state" = "0" ] && break
-  sleep 60
-done
-gh pr checks <pr> --json name,bucket --jq '.[] | "\(.name): \(.bucket)"'
-```
+After every push, watch the PR's checks; never use `gh run watch`. When the `ci-watch` mod is loaded, it watches the PR after `git push` or `gh pr create` and wakes the session once all checks settle; follow the mod and start no second watcher. Otherwise follow `docs/ci-watching.md`, which holds the Monitor and background-loop watchers.
 
 When everything is green, merge per `git.md` § Merging. On a red check, read the failing log (`gh run view <id> --log-failed`), fix it on the branch and push. Ask first only when the failure is ambiguous (flaky test, infrastructure outage, or the test and the change disagree about intended behavior).
 

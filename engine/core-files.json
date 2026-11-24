@@ -70,6 +70,7 @@
   "CONTRIBUTING.md",
   "LICENSE.template",
   "README.md.template",
+  "docs/ci-watching.md",
   "docs/comment-audit.md",
   "docs/docs-audit.md",
   "docs/security-posture.md",

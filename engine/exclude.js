@@ -19,7 +19,7 @@ export const LOCAL_FOLDERS = [
 export const ALWAYS_FILES = ["ROADMAP.md"];
 // Files, listed only when the plan writes them.
 export const LOCAL_FILES = [
-  "CLAUDE.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
+  "CLAUDE.md", "docs/ci-watching.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
   "docs/security-posture.md", ".github/scripts/size_check.py", ".github/workflows/size-check.yml",
 ];
 
