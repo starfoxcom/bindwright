@@ -92,10 +92,16 @@ function inValues(name, folder) {
 // depth, so the swap is plain text and exact.
 const ESCAPED_IN_JSON = /["\\\u0000-\u001f]/
 
-// The first of `folders` whose name holds such a character, or undefined. A
+// The first folder along `folders` whose own name holds such a character, as
+// its path (/home/sa\m for a project in /home/sa\m/work), or undefined. A
 // Windows name cannot hold any of them; its backslashes are separators.
 function escapedFolder(...folders) {
-  return folders.find(folder => segments(folder).some(part => ESCAPED_IN_JSON.test(part)))
+  for (const folder of folders) {
+    const parts = segments(folder)
+    const at = parts.findIndex(part => ESCAPED_IN_JSON.test(part))
+    if (at >= 0) return parts.slice(0, at + 1).join('/')
+  }
+  return undefined
 }
 
 function applyRules(text, rules) {

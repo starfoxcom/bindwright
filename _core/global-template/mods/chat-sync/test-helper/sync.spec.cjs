@@ -182,16 +182,18 @@ test('a Windows chat moved to a computer without drive letters gets its paths in
 
 test('a computer whose project or home folder name holds a quote or a backslash keeps its chats and says why', () => {
   const rows = [
-    ['a quote in the project folder', { root: '/home/sam/say "hi"' }],
-    ['a backslash in the home folder', { home: '/home/sa\\m' }],
+    ['a quote in the project folder', { root: '/home/sam/say "hi"' }, '/home/sam/say "hi"'],
+    ['a backslash in the home folder', { home: '/home/sa\\m' }, '/home/sa\\m'],
+    ['a project inside that home folder', { home: '/home/sa\\m', root: '/home/sa\\m/work/shop' }, '/home/sa\\m'],
   ]
-  for (const [label, paths] of rows) {
+  for (const [label, paths, named] of rows) {
     const store = tempDir('store')
     const pc = computer('a', store, paths)
     writeChat(pc, 's1', ['one'])
     const sent = pc.sync('out', path.join(pc.chatDir, 's1.jsonl'), pc.root)
     assert.deepStrictEqual(sent, { skipped: 'folder name' }, label)
-    assert.match(pc.sync('in', pc.chatDir, pc.root, 'other').error || '', /Rename the folder/, label)
+    const said = pc.sync('in', pc.chatDir, pc.root, 'other').error || ''
+    assert.ok(said.startsWith(`rename the folder ${named} to sync`), `${label}: ${said}`)
     assert.deepStrictEqual(fs.readdirSync(store), [], `${label}: nothing reaches the sync place`)
   }
 })

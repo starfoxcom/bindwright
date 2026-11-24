@@ -468,8 +468,9 @@ function stampOf(file) {
 function unsyncable(root) {
   const folder = paths.escapedFolder(root, os.homedir())
   if (!folder) return null
-  return `the folder ${folder} has a quote, a backslash or a control character in its name, `
-    + 'so its chats stay on this computer. Rename the folder to sync them.'
+  // The advice comes first, since the session-start note keeps only the start.
+  return `rename the folder ${folder} to sync this project's chats, which stay on this computer `
+    + 'while its name holds a quote, a backslash or a control character'
 }
 
 // Copies one chat out to the sync place.
