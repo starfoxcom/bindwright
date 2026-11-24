@@ -953,10 +953,11 @@ test('/ci-watch answers in the row words, and phone adds each check and the link
   ]
   await clock.advance(POLL_MS)
   // A count of finished checks, never of passed ones under the word "done".
-  expect(await ask('')).toEqual(['⏳ PR 7 · 1/2 done (o/r)'])
+  // The round its head is, as the row names it: the first one on this PR.
+  expect(await ask('')).toEqual(['⏳ PR 7 · round 1 · 1/2 done (o/r)'])
   // The checks in the row's own order, which is the order they were first seen.
   const phone = await ask('phone')
-  expect(phone[0]).toBe('⏳ PR 7 · 1/2 done')
+  expect(phone[0]).toBe('⏳ PR 7 · round 1 · 1/2 done')
   expect(phone.slice(1, 3).sort()).toEqual(['   ⏳ build', '   ✅ review'])
   expect(phone.slice(3)).toEqual(['   https://github.com/o/r/pull/7', '/ci-watch help for more'])
 })
