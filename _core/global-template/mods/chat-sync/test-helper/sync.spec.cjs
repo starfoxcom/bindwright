@@ -799,6 +799,30 @@ test('a remote lookup git did not finish writes nothing, and one without git use
   }
 })
 
+test('a repo place on a computer without git says so and writes nothing into the clone', () => {
+  const a = gitComputer('a', bareRepo())
+  writeChat(a, 's1', ['one'])
+  const clone = path.join(a.dataDir, 'repo')
+  const before = fs.readdirSync(clone)
+  const childProcess = require('child_process')
+  const realSpawn = childProcess.spawnSync
+  childProcess.spawnSync = (command, args, options) => command === 'git'
+    ? { status: null, stdout: '', stderr: '', error: { code: 'ENOENT', message: 'spawnSync git ENOENT' } }
+    : realSpawn(command, args, options)
+  const commands = () => require(path.join(SCRIPTS, 'commands.cjs'))
+  let answers
+  try {
+    answers = inProcess(a, () => [
+      commands().run(['out', path.join(a.chatDir, 's1.jsonl'), a.root]),
+      commands().run(['in', a.chatDir, a.root, 'other']),
+    ])
+  } finally {
+    childProcess.spawnSync = realSpawn
+  }
+  for (const answer of answers) assert.match(answer.error || '', /cannot find git/)
+  assert.deepStrictEqual(fs.readdirSync(clone), before, 'the clone holds nothing new')
+})
+
 test('a run waiting for another one stops waiting at the deadline the hook passed', () => {
   const a = computer('a', tempDir('folder'))
   writeChat(a, 's1', ['one'])

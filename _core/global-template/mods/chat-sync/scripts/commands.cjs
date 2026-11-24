@@ -324,6 +324,9 @@ function keepTempsOutOfGit(store) {
   fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.*.tmp\n`)
 }
 
+const NO_GIT = 'The chats sync through a git repo here, but this session cannot find git, so nothing was copied. '
+  + 'Install git, or make sure it is on the PATH Claude Code starts with.'
+
 // Where the chats go now, or a reason nothing can be copied. Every git call
 // in the clone runs with the mod's own settings (`gitSettings` in sync.cjs).
 function openStore() {
@@ -340,6 +343,11 @@ function openStore() {
     if (!fs.existsSync(path.join(store, '.git'))) {
       return { error: 'The chat repo is not cloned here. Run /chat-sync move git <owner/repo> again.' }
     }
+    // Checked before anything is written: with no git, the project's remote
+    // cannot be read either, and a chat left in the clone under another name
+    // would go up with the next run that finds git.
+    const check = base.git(store, '--version')
+    if (!check.ok) return { error: check.isMissing ? NO_GIT : check.out }
     keepTempsOutOfGit(store)
   }
   return { place, store }
