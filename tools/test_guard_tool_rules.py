@@ -149,6 +149,8 @@ class LengthRowsTest(unittest.TestCase):
         ("a long body under a short subject", f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
         ("an example command in a quoted body", f"git commit -m \"short\n\ngit commit -m '{LONG}'\"", "bash", False),
         ("a PowerShell expression", f"git commit -m ('{LONG[:71]}')", "powershell", False),
+        ("a PowerShell array", f"git commit -m 'short','{LONG}'", "powershell", False),
+        ("a glob", f'git commit -m "{LONG}" src/*.py', "bash", False),
         ("a typographic quote in PowerShell", f"git commit -m 'keep the user’s and {LONG}'", "powershell", False),
         ("a dash-led value of a long option", f'git commit --author "-m{LONG}" -m "short"', "bash", False),
         ("exactly 72", f'git commit -m "{AT_LIMIT}"', "bash", False),

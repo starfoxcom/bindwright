@@ -377,8 +377,9 @@ COMMAND_END = re.compile(r"[\n;&|]")
 # What the shell would change, so the length rules leave the command unread: an expansion, an escape, or a
 # doubled quote (PowerShell's quote inside a string). Without them, shlex splits a command as both shells do.
 UNPLAIN = re.compile(r"[$`\\]|''|\"\"")
-# Outside quotes, PowerShell reads these as an expression or a here-string, where shlex reads a word.
-POWERSHELL_UNPLAIN = re.compile(r"[()@]")
+# The only characters a command may hold outside quotes and comments to be read. Any other (a glob, a
+# tilde, a bracket, PowerShell's array comma or `@`) can make the shell pass other words than shlex finds.
+PLAIN_OUTSIDE = {"bash": re.compile(r"[\w \t./:=+,%@-]*"), "powershell": re.compile(r"[\w \t./:=+%-]*")}
 # Anywhere in the text, PowerShell reads these as quotes where shlex does not: a here-string opener and
 # the typographic quotes.
 POWERSHELL_QUOTES = re.compile("@['\"]|[‘’‚‛“”„]")
@@ -406,7 +407,9 @@ def plain_words(command, shape, shell):
     command = command.strip()
     if not command.startswith(("git", "gh")) or len(command) > LONGEST_COMMAND or UNPLAIN.search(command):
         return None
-    if shell == "powershell" and (POWERSHELL_UNPLAIN.search(shape) or POWERSHELL_QUOTES.search(command)):
+    if not PLAIN_OUTSIDE[shell].fullmatch(shape.strip(" \t\r")):
+        return None
+    if shell == "powershell" and POWERSHELL_QUOTES.search(command):
         return None
     try:
         return shlex.split(command, comments=True)
