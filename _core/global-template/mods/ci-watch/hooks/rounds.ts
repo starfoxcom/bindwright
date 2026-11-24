@@ -17,6 +17,12 @@ import type { Watch } from '../types'
 
 /** One settled watch of a PR's pushed head: whether a check failed. */
 export type Round = { sha: string; red: boolean }
+/** Whether a value read from the count file is one round: a head's sha and whether it failed. */
+export function isRound(value: unknown): value is Round {
+  const r = value as Partial<Round> | null
+  return typeof r === 'object' && r !== null && typeof r.sha === 'string' && typeof r.red === 'boolean'
+}
+
 /** A PR's rounds, oldest first. */
 export type PrRounds = { rounds: Round[] }
 

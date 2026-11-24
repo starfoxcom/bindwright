@@ -150,6 +150,19 @@ test('the row names the round its head is, after the rounds already settled on t
   expect(await ui.find({ type: 'Text', text: /PR 7 · round 3 · / })).toBeDefined()
 })
 
+test('entries in the count file that are not rounds are skipped, and the row still draws', async ($, on) => {
+  const { seen } = world(on)
+  seen.isReadable = true
+  const rounds = [null, 5, { sha: 'c0' }, { sha: 'c1', red: true }, 'x']
+  const file = { 'o/r#7': { rounds }, 'o/r#8': null, 'o/r#9': { rounds: 'x' } }
+  seen.files.set('C:/Users/me/.claude/mods-data/ci-watch/rounds.json', JSON.stringify(file))
+  await pushed($, 'terminal')
+  const ui = await $.ui.mount({ plugin: 'ci-watch', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
+  expect(await ui.find({ type: 'Text', text: /PR 7 · round 2 · / })).toBeDefined()
+  const answer = (await $.command.run({ command: 'ci-watch', args: '' } as never)) as { text: string }
+  expect(answer.text).toMatch(/PR 7 · round 2 · /)
+})
+
 test('with nothing watched the band draws nothing of its own', async ($, on) => {
   world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })

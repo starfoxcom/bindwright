@@ -2,7 +2,7 @@
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
 import {
-  crossedResearch, mayBeRound, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED,
+  crossedResearch, isRound, mayBeRound, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED,
 } from './rounds'
 import type { PrRounds } from './rounds'
 import { givenDir } from './settings'
@@ -33,9 +33,22 @@ async function roundsPath($: EngineInterface): Promise<string> {
   return `${path.slice(0, path.lastIndexOf('/'))}/${ROUNDS_FILE}`
 }
 
+// Every PR's rounds as the file holds them, each list cut to the entries that are real rounds, so every
+// reader gets well-formed rounds whatever another session or a hand edit left in the file.
 export async function readRounds($: EngineInterface): Promise<Record<string, PrRounds>> {
-  const all = await $.fs.read(await roundsPath($)).then(text => JSON.parse(String(text))).catch(() => undefined)
-  return all && typeof all === 'object' ? (all as Record<string, PrRounds>) : {}
+  const text = await $.fs.read(await roundsPath($)).catch(() => undefined)
+  let all: unknown
+  try {
+    all = text === undefined ? undefined : JSON.parse(String(text))
+  } catch {
+    return {}
+  }
+  if (!all || typeof all !== 'object' || Array.isArray(all)) return {}
+  const roundsIn = (pr: unknown) => (pr as Partial<PrRounds> | null)?.rounds
+  return Object.fromEntries(Object.entries(all).map(([key, pr]) => {
+    const rounds = roundsIn(pr)
+    return [key, { rounds: Array.isArray(rounds) ? rounds.filter(isRound) : [] }]
+  }))
 }
 
 // The PR's rounds changed by `change`, applied to the file as read right before the write, with nothing
