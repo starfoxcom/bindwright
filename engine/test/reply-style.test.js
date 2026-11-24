@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -155,10 +155,91 @@ test("what a finished reply broke comes with the next prompt, once", { skip }, (
   const slips = "so this one avoids them: a bold label at the start of a line or list item (2);"
     + ' an em dash (2); "essentially"; "basically".';
   assert.ok(run(layout, prompt).context.additionalContext.endsWith(slips));
-  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+  const rate = (clean, checked, pct) =>
+    new RegExp(`plain words\\.\\n\\nThis session so far: ${clean} of ${checked} replies kept the measured rules`
+      + ` \\(${pct}%\\), against a 90% goal\\.$`);
+  assert.match(run(layout, prompt).context.additionalContext, rate(0, 1, 0));
   run(layout, finished(SLIPPED));
   run(layout, finished("All clean, plain words."));
-  assert.match(run(layout, prompt).context.additionalContext, /Answer first, in plain words\.$/);
+  assert.match(run(layout, prompt).context.additionalContext, rate(1, 3, 33));
+}));
+
+// The checked style under its own name, in a fresh layout.
+function straight(layout) {
+  const styleFile = join(layout.home, ".claude", "output-styles", "plain.md");
+  writeFileSync(styleFile, STYLE.replace("Plain Speech", "Straight Talk"));
+  writeFileSync(join(layout.home, ".claude", "settings.json"), JSON.stringify({ outputStyle: "Straight Talk" }));
+}
+const CLEAN = "All clean, plain words.";
+const replies = (layout, session, texts) =>
+  texts.forEach((text) => run(layout, { hook_event_name: "Stop", session_id: session, last_assistant_message: text }));
+const promptOf = (layout, session) =>
+  run(layout, { hook_event_name: "UserPromptSubmit", session_id: session }).context.additionalContext;
+
+test("a session at or above the goal gets a pointer, and the whole text once it falls below", { skip }, () =>
+  withLayout((layout) => {
+    straight(layout);
+    replies(layout, "s-1", Array(5).fill(CLEAN));
+    const pointer = promptOf(layout, "s-1");
+    assert.match(pointer, /Straight Talk, is in the system prompt/);
+    assert.match(pointer, /held in 5 of 5 replies of this session \(100%\), at or above the 90% goal/);
+    assert.doesNotMatch(pointer, /Answer first/);
+    // 5 of 6 is 83%: the whole text comes back, with the rate and the slip.
+    replies(layout, "s-1", ["It holds — mostly."]);
+    const full = promptOf(layout, "s-1");
+    assert.match(full, /Answer first, in plain words\./);
+    assert.match(full, /5 of 6 replies kept the measured rules \(83%\)/);
+    assert.ok(full.endsWith("so this one avoids them: an em dash."));
+    // The record holds counts, never the reply's words.
+    const record = readFileSync(join(layout.home, ".bindwright", "reply-style", "s-1.record"), "utf8");
+    assert.deepEqual(JSON.parse(record), { checked: 6, clean: 5, slips: { "an em dash": 1 } });
+  }));
+
+test("a new session goes by the last session's record until it has five replies of its own", { skip }, () =>
+  withLayout((layout) => {
+    straight(layout);
+    assert.match(promptOf(layout, "s-2"), /Answer first, in plain words\.$/);
+    replies(layout, "s-1", Array(5).fill(CLEAN));
+    assert.match(promptOf(layout, "s-2"), /held in 5 of 5 replies of the last session/);
+    replies(layout, "s-2", Array(5).fill("It holds — mostly."));
+    assert.match(promptOf(layout, "s-2"), /0 of 5 replies kept the measured rules \(0%\)/);
+  }));
+
+const report = ({ home }) => {
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  return JSON.parse(spawnSync(python, ["-I", hook, "--report"], { env, encoding: "utf8" }).stdout);
+};
+
+test("the report asks for the assess step when the last three sessions fell short", { skip }, () =>
+  withLayout((layout) => {
+    straight(layout);
+    assert.deepEqual(report(layout), { goal: 90, sessions: [], assess: false, worst: null });
+    for (const session of ["s-1", "s-2", "s-3"]) {
+      replies(layout, session, [...Array(4).fill(CLEAN), "It holds — mostly — and basically."]);
+    }
+    // Three replies short of five are no session's record yet.
+    replies(layout, "s-4", ["It holds — mostly."]);
+    const short = report(layout);
+    assert.deepEqual(short.sessions.map((s) => s.rate), [80, 80, 80]);
+    assert.equal(short.assess, true);
+    assert.deepEqual(short.worst, { rule: "an em dash", count: 6 });
+    writeFileSync(join(layout.home, ".bindwright", "reply-style", "config.json"), JSON.stringify({ goal: 75 }));
+    assert.deepEqual({ ...report(layout), sessions: [] }, { goal: 75, sessions: [], assess: false, worst: null });
+  }));
+
+test("only the newest twenty session records are kept", { skip }, () => withLayout((layout) => {
+  straight(layout);
+  const folder = join(layout.home, ".bindwright", "reply-style");
+  mkdirSync(folder, { recursive: true });
+  for (let i = 0; i < 21; i++) {
+    const path = join(folder, `old-${i}.record`);
+    writeFileSync(path, JSON.stringify({ checked: 1, clean: 1, slips: {} }));
+    utimesSync(path, 1_000_000 + i, 1_000_000 + i);
+  }
+  replies(layout, "s-1", [CLEAN]);
+  const kept = readdirSync(folder).filter((name) => name.endsWith(".record")).sort();
+  assert.equal(kept.length, 20);
+  assert.ok(kept.includes("s-1.record") && !kept.includes("old-0.record") && !kept.includes("old-1.record"));
 }));
 
 test("replies under another style are not measured, nor named after a switch", { skip }, () => withLayout((layout) => {

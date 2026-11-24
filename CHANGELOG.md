@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Added
+
+- **The reply style keeps a hit rate, and restates its whole text only while a session falls short.** Under Straight Talk, each session now keeps a record of how many of its replies broke none of the rules a pattern can check, counts only and never a reply's words. While that share is at or above the goal, 90% unless `~/.bindwright/reply-style/config.json` sets `goal`, the reminder before each prompt is a one-line pointer to the style instead of its 2.6k characters; below it, the whole text comes back with the session's rate. A new session goes by the last session's record until it has five replies of its own. `/close-session` reports the rate against the goal, and when the last three sessions all fell short it names the rule they broke most and proposes a change to the style's text, made only on a yes.
+
 ### Changed
 
 - **Less text loads at session start.** The global instructions drop "Auto memory", which repeated Claude Code's own memory instructions, and "Time-of-day awareness", which explained a `[time]` hook the session-facts mod replaced; the code-research section becomes a short pointer at the chosen tool's own guidance, under the new heading "Code research: the project's tool, not agents". The time-injection snippet is retired with them. `/bindwright:setup` offers to take the three old sections out of `~/.claude/CLAUDE.md`, and `/bindwright:remove` takes them out with the rest.

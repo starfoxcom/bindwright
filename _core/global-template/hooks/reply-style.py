@@ -13,8 +13,12 @@ styles have no file, so they get nothing. A subagent's tool calls are not counte
 
 Under the style Bindwright ships (CHECKED_STYLE), each finished reply (Stop) is measured against
 the rules a pattern can see, such as bold labels and em dashes, and the next prompt's restatement
-names what it broke. Tone, rhythm and word choice are left to the restated text.
-The count of tool calls and the last reply's slips, per session, live in
+names what it broke. Tone, rhythm and word choice are left to the restated text. Each session keeps
+a record of those checks, counts only and never a reply's words: while the share of replies that
+broke no rule is at or above the goal (GOAL, or `goal` in the counts folder's `config.json`), the
+restatement is a one-line pointer to the style in the system prompt; below it, the whole text.
+`--report` prints the newest records against the goal, and whether the last three fell short.
+The count of tool calls, the last reply's slips and each session's record live in
 ~/.bindwright/reply-style/, outside any `.claude` folder. Every failure prints nothing and exits 0:
 a reminder never blocks a prompt or a tool call.
 """
@@ -35,6 +39,18 @@ INTRO = ("The reply style in use, {name}, restated here so it is the last thing 
 # The style the checks below measure: the one Bindwright ships. Other styles get no checks.
 CHECKED_STYLE = "straight talk"
 SLIPS_INTRO = "\n\nThe last reply broke these of its rules, so this one avoids them: "
+# The share of replies that keep every measured rule a session aims for, in percent, unless the computer's
+# `config.json` in the counts folder sets `goal`.
+GOAL = 90
+# A session's record speaks for its replies, in the pointer and in `--report`, from this many on.
+MIN_REPLIES = 5
+# The newest session records kept; each record deletes those past it.
+RECORDS_KEPT = 20
+POINTER = ("The reply style in use, {name}, is in the system prompt, and every reply follows it. Its measured"
+           " rules held in {clean} of {checked} replies of {whose} ({rate}%), at or above the {goal}% goal, so"
+           " its text is not restated.")
+RATE_LINE = ("\n\nThis session so far: {clean} of {checked} replies kept the measured rules ({rate}%), against a"
+             " {goal}% goal.")
 # Prose checkers keep code out with a Markdown parser; without one, where a fence ends cannot be told
 # for sure, so a reply is measured only up to its first fence mark, and a line that may be indented
 # code is skipped. A check can miss a slip, but never report one made in code.
@@ -183,7 +199,11 @@ def session_file(session, suffix):
     """The session's file in the counts folder, or None for an id that could leave it."""
     if not SESSION_ID.fullmatch(session or ""):
         return None
-    return os.path.join(os.path.expanduser("~"), ".bindwright", "reply-style", session + suffix)
+    return os.path.join(counts_folder(), session + suffix)
+
+
+def counts_folder():
+    return os.path.join(os.path.expanduser("~"), ".bindwright", "reply-style")
 
 
 def reset_count(session):
@@ -212,11 +232,112 @@ def prose_of(reply):
     return "\n\n".join(kept)
 
 
-def slips_in(reply):
-    """What the reply broke of the checked style's measurable rules, each with its count."""
+def found_in(reply):
+    """(rule, count) for each of the checked style's measurable rules the reply broke."""
     prose = prose_of(reply)
     found = [(label, len(pattern.findall(prose))) for label, pattern in CHECKS]
-    return ["{} ({})".format(label, count) if count > 1 else label for label, count in found if count]
+    return [(label, count) for label, count in found if count]
+
+
+def slips_in(reply):
+    """What the reply broke of the checked style's measurable rules, each with its count."""
+    return ["{} ({})".format(label, count) if count > 1 else label for label, count in found_in(reply)]
+
+
+def goal():
+    """The computer's goal in percent: `goal` in the counts folder's `config.json`, else GOAL."""
+    value = read_json(os.path.join(counts_folder(), "config.json")).get("goal")
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= 100 else GOAL
+
+
+def read_record(path):
+    """A session's record: replies measured, those that broke no rule, and each rule's slips. Counts
+    only, never a reply's words."""
+    data = read_json(path)
+    checked, clean, slips = data.get("checked"), data.get("clean"), data.get("slips")
+    if not (isinstance(checked, int) and isinstance(clean, int) and 0 <= clean <= checked):
+        return {"checked": 0, "clean": 0, "slips": {}}
+    slips = {k: v for k, v in slips.items() if isinstance(v, int)} if isinstance(slips, dict) else {}
+    return {"checked": checked, "clean": clean, "slips": slips}
+
+
+def records():
+    """Every session's record, newest first, as (session file, record)."""
+    folder = counts_folder()
+    try:
+        paths = [os.path.join(folder, n) for n in os.listdir(folder) if n.endswith(".record")]
+        dated = sorted(((os.path.getmtime(p), p) for p in paths), reverse=True)
+    except OSError:
+        return []
+    return [(path, read_record(path)) for _, path in dated]
+
+
+def add_to_record(session, reply):
+    """Count a finished reply in the session's record, and delete the records past RECORDS_KEPT."""
+    path = session_file(session, ".record")
+    if not path:
+        return
+    record = read_record(path)
+    found = found_in(reply)
+    record["checked"] += 1
+    record["clean"] += 0 if found else 1
+    for label, count in found:
+        record["slips"][label] = record["slips"].get(label, 0) + count
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(record, fh)
+        os.replace(path + ".tmp", path)
+        for old, _ in records()[RECORDS_KEPT:]:
+            os.remove(old)
+    except OSError:
+        pass
+
+
+def percent(record):
+    return round(100 * record["clean"] / record["checked"])
+
+
+def standing(session, own):
+    """(record, whose) the restatement goes by: this session's once it has MIN_REPLIES replies, else the
+    newest other session's that has; None without either."""
+    if own["checked"] >= MIN_REPLIES:
+        return own, "this session"
+    own_path = session_file(session, ".record")
+    other = next((r for p, r in records() if p != own_path and r["checked"] >= MIN_REPLIES), None)
+    return (other, "the last session") if other else None
+
+
+def restatement(session, name, body, slips):
+    """The checked style's restatement: a pointer while the record holds the goal, else the whole text
+    with this session's rate; the last reply's slips either way."""
+    target, own = goal(), read_record(session_file(session, ".record") or "")
+    found = standing(session, own)
+    if found and percent(found[0]) >= target:
+        record, whose = found
+        text = POINTER.format(name=name, clean=record["clean"], checked=record["checked"], whose=whose,
+                              rate=percent(record), goal=target)
+    else:
+        text = INTRO.format(name=name) + body
+        if own["checked"]:
+            text += RATE_LINE.format(clean=own["clean"], checked=own["checked"], rate=percent(own), goal=target)
+    return text + (SLIPS_INTRO + slips if slips else "")
+
+
+def report():
+    """`--report`: the newest sessions that measured MIN_REPLIES replies, newest first, the goal, and
+    whether the last three all fell short, with the rule they broke most."""
+    target = goal()
+    measured = [record for _, record in records() if record["checked"] >= MIN_REPLIES]
+    sessions = [{"rate": percent(r), "clean": r["clean"], "checked": r["checked"]} for r in measured[:3]]
+    short = len(measured) >= 3 and all(percent(r) < target for r in measured[:3])
+    totals = {}
+    for record in measured[:3]:
+        for label, count in record["slips"].items():
+            totals[label] = totals.get(label, 0) + count
+    worst = max(totals, key=totals.get) if short and totals else None
+    return {"goal": target, "sessions": sessions, "assess": short,
+            "worst": {"rule": worst, "count": totals[worst]} if worst else None}
 
 
 def record_slips(session, reply):
@@ -251,6 +372,9 @@ def take_slips(session):
 
 
 def main():
+    if sys.argv[1:] == ["--report"]:
+        print(json.dumps(report()))
+        return
     try:
         event = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
     except ValueError:
@@ -278,11 +402,14 @@ def main():
         reply = event.get("last_assistant_message")
         if name.lower() == CHECKED_STYLE and isinstance(reply, str):
             record_slips(session, reply)
+            add_to_record(session, reply)
         return
-    # Slips are named only under the style they were measured against: another style may allow them.
-    if slips and name.lower() == CHECKED_STYLE:
-        body += SLIPS_INTRO + slips
-    context = INTRO.format(name=name) + body
+    # Slips and the record count only under the style they were measured against: another style may
+    # allow what this one does not.
+    if name.lower() == CHECKED_STYLE:
+        context = restatement(session, name, body, slips)
+    else:
+        context = INTRO.format(name=name) + body
     print(json.dumps({"hookSpecificOutput": {"hookEventName": kind, "additionalContext": context}}))
 
 
