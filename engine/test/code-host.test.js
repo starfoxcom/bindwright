@@ -33,7 +33,7 @@ const PASSING_MENTIONS = [
 const HOST_STEP = /\bPRs?\b|pull request|\bgh (pr|run|issue|api|repo)\b|origin\/|git (push|fetch)|\bCI\b/;
 const LEFT_OUT = new RegExp([
   "PULL_REQUEST_TEMPLATE", "ISSUE_TEMPLATE", "CODEOWNERS",
-  "review-tiers\\.md", "tracker\\.md", "review-gate\\.yml", "review-guide\\.md",
+  "review-tiers\\.md", "review-workflow\\.md", "tracker\\.md", "review-gate\\.yml", "review-guide\\.md",
 ].join("|"));
 
 function offending(files, pattern) {
