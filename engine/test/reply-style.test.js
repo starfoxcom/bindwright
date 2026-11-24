@@ -199,7 +199,7 @@ test("a session at or above the goal gets a pointer, and the whole text once it 
     assert.deepEqual(JSON.parse(record), { checked: 6, clean: 5, slips: { "an em dash": 1 } });
   }));
 
-test("a new session goes by the last session's record until it has five replies of its own", { skip }, () =>
+test("a new session goes by the last session's record until it has five replies or a slip", { skip }, () =>
   withLayout((layout) => {
     straight(layout);
     assert.match(promptOf(layout, "s-2"), /Answer first, in plain words\.$/);
@@ -232,7 +232,7 @@ test("the report asks for the assess step when the last three sessions fell shor
     for (const session of ["s-1", "s-2", "s-3"]) {
       replies(layout, session, [...Array(4).fill(CLEAN), "It holds — mostly — and basically."]);
     }
-    // Three replies short of five are no session's record yet.
+    // A session with one reply, short of five, is no session's record yet.
     replies(layout, "s-4", ["It holds — mostly."]);
     const short = report(layout);
     assert.deepEqual(short.sessions.map((s) => s.rate), [80, 80, 80]);
