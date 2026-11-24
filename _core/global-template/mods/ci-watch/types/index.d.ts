@@ -46,6 +46,8 @@ export type Watch = {
    * (`routine error, deep none`). Such a round is not counted, and its wake says why.
    */
   noVerdict?: string
+  /** Only on the copies the band and `/ci-watch` show, never saved: which round of its PR this head is. */
+  round?: number
 }
 
 /** A background run (a shell or a subagent) this session started and has not heard back from. */

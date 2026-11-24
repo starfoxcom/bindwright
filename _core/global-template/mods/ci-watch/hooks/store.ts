@@ -1,7 +1,9 @@
 // Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import { crossedResearch, recordRound, redStreak, ROUNDS_FILE, SOURCES_NEEDED } from './rounds'
+import {
+  crossedResearch, isRound, mayBeRound, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED,
+} from './rounds'
 import type { PrRounds } from './rounds'
 import { givenDir } from './settings'
 
@@ -31,9 +33,22 @@ async function roundsPath($: EngineInterface): Promise<string> {
   return `${path.slice(0, path.lastIndexOf('/'))}/${ROUNDS_FILE}`
 }
 
+// Every PR's rounds as the file holds them, each list cut to the entries that are real rounds, so every
+// reader gets well-formed rounds whatever another session or a hand edit left in the file.
 export async function readRounds($: EngineInterface): Promise<Record<string, PrRounds>> {
-  const all = await $.fs.read(await roundsPath($)).then(text => JSON.parse(String(text))).catch(() => undefined)
-  return all && typeof all === 'object' ? (all as Record<string, PrRounds>) : {}
+  const text = await $.fs.read(await roundsPath($)).catch(() => undefined)
+  let all: unknown
+  try {
+    all = text === undefined ? undefined : JSON.parse(String(text))
+  } catch {
+    return {}
+  }
+  if (!all || typeof all !== 'object' || Array.isArray(all)) return {}
+  const roundsIn = (pr: unknown) => (pr as Partial<PrRounds> | null)?.rounds
+  return Object.fromEntries(Object.entries(all).map(([key, pr]) => {
+    const rounds = roundsIn(pr)
+    return [key, { rounds: Array.isArray(rounds) ? rounds.filter(isRound) : [] }]
+  }))
 }
 
 // The PR's rounds changed by `change`, applied to the file as read right before the write, with nothing
@@ -53,8 +68,7 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
   const stepBacks = new Map<string, number>()
   for (const w of settled) {
     // A silent watch follows a head someone else pushed: no round of this session's.
-    if (w.isSilent || w.noVerdict !== undefined || w.isConflicting) continue
-    if (w.outcome !== 'failed' && w.outcome !== 'passed') continue
+    if (!mayBeRound(w) || w.outcome === undefined) continue
     const red = w.outcome === 'failed'
     const key = `${w.repo}#${w.number}`
     const counted = (pr?: PrRounds) => {
@@ -65,6 +79,14 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
     await updateRounds($, key, counted).catch(() => stepBacks.delete(key))
   }
   return stepBacks
+}
+
+// The watches as shown, each that may be a round with the round its head is (`roundOf`), from one read
+// of the count file. A head the count never records shows no number.
+export async function roundsLookup($: EngineInterface): Promise<(watches: Watch[]) => Watch[]> {
+  const rounds = await readRounds($)
+  const round = (w: Watch) => roundOf(rounds[`${w.repo}#${w.number}`], w.headSha)
+  return watches => watches.map(w => (mayBeRound(w) ? { ...w, round: round(w) } : w))
 }
 
 export async function redRoundsOf($: EngineInterface, pr: { repo: string; number: number }): Promise<number> {
