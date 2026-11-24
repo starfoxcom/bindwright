@@ -29,6 +29,10 @@ Then check the living docs are still current: for each behaviour, name, path, co
 
 When the guidance FindWright installed for the agent names a step for the end of a session, such as a report on how its searches did, run it here.
 
+## The reply style's close step
+
+When `~/.claude/hooks/reply-style.py` exists, run it with `--report` (with `python3`, or `python` on Windows). It prints `{goal, sessions, assess, worst}`: `sessions` are the newest sessions that measured five replies or more, newest first, each with its `rate` in percent. Say in one line how this session's replies did against the goal: the latest restated reply style names this session's count once it has measured a reply ("held in N of M replies of this session", or "This session so far: N of M"), counted up to the reply before that prompt. When it names none, say no reply was measured yet. Never give a figure it names for "the last session" as this one's. When `assess` is true, the last three sessions all fell short: name `worst`, the rule they broke most, with its count, and propose a change to the reply style's text in `~/.claude/output-styles/` that would prevent it; change the file only on the user's yes.
+
 ## Pruning pass
 
 Rules, tests and memory only ever grow, and a long rule file is where a session reads past a rule. So at most once a month, offer to prune, here or at `/start-session`, whichever runs first. The date of the last pass, offered or run, lives in this clone's git config, which its worktrees share and no commit carries: `git config --local bindwright.lastPruning` prints it, and `git config --local bindwright.lastPruning <YYYY-MM-DD>` sets it. When it prints nothing, set today's date and skip this step, so the first offer comes a month after the first close that runs it; when it is less than 30 days old, skip this step. Otherwise ask once: "It has been a month: look for rules, tests and memory entries nothing uses any more?" On a no, set today's date and go on.
