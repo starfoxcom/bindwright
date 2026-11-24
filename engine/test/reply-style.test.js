@@ -201,6 +201,17 @@ test("a new session goes by the last session's record until it has five replies 
     assert.match(promptOf(layout, "s-2"), /Answer first, in plain words\.$/);
     replies(layout, "s-1", Array(5).fill(CLEAN));
     assert.match(promptOf(layout, "s-2"), /held in 5 of 5 replies of the last session/);
+    // A clean start borrows the record and names its own rate; one slip before five takes the whole text.
+    replies(layout, "s-3", [CLEAN]);
+    const borrowed = promptOf(layout, "s-3");
+    assert.match(borrowed, /of the last session \(100%\)/);
+    assert.match(borrowed, /This session so far: 1 of 1 replies kept the measured rules \(100%\)/);
+    replies(layout, "s-3", ["It holds — mostly."]);
+    assert.match(promptOf(layout, "s-3"), /Answer first, in plain words\.\n\nThis session so far: 1 of 2/);
+    // Counts written as true or false are no record.
+    const folder = join(layout.home, ".bindwright", "reply-style");
+    writeFileSync(join(folder, "s-1.record"), JSON.stringify({ checked: true, clean: true, slips: {} }));
+    assert.match(promptOf(layout, "s-2"), /Answer first, in plain words\.$/);
     replies(layout, "s-2", Array(5).fill("It holds — mostly."));
     assert.match(promptOf(layout, "s-2"), /0 of 5 replies kept the measured rules \(0%\)/);
   }));

@@ -255,9 +255,12 @@ def read_record(path):
     only, never a reply's words."""
     data = read_json(path)
     checked, clean, slips = data.get("checked"), data.get("clean"), data.get("slips")
-    if not (isinstance(checked, int) and isinstance(clean, int) and 0 <= clean <= checked):
+    def is_count(value):
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    if not (is_count(checked) and is_count(clean) and clean <= checked):
         return {"checked": 0, "clean": 0, "slips": {}}
-    slips = {k: v for k, v in slips.items() if isinstance(v, int)} if isinstance(slips, dict) else {}
+    slips = {k: v for k, v in slips.items() if is_count(v)} if isinstance(slips, dict) else {}
     return {"checked": checked, "clean": clean, "slips": slips}
 
 
@@ -300,27 +303,30 @@ def percent(record):
 
 def standing(session, own):
     """(record, whose) the restatement goes by: this session's once it has MIN_REPLIES replies, else the
-    newest other session's that has; None without either."""
+    newest other session's that has, unless this one has slipped already; None otherwise."""
     if own["checked"] >= MIN_REPLIES:
         return own, "this session"
+    if own["clean"] < own["checked"]:
+        return None
     own_path = session_file(session, ".record")
     other = next((r for p, r in records() if p != own_path and r["checked"] >= MIN_REPLIES), None)
     return (other, "the last session") if other else None
 
 
 def restatement(session, name, body, slips):
-    """The checked style's restatement: a pointer while the record holds the goal, else the whole text
-    with this session's rate; the last reply's slips either way."""
+    """The checked style's restatement: a pointer while the record holds the goal, else the whole text;
+    this session's rate whenever the pointer does not already name it; the last reply's slips either way."""
     target, own = goal(), read_record(session_file(session, ".record") or "")
     found = standing(session, own)
+    whose = None
     if found and percent(found[0]) >= target:
         record, whose = found
         text = POINTER.format(name=name, clean=record["clean"], checked=record["checked"], whose=whose,
                               rate=percent(record), goal=target)
     else:
         text = INTRO.format(name=name) + body
-        if own["checked"]:
-            text += RATE_LINE.format(clean=own["clean"], checked=own["checked"], rate=percent(own), goal=target)
+    if own["checked"] and whose != "this session":
+        text += RATE_LINE.format(clean=own["clean"], checked=own["checked"], rate=percent(own), goal=target)
     return text + (SLIPS_INTRO + slips if slips else "")
 
 
