@@ -190,6 +190,17 @@ test("default-branch choice flips the workflow-change guidance", async () => {
   assert.doesNotMatch(devFiles.get(".claude/rules/git.md"), /always pass `--base develop`/);
 });
 
+test("the first-setup steps follow the branch model", async () => {
+  const a = defaults();
+  const gitflow = (await run(a)).get(".claude/rules/review-workflow.md");
+  assert.match(gitflow, /Once it merges, cascade it into `develop`/);
+  a.advanced.branching = "trunk";
+  const trunk = (await run(a)).get(".claude/rules/review-workflow.md");
+  assert.match(trunk, /Once it merges, run `\.github\/scripts\/setup-review-gate\.sh` to protect `main`/);
+  const firstSetup = trunk.slice(trunk.indexOf("### The first setup PR"), trunk.indexOf("## If the gate"));
+  assert.doesNotMatch(firstSetup, /develop|cascade/, "a trunk bind has no integration branch to cascade into");
+});
+
 test("rules carry no stale model names or polling loops", async () => {
   const files = await run(defaults({ team: true, client: true }));
   for (const [path, text] of files) {
