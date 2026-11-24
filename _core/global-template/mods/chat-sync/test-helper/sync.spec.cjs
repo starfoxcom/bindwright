@@ -728,9 +728,10 @@ test('a move out of a folder that holds other things copies only the chats', () 
 
 test('git asks no question of an ssh command set by the user, and signs in to GitHub through gh', () => {
   const base = require(SYNC)
+  const quoted = '"C:/Program Files/OpenSSH/ssh.exe" -i key'
   const rows = [
     ['ssh with options', 'ssh -i key', 'ssh -i key -o BatchMode=yes'],
-    ['quoted ssh.exe', '"C:/Program Files/OpenSSH/ssh.exe" -i key', '"C:/Program Files/OpenSSH/ssh.exe" -i key -o BatchMode=yes'],
+    ['quoted ssh.exe', quoted, `${quoted} -o BatchMode=yes`],
     ['another program', 'plink -batch', 'plink -batch'],
   ]
   const saved = process.env.GIT_SSH_COMMAND
