@@ -13,7 +13,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
-- **The review rules load less text at every session start.** How a PR that edits the review workflow merges, the steps for a repo's first setup PR and the recovery for a broken review gate moved from `review-tiers.md` into a new `review-workflow.md`, which loads only when a session reads a workflow or gate file. `review-tiers.md` drops from 12.5k to 8.2k characters and keeps a pointer that says when to read the new rule; `/bindwright:update` adds the new file.
+- **The review rules load less text at every session start.** How a PR that edits the review workflow merges, the steps for a repo's first setup PR and the recovery for a broken review gate moved from `review-tiers.md` into a new `review-workflow.md`, which loads only when a session reads a workflow or gate file. `review-tiers.md` drops from 12.4k to 8.1k characters and keeps a pointer that says when to read the new rule; `/bindwright:update` adds the new file.
 
 ## [v7.16.1] — 2026-11-23
 
