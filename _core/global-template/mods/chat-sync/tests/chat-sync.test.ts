@@ -7,14 +7,18 @@ const CHATS = 'C:/Users/me/.claude/projects/C--repo'
 const TRANSCRIPT = `${CHATS}/sess-1.jsonl`
 const MINUTE = 60_000
 
-type World = { runs: string[][]; toasts: string[]; clock: ReturnType<typeof mock.clock> }
+type World = {
+  runs: string[][]; toasts: string[]; clock: ReturnType<typeof mock.clock>
+  // For each run: the time the helper was given to answer in, and the hook's own limit.
+  limits: { answerInMs: number; timeoutMs: number }[]
+}
 
 // The helper answers each command with the JSON line given for it, or, for a
 // command named in `stops`, exits with that code and prints nothing.
 function world(on: On, answers: Record<string, unknown> = {}, stops: Record<string, number> = {},
   outDone: Promise<void> = Promise.resolve()): World {
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 23, 12, 0, 0) })
-  const seen: World = { runs: [], toasts: [], clock }
+  const seen: World = { runs: [], toasts: [], clock, limits: [] }
   on('session.id', () => ({ value: 'sess-1' }))
   on('session.root', () => ({ value: ROOT }))
   on('session.info', () => ({ value: { transcriptPath: TRANSCRIPT } as never }))
@@ -29,6 +33,8 @@ function world(on: On, answers: Record<string, unknown> = {}, stops: Record<stri
   on('process.run', async ($, e) => {
     const args = e.argv.slice(2)
     seen.runs.push([...args])
+    const answerInMs = Number(e.init?.env?.CHAT_SYNC_DEADLINE) - clock.now()
+    seen.limits.push({ answerInMs, timeoutMs: e.init?.timeoutMs ?? 30_000 })
     if (args[0] === 'out') await outDone
     const stop = stops[args[0] ?? '']
     const stdout = stop === undefined ? `${JSON.stringify(answers[args[0] ?? ''] ?? {})}\n` : ''
@@ -111,6 +117,8 @@ test('the session end copies the chat out', async ($, on) => {
 
   expect(seen.runs.at(-1)).toEqual(['out', TRANSCRIPT, ROOT])
   expect(seen.toasts).toEqual([])
+  // The helper must answer inside the session end's short bound, with room left.
+  expect(seen.limits.at(-1)).toEqual({ answerInMs: 6_000, timeoutMs: 8_000 })
 })
 
 test('a copy queued by the last turn does not run after the session end sent the chat', async ($, on) => {

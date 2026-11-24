@@ -16,8 +16,9 @@ const paths = require('./paths.cjs')
 const { syncPlaces } = require('./places.cjs')
 const { withRunLock, isAlive } = require('./lock.cjs')
 
-// The hook stops a copy's helper after 120 s and a move's after 300 s; the
-// helper stops its own calls 10 s before that, so its answer still reaches it.
+// The hook stops a copy's helper after 120 s (8 s at a session's end) and a
+// move's after 300 s, and passes the moment its answer is due in
+// CHAT_SYNC_DEADLINE. These are the limits when no deadline is passed.
 const COPY_LIMIT_MS = 110_000
 const MOVE_LIMIT_MS = 290_000
 
@@ -419,6 +420,19 @@ function seenFile() {
   return path.join(base.dataDir(), 'seen.json')
 }
 
+function endsOnWholeLine(file) {
+  const size = sizeOf(file)
+  if (size <= 0) return size === 0
+  const input = fs.openSync(file, 'r')
+  try {
+    const last = Buffer.alloc(1)
+    fs.readSync(input, last, 0, 1, size - 1)
+    return last[0] === 10
+  } finally {
+    fs.closeSync(input)
+  }
+}
+
 function stampOf(file) {
   const stat = fs.statSync(file)
   return `${stat.size}:${Math.round(stat.mtimeMs)}`
@@ -595,31 +609,42 @@ function behindCopy(storeChat, local, root, work) {
   return { isConflict }
 }
 
-// Writes the local chat as its own complete lines plus the copy's lines after
-// them; a last line cut off mid-write is dropped, since the copy's next line
-// takes its place. When the chat changed since `before`, its stamp when the
-// compare began (another session on this computer wrote it), nothing is
-// written. True when the chat was written.
+// Adds the copy's lines after the local chat's own. A chat that ends on a
+// whole line gets them appended in place, so a line another session on this
+// computer writes meanwhile lands beside them instead of being written over.
+// A chat whose last line was cut off mid-write is rebuilt from its complete
+// lines plus the copy's, since the copy's next line takes the cut one's place.
+// When the chat changed since `before`, its stamp when the compare began,
+// nothing is written. True when the chat was written.
 function importCopy(copy, local, root, { localLines, before }) {
   fs.mkdirSync(path.dirname(local), { recursive: true })
   const incoming = `${local}.chat-sync.${process.pid}.in`
   removeQuietly(incoming)
   try {
-    if (before) transformFile(local, incoming, text => text, true)
+    const isWhole = before !== null && endsOnWholeLine(local)
+    if (before && !isWhole) transformFile(local, incoming, text => text, true)
     appendLines(copy, localLines, incoming, expand(root, os.homedir()))
     if ((sizeOf(local) >= 0 ? stampOf(local) : null) !== before) return false
-    fs.renameSync(incoming, local)
+    if (isWhole) appendLines(incoming, 0, local, text => text)
+    else fs.renameSync(incoming, local)
     return true
   } finally {
     removeQuietly(incoming)
   }
 }
 
-// The run holding the lock clears the work folders of runs that are gone. It
-// also sets the run's deadline, a little before the hook stops the helper, so
-// every git and gh call fits in it and the answer is still printed.
+// The run's deadline: the one the hook passed, else `limitMs` from the
+// helper's start. The lock wait and every git and gh call fit in it, so the
+// answer is printed before the hook stops the helper.
+function runDeadline(limitMs) {
+  const own = performance.timeOrigin + limitMs
+  const given = Number(process.env.CHAT_SYNC_DEADLINE)
+  return given > 0 ? Math.min(own, given) : own
+}
+
+// The run holding the lock clears the work folders of runs that are gone.
 function locked(work, limitMs) {
-  base.setDeadline(performance.timeOrigin + limitMs)
+  base.setDeadline(runDeadline(limitMs))
   return withRunLock(() => {
     clearStoppedRuns()
     return work()

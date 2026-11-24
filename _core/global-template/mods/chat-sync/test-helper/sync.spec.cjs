@@ -514,6 +514,45 @@ test('a chat cut off mid-line here takes the newer copy\'s lines whole', () => {
   assert.deepStrictEqual(readChat(b, 's1').map(r => r.message.content), [`one in ${b.root}`, `two in ${b.root}`])
 })
 
+test('a line another session writes here while a newer copy comes in is kept', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  b.sync('in', b.chatDir, b.root, 'other')
+  writeChat(a, 's1', ['one', 'two'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  // The other session's line lands just before the import writes the chat.
+  const chat = path.resolve(b.chatDir, 's1.jsonl')
+  const meanwhile = '{"meanwhile":true}\n'
+  let hasWritten = false
+  const writeMeanwhile = file => {
+    if (hasWritten || path.resolve(String(file)) !== chat) return
+    hasWritten = true
+    fs.appendFileSync(chat, meanwhile)
+  }
+  const [realOpen, realRename] = [fs.openSync, fs.renameSync]
+  fs.openSync = (file, flags, ...rest) => {
+    if (flags === 'a') writeMeanwhile(file)
+    return realOpen(file, flags, ...rest)
+  }
+  fs.renameSync = (from, to) => {
+    writeMeanwhile(to)
+    return realRename(from, to)
+  }
+  let answer
+  try {
+    answer = inProcess(b, () => require(path.join(SCRIPTS, 'commands.cjs')).run(['in', b.chatDir, b.root, 'other']))
+  } finally {
+    Object.assign(fs, { openSync: realOpen, renameSync: realRename })
+  }
+  assert.deepStrictEqual(answer.imported, ['s1'])
+  const text = fs.readFileSync(chat, 'utf8')
+  assert.ok(text.includes(meanwhile), 'the other session\'s line is still there')
+  assert.ok(text.includes(`two in ${JSON.stringify(b.root).slice(1, -1)}`), 'the newer copy\'s line came in')
+})
+
 test('a chat repo that cannot be confirmed private at session start says so and sends nothing', () => {
   const a = gitComputer('a', bareRepo(), { GH_HOST: 'chat-sync.invalid' })
   fs.writeFileSync(path.join(a.dataDir, 'visibility.json'), JSON.stringify({ repo: 'me/chats', at: 0 }))
@@ -539,6 +578,31 @@ test('a chat repo that never answers stops the run within its limit, with an ans
     server.closeAllConnections()
     server.close()
   }
+})
+
+test('a run\'s git and gh calls, the ssh lookups among them, all end by the deadline the hook passed', () => {
+  const pc = computer('a', null)
+  const childProcess = require('child_process')
+  const realSpawn = childProcess.spawnSync
+  // Every call takes 400 ms, or times out sooner when its limit is shorter.
+  childProcess.spawnSync = (command, args, options) => {
+    const took = Math.min(options.timeout || Infinity, 400)
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, took)
+    if (took < 400) return { status: null, stdout: '', stderr: '', error: { code: 'ETIMEDOUT', message: 'timed out' } }
+    if (command !== 'gh') return { status: args.includes('core.sshCommand') ? 1 : 0, stdout: '', stderr: '' }
+    const out = args[0] === 'config' ? '' : args.includes('visibility') ? 'PRIVATE' : 'https://github.com/me/chats'
+    return { status: 0, stdout: `${out}\n`, stderr: '' }
+  }
+  const started = Date.now()
+  pc.env.CHAT_SYNC_DEADLINE = String(started + 1_500)
+  let answer
+  try {
+    answer = inProcess(pc, () => require(path.join(SCRIPTS, 'commands.cjs')).run(['move', 'git', 'me/chats']))
+  } finally {
+    childProcess.spawnSync = realSpawn
+  }
+  assert.ok(Date.now() - started < 1_800, `the run ended ${Date.now() - started} ms after it started`)
+  assert.match(answer.error || '', /time/)
 })
 
 // A password prompt program, as an editor's terminal sets one, that would keep
@@ -695,6 +759,18 @@ test('a run waits for another run on this computer, and takes over from one that
   writeChat(a, 's1', ['one', 'two'])
   assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1' })
   assert.ok(!fs.existsSync(lock), 'the lock is let go after the run')
+})
+
+test('a run waiting for another one stops waiting at the deadline the hook passed', () => {
+  const a = computer('a', tempDir('folder'))
+  writeChat(a, 's1', ['one'])
+  fs.writeFileSync(path.join(a.dataDir, 'run.lock'), String(process.pid))
+  const started = Date.now()
+  const env = { ...a.env, CHAT_SYNC_DEADLINE: String(started + 1_000) }
+  const answer = JSON.parse(execFileSync(process.execPath, [SYNC, 'out', path.join(a.chatDir, 's1.jsonl'), a.root],
+    { env, encoding: 'utf8', timeout: 40_000 }))
+  assert.match(answer.error || '', /still going/)
+  assert.ok(Date.now() - started < 5_000, `the run waited ${Date.now() - started} ms`)
 })
 
 test('a move into a repo that does not take the chats keeps them syncing where they did', () => {

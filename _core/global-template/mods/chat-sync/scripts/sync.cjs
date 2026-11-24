@@ -93,10 +93,12 @@ function quietEnv(cwd = os.homedir()) {
 }
 
 // Read again for every call, since a folder's answer changes once its remote is
-// set (a conditional include can name the remote's address).
+// set (a conditional include can name the remote's address). With no time left
+// it reads as unset, and the call that asked for it does not run.
 function configuredSshCommand(cwd) {
-  const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
-    { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
+  const timeout = callTimeout(GIT_TIMEOUT_MS)
+  if (!timeout) return ''
+  const run = spawnSync('git', ['config', '--get', 'core.sshCommand'], { cwd, encoding: 'utf8', timeout })
   return (run.stdout || '').trim()
 }
 
@@ -130,11 +132,19 @@ function callTimeout(ownMs) {
 
 const OUT_OF_TIME = 'Chat sync ran out of time for this run; the next one goes on.'
 
+// Runs git or gh with the environment from `quietEnv(envCwd)`. The timeout is
+// taken once that environment is built, since building it can run git too.
+// Null when no time is left, as a timeout of 0 would mean no limit at all.
+function timedRun(command, args, ownMs, envCwd) {
+  const env = quietEnv(envCwd)
+  const timeout = callTimeout(ownMs)
+  if (!timeout) return null
+  return spawnSync(command, args, { encoding: 'utf8', timeout, env })
+}
+
 function git(cwd, ...args) {
-  const timeout = callTimeout(GIT_TIMEOUT_MS)
-  if (!timeout) return { ok: false, out: OUT_OF_TIME }
-  const run = spawnSync('git', [...gitSettings(), '-C', cwd, ...args],
-    { encoding: 'utf8', timeout, env: quietEnv(cwd) })
+  const run = timedRun('git', [...gitSettings(), '-C', cwd, ...args], GIT_TIMEOUT_MS, cwd)
+  if (!run) return { ok: false, out: OUT_OF_TIME }
   const ok = run.status === 0
   const out = `${run.stdout || ''}${run.stderr || ''}`.trim()
   return { ok, out: ok || out ? out : stopReason(`git ${args[0]}`, run) }
@@ -178,7 +188,7 @@ function safeName(text) {
 
 module.exports = {
   configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git,
-  setDeadline, callTimeout, OUT_OF_TIME, stopReason, projectKey, safeName,
+  setDeadline, callTimeout, timedRun, OUT_OF_TIME, stopReason, projectKey, safeName,
 }
 
 if (require.main === module) {

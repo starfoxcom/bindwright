@@ -6,7 +6,6 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const {
   compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
@@ -15,6 +14,7 @@ const { copyPlainFile } = require('./paths.cjs')
 
 // Neither part starts with a dash, so gh never reads the name as an option.
 const REPO = /^[\w.][\w.-]*\/[\w.][\w.-]*$/
+const GH_TIMEOUT_MS = 30_000
 
 function describe(place) {
   if (place.kind === 'folder') return place.path
@@ -24,10 +24,8 @@ function describe(place) {
 
 // A chat repo must be private: a chat holds code, command output and anything pasted in.
 function checkPrivate(repo) {
-  const timeout = base.callTimeout(30_000)
-  if (!timeout) return base.OUT_OF_TIME
-  const view = spawnSync('gh', ['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility'],
-    { encoding: 'utf8', timeout, env: base.quietEnv() })
+  const view = base.timedRun('gh', ['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility'], GH_TIMEOUT_MS)
+  if (!view) return base.OUT_OF_TIME
   if (view.status !== 0) {
     return `Could not confirm that ${repo} is private: ${(view.stderr || '').trim() || base.stopReason('gh', view)}`
   }
@@ -39,12 +37,11 @@ function checkPrivate(repo) {
 // The repo's address as gh would clone it: its ssh address when gh's git
 // protocol is ssh, else its https one.
 function repoAddress(repo) {
-  const timeout = base.callTimeout(30_000)
-  if (!timeout) return { error: base.OUT_OF_TIME }
-  const options = { encoding: 'utf8', timeout, env: base.quietEnv() }
-  const protocol = spawnSync('gh', ['config', 'get', 'git_protocol', '-h', 'github.com'], options)
+  const protocol = base.timedRun('gh', ['config', 'get', 'git_protocol', '-h', 'github.com'], GH_TIMEOUT_MS)
+  if (!protocol) return { error: base.OUT_OF_TIME }
   const field = (protocol.stdout || '').trim() === 'ssh' ? 'sshUrl' : 'url'
-  const view = spawnSync('gh', ['repo', 'view', repo, '--json', field, '--jq', `.${field}`], options)
+  const view = base.timedRun('gh', ['repo', 'view', repo, '--json', field, '--jq', `.${field}`], GH_TIMEOUT_MS)
+  if (!view) return { error: base.OUT_OF_TIME }
   const address = (view.stdout || '').trim()
   if (view.status === 0 && address) return { address }
   return { error: `Could not find ${repo}: ${(view.stderr || '').trim() || base.stopReason('gh', view)}` }

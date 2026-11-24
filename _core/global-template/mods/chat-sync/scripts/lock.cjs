@@ -11,8 +11,8 @@ const WAIT_MS = 30_000
 const POLL_MS = 100
 // Longer than any run lasts: a move is stopped after 300 s.
 const HELD_MAX_MS = 10 * 60_000
-const BUSY = 'Another chat-sync run on this computer took longer than 30 s, so this one did nothing; '
-  + 'the next copy catches up.'
+const BUSY = 'Another chat-sync run on this computer was still going when this one had to stop, '
+  + 'so this one did nothing; the next copy catches up.'
 
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
@@ -88,12 +88,13 @@ function release(file) {
   if (readLock(file)?.text === String(process.pid)) fs.rmSync(file, { force: true })
 }
 
-// Runs `work` while holding the lock. Before any place is chosen, the helper's
+// Runs `work` while holding the lock, waiting for it up to 30 s or the run's
+// deadline, whichever comes first. Before any place is chosen, the helper's
 // folder does not exist yet and there is nothing to share.
 function withRunLock(work) {
   if (!fs.existsSync(base.dataDir())) return work()
   const file = path.join(base.dataDir(), 'run.lock')
-  const giveUpAt = Date.now() + WAIT_MS
+  const giveUpAt = Date.now() + base.callTimeout(WAIT_MS)
   while (!tryTake(file)) {
     if (Date.now() > giveUpAt) return { error: BUSY }
     sleep(POLL_MS)

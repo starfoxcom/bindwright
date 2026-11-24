@@ -10,6 +10,9 @@ const SCRIPT = 'scripts/sync.cjs'
 const OUT_EVERY_MS = 60_000
 // The session's end gives every hook one short shared bound.
 const END_TIMEOUT_MS = 8_000
+// The helper's answer is due this long before the hook stops it, so the answer
+// is still read.
+const ANSWER_RESERVE_MS = 2_000
 const COMMAND = 'chat-sync'
 const HINT = '[status | places | move folder <path> | move git <owner/repo> | move off]'
 const HELP = [
@@ -34,9 +37,13 @@ let hasEnded = false
 // helper beside it, and the next session start sends what it missed.
 let isCopying = false
 
+// The helper gets the moment its answer is due, so every git and gh call it
+// makes ends before the hook stops it.
 async function runSync($: EngineInterface, args: string[], timeoutMs = 120_000): Promise<Answer> {
   try {
-    const run = await $.process.run(['node', `${$.plugin.root}/${SCRIPT}`, ...args], { timeoutMs })
+    const deadline = (await $.clock.now()) + timeoutMs - ANSWER_RESERVE_MS
+    const env = { CHAT_SYNC_DEADLINE: String(deadline) }
+    const run = await $.process.run(['node', `${$.plugin.root}/${SCRIPT}`, ...args], { timeoutMs, env })
     const last = run.stdout.trim().split('\n').pop()
     if (run.exitCode !== 0 || !last) {
       return { error: `the helper stopped (exit code ${run.exitCode}) ${run.stderr.trim().slice(-200)}`.trim() }
