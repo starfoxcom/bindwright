@@ -241,6 +241,10 @@ def _hooks_check(config):
     return _check("hooks", True, "Every hook's program is on this computer.")
 
 
+# An empty list, an empty string and YAML's null forms list no path.
+_EMPTY_YAML = re.compile(r"\[[ \t]*\]|\"\"|''|~|null|Null|NULL")
+
+
 def _is_path_scoped(text):
     lines = re.split(r"\r\n|\r|\n", text[1:] if text.startswith("﻿") else text)
     if lines[0] != "---":
@@ -254,7 +258,7 @@ def _is_path_scoped(text):
         comment = re.search(r"(^|[ \t])#", rest)
         inline = (rest[:comment.start()] if comment else rest).strip(JS_WHITESPACE)
         if inline:
-            return inline not in ("[]", '""', "''")
+            return not _EMPTY_YAML.fullmatch(inline)
         following = [line for line in lines[i + 1:]
                      if line.strip(JS_WHITESPACE) and not line.strip(JS_WHITESPACE).startswith("#")]
         return (following[0] if following else "").strip(JS_WHITESPACE).startswith("- ")
@@ -264,9 +268,12 @@ def _is_path_scoped(text):
 def _file_id(path):
     try:
         stat = os.stat(path)
+        # A disk that numbers no files reports inode 0, so there the real path stands in.
+        if stat.st_ino == 0:
+            return "path:" + os.path.realpath(path)
+        return "%d:%d" % (stat.st_dev, stat.st_ino)
     except OSError:
         return None
-    return "%d:%d" % (stat.st_dev, stat.st_ino)
 
 
 def _real_path(path):

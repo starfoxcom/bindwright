@@ -244,6 +244,9 @@ function hooksCheck(config) {
 
 // A rule whose front matter lists at least one path under `paths:` loads only
 // when Claude reads a file it matches, so it is not loaded at session start.
+// An empty list, an empty string and YAML's null forms list no path.
+const EMPTY_YAML = /^(?:\[[ \t]*\]|""|''|~|null|Null|NULL)$/;
+
 function isPathScoped(text) {
   const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
   if (lines[0] !== "---") return false;
@@ -252,7 +255,7 @@ function isPathScoped(text) {
     const rest = lines[i].slice("paths:".length);
     const comment = rest.search(/(^|[ \t])#/);
     const inline = (comment === -1 ? rest : rest.slice(0, comment)).trim();
-    if (inline) return !["[]", '""', "''"].includes(inline);
+    if (inline) return !EMPTY_YAML.test(inline);
     const next = lines.slice(i + 1).find((line) => line.trim() && !line.trim().startsWith("#"));
     return (next ?? "").trim().startsWith("- ");
   }
@@ -260,11 +263,12 @@ function isPathScoped(text) {
 }
 
 // A file's identity on its disk, the same however a path spells it (case,
-// links, short names); null when it cannot be read.
+// links, short names). A disk that numbers no files reports inode 0, so there
+// the real path stands in. Null when the file cannot be read.
 function fileId(path) {
   try {
     const stat = statSync(path, { bigint: true });
-    return `${stat.dev}:${stat.ino}`;
+    return stat.ino === 0n ? `path:${realpathSync.native(path)}` : `${stat.dev}:${stat.ino}`;
   } catch {
     return null;
   }
