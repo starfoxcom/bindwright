@@ -250,10 +250,10 @@ def _is_path_scoped(text):
             return False
         if not lines[i].startswith("paths:"):
             continue
-        inline = lines[i][len("paths:"):].strip()
+        inline = lines[i][len("paths:"):].strip(JS_WHITESPACE)
         if inline:
             return inline != "[]"
-        return (lines[i + 1] if i + 1 < len(lines) else "").strip().startswith("- ")
+        return (lines[i + 1] if i + 1 < len(lines) else "").strip(JS_WHITESPACE).startswith("- ")
     return False
 
 
@@ -288,31 +288,33 @@ def _markdown_files(folder, prefix="", seen=None):
         if os.path.isdir(path):
             out += _markdown_files(path, prefix + name + "/", seen)
         elif os.path.isfile(path) and name.endswith(".md"):
-            text = _read_text(path)
-            if text is not None:
-                out.append((prefix + name, text))
+            out.append((prefix + name, path))
     return out
 
 
 def _start_files(root, config):
     out = []
 
-    def add(name, text):
-        if text is not None:
-            out.append((name, len(text.encode("utf-16-le", "surrogatepass")) // 2))
-    repo_claude = os.path.join(root, ".claude")
-    same_folder = _real_path(repo_claude) is not None and _real_path(repo_claude) == _real_path(config)
+    counted = set()
+    personal = _real_path(config)
+
+    def add(name, path, rule=None):
+        real = _real_path(path)
+        text = None if real is None or real in counted else _read_text(path)
+        if text is None or (rule and _is_path_scoped(text)):
+            return
+        counted.add(real)
+        is_personal = rule == "personal" or bool(rule and personal is not None
+                                                 and real.startswith(personal + os.sep))
+        out.append(("a rule in ~/.claude/rules" if is_personal else name,
+                    len(text.encode("utf-16-le", "surrogatepass")) // 2))
     for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
-        add(name, _read_text(os.path.join(root, *name.split("/"))))
-    for name, text in _markdown_files(os.path.join(repo_claude, "rules")):
-        if not _is_path_scoped(text):
-            add(".claude/rules/" + name, text)
-    if same_folder:
-        return out
-    add("~/.claude/CLAUDE.md", _read_text(os.path.join(config, "CLAUDE.md")))
-    for _, text in _markdown_files(os.path.join(config, "rules")):
-        if not _is_path_scoped(text):
-            add("a rule in ~/.claude/rules", text)
+        add(name, os.path.join(root, *name.split("/")))
+    add("~/.claude/CLAUDE.md", os.path.join(config, "CLAUDE.md"))
+    for name, path in _markdown_files(os.path.join(config, "rules")):
+        add(name, path, "personal")
+    for name, path in _markdown_files(os.path.join(root, ".claude", "rules")):
+        add(".claude/rules/" + name, path, "repo")
     return out
 
 

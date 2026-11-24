@@ -3,7 +3,7 @@
 // wrong, the fix in plain words. Node only; doctor.py is the Python twin.
 
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { ANSWERS, PRISTINE, STAGING } from "./bind.js";
 import { expandAnswers, validate } from "./model.js";
 import { MODS, commandHooks, isMissing, programOf, readLayerFile, runSettings } from "./layers.js";
@@ -286,8 +286,7 @@ function markdownFiles(dir, prefix = "", seen = new Set()) {
       return [];
     }
     if (stat.isDirectory()) return markdownFiles(path, `${prefix}${name}/`, seen);
-    const text = stat.isFile() && name.endsWith(".md") ? readText(path) : null;
-    return text === null ? [] : [[`${prefix}${name}`, text]];
+    return stat.isFile() && name.endsWith(".md") ? [[`${prefix}${name}`, path]] : [];
   });
 }
 
@@ -302,24 +301,26 @@ function readText(file) {
 // The instruction files Claude Code loads at session start for this repo and
 // config folder, as [name, characters in UTF-16 units, as Claude Code counts
 // them]: each CLAUDE.md and every rule without a `paths:` list. A rule in the
-// config folder is named only as such, so its file name never reaches a bug
-// report. A CLAUDE.md above the repo and files it imports are not counted.
+// config folder (wherever the walk reached it from) is named only as such, so
+// its file name never reaches a bug report, and a file reached twice counts
+// once. A CLAUDE.md above the repo and files it imports are not counted.
 function startFiles(root, config) {
   const out = [];
-  const add = (name, text) => text !== null && out.push([name, text.length]);
-  const repoClaude = join(root, ".claude");
-  const sameFolder = realPath(repoClaude) !== null && realPath(repoClaude) === realPath(config);
-  for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) {
-    add(name, readText(join(root, ...name.split("/"))));
-  }
-  for (const [name, text] of markdownFiles(join(repoClaude, "rules"))) {
-    if (!isPathScoped(text)) add(`.claude/rules/${name}`, text);
-  }
-  if (sameFolder) return out;
-  add("~/.claude/CLAUDE.md", readText(join(config, "CLAUDE.md")));
-  for (const [, text] of markdownFiles(join(config, "rules"))) {
-    if (!isPathScoped(text)) add("a rule in ~/.claude/rules", text);
-  }
+  const counted = new Set();
+  const personal = realPath(config);
+  // `rule` is null for a CLAUDE.md, "repo" for a rule the repo's folder holds, "personal" for one in ~/.claude.
+  const add = (name, path, rule = null) => {
+    const real = realPath(path);
+    const text = real === null || counted.has(real) ? null : readText(path);
+    if (text === null || (rule && isPathScoped(text))) return;
+    counted.add(real);
+    const isPersonal = rule === "personal" || (rule && personal !== null && real.startsWith(personal + sep));
+    out.push([isPersonal ? "a rule in ~/.claude/rules" : name, text.length]);
+  };
+  for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) add(name, join(root, ...name.split("/")));
+  add("~/.claude/CLAUDE.md", join(config, "CLAUDE.md"));
+  for (const [name, path] of markdownFiles(join(config, "rules"))) add(name, path, "personal");
+  for (const [name, path] of markdownFiles(join(root, ".claude", "rules"))) add(`.claude/rules/${name}`, path, "repo");
   return out;
 }
 

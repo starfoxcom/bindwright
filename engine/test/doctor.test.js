@@ -86,11 +86,16 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
       mkdirSync(join(config, "rules"), { recursive: true });
       symlinkSync(shared, join(config, "rules", "shared"), "junction");
       symlinkSync(join(config, "rules"), join(config, "rules", "loop"), "junction");
+      // The repo reaches the same personal rules through a link of its own.
+      symlinkSync(shared, at(".claude/rules/linked"), "junction");
     });
     const found = loud.checks.find((c) => c.id === "instructions");
     assert.equal(found.ok, false);
-    assert.match(found.say, /The largest: CLAUDE\.md \(110\.0k\), a rule in ~\/\.claude\/rules \(15\.0k\)/,
-      "a linked folder is read, a loop ends, and a personal rule's name stays out");
+    // Counted once: a second copy, through the loop or the repo's link, would fill the third place.
+    const largest = new RegExp("The largest: CLAUDE\\.md \\(110\\.0k\\), a rule in ~/\\.claude/rules \\(15\\.0k\\), "
+      + "(?!a rule in)[^,]+\\.$");
+    assert.match(found.say, largest, "a linked folder is read once and a loop ends");
+    assert.doesNotMatch(found.say, /client-notes/, "a personal rule's name stays out, however it is reached");
   });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
