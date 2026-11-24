@@ -60,12 +60,10 @@ function hasName(parts) {
 function outRules(name, folder) {
   const parts = segments(folder)
   if (!hasName(parts)) return []
-  const isWindows = isWindowsPath(folder)
-  const forms = isWindows ? Object.keys(FORMS) : ['F', 'E2']
-  const flags = isWindows ? 'giu' : 'gu'
+  const forms = isWindowsPath(folder) ? Object.keys(FORMS) : ['F']
+  const flags = isWindowsPath(folder) ? 'giu' : 'gu'
   return forms
-    .map(form => ({ text: written(parts, form, isWindows), form }))
-    .filter((rule, i, all) => all.findIndex(other => other.text === rule.text) === i)
+    .map(form => ({ text: parts.join(FORMS[form]), form }))
     .sort((a, b) => b.text.length - a.text.length)
     .map(({ text, form }) => ({
       pattern: new RegExp(`${startsAfter(text)}${escapeRegExp(text)}${ENDS_BEFORE}`, flags),
@@ -85,61 +83,19 @@ function formless(text) {
 function inValues(name, folder) {
   const parts = segments(folder)
   const isWindows = isWindowsPath(folder)
-  return Object.keys(FORMS).map(form => [token(name, form), written(parts, form, isWindows)])
+  return Object.keys(FORMS).map(form => [token(name, form), parts.join(isWindows ? FORMS[form] : '/')])
 }
 
-// How many times each form sits inside a JSON string: once for F and E1, twice
-// for E2, a JSON string held inside another.
-const DEPTH = { F: 1, E1: 1, E2: 2 }
+// Characters JSON writes escaped: how many times depends on how deep a string
+// sits, which a chat line does not say (a JSON file read into a tool result, a
+// command quoting a path). A folder name without them reads the same at every
+// depth, so the swap is plain text and exact.
+const ESCAPED_IN_JSON = /["\\\u0000-\u001f]/
 
-// `folder`'s segments as a chat file holds them in `form`: each escaped for its
-// JSON depth, so a `"` or `\` in a folder name keeps the line valid JSON.
-function written(parts, form, isWindows, depth = DEPTH[form]) {
-  const escape = text => JSON.stringify(text).slice(1, -1)
-  const escaped = parts.map(part => Array.from({ length: depth }).reduce(escape, part))
-  return escaped.join(isWindows ? FORMS[form] : '/')
-}
-
-// The spans [start, end) of a JSON line's top-level strings, quotes included.
-function stringSpans(line) {
-  const spans = []
-  for (let at = line.indexOf('"'); at >= 0; at = line.indexOf('"', at)) {
-    let end = at + 1
-    while (end < line.length && line[end] !== '"') end += line[end] === '\\' ? 2 : 1
-    spans.push([at, end + 1])
-    at = end + 1
-  }
-  return spans
-}
-
-// True when the JSON string literal `literal` holds a JSON object or array.
-function holdsJson(literal) {
-  try {
-    const text = JSON.parse(literal).trim()
-    if (!text.startsWith('{') && !text.startsWith('[')) return false
-    JSON.parse(text)
-    return true
-  } catch {
-    return false
-  }
-}
-
-// A folder whose name needs no escaping writes the same text inside a string
-// and inside a string held in another, so one placeholder, F, stands for both.
-// On the way in, F is escaped twice where it sits in a string that holds JSON.
-function expandLine(line, values, nestedValues) {
-  let spans = null
-  let span = 0
-  const isNested = new Map()
-  return line.replace(WRITTEN, (match, at) => {
-    if (!(match in nestedValues)) return values[match] ?? 'CHATSYNC_'
-    spans ??= stringSpans(line)
-    while (span < spans.length && spans[span][1] <= at) span++
-    const [start, end] = spans[span] ?? [at, at]
-    if (start > at) return values[match]
-    if (!isNested.has(span)) isNested.set(span, holdsJson(line.slice(start, end)))
-    return isNested.get(span) ? nestedValues[match] : values[match]
-  })
+// The first of `folders` whose name holds such a character, or undefined. A
+// Windows name cannot hold any of them; its backslashes are separators.
+function escapedFolder(...folders) {
+  return folders.find(folder => segments(folder).some(part => ESCAPED_IN_JSON.test(part)))
 }
 
 function applyRules(text, rules) {
@@ -170,9 +126,7 @@ function neutralize(root, home) {
 
 function expand(root, home) {
   const values = Object.fromEntries([...inValues('project', root), ...inValues('home', home)])
-  const nestedF = (name, folder) => [token(name, 'F'), written(segments(folder), 'F', isWindowsPath(folder), 2)]
-  const nestedValues = Object.fromEntries([nestedF('project', root), nestedF('home', home)])
-  return text => text.replace(/[^\n]*\n?/g, line => expandLine(line, values, nestedValues))
+  return text => text.replace(WRITTEN, match => values[match] ?? 'CHATSYNC_')
 }
 
 // Writes `src` through `change`, line by line, to `dst`. With `completeOnly`, a
@@ -318,5 +272,6 @@ function startsWithFile(longer, shorter) {
 }
 
 module.exports = {
-  neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf, copyPlainFile,
+  neutralize, expand, formless, escapedFolder,
+  transformFile, appendLines, countLines, startsWithFile, sizeOf, copyPlainFile,
 }

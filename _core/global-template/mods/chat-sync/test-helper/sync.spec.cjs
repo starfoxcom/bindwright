@@ -180,31 +180,19 @@ test('a Windows chat moved to a computer without drive letters gets its paths in
   assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, '/home/sam/dev/app')
 })
 
-test('a folder whose name holds a quote or a backslash keeps every line valid JSON both ways', () => {
-  const odd = '/Users/sam/code/say "hi"\\x'
-  const line = JSON.stringify({ cwd: odd, file: `${odd}/a.js` })
-  const nested = JSON.stringify({ inner: line })
-  const out = neutralize(odd, '/Users/sam')
-  assert.doesNotMatch(out(line), /say/, 'the folder is swapped for its placeholder on the way out')
-  assert.doesNotMatch(out(nested), /say/, 'and inside a nested string too')
-  const back = expand(odd, '/Users/sam')
-  assert.deepStrictEqual(JSON.parse(back(out(line))), { cwd: odd, file: `${odd}/a.js` })
-  assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, odd)
-})
-
-test('a chat from a plain folder name arrives whole on a computer whose folder holds a quote or a backslash', () => {
-  const odd = '/home/sam/say "hi"\\x'
-  const back = expand(odd, '/home/sam')
-  const senders = [
-    ['a folder without drive letters', '/Users/sam/app', '/Users/sam', '/Users/sam/app'],
-    ['a Windows folder written with forward slashes', 'C:\\Users\\sam\\app', 'C:\\Users\\sam', 'C:/Users/sam/app'],
+test('a computer whose project or home folder name holds a quote or a backslash keeps its chats and says why', () => {
+  const rows = [
+    ['a quote in the project folder', { root: '/home/sam/say "hi"' }],
+    ['a backslash in the home folder', { home: '/home/sa\\m' }],
   ]
-  for (const [name, root, home, written] of senders) {
-    const out = neutralize(root, home)
-    const top = JSON.stringify({ cwd: written, said: `cd "${written}"` })
-    const nested = JSON.stringify({ inner: JSON.stringify({ cwd: written }) })
-    assert.deepStrictEqual(JSON.parse(back(out(top))), { cwd: odd, said: `cd "${odd}"` }, `${name}: a top-level string`)
-    assert.strictEqual(JSON.parse(JSON.parse(back(out(nested))).inner).cwd, odd, `${name}: a nested string`)
+  for (const [label, paths] of rows) {
+    const store = tempDir('store')
+    const pc = computer('a', store, paths)
+    writeChat(pc, 's1', ['one'])
+    const sent = pc.sync('out', path.join(pc.chatDir, 's1.jsonl'), pc.root)
+    assert.deepStrictEqual(sent, { skipped: 'folder name' }, label)
+    assert.match(pc.sync('in', pc.chatDir, pc.root, 'other').error || '', /Rename the folder/, label)
+    assert.deepStrictEqual(fs.readdirSync(store), [], `${label}: nothing reaches the sync place`)
   }
 })
 

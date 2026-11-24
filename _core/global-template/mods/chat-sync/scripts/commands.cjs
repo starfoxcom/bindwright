@@ -463,6 +463,15 @@ function stampOf(file) {
   return `${stat.size}:${Math.round(stat.mtimeMs)}`
 }
 
+// Why this computer's chats of `root` cannot sync, or null. Each path is swapped
+// as plain text, which is exact only for a folder name JSON writes unescaped.
+function unsyncable(root) {
+  const folder = paths.escapedFolder(root, os.homedir())
+  if (!folder) return null
+  return `the folder ${folder} has a quote, a backslash or a control character in its name, `
+    + 'so its chats stay on this computer. Rename the folder to sync them.'
+}
+
 // Copies one chat out to the sync place.
 function out([transcript, root]) {
   const opened = openStore()
@@ -473,6 +482,8 @@ function out([transcript, root]) {
   if (refused) return { pushError: refused }
   // Claude Code writes the chat file once the first message is sent.
   if (!isPlainFile(transcript)) return { skipped: 'no chat yet' }
+  // Said once, at session start, by `in`.
+  if (unsyncable(root)) return { skipped: 'folder name' }
   const id = path.basename(transcript, '.jsonl')
   const key = base.projectKey(root)
   const projectDir = path.join(store, key)
@@ -494,6 +505,8 @@ function bringIn([chatDir, root, openId]) {
   const opened = openStore()
   if (!opened.store) return opened
   const { place, store } = opened
+  const unsafe = unsyncable(root)
+  if (unsafe) return { error: unsafe }
   const isGit = place.kind === 'git'
   // Counted from the helper's start, so a wait for another run's lock uses it too.
   const deadline = performance.timeOrigin + runBudgetMs()
