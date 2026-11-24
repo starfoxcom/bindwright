@@ -6,7 +6,10 @@ The work state lives in GitHub issues, not in the repo. The repo holds the rules
 The board is `advanced.trackerProject` in `.bindwright/project.json`, written `"<owner>/<number>"`.
 <!-- TOGGLE:tracker_board END -->
 <!-- TOGGLE:tracker_board:off START -->
-This project has no board (`advanced.trackerProject` is `null` in `.bindwright/project.json`): issues alone, with project status in a pinned issue (see Project status updates). To add a board, write it there as `"<owner>/<number>"` and run `/bindwright:update`, which brings in its commands.
+This project has no board (`advanced.trackerProject` is `null` in `.bindwright/project.json`): issues alone, with project status in a pinned issue (see Project status updates).
+<!-- TOGGLE:github_actions START -->
+To add a board, write it there as `"<owner>/<number>"` and run `/bindwright:update`, which brings in its commands.
+<!-- TOGGLE:github_actions END -->
 <!-- TOGGLE:tracker_board:off END -->
 
 The issues live in this repo unless `advanced.trackerRepo` names another, written `"<owner>/<repo>"`: a private repo that keeps the work items apart from code that is public. Then every `gh issue` command below takes `--repo <that repo>`.
