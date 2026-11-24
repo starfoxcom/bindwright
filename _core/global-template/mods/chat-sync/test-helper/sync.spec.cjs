@@ -175,6 +175,8 @@ test('only this computer\'s own folders are swapped, never a longer path or name
     ['a network path in a web address', network, 'https://nas/projects/foo/x'],
     ['a home after a drive letter', mac, 'C:/Users/al/x'],
     ['a longer name in another alphabet', short, '/home/josé/x'],
+    ['a name going on with an accent mark', neutralize('/srv/app', '/Users/jose'), '/Users/josé/x'],
+    ['a name going on with a vowel sign', neutralize('/srv/app', '/home/राम'), '/home/रामा/x'],
     ['inside a longer path', posix, '/mnt/backup/home/sam/x'],
     ['a name with a suffix', posix, '/home/sam.bak/x'],
     ['the project name in a relative path', posix, 'src/srv/app/main.ts'],
@@ -751,23 +753,20 @@ test('this computer\'s own copy that cannot be read never brings a deleted chat 
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, [], 'nobody continued it')
 })
 
-test('git asks no question of an ssh command set by the user, and signs in to GitHub through gh', () => {
-  const quoted = '"C:/Program Files/OpenSSH/ssh.exe" -i key'
-  const configured = { GIT_SSH: 'plink', GIT_CONFIG_GLOBAL: gitConfig('[core]\n\tsshCommand = ssh -i key\n') }
-  const program = 'C:\\Windows\\OpenSSH\\ssh.exe'
+test('plain ssh runs in batch mode, an ssh the user set runs as set, and GitHub signs in through gh', () => {
+  const clone = tempDir('clone')
+  execFileSync('git', ['init', '-q', clone], { env: { ...process.env, ...GIT_ENV } })
+  execFileSync('git', ['-C', clone, 'config', 'core.sshCommand', 'ssh -i work-key'])
   const rows = [
-    ['ssh with options', { GIT_SSH_COMMAND: 'ssh -i key' }, 'ssh -i key -o BatchMode=yes'],
-    ['quoted ssh.exe', { GIT_SSH_COMMAND: quoted }, `${quoted} -o BatchMode=yes`],
-    ['another program', { GIT_SSH_COMMAND: 'plink -batch' }, 'plink -batch'],
-    ['GIT_SSH naming ssh.exe', { GIT_SSH: program }, `'${program}' -o BatchMode=yes`],
-    ['GIT_SSH naming another program', { GIT_SSH: 'plink' }, undefined],
-    ['core.sshCommand beside GIT_SSH', configured, 'ssh -i key -o BatchMode=yes'],
-    ['nothing set', {}, 'ssh -o BatchMode=yes'],
+    ['nothing set', {}, tempDir('plain'), 'ssh -o BatchMode=yes'],
+    ['GIT_SSH_COMMAND', { GIT_SSH_COMMAND: 'ssh -i key' }, tempDir('plain'), 'ssh -i key'],
+    ['GIT_SSH', { GIT_SSH: 'plink' }, tempDir('plain'), undefined],
+    ['core.sshCommand set only in the clone', {}, clone, undefined],
   ]
-  for (const [name, env, expected] of rows) {
+  for (const [name, env, folder, expected] of rows) {
     const command = inProcess({ env: { ...GIT_ENV, ...env } }, () => {
       for (const key of ['GIT_SSH_COMMAND', 'GIT_SSH']) if (!(key in env)) delete process.env[key]
-      return require(SYNC).quietEnv().GIT_SSH_COMMAND
+      return require(SYNC).quietEnv(folder).GIT_SSH_COMMAND
     })
     assert.strictEqual(command, expected, name)
   }

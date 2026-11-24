@@ -76,37 +76,31 @@ function storeRoot(place) {
   return null
 }
 
-let sshCommand
-
 // The environment for git and gh: a password, passphrase or host-key question
 // fails the command at once instead of waiting, since no one is there to answer
 // it. Git asks an askpass program before the terminal, and an editor's terminal
 // sets one that opens a dialog, so none is passed on (core.askPass is emptied in
-// gitSettings). A user's own ssh command or program is kept, picked in git's
-// order, with batch mode added when it is OpenSSH's; another program (plink, a
-// wrapper) takes other options, so only the time limit stops its questions.
-function quietEnv() {
+// gitSettings). When the user set no ssh program of their own, plain ssh runs in
+// batch mode. A program or command the user set (GIT_SSH_COMMAND, GIT_SSH, or
+// core.sshCommand as git reads it in the folder `cwd`) runs as they set it, so
+// only the time limit stops a question it asks.
+function quietEnv(cwd = os.homedir()) {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GH_PROMPT_DISABLED: '1' }
   for (const name of ['GIT_ASKPASS', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']) delete env[name]
-  const own = env.GIT_SSH_COMMAND || configuredSshCommand() || (env.GIT_SSH ? `'${env.GIT_SSH}'` : 'ssh')
-  if (isOpenSsh(own)) env.GIT_SSH_COMMAND = `${own} -o BatchMode=yes`
+  const isOwnSsh = env.GIT_SSH_COMMAND || env.GIT_SSH || configuredSshCommand(cwd)
+  if (!isOwnSsh) env.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes'
   return env
 }
 
-function configuredSshCommand() {
-  if (sshCommand === undefined) {
-    const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
-      { cwd: os.homedir(), encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
-    sshCommand = (run.stdout || '').trim()
-  }
-  return sshCommand
-}
+const sshCommands = new Map()
 
-// Whether a command's program is ssh itself, by its file name, quoted or not.
-function isOpenSsh(command) {
-  const program = /^\s*(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(command)
-  const file = program ? (program[1] || program[2] || program[3]) : ''
-  return /^ssh(?:\.exe)?$/i.test(file.split(/[\\/]/).pop())
+function configuredSshCommand(cwd) {
+  if (!sshCommands.has(cwd)) {
+    const run = spawnSync('git', ['config', '--get', 'core.sshCommand'],
+      { cwd, encoding: 'utf8', timeout: GIT_TIMEOUT_MS })
+    sshCommands.set(cwd, (run.stdout || '').trim())
+  }
+  return sshCommands.get(cwd)
 }
 
 // Settings every git call of the mod runs with, the clone included: chat files
@@ -127,7 +121,7 @@ function gitSettings() {
 
 function git(cwd, ...args) {
   const run = spawnSync('git', [...gitSettings(), '-C', cwd, ...args],
-    { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv() })
+    { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv(cwd) })
   const ok = run.status === 0
   const out = `${run.stdout || ''}${run.stderr || ''}`.trim()
   return { ok, out: ok || out ? out : stopReason(`git ${args[0]}`, run) }
@@ -170,7 +164,7 @@ function safeName(text) {
 }
 
 module.exports = {
-  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, isOpenSsh, gitSettings, git,
+  configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git,
   stopReason, projectKey, safeName,
 }
 

@@ -38,16 +38,17 @@ function escapeRegExp(text) {
 // for a home of /Users/al, C:/Users/al are left alone. A path that starts with
 // two slashes (a network path) never starts after `:`, as in https://nas/x.
 const BEFORE = '^|[\\s"\'`([{<>=,;|]|\\\\[nrt]'
-const COLON_NOT_DRIVE = '(?<!(?:^|[^\\p{L}\\p{N}_])[A-Za-z]):'
+const COLON_NOT_DRIVE = '(?<!(?:^|[^\\p{L}\\p{M}\\p{N}_])[A-Za-z]):'
 
 function startsAfter(text) {
   return text.startsWith('//') ? `(?<=${BEFORE})` : `(?<=${BEFORE}|${COLON_NOT_DRIVE})`
 }
 
-// A path ends where the folder's name ends, in any alphabet, so C:/Users/al
-// never matches inside C:/Users/alex, /home/jos inside /home/josé, or
-// /home/sam.bak; a sentence's closing dot still ends it.
-const ENDS_BEFORE = '(?![\\p{L}\\p{N}_-]|\\.[\\p{L}\\p{N}_-])'
+// A path ends where the folder's name ends, in any alphabet and with any accent
+// or vowel sign written as its own mark, so C:/Users/al never matches inside
+// C:/Users/alex, /home/jos inside /home/josé, or /home/sam.bak; a sentence's
+// closing dot still ends it.
+const ENDS_BEFORE = '(?![\\p{L}\\p{M}\\p{N}_-]|\\.[\\p{L}\\p{M}\\p{N}_-])'
 
 // A folder with no name below the root or the drive ("/", "C:\") is everywhere
 // in a chat, so it gets no rule.
