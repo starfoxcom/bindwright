@@ -24,8 +24,10 @@ function describe(place) {
 
 // A chat repo must be private: a chat holds code, command output and anything pasted in.
 function checkPrivate(repo) {
+  const timeout = base.callTimeout(30_000)
+  if (!timeout) return base.OUT_OF_TIME
   const view = spawnSync('gh', ['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility'],
-    { encoding: 'utf8', timeout: 30_000, env: base.quietEnv() })
+    { encoding: 'utf8', timeout, env: base.quietEnv() })
   if (view.status !== 0) {
     return `Could not confirm that ${repo} is private: ${(view.stderr || '').trim() || base.stopReason('gh', view)}`
   }
@@ -37,7 +39,9 @@ function checkPrivate(repo) {
 // The repo's address as gh would clone it: its ssh address when gh's git
 // protocol is ssh, else its https one.
 function repoAddress(repo) {
-  const options = { encoding: 'utf8', timeout: 30_000, env: base.quietEnv() }
+  const timeout = base.callTimeout(30_000)
+  if (!timeout) return { error: base.OUT_OF_TIME }
+  const options = { encoding: 'utf8', timeout, env: base.quietEnv() }
   const protocol = spawnSync('gh', ['config', 'get', 'git_protocol', '-h', 'github.com'], options)
   const field = (protocol.stdout || '').trim() === 'ssh' ? 'sshUrl' : 'url'
   const view = spawnSync('gh', ['repo', 'view', repo, '--json', field, '--jq', `.${field}`], options)

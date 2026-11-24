@@ -11,9 +11,6 @@ const WAIT_MS = 30_000
 const POLL_MS = 100
 // Longer than any run lasts: a move is stopped after 300 s.
 const HELD_MAX_MS = 10 * 60_000
-// A run that took the lock writes its process id at once; a lock still empty
-// after this long was left by a run stopped in between.
-const UNWRITTEN_MS = 5_000
 const BUSY = 'Another chat-sync run on this computer took longer than 30 s, so this one did nothing; '
   + 'the next copy catches up.'
 
@@ -40,18 +37,21 @@ function readLock(file) {
 
 function isStale({ text, age }) {
   const owner = Number.parseInt(text, 10)
-  if (!owner) return age > UNWRITTEN_MS
-  return !isAlive(owner) || age > HELD_MAX_MS
+  return !owner || !isAlive(owner) || age > HELD_MAX_MS
 }
 
+// The process id is written to a file of this run's own, then linked to the
+// lock's name, which only one run can do: the lock is never seen empty.
 function tryTake(file) {
+  const own = `${file}.${process.pid}.new`
+  fs.writeFileSync(own, String(process.pid))
   try {
-    const handle = fs.openSync(file, 'wx')
-    fs.writeSync(handle, String(process.pid))
-    fs.closeSync(handle)
+    fs.linkSync(own, file)
     return true
   } catch (error) {
     if (error.code !== 'EEXIST') throw error
+  } finally {
+    fs.rmSync(own, { force: true })
   }
   const held = readLock(file)
   if (held && isStale(held)) takeOver(file, held)
@@ -62,7 +62,9 @@ function tryTake(file) {
 // can do to a given file, then checks what it moved: a lock that another run
 // took after it was judged stale goes back. Between the move and the putting
 // back, a third run can take the name too; making that impossible needs an
-// operating-system lock, which Node does not offer on every system.
+// operating-system lock, which Node does not offer on every system. Two runs
+// working at once then cost a repeated copy or a git error, never a chat: each
+// keeps its private copies in a folder of its own (`inWorkFolder`).
 function takeOver(file, held) {
   const aside = `${file}.${process.pid}.stale`
   try {
@@ -103,4 +105,4 @@ function withRunLock(work) {
   }
 }
 
-module.exports = { withRunLock }
+module.exports = { withRunLock, isAlive }

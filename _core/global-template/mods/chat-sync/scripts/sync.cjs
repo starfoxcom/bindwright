@@ -116,9 +116,25 @@ function gitSettings() {
   return settings.flatMap(setting => ['-c', setting])
 }
 
+// One deadline for the whole run: every git and gh call gets the smaller of its
+// own limit and the time left, so the calls never add up past it.
+let deadline = Infinity
+
+function setDeadline(at) {
+  deadline = at
+}
+
+function callTimeout(ownMs) {
+  return Math.max(0, Math.min(ownMs, Math.floor(deadline - Date.now())))
+}
+
+const OUT_OF_TIME = 'Chat sync ran out of time for this run; the next one goes on.'
+
 function git(cwd, ...args) {
+  const timeout = callTimeout(GIT_TIMEOUT_MS)
+  if (!timeout) return { ok: false, out: OUT_OF_TIME }
   const run = spawnSync('git', [...gitSettings(), '-C', cwd, ...args],
-    { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: quietEnv(cwd) })
+    { encoding: 'utf8', timeout, env: quietEnv(cwd) })
   const ok = run.status === 0
   const out = `${run.stdout || ''}${run.stderr || ''}`.trim()
   return { ok, out: ok || out ? out : stopReason(`git ${args[0]}`, run) }
@@ -162,7 +178,7 @@ function safeName(text) {
 
 module.exports = {
   configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git,
-  stopReason, projectKey, safeName,
+  setDeadline, callTimeout, OUT_OF_TIME, stopReason, projectKey, safeName,
 }
 
 if (require.main === module) {

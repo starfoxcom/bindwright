@@ -96,13 +96,14 @@ function moveToRepo(pc, origin, afterClone = () => {}, sshUsed = []) {
 }
 
 // Runs `work` inside this process as computer `pc`, with the helper's scripts
-// loaded fresh for it.
+// loaded fresh for it. A helper counts its time from its process's start, which
+// here is the test run's, so the limits are lifted.
 function inProcess(pc, work) {
   const savedEnv = { ...process.env }
   const scripts = ['sync.cjs', 'commands.cjs', 'move.cjs', 'paths.cjs', 'places.cjs', 'lock.cjs']
     .map(name => require.resolve(path.join(SCRIPTS, name)))
   const reload = () => scripts.forEach(file => delete require.cache[file])
-  Object.assign(process.env, pc.env)
+  Object.assign(process.env, { CHAT_SYNC_RUN_BUDGET_MS: '1e12', CHAT_SYNC_COPY_LIMIT_MS: '1e12' }, pc.env)
   reload()
   try {
     return work()
@@ -113,12 +114,13 @@ function inProcess(pc, work) {
   }
 }
 
-// Runs the helper as computer `pc` while every file under `folder` refuses to
-// open, as a file a sync app holds open does on Windows.
-function syncWithBusyFiles(pc, folder, ...args) {
+// Runs the helper as computer `pc` while every file whose path holds the name
+// `busy` (a unique folder or file name) refuses to open, as a file a sync app
+// holds open does on Windows.
+function syncWithBusyFiles(pc, busy, ...args) {
   const realOpen = fs.openSync
   fs.openSync = (file, ...rest) => {
-    if (path.resolve(String(file)).startsWith(path.resolve(folder))) {
+    if (String(file).includes(busy)) {
       throw Object.assign(new Error(`EBUSY: resource busy or locked, open '${file}'`), { code: 'EBUSY' })
     }
     return realOpen(file, ...rest)
@@ -521,6 +523,24 @@ test('a chat repo that cannot be confirmed private at session start says so and 
   assert.deepStrictEqual(answer.sent, [])
 })
 
+test('a chat repo that never answers stops the run within its limit, with an answer', async () => {
+  const server = http.createServer(() => {})
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const a = gitComputer('a', bareRepo(), { CHAT_SYNC_COPY_LIMIT_MS: '4000' })
+    const url = `http://127.0.0.1:${server.address().port}/chats.git`
+    execFileSync('git', ['-C', path.join(a.dataDir, 'repo'), 'remote', 'set-url', 'origin', url])
+    const started = Date.now()
+    const run = await execFileAsync(process.execPath, [SYNC, 'in', a.chatDir, a.root, 'other'],
+      { env: a.env, timeout: 40_000 })
+    assert.match(JSON.parse(run.stdout).error || '', /time/)
+    assert.ok(Date.now() - started < 20_000, 'the run kept to its limit')
+  } finally {
+    server.closeAllConnections()
+    server.close()
+  }
+})
+
 // A password prompt program, as an editor's terminal sets one, that would keep
 // git waiting; it leaves a mark when git starts it.
 function waitingAskpass() {
@@ -721,7 +741,7 @@ test('a newer copy that cannot be read yet is brought in once it can be', () => 
   b.sync('in', b.chatDir, b.root, 'other')
   writeChat(a, 's1', ['one', 'two'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const busy = syncWithBusyFiles(b, store, 'in', b.chatDir, b.root, 'other')
+  const busy = syncWithBusyFiles(b, path.basename(store), 'in', b.chatDir, b.root, 'other')
   assert.match(busy.error || '', /could not read/)
   assert.deepStrictEqual(busy.imported, [])
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
@@ -760,7 +780,7 @@ test('this computer\'s own copy that cannot be read never brings a deleted chat 
   const ownOfB = fs.readdirSync(folder).find(name => name !== fromA)
   fs.rmSync(path.join(b.chatDir, 's1.jsonl'))
   fs.utimesSync(path.join(folder, fromA), new Date(), new Date(Date.now() + 5_000))
-  const busy = syncWithBusyFiles(b, path.join(folder, ownOfB), 'in', b.chatDir, b.root, 'other')
+  const busy = syncWithBusyFiles(b, ownOfB, 'in', b.chatDir, b.root, 'other')
   assert.match(busy.error || '', /could not read/)
   assert.deepStrictEqual(busy.imported, [])
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, [], 'nobody continued it')

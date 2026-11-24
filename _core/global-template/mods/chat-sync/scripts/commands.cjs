@@ -14,7 +14,12 @@ const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const paths = require('./paths.cjs')
 const { syncPlaces } = require('./places.cjs')
-const { withRunLock } = require('./lock.cjs')
+const { withRunLock, isAlive } = require('./lock.cjs')
+
+// The hook stops a copy's helper after 120 s and a move's after 300 s; the
+// helper stops its own calls 10 s before that, so its answer still reaches it.
+const COPY_LIMIT_MS = 110_000
+const MOVE_LIMIT_MS = 290_000
 
 const {
   neutralize, expand, formless, transformFile, appendLines, countLines, startsWithFile, sizeOf, copyPlainFile,
@@ -151,15 +156,31 @@ function compareChat(local, stored, root) {
 }
 
 // Private copies of chats live in the helper's own folder, never the system's
-// temporary one, and each run clears what a stopped run left there.
+// temporary one, each named after the run's process, and each run clears what
+// a stopped run left there.
 function workRoot() {
   return path.join(base.dataDir(), 'work')
+}
+
+const WORK_FOLDER = /^run-(\d+)-/
+
+function clearStoppedRuns() {
+  let names = []
+  try {
+    names = fs.readdirSync(workRoot())
+  } catch {
+    return
+  }
+  for (const name of names) {
+    const owner = Number(WORK_FOLDER.exec(name)?.[1])
+    if (!owner || !isAlive(owner)) removeQuietly(path.join(workRoot(), name))
+  }
 }
 
 // Runs `work` with a private folder of this computer's, removed after.
 function inWorkFolder(work) {
   fs.mkdirSync(workRoot(), { recursive: true })
-  const dir = fs.mkdtempSync(path.join(workRoot(), 'run-'))
+  const dir = fs.mkdtempSync(path.join(workRoot(), `run-${process.pid}-`))
   try {
     return work(dir)
   } finally {
@@ -594,19 +615,23 @@ function importCopy(copy, local, root, { localLines, before }) {
   }
 }
 
-// Only one run works at a time, so the run holding the lock owns the work folder.
-function locked(work) {
+// The run holding the lock clears the work folders of runs that are gone. It
+// also sets the run's deadline, a little before the hook stops the helper, so
+// every git and gh call fits in it and the answer is still printed.
+function locked(work, limitMs) {
+  base.setDeadline(performance.timeOrigin + limitMs)
   return withRunLock(() => {
-    removeQuietly(workRoot())
+    clearStoppedRuns()
     return work()
   })
 }
 
 function run([command, ...args]) {
   const { move } = require('./move.cjs')
-  if (command === 'out') return locked(() => out(args))
-  if (command === 'in') return locked(() => bringIn(args))
-  if (command === 'move') return locked(() => move(args))
+  const copyLimitMs = Number(process.env.CHAT_SYNC_COPY_LIMIT_MS) || COPY_LIMIT_MS
+  if (command === 'out') return locked(() => out(args), copyLimitMs)
+  if (command === 'in') return locked(() => bringIn(args), copyLimitMs)
+  if (command === 'move') return locked(() => move(args), MOVE_LIMIT_MS)
   if (command === 'places') return { places: syncPlaces() }
   if (command === 'status') return status(args)
   return { error: `Unknown command: ${command || '(none)'}` }
