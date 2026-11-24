@@ -376,23 +376,33 @@ COMMAND_END = re.compile(r"[\n;&|]")
 # What the shell would change, so the length rules leave the command unread: an expansion, an escape, or a
 # doubled quote (PowerShell's quote inside a string). Without them, shlex splits a command as both shells do.
 UNPLAIN = re.compile(r"[$`\\]|''|\"\"")
+# Outside quotes, PowerShell reads these as an expression or a here-string, where shlex reads a word.
+POWERSHELL_UNPLAIN = re.compile(r"[()@]")
 LONGEST_COMMAND = 10000  # a plain commit or PR command is shorter; a longer one is left unread
 
 
 def commands(text, shell):
-    """The text of each command, cut where the shell ends one outside quotes and comments."""
-    calls, end = masked_calls(text, shell)
+    """Each command's text and its shape, cut at a separator outside quotes and comments. The shape is
+    the text with every character the shell's scan finds inside quotes or a comment, a line break
+    included, written as `x`, so only a separator the shell reads can cut it."""
+    _, end = masked_calls(text, shell)
+    shape = list(text[:end])
+    for found in quoted(text[:end], shell):
+        shape[found.start():found.end()] = "x" * (found.end() - found.start())
+    shape = "".join(shape)
     start = 0
-    for found in COMMAND_END.finditer(calls, 0, end):
-        yield text[start:found.start()]
+    for found in COMMAND_END.finditer(shape):
+        yield text[start:found.start()], shape[start:found.start()]
         start = found.end()
-    yield text[start:end]
+    yield text[start:end], shape[start:]
 
 
-def plain_words(command):
+def plain_words(command, shape, shell):
     """The command's words as the shell passes them, or None when the shell would change any of them."""
     command = command.strip()
     if not command.startswith(("git", "gh")) or len(command) > LONGEST_COMMAND or UNPLAIN.search(command):
+        return None
+    if shell == "powershell" and POWERSHELL_UNPLAIN.search(shape):
         return None
     try:
         return shlex.split(command, comments=True)
@@ -414,9 +424,11 @@ def gh_pr_args(words):
     return words[3:] if words[:2] == ["gh", "pr"] and words[2:3] in (["create"], ["edit"]) else None
 
 
-def first_value(args, letter, name, value_letters):
+def first_value(args, rule):
     """The value of the first `--<name>`, or `-<letter>` alone or in a cluster of short options. A short
-    option in `value_letters` takes the rest of its word, or the next word, as its own value."""
+    option in `value_letters` takes the rest of its word, or the next word, as its own value; one in
+    `attached_only` takes only the rest of its word."""
+    _, letter, name, value_letters, attached_only, attached_equals = rule
     skip = False
     for index, arg in enumerate(args):
         following = args[index + 1] if index + 1 < len(args) else None
@@ -431,24 +443,27 @@ def first_value(args, letter, name, value_letters):
         elif len(arg) > 1 and arg[0] == "-" and arg[1].isalpha():
             for at, short in enumerate(arg[1:], 2):
                 if short == letter:
-                    return arg[at:] or following
-                if short in value_letters or not short.isalpha():
+                    attached = arg[at + 1:] if attached_equals and arg[at:at + 1] == "=" else arg[at:]
+                    return attached or following
+                if short in value_letters or short in attached_only or not short.isalpha():
                     skip = short in value_letters and at == len(arg)
                     break
     return None
 
 
-# Each length rule: the command's arguments, its message option, and the short options that take a value.
-COMMIT_MESSAGE = (git_commit_args, "m", "--message", "cCFStu")
-PR_TITLE = (gh_pr_args, "t", "--title", "aBbFHlmpRrT")
+# Each length rule: the command's arguments, its message option, the short options that take a value
+# (the rest of their word or else the next word), those that take one only attached (git's `-S<keyid>`),
+# and whether an attached value drops a leading `=` (gh's flag parser does; git's keeps it).
+COMMIT_MESSAGE = (git_commit_args, "m", "--message", "cCFt", "Su", False)
+PR_TITLE = (gh_pr_args, "t", "--title", "aBbFHlmpRrT", "", True)
 
 
 def option_values(text, shell, rule):
-    args_of, letter, name, value_letters = rule
-    for command in commands(text, shell):
-        words = plain_words(command)
+    args_of = rule[0]
+    for command, shape in commands(text, shell):
+        words = plain_words(command, shape, shell)
         args = args_of(words) if words else None
-        value = first_value(args, letter, name, value_letters) if args is not None else None
+        value = first_value(args, rule) if args is not None else None
         if value is not None:
             yield value
 
