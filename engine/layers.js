@@ -42,7 +42,7 @@ const SETTING_EXTRAS = {
   },
 };
 export const MODS = [
-  "chat-sync", "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
+  "ci-watch", "compact-handoff", "mods", "runners", "session-facts",
   "session-info", "shared-pc", "skill-check", "tasks", "usage-guard",
 ];
 export const EXTRAS = [...Object.keys(EXTRA_FILES), ...Object.keys(SETTING_EXTRAS), ...MODS].sort();
