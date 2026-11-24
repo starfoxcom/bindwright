@@ -8,6 +8,9 @@ import { currentView, setView } from "./view.js";
 
 const $ = (id) => document.getElementById(id);
 const answers = defaults();
+// Setup creates the board and only then writes its number, so the defaults hold none; the page
+// shows the recommended setup, which has one.
+answers.advanced.trackerProject = "your-name/1";
 const COPY_FEEDBACK_MS = 1500;
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 // Where the file list and the open file share the width, side by side.
