@@ -13,7 +13,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const paths = require('./paths.cjs')
-const { syncPlaces } = require('./places.cjs')
+const { syncPlaces, othersChats } = require('./places.cjs')
 const { withRunLock, isAlive } = require('./lock.cjs')
 
 // The hook stops a copy's helper after 120 s and a move's after 300 s, and
@@ -72,7 +72,12 @@ function chatIds(projectDir) {
 // This computer's id as a file name in the sync place, in the same letters the
 // readers accept, whatever machine.json holds.
 function ownName() {
-  return `${base.machineId().replace(/[^\w-]+/g, '-')}.jsonl`
+  return copyName(base.machineId())
+}
+
+// The name of a computer's copy of a chat in the sync place.
+function copyName(machine) {
+  return `${machine.replace(/[^\w-]+/g, '-')}.jsonl`
 }
 
 // A temporary copy of this computer's, named the way sync apps name theirs.
@@ -677,9 +682,18 @@ function run([command, ...args]) {
   if (command === 'out') return locked(() => out(args), copyLimitMs)
   if (command === 'in') return locked(() => bringIn(args), copyLimitMs)
   if (command === 'move') return locked(() => move(args), MOVE_LIMIT_MS)
-  if (command === 'places') return { places: syncPlaces() }
+  if (command === 'places') return places()
   if (command === 'status') return status(args)
   return { error: `Unknown command: ${command || '(none)'}` }
+}
+
+// Each sync folder found here, with what other computers keep in its
+// `Claude chats` folder (`others`, null when nothing), so setup can offer the
+// place a second computer joins. Read only, like `status`.
+function places() {
+  const machine = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id
+  const ownFile = machine ? copyName(machine) : null
+  return { places: syncPlaces().map(place => ({ ...place, others: othersChats(place.path, ownFile) })) }
 }
 
 function status([root]) {

@@ -90,4 +90,36 @@ function syncPlaces(home = os.homedir()) {
   })
 }
 
-module.exports = { syncPlaces }
+// The folder setup proposes inside a sync folder, where a computer that set up
+// chat sync before keeps its chats.
+const CHATS_FOLDER = 'Claude chats'
+
+function realFolders(folder) {
+  try {
+    return fs.readdirSync(folder, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
+  } catch {
+    return []
+  }
+}
+
+// What other computers already keep in `<folder>/Claude chats`: the number of
+// projects and the computers' names, or null when it holds no copy but
+// `ownFile`, this computer's own. Only names are read, and links are not
+// followed.
+function othersChats(folder, ownFile) {
+  const chats = path.join(folder, CHATS_FOLDER)
+  const projects = new Set()
+  const computers = new Set()
+  for (const project of realFolders(chats)) {
+    for (const id of realFolders(path.join(chats, project))) {
+      const copies = children(path.join(chats, project, id)).filter(name => /^[\w-]+\.jsonl$/.test(name))
+      for (const name of copies.filter(copy => copy !== ownFile)) {
+        projects.add(project)
+        computers.add(name.slice(0, -'.jsonl'.length))
+      }
+    }
+  }
+  return projects.size ? { folder: chats, projects: projects.size, computers: [...computers].sort() } : null
+}
+
+module.exports = { syncPlaces, othersChats }

@@ -1093,6 +1093,32 @@ test('Google Drive is found under its folder name in the computer\'s language', 
   }
 })
 
+test('a sync folder where another computer keeps chats is told apart from one with none', () => {
+  const { othersChats } = require(path.join(SCRIPTS, 'places.cjs'))
+  const withCopies = (copies) => {
+    const drive = tempDir('drive')
+    for (const copy of copies) {
+      fs.mkdirSync(path.join(drive, 'Claude chats', 'shop-1', 's1'), { recursive: true })
+      fs.writeFileSync(path.join(drive, 'Claude chats', 'shop-1', 's1', copy), '{}\n')
+    }
+    return drive
+  }
+  const linked = withCopies([])
+  fs.mkdirSync(path.join(linked, 'Claude chats'))
+  fs.symlinkSync(withCopies(['desk-1.jsonl']), path.join(linked, 'Claude chats', 'shop-2'), 'junction')
+  const cases = [
+    { name: 'another computer\'s copy', drive: withCopies(['desk-1.jsonl', 'me-2.jsonl']),
+      want: { projects: 1, computers: ['desk-1'] } },
+    { name: 'only this computer\'s copy', drive: withCopies(['me-2.jsonl']), want: null },
+    { name: 'no chats folder', drive: withCopies([]), want: null },
+    { name: 'a project folder that is a link', drive: linked, want: null },
+  ]
+  for (const row of cases) {
+    const found = othersChats(row.drive, 'me-2.jsonl')
+    assert.deepStrictEqual(found && { projects: found.projects, computers: found.computers }, row.want, row.name)
+  }
+})
+
 test('a session start that runs out of time keeps what it did, and the next one goes on', () => {
   const a = computer('a', tempDir('folder'))
   for (const id of ['s1', 's2', 's3']) writeChat(a, id, [id])
