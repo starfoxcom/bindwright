@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.17.0] — 2026-11-24
+
 ### Added
 
 - **Chat sync: resume a chat on another computer.** A new opt-in mod, `chat-sync`, keeps chats in step across computers, so a chat started on one is in `/resume` on another once Claude Code starts in the project there. Setup asks where the chats live: a folder a sync app keeps in step (it finds Google Drive, OneDrive, Dropbox, iCloud Drive and Syncthing on the computer) or a private GitHub repo. Newer chats come in when a session starts, and the open chat goes out after a turn and when the session ends. Each computer's paths inside a chat are swapped for placeholders on the way out and back on the way in, so the project can sit at a different path on each computer. Each computer keeps its own copy of a chat in the sync place, so no two computers write the same file, and copies that changed on both sides are both kept. `/chat-sync move` moves every chat to a new place, from Google Drive to Dropbox for example, checks each arrived, then switches. Only chat files move; settings and login stay on each computer. On a second computer, setup notices a sync folder where another computer already keeps its chats, recommends the mod and offers that folder first, so the new computer joins the same place.
