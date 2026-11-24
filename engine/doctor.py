@@ -26,7 +26,13 @@ FIX = {
                "and the Next id line is above every id in use.",
     "hooks": "Run /bindwright:setup again to reinstall them, "
              "or fix the paths in the settings file named.",
+    "instructions": "Move what a session needs only for some files into rules with a `paths:` line, which load "
+                    "only when Claude reads a matching file, or into the skill that uses it. Past the limit "
+                    "Claude Code warns at every session start.",
 }
+
+INSTRUCTIONS_LIMIT = 150000
+INSTRUCTIONS_WARN_AT = 120000
 
 
 MODS_SINCE = [2, 1, 287]
@@ -235,6 +241,78 @@ def _hooks_check(config):
     return _check("hooks", True, "Every hook's program is on this computer.")
 
 
+def _is_path_scoped(text):
+    lines = re.split(r"\r\n|\r|\n", text)
+    if lines[0] != "---":
+        return False
+    for line in lines[1:]:
+        if line == "---":
+            return False
+        if line.startswith("paths:"):
+            return True
+    return False
+
+
+def _read_text(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace", newline="") as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def _markdown_files(folder, prefix=""):
+    try:
+        names = sorted(os.listdir(folder), key=_code_units)
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        path = os.path.join(folder, name)
+        if os.path.islink(path):
+            continue
+        if os.path.isdir(path):
+            out += _markdown_files(path, prefix + name + "/")
+        elif os.path.isfile(path) and name.endswith(".md"):
+            text = _read_text(path)
+            if text is not None:
+                out.append((prefix + name, text))
+    return out
+
+
+def _start_files(root, config):
+    out = []
+
+    def add(name, text):
+        if text is not None:
+            out.append((name, len(text)))
+    for name in ("CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"):
+        add(name, _read_text(os.path.join(root, *name.split("/"))))
+    add("~/.claude/CLAUDE.md", _read_text(os.path.join(config, "CLAUDE.md")))
+    for where, folder in ((".claude/rules/", os.path.join(root, ".claude", "rules")),
+                          ("~/.claude/rules/", os.path.join(config, "rules"))):
+        for name, text in _markdown_files(folder):
+            if not _is_path_scoped(text):
+                add(where + name, text)
+    return out
+
+
+def _kilo(n):
+    return "%d.%dk" % (n // 1000, n % 1000 // 100)
+
+
+def _instructions_check(root, config):
+    files = _start_files(root, config)
+    total = sum(size for _, size in files)
+    largest = sorted(files, key=lambda item: (-item[1], _code_units(item[0])))[:3]
+    say = ("Claude Code loads %d instruction files at session start, %s characters of its %s limit. "
+           "The largest: %s." % (len(files), _kilo(total), _kilo(INSTRUCTIONS_LIMIT),
+                                 ", ".join("%s (%s)" % (name, _kilo(size)) for name, size in largest) or "none"))
+    if total < INSTRUCTIONS_WARN_AT:
+        return _check("instructions", True, say)
+    return _check("instructions", False, say, FIX["instructions"])
+
+
 def run_doctor(root, config, plugin_version, cli_version):
     """See runDoctor in doctor.js."""
     state = _state_checks(root)
@@ -242,7 +320,7 @@ def run_doctor(root, config, plugin_version, cli_version):
     if "answers" in state:
         checks += [_version_check(state["pristine"], plugin_version),
                    _guard_check(root, state["answers"], state["pristine"])]
-        checks.append(_staged_check(root))
+        checks += [_staged_check(root), _instructions_check(root, config)]
         if state["answers"]["advanced"]["tracker"] == "file":
             checks.append(_roadmap_check(root))
         settings = _settings_checks(root, config)

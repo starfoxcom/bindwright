@@ -26,7 +26,15 @@ const FIX = {
     + "and the Next id line is above every id in use.",
   hooks: "Run /bindwright:setup again to reinstall them, "
     + "or fix the paths in the settings file named.",
+  instructions: "Move what a session needs only for some files into rules with a `paths:` line, which load "
+    + "only when Claude reads a matching file, or into the skill that uses it. Past the limit Claude Code "
+    + "warns at every session start.",
 };
+
+// Claude Code's limit on the instruction files it loads at session start, in
+// characters, and the share of it past which the doctor warns.
+export const INSTRUCTIONS_LIMIT = 150000;
+const INSTRUCTIONS_WARN_AT = 120000;
 
 // The first CLI with mods; older ones load none of them.
 export const MODS_SINCE = [2, 1, 287];
@@ -234,6 +242,76 @@ function hooksCheck(config) {
     : check("hooks", true, "Every hook's program is on this computer.");
 }
 
+// A rule whose front matter has a `paths:` line loads only when Claude reads a
+// file it matches, so it is not loaded at session start.
+function isPathScoped(text) {
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines[0] !== "---") return false;
+  for (const line of lines.slice(1)) {
+    if (line === "---") return false;
+    if (line.startsWith("paths:")) return true;
+  }
+  return false;
+}
+
+// Each Markdown file under `dir`, sorted, as [path below `dir`, text]; none
+// when the folder is missing or cannot be read.
+function markdownFiles(dir, prefix = "") {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return entries.flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return markdownFiles(path, `${prefix}${entry.name}/`);
+    const text = entry.isFile() && entry.name.endsWith(".md") ? readText(path) : null;
+    return text === null ? [] : [[`${prefix}${entry.name}`, text]];
+  });
+}
+
+function readText(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+// The instruction files Claude Code loads at session start for this repo and
+// config folder, as [name, characters]: each CLAUDE.md and every rule with no
+// `paths:` line. A CLAUDE.md in a folder above the repo and files it imports
+// are not counted.
+function startFiles(root, config) {
+  const out = [];
+  const add = (name, text) => text !== null && out.push([name, [...text].length]);
+  for (const name of ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md"]) {
+    add(name, readText(join(root, ...name.split("/"))));
+  }
+  add("~/.claude/CLAUDE.md", readText(join(config, "CLAUDE.md")));
+  const ruleFolders = [[".claude/rules/", join(root, ".claude", "rules")], ["~/.claude/rules/", join(config, "rules")]];
+  for (const [where, dir] of ruleFolders) {
+    for (const [name, text] of markdownFiles(dir)) if (!isPathScoped(text)) add(`${where}${name}`, text);
+  }
+  return out;
+}
+
+// Characters as thousands with one decimal, cut rather than rounded, so both engines print the same.
+const kilo = (n) => `${Math.floor(n / 1000)}.${Math.floor((n % 1000) / 100)}k`;
+
+function instructionsCheck(root, config) {
+  const files = startFiles(root, config);
+  const total = files.reduce((sum, [, size]) => sum + size, 0);
+  const largest = [...files].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, 3);
+  const say = `Claude Code loads ${files.length} instruction files at session start, ${kilo(total)} characters `
+    + `of its ${kilo(INSTRUCTIONS_LIMIT)} limit. The largest: `
+    + `${largest.map(([name, size]) => `${name} (${kilo(size)})`).join(", ") || "none"}.`;
+  return total < INSTRUCTIONS_WARN_AT ? check("instructions", true, say) : check("instructions", false, say,
+    FIX.instructions);
+}
+
 // Every check for the repo at `root` and the config folder `config`.
 // `pluginVersion` is "x.y.z"; `cliVersion` [major, minor, patch] or null.
 export function runDoctor(root, config, { pluginVersion, cliVersion }) {
@@ -241,7 +319,7 @@ export function runDoctor(root, config, { pluginVersion, cliVersion }) {
   const checks = [...state.checks, hooksCheck(config)];
   if (state.answers) {
     checks.push(versionCheck(state.pristine, pluginVersion), guardCheck(root, state.answers, state.pristine));
-    checks.push(stagedCheck(root));
+    checks.push(stagedCheck(root), instructionsCheck(root, config));
     if (state.answers.advanced.tracker === "file") checks.push(roadmapCheck(root));
     const settings = settingsChecks(root, config);
     const guards = hasGuards(state.answers, state.pristine, settings.installed);

@@ -67,9 +67,25 @@ test("the CLI version is read from the session's own agent name", () => {
 test("a healthy repo passes every check", needsPython, async () => {
   const report = await doctor();
   assert.equal(report.problems, 0, JSON.stringify(failing(report)));
-  const ids = ["state", "hooks", "version", "guards", "staged", "settings", "extras", "cli"];
+  const ids = ["state", "hooks", "version", "guards", "staged", "instructions", "settings", "extras", "cli"];
   assert.deepEqual(report.checks.map((c) => c.id), ids);
 });
+
+test("instruction files near Claude Code's limit are named, and a rule loaded by path is not counted", needsPython,
+  async () => {
+    const scoped = `---\npaths:\n  - "src/**"\n---\n${"x".repeat(200000)}`;
+    const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
+    assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
+
+    const loud = await doctor(({ at, config }) => {
+      writeFileSync(at("CLAUDE.md"), "é".repeat(110000));
+      mkdirSync(join(config, "rules"), { recursive: true });
+      writeFileSync(join(config, "rules", "mine.md"), "y".repeat(15000));
+    });
+    const found = loud.checks.find((c) => c.id === "instructions");
+    assert.equal(found.ok, false);
+    assert.match(found.say, /The largest: CLAUDE\.md \(110\.0k\), ~\/\.claude\/rules\/mine\.md \(15\.0k\)/);
+  });
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
   const broken = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), "{"));
