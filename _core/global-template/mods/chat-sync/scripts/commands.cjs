@@ -221,11 +221,21 @@ function dropUncommitted(store) {
   return clean.ok ? null : clean.out
 }
 
-// The repo's default branch, or null while nothing has been pushed to it.
+// The repo's default branch as { branch }, {} while nothing has been pushed to
+// it, or { error } when the repo could not be read: git answers an empty repo
+// with success and nothing listed, and an unreachable one with a failure.
 function remoteBranch(store) {
   const head = base.git(store, 'ls-remote', '--symref', 'origin', 'HEAD')
+  if (!head.ok) return { error: head.out }
   const match = /^ref: refs\/heads\/(\S+)\s+HEAD/m.exec(head.out)
-  return head.ok && match ? match[1] : null
+  return match ? { branch: match[1] } : {}
+}
+
+// Whether the clone holds commits the repo lacks, such as those of a push that
+// failed, so the next copy pushes them though its own chat did not change.
+function isAhead(store) {
+  const count = base.git(store, 'rev-list', '--count', 'HEAD', '--not', '--remotes=origin')
+  return count.ok && Number(count.out) > 0
 }
 
 // Brings the clone up to the repo, naming the branch, so a clone made while the
@@ -238,7 +248,9 @@ function pull(store) {
   clearStaleLock(store)
   const dropped = dropUncommitted(store)
   if (dropped) return { error: dropped }
-  const branch = remoteBranch(store)
+  const remote = remoteBranch(store)
+  if (remote.error) return { error: remote.error }
+  const { branch } = remote
   if (!branch) return {}
   // Named in full, so a branch the repo names with a leading dash is never read as an option.
   const run = base.git(store, 'pull', '-q', '--rebase', 'origin', `refs/heads/${branch}`)
@@ -387,7 +399,8 @@ function out([transcript, root]) {
   seen[`sent:${key}/${id}`] = sentStamp(stamp, ownCopy(projectDir, id))
   base.writeJson(seenFile(), seen)
   const result = isChanged ? { copied: id } : { same: id }
-  return isGit && isChanged ? Object.assign(result, publish(store, `${id} from ${base.machineId()}`)) : result
+  const isToPush = isGit && (isChanged || isAhead(store))
+  return isToPush ? Object.assign(result, publish(store, `${id} from ${base.machineId()}`)) : result
 }
 
 // Brings each newer chat of this project into this computer's chat folder, then

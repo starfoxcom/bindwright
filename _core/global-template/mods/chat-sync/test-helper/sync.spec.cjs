@@ -688,3 +688,24 @@ test('a move into a folder inside the old place copies each chat once and makes 
   assert.strictEqual(a.sync('move', 'folder', inner).moved, 1)
   assert.deepStrictEqual(fs.readdirSync(inner), ['shop'])
 })
+
+test('a move away from a repo that cannot be read keeps the chats syncing where they did', () => {
+  const a = gitComputer('a', bareRepo())
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  execFileSync('git', ['-C', path.join(a.dataDir, 'repo'), 'remote', 'set-url', 'origin', path.join(a.home, 'gone')])
+  assert.match(a.sync('move', 'folder', tempDir('target')).error || '', /could not be read/)
+  assert.strictEqual(a.sync('status', a.root).place.kind, 'git')
+})
+
+test('a push that failed goes up with the next copy, though the chat did not change', () => {
+  const origin = bareRepo()
+  const a = gitComputer('a', origin)
+  const clone = path.join(a.dataDir, 'repo')
+  writeChat(a, 's1', ['one'])
+  execFileSync('git', ['-C', clone, 'remote', 'set-url', '--push', 'origin', path.join(a.home, 'gone')])
+  assert.ok(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushError, 'the first push fails')
+  execFileSync('git', ['-C', clone, 'remote', 'set-url', '--push', 'origin', origin])
+  assert.strictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushed, true)
+  assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
+})
