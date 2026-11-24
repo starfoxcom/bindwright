@@ -163,6 +163,17 @@ function linkedWorktree({ repo }) {
   return worktree;
 }
 
+// The repo as a linked worktree of a main checkout beside it, its `.git` line written with
+// `prefix` before the path and `ending` after it; the index sits under the main checkout's slug.
+const linkedTo = (ending, prefix = "") => ({ repo, config, at }) => {
+  const main = join(dirname(repo), "main");
+  const gitdir = join(main, ".git", "worktrees", "w");
+  mkdirSync(gitdir, { recursive: true });
+  writeFileSync(join(gitdir, "commondir"), "../..\n");
+  writeFileSync(at(".git"), `gitdir: ${prefix}${gitdir}${ending}`);
+  writeIndex({ repo: main, config }, INDEX_3000);
+};
+
 // Each row is one scene; `index` is the memory index's text, `setup` the rest of the scene, and `note` the
 // sentence the instructions check ends with, or null when no note is shown.
 const MEMORY_ROWS = [
@@ -248,6 +259,27 @@ const MEMORY_ROWS = [
     },
     note: null,
   },
+  {
+    name: "a .git line ending in CR CR LF is read alike in both engines",
+    setup: linkedTo("\r\r\n"),
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "a .git line ending in a lone CR is read alike in both engines",
+    setup: linkedTo("\r"),
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "a gitdir path with two leading slashes resolves alike in both engines",
+    skip: process.platform === "win32" && "two leading slashes start a network path on Windows",
+    setup: linkedTo("\n", "/"),
+    note: "Auto memory's index (MEMORY.md) adds 3.0k more.",
+  },
+  {
+    name: "an index of bytes that are not UTF-8 is past the limit once its count is cut",
+    index: Buffer.alloc(9000, 0xff),
+    note: `Auto memory's index (MEMORY.md) adds 8.3k more. ${PAST}`,
+  },
   { name: "no index file means no note", note: null },
 ];
 
@@ -255,7 +287,7 @@ test("auto memory's index is noted in the instructions check, and the cases that
   needsPython, async (t) => {
     const plain = (await doctor()).checks.find((c) => c.id === "instructions").say;
     for (const row of MEMORY_ROWS) {
-      await t.test(row.name, async () => {
+      await t.test(row.name, { skip: row.skip ?? false }, async () => {
         const change = (ctx) => {
           if (row.index !== undefined) writeIndex(ctx, row.index);
           return row.setup?.(ctx);

@@ -346,20 +346,28 @@ MEMORY_MOVED_VARS = ("CLAUDE_CODE_PROJECT_DIR_NAME", "CLAUDE_CODE_REMOTE_MEMORY_
                      "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
 
 
+# An absolute path as Node's path.resolve gives it, which folds the two leading
+# slashes that POSIX normpath keeps.
+def _resolve(base, path):
+    resolved = os.path.abspath(os.path.join(base, path))
+    if os.name != "nt" and resolved.startswith("//"):
+        resolved = "/" + resolved.lstrip("/")
+    return resolved
+
+
 # The main checkout's folder: a linked worktree's `.git` file points into the main git folder.
 def _main_checkout(root):
-    first = ((_read_text(os.path.join(root, ".git")) or "").split("\n")[0]).rstrip("\r")
-    link = re.match(r"gitdir: (.*)$", first)
+    first = (_read_text(os.path.join(root, ".git")) or "").split("\n")[0]
+    link = re.match(r"gitdir: (.*)\Z", first, re.DOTALL)
     if link is None:
         return root
     try:
-        gitdir = os.path.normpath(os.path.join(root, link.group(1).strip(JS_WHITESPACE)))
+        gitdir = _resolve(root, link.group(1).strip(JS_WHITESPACE))
         # Read as readFileSync reads it: bad bytes replaced, never a decode error.
         text = _read_text(os.path.join(gitdir, "commondir"))
         if text is None:
             return root
-        common = text.split("\n")[0].rstrip("\r").strip(JS_WHITESPACE)
-        return os.path.dirname(os.path.normpath(os.path.join(gitdir, common)))
+        return os.path.dirname(_resolve(gitdir, text.split("\n")[0].strip(JS_WHITESPACE)))
     except (OSError, ValueError):
         # ValueError: a NUL in the path, which open() refuses as readFileSync does.
         return root
@@ -439,7 +447,8 @@ def _loaded_index(data):
     text = data.decode("utf-8", errors="replace")
     head = _first_lines(text, MEMORY_LINES)
     kept = _first_bytes(head.encode("utf-8"), MEMORY_BYTES).decode("utf-8")
-    return _units(kept), len(head) < len(text) or len(data) > MEMORY_BYTES
+    # `kept` is always a start of `text`, so one test covers both cuts.
+    return _units(kept), len(kept) < len(text)
 
 
 # The sentence about the index, or "" when auto memory is off, moved, or the index is missing.

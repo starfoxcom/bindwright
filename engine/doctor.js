@@ -372,12 +372,13 @@ const MEMORY_MOVED_VARS = ["CLAUDE_CODE_PROJECT_DIR_NAME", "CLAUDE_CODE_REMOTE_M
 
 // The main checkout's folder: a linked worktree's `.git` file points into the main git folder.
 function mainCheckout(root) {
-  const first = readText(join(root, ".git"))?.split(/\r?\n/)[0] ?? "";
-  const link = /^gitdir: (.*)$/.exec(first);
+  // Split on LF alone and match any character, as the Python twin does; trim() drops a CR.
+  const first = readText(join(root, ".git"))?.split("\n")[0] ?? "";
+  const link = /^gitdir: ([^]*)$/.exec(first);
   if (!link) return root;
   try {
     const gitdir = resolve(root, link[1].trim());
-    const common = readFileSync(join(gitdir, "commondir"), "utf8").split(/\r?\n/)[0].trim();
+    const common = readFileSync(join(gitdir, "commondir"), "utf8").split("\n")[0].trim();
     return dirname(resolve(gitdir, common));
   } catch {
     return root;
@@ -454,7 +455,8 @@ function loadedIndex(bytes) {
   const text = bytes.toString("utf8");
   const head = firstLines(text, MEMORY_LINES);
   const kept = firstBytes(Buffer.from(head, "utf8"), MEMORY_BYTES).toString("utf8");
-  return { units: kept.length, past: head.length < text.length || bytes.length > MEMORY_BYTES };
+  // `kept` is always a start of `text`, so one test covers both cuts.
+  return { units: kept.length, past: kept.length < text.length };
 }
 
 // The sentence about the index, or "" when auto memory is off, moved, or the index is missing.
