@@ -1,141 +1,44 @@
 # CLAUDE.md — Bindwright
 
-This file guides Claude Code when working in **this** repository — the templates project itself.
+This repo is Bindwright itself, and it runs on its own setup. `.claude/rules/` is the bind the engine renders from `_core/project-template/.claude/rules/` with this project's answers in `.bindwright/project.json`, exactly what a downstream project gets. The canonical templates live only in `_core/`.
 
-Yes, the templates project dogfoods itself: the discipline we ship to other projects also applies to development of this repo. The rules at `.claude/rules/` are a *resolved bind* of the canonical sources at `_core/project-template/.claude/rules/` rendered by the v2 engine from this project's answers in `.bindwright/project.json` — exactly what a fresh team bind would write into a downstream project. The canonical templates never leave `_core/`; this repo's `.claude/` is the proof that the bind process produces a working setup.
-
-When canonical templates evolve in `_core/`, re-bind with `node engine/cli.js --update .` (the same three-way merge `/bindwright:update` runs, against `.bindwright/pristine.json`). Two hand tunes stay on top of the render: `code-size.md` lists only JavaScript and Python, and `collaboration.md` § Who reviews describes the solo-maintainer gate.
-
----
-
-## Code research
-
-Start any "where is X / how does Y work / find usages of Z" task with FindWright's `find` (a question or a name) or `search` (regexes over every tracked file), not Grep, Glob or raw `grep`/`rg`. `/find` holds the full sequence.
-
-FindWright's search hook, which `/findwright:setup` adds, blocks Grep, Glob and raw greps while this repo has a FindWright index (`.findwright/index.db`). The index updates itself on every call, so it never needs a sync, and `/close-session` records FindWright's hit rate.
-
-Fallback to Grep/Glob is allowed when:
-1. FindWright returned nothing usable for two differently worded queries
-2. The target is outside the repo, binary or git-ignored
-3. FindWright is unavailable in the session
-
-Bypass for Bash `grep`/`rg`: include `# FINDWRIGHT_BYPASS: <reason>` in the command. The Grep and Glob tools have no bypass while the index exists: for a search FindWright cannot answer, run `grep`/`rg` in Bash with the marker.
-
----
+After a change in `_core/`, re-bind with `node engine/cli.js --update .` (the same three-way merge `/bindwright:update` runs, against `.bindwright/pristine.json`) and commit the result with it. Two hand tunes stay on top of the render: `code-size.md` lists only JavaScript and Python, and `collaboration.md` § Who reviews describes the solo-maintainer gate.
 
 ## Project overview
 
 **Bindwright** is an open-source Claude Code plugin: `/bindwright:setup` asks a few questions and writes the setup that fits the project. A landing page on GitHub Pages explains and installs it.
 
-- **Live page:** `page/`, deployed at https://starfoxcom.github.io/bindwright/ (the root `index.html` redirects there)
-- **Source of truth for templates:** `_core/`
-- **Bind engine:** `engine/`, run by the plugin (`plugin/`, `/bindwright:setup`) and by the page's file preview
-- **Versioning:** SemVer (`v1.0.0 → v1.1.0 → v2.0.0 …`). Earlier conversational `v17 / v18` mentions consolidated into the v1.0.0 release. See `VERSION` file and `CHANGELOG.md`.
+- **Live page:** `page/`, deployed at https://starfoxcom.github.io/bindwright/ (the root `index.html` redirects there). Hand-authored, no build step.
+- **Templates:** `_core/`. **Bind engine:** `engine/`, run by the plugin (`plugin/`) and by the page's file preview.
+- **Versioning:** SemVer, in `VERSION` and `CHANGELOG.md`; `.claude/rules/releases.md` holds the release flow.
 
-The page itself is the deliverable. There is no build step; `page/` is hand-authored and deployed as-is via the Pages workflow.
+## Review discipline: strict, because the bundle ships to every user
 
----
+Downstream projects install these templates verbatim, so a malicious change landing on `main` would reach every future bind. The rules in `review-tiers.md` and `collaboration.md` apply with extra strictness:
 
-## Git workflow
+- Required checks on `main` and `develop`: `Review gate` and `No AI attribution`; on `develop` also `Engine and hook tests` and `Mod tests`, which run on every PR. Zero required approvals, and no bypass actors: nobody, admins included, merges past the gates. Never `gh pr merge --admin`; `BLOCKED` means find and fix the cause.
+- The deep review fires by itself on any PR touching `_core/` (its hooks included) or `engine/`, the surfaces with the widest reach.
+- Our own PRs merge on green without waiting for the maintainer. A PR carrying a commit from outside our sessions also needs the maintainer's read of its whole diff.
+- A PR that edits `.github/workflows/claude-code-review.yml` holds only that file and merges as `.claude/rules/review-workflow.md` says.
 
-Per `.claude/rules/git.md` (resolved from canonical `_core/project-template/.claude/rules/git.md`):
-
-- **Atomic commits.** One logical change per commit. Format: `<type>(<scope>): <imperative description>` (max 72 chars).
-- **Conventional types:** `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `data`, `style`.
-- **No AI-attribution markers** anywhere — not in commit messages, PR titles, PR bodies, or issue comments. No `Co-Authored-By: Claude`, no `Generated with Claude Code`, no `claude.com` links in footers. The discipline is the work; the tool is a detail.
-- **Gitflow branching model.** Per the project's own `_core/project-template/.claude/rules/git.md`:
-  - `main` — stable releases only, tag every release commit
-  - `develop` — base for all in-flight work
-  - `feature/<n>` — branches from `develop`, merges back to `develop`
-  - `release/<v>` — branches from `develop`, merges to `main`, then reaches `develop` through a cascade PR opened by hand (`.claude/rules/releases.md` § "Cascade after every merge into `main`")
-  - `hotfix/<n>` — branches from `main`, merges to `main`, then the same hand-opened cascade PR into `develop`
-- **Every PR merges with a merge commit** (`gh pr merge <pr> --merge`), so each branch stays visible in the history graph. Keep every commit on the branch meaningful; the PR title (64 characters max) goes into the merge commit. Squash and rebase merges are not used here.
-
----
-
-## Token-efficiency discipline
-
-Rules from `.claude/rules/token-efficiency.md`, `.claude/rules/task-tracking.md` and `.claude/rules/git.md`, plus a few that live only here:
-
-- **Task tracking is mandatory for 3+ step sessions** (`.claude/rules/task-tracking.md`). Use the `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` tools (`TodoWrite` where they are not available). Enumerate the planned steps with `TaskCreate` at session start. To chain dependencies, capture each new task's ID from the `tool_result` and call `TaskUpdate({ taskId, addBlockedBy: [<prereq-id>] })` (`addBlockedBy` is a `TaskUpdate` input parameter, not a separate tool). `TaskUpdate({ taskId, status: 'in_progress' })` BEFORE starting; `TaskUpdate({ taskId, status: 'completed' })` immediately when done — don't batch. New follow-ups discovered mid-session get their own `TaskCreate` call. The task list is the in-session source of truth and the basis for the close-session DoD audit. Single-task or trivial conversational work doesn't need it; the threshold is 3+ discrete items. **For multi-PR workstreams** (hotfix + cascade chains, large refactors split for review), create one task per PR up-front and chain dependencies with `TaskUpdate({ taskId, addBlockedBy: [<prior-pr-task-id>] })` so the task list mirrors the merge order — treating a 10-PR chain as ad-hoc work burns hours on out-of-sequence routing.
-- **Read before writing.** Locate the relevant function/class before reading whole files. Use FindWright's `outline` to find a symbol's line range and read only that.
-- **Command timeout scaling** follows `.claude/rules/token-efficiency.md`.
-- **Never use `gh run watch`.** When the ci-watch mod is loaded, it watches the PR after `git push`/`gh pr create` and wakes the session once all checks settle; without it, use the watchers in `.claude/rules/token-efficiency.md` (the Monitor tool, then a bounded background loop).
-- **What the checks report by PR class:**
-  - **Docs-only / non-reviewable PRs** (anything `triage` classifies non-reviewable; `.claude/` and any `CLAUDE.md` or `AGENTS.md` always get a review) — expect `Diff triage: SUCCESS` and `Review gate: SUCCESS` ("No review needed"). Merge with `gh pr merge <pr> --merge` once the PR reports `CLEAN`.
-  - **Normal-review PRs** — the `Review gate` check's title says where the PR stands (routine 🔴, deep review in progress, both 🟢); read the verdict comments for the findings. Green gate and every other required check passing: merge with `--merge`. 🔴: fix on the PR branch and push.
-  - **PRs that edit `.github/workflows/claude-code-review.yml`** — triage never reviews that one file, so with only skippable docs beside it the PR passes the gate like a docs PR. Its review could never be posted anyway: the review app refuses its token to a run whose copy of that workflow differs from the default branch's. Anything reviewable in the same PR (`claude.yml`, another workflow, the gate script, `.claude/`, code) starts the review, whose post job is then refused ("The bot token exchange failed three times"), and the PR can never merge: split it into its own PR first. Edits to `claude.yml` alone get a normal review. It merges only as `.claude/rules/review-workflow.md` § "PRs that edit the review workflow" describes: two local 🟢 reviews on the head commit when every commit came from our own sessions, otherwise the maintainer's read.
-- **No admin bypass, ever.** Never `gh pr merge --admin`. The rulesets have no bypass actors; `BLOCKED` means find and fix the cause.
-- **Branch cleanup after every merge** follows `.claude/rules/git.md` § Merging: `gh pr merge --delete-branch` removes the remote branch (and the local one when it is checked out); run `git branch -D <name>` as a separate call if it remains. Never `&&`-chain cleanup commands: permission rules match the whole command string, so chained calls get denied.
-- **Our own PRs merge on green, without waiting for the maintainer.** Once every check passes (and, for a PR that edits the review workflow, both local reviews of the head commit are 🟢), the session merges and cleans up. Only a PR carrying a commit from outside our sessions waits for the maintainer's read.
-
----
-
-## Review discipline — strict because supply-chain matters
-
-This project ships templates that downstream users install verbatim. A malicious PR landing on `main` could inject hidden code into the bundle that every future bind ships to every user. That makes the review surface load-bearing in a way ordinary OSS isn't.
-
-Per `.claude/rules/review-tiers.md` (resolved from canonical `_core/project-template/.claude/rules/review-tiers.md`), applied with extra strictness here:
-
-- **Two tiers.** Routine review (every PR) + on-demand deep review (fired by a comment starting with `@claude review this PR`). Routine runs Fable 5.2 at low effort and deep at medium, both with an Opus 5.5 high-effort backup; the deep tier retries Fable once before falling back. The `Review gate` check's summary names the model whose attempt wrote each tier's verdict, and whether it ran on the API credits.
-- **Binary verdict rule.** `🟢 LGTM` only when fully clean. `🔴 Blocking` when *any* real finding exists. No "minor non-blocking" rot. This applies to both tiers.
-- **Auto-fire deep review** on the trigger surface (parsing/codec/serialization, threading, scheduling, save/load formats, mod-loader DAG changes — full list in `.claude/rules/review-tiers.md` § Deep review triggers). The routine reviewer applies the `needs-deep-review` label automatically.
-- **Strict OSS review posture on `main` AND `develop`:**
-  - Required status checks: `Review gate` (both review tiers) and `No AI attribution` must pass before merge. On `develop`, `Engine and hook tests` (the `Tests` workflow: engine, Python twin and guard-hook tests) and `Mod tests` (every template mod's suite on a Windows runner) are required too; both run on every PR so they never wait on a docs-only one
-  - Required approvals: 0 (the AI gates decide; a solo maintainer cannot approve their own PR)
-  - Bypass actors: none. Nobody, admins included, can merge past the gates
-  - Every external contribution: AI routine review verdict + maintainer eyes-on review before merge
-  - Deep review fires automatically on any PR touching `_core/` (its hooks included) or `engine/`, which renders every bind. These are the highest-blast-radius surfaces.
-
-The routine-review + deep-review workflows are installed and active in this repo's own `.github/workflows/` (`claude-code-review.yml` and `claude.yml`) — they self-host the same discipline the templates ship. They exist canonically in `_core/project-template/.github/workflows/` (`claude-code-review.yml.template`, `claude.yml.template`); this repo's live copies are the resolved bind of those canonical templates.
-
----
-
-## Visual-slice discipline
-
-The page IS a visual artifact. Per `.claude/rules/visual.md` (resolved from canonical `_core/project-template/.claude/rules/visual.md`):
-
-- Ship one verifiable slice at a time, each checkable with one short yes/no list.
-- **Local-iterate-then-push** for visual changes. Commit locally, report, wait for visual approval, then push. Skipping this burns CI cycles on iteration.
-- **Concrete visual smoke-test checklists** — never "verify no regressions." Hand the reviewer a specific yes/no list tied to what changed.
-
----
+The live `claude-code-review.yml` and `claude.yml` are the resolved bind of `_core/project-template/.github/workflows/*.yml.template`.
 
 ## Session ritual
 
-Skills `/start-session`, `/close-session` and `/find` live at `.claude/skills/`, rendered with the rules above. Work state lives on the GitHub board (`starfoxcom/6`) and in each issue's `### Current state` (`.claude/rules/tracker.md`); `/close-session` also rewrites the git-ignored pointer file `.bindwright/handoff.md`. This repo's own extra steps (the review gate's `--check` at session start) live in `.bindwright/session-steps.md`.
-
----
+`/start-session`, `/close-session` and `/find` live in `.claude/skills/`. Work state lives on the GitHub board (`starfoxcom/6`) and in each issue's `### Current state` (`.claude/rules/tracker.md`); `/close-session` also rewrites the git-ignored `.bindwright/handoff.md`. This repo's extra steps (the review gate's `--check` at session start) are in `.bindwright/session-steps.md`.
 
 ## Repo layout
 
 ```
-bindwright/
-├── index.html              # redirects to page/
-├── page/                   # the live page
-├── engine/                 # the bind engine
-├── plugin/                 # the Claude Code plugin: skills only
-├── helper/                 # the helper package's scripts (release files)
-├── README.md               # public-facing
-├── CLAUDE.md               # this file
-├── CHANGELOG.md            # version history
-├── CONTRIBUTING.md         # how to PR
-├── LICENSE                 # MIT
-├── VERSION                 # current edition
-├── _core/
-│   ├── project-template/   # lands in user's repo on bind
-│   ├── global-template/    # lands in user's ~/.claude on bind
-│   └── licenses/           # LICENSE variants per type
-└── .github/
-    └── workflows/
-        └── pages.yml       # GitHub Pages deployment
+page/        the live page          engine/   the bind engine
+plugin/      the plugin's skills    helper/   the helper package's scripts
+_core/       project-template/ (lands in a user's repo), global-template/ (lands in ~/.claude), licenses/
+counter/     the review-counts worker (Cloudflare)
+tools/       packing, page and release scripts, and the guard-hook tests
+docs/        maintainer docs        .github/  workflows, gate scripts, review guide
 ```
-
----
 
 ## Project conventions
 
-- **All code + prose in English.** Variable names, comments, manifest text, docs.
-- **The page in `page/` is hand-authored** HTML, CSS and JavaScript modules: no build step, no minification, readable in a browser's dev tools.
-- **OKLCH for color** in CSS — see the v1.0.0 redesign rationale in `CHANGELOG.md`.
-- **Hubot Sans and Fragment Mono from Google Fonts**, loaded via `<link>` at the top of each page. No npm, no node_modules, no bundling.
+- All code and prose in English.
+- The page is plain HTML, CSS and JavaScript modules: no build step, no minification, readable in dev tools. OKLCH for colour; Hubot Sans and Fragment Mono from Google Fonts via `<link>`. No npm or bundling on the page.
