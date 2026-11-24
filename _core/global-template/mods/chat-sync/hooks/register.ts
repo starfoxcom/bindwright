@@ -134,9 +134,14 @@ export const register: Register = on => {
     if (isOutQueued) return result
     isOutQueued = true
     const wait = Math.max(0, OUT_EVERY_MS - (Date.now() - lastOutAt))
+    // Stays queued until the copy has finished, so a turn that ends meanwhile
+    // never starts a second helper beside it.
     $.clock.after(wait, async () => {
-      isOutQueued = false
-      if (!hasEnded) await copyOut($, false)
+      try {
+        if (!hasEnded) await copyOut($, false)
+      } finally {
+        isOutQueued = false
+      }
     })
     return result
   })

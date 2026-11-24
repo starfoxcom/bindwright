@@ -11,7 +11,8 @@ type World = { runs: string[][]; toasts: string[]; clock: ReturnType<typeof mock
 
 // The helper answers each command with the JSON line given for it, or, for a
 // command named in `stops`, exits with that code and prints nothing.
-function world(on: On, answers: Record<string, unknown> = {}, stops: Record<string, number> = {}): World {
+function world(on: On, answers: Record<string, unknown> = {}, stops: Record<string, number> = {},
+  outDone: Promise<void> = Promise.resolve()): World {
   const clock = mock.clock(on, { now: Date.UTC(2026, 10, 23, 12, 0, 0) })
   const seen: World = { runs: [], toasts: [], clock }
   on('session.id', () => ({ value: 'sess-1' }))
@@ -25,9 +26,10 @@ function world(on: On, answers: Record<string, unknown> = {}, stops: Record<stri
     seen.toasts.push(e.text)
     return { value: undefined }
   })
-  on('process.run', ($, e) => {
+  on('process.run', async ($, e) => {
     const args = e.argv.slice(2)
     seen.runs.push([...args])
+    if (args[0] === 'out') await outDone
     const stop = stops[args[0] ?? '']
     const stdout = stop === undefined ? `${JSON.stringify(answers[args[0] ?? ''] ?? {})}\n` : ''
     const exitCode = stop ?? 0
@@ -80,6 +82,18 @@ test('turns copy the chat out at most once a minute, and a copy that fails says 
   expect(outs()).toHaveLength(1)
   await seen.clock.advance(MINUTE / 2)
   expect(outs()).toHaveLength(2)
+})
+
+test('a turn that ends while a copy is still running starts no second copy', async ($, on) => {
+  let finish = () => {}
+  const seen = world(on, { out: { same: 'sess-1' } }, {}, new Promise<void>(resolve => { finish = resolve }))
+  await start($)
+  await endTurn($)
+  await seen.clock.advance(1)
+  await endTurn($)
+  await seen.clock.advance(MINUTE * 2)
+  expect(seen.runs.filter(args => args[0] === 'out')).toHaveLength(1)
+  finish()
 })
 
 test('the session end copies the chat out', async ($, on) => {
