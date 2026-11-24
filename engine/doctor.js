@@ -242,11 +242,11 @@ function hooksCheck(config) {
     : check("hooks", true, "Every hook's program is on this computer.");
 }
 
-// A rule whose front matter lists at least one path under `paths:` loads only
-// when Claude reads a file it matches, so it is not loaded at session start.
 // An empty list, an empty string and YAML's null forms list no path.
 const EMPTY_YAML = /^(?:\[[ \t]*\]|""|''|~|null|Null|NULL)$/;
 
+// A rule whose front matter lists at least one path under `paths:` loads only
+// when Claude reads a file it matches, so it is not loaded at session start.
 function isPathScoped(text) {
   const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
   // Front matter that never closes is no front matter, so the whole file loads.
@@ -294,9 +294,9 @@ function canonicalPath(path) {
   }
 }
 
-// Each Markdown file under `dir`, sorted, as [path below `dir`, text], links
-// followed as Claude Code follows them; a folder already walked is skipped, so
-// a link back up the tree ends. None when the folder cannot be read.
+// Each Markdown file under `dir`, sorted, as [path below `dir`, full path],
+// links followed as Claude Code follows them; a folder already walked is
+// skipped, so a link back up the tree ends. Empty when the folder cannot be read.
 function markdownFiles(dir, prefix = "", seen = new Set()) {
   const id = fileId(dir);
   if (id === null || seen.has(id)) return [];
