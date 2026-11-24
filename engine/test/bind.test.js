@@ -182,12 +182,12 @@ test("merge style picks the matching merge command", async () => {
 
 test("default-branch choice flips the workflow-change guidance", async () => {
   const a = defaults();
-  const mainDefault = (await run(a)).get(".claude/rules/git.md");
+  const mainDefault = (await run(a)).get(".claude/rules/releases.md");
   assert.match(mainDefault, /lands on `main` first as a `hotfix\/<name>` PR/);
   a.advanced.devIsDefault = true;
-  const devDefault = (await run(a)).get(".claude/rules/git.md");
-  assert.match(devDefault, /workflow changes are ordinary work PRs into `develop`/);
-  assert.doesNotMatch(devDefault, /always pass `--base develop`/);
+  const devFiles = await run(a);
+  assert.match(devFiles.get(".claude/rules/releases.md"), /workflow changes are ordinary work PRs into `develop`/);
+  assert.doesNotMatch(devFiles.get(".claude/rules/git.md"), /always pass `--base develop`/);
 });
 
 test("rules carry no stale model names or polling loops", async () => {
