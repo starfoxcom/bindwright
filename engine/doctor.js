@@ -268,7 +268,7 @@ function isPathScoped(text) {
 function fileId(path) {
   try {
     const stat = statSync(path, { bigint: true });
-    return stat.ino === 0n ? `path:${realpathSync.native(path)}` : `${stat.dev}:${stat.ino}`;
+    return stat.ino === 0n ? `path:${realPath(path) ?? path}` : `${stat.dev}:${stat.ino}`;
   } catch {
     return null;
   }
