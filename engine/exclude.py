@@ -11,7 +11,8 @@ from apply import _code_units
 LOCAL_FOLDERS = [
     (".claude/", True),
     (".bindwright/", True),
-    ("docs/lazy/", False),
+    # Kept out on every run: a clone may still hold the docs/lazy/README.md older setups wrote.
+    ("docs/lazy/", True),
     (".github/size-check/", False),
 ]
 # Files the sessions write when the work state lives in the repo, listed on every run.

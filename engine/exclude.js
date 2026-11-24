@@ -11,7 +11,8 @@ import { dirname, resolve } from "node:path";
 export const LOCAL_FOLDERS = [
   { path: ".claude/", always: true },
   { path: ".bindwright/", always: true },
-  { path: "docs/lazy/" },
+  // Kept out on every run: a clone may still hold the docs/lazy/README.md older setups wrote.
+  { path: "docs/lazy/", always: true },
   { path: ".github/size-check/" },
 ];
 // Files the sessions write when the work state lives in the repo, listed on every run.

@@ -38,16 +38,9 @@ Work is planned in `ROADMAP.md` (Now, Next, Later, one line per item with its id
 - Talk to me in **{{CONVERSATION_LANGUAGE}}**.
 - Code, comments, identifiers and technical docs are in **{{CODE_LANGUAGE}}**. User-visible strings go through the localization layer when the project has one.
 
-<!-- TOGGLE:code_research_first START -->
-## Code research
-
-Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RESEARCH_NAME}}**; `/find` has the lookup sequence and the only cases where Grep and Glob are allowed.
-
-<!-- TOGGLE:code_research_first END -->
 ## Sessions
 
 - **Start:** `/start-session` reads the current state, proposes a plan and waits for approval before changing code.
-- **During:** track multi-step work per `.claude/rules/task-tracking.md`.
 <!-- TOGGLE:code_host_local START -->
 - **End:** `/close-session` checks what is really finished and makes the save point.
 <!-- TOGGLE:code_host_local END -->
@@ -55,14 +48,8 @@ Find code with `/find` before reading files. This project uses **{{TOOLS_CODE_RE
 - **End:** `/close-session` checks what is really finished, commits, and opens or merges the PR.
 <!-- TOGGLE:code_host_local:off END -->
 
-<!-- TOGGLE:lazy_rules_folder START -->
-## Rules loaded on demand
-
-Rules that matter only at certain milestones live in `docs/lazy/` and do not load automatically. `docs/lazy/README.md` lists them and when to read each.
-
-<!-- TOGGLE:lazy_rules_folder END -->
 <!-- TOGGLE:memory_system START -->
 ## Memory
 
-Project memory lives in `~/.claude/projects/<project-slug>/memory/`, indexed by `MEMORY.md`. Save what the repo cannot tell a future session (decisions, preferences, pointers to outside resources), never what the code or git history already records. Each entry carries the date it was written (`written:`) and where it came from (`source:`), so the monthly pruning pass can find the stale ones.
+Each memory entry carries the date it was written or last confirmed (`written:`) and where it came from (`source:`) in its front matter, so the monthly pruning pass can find the stale ones.
 <!-- TOGGLE:memory_system END -->
