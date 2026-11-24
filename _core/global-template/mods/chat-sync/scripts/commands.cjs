@@ -13,7 +13,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const base = require('./sync.cjs')
 const paths = require('./paths.cjs')
-const { syncPlaces, othersChats } = require('./places.cjs')
+const { syncPlaces } = require('./places.cjs')
 const { withRunLock, isAlive } = require('./lock.cjs')
 
 // The hook stops a copy's helper after 120 s and a move's after 300 s, and
@@ -689,11 +689,49 @@ function run([command, ...args]) {
 
 // Each sync folder found here, with what other computers keep in its
 // `Claude chats` folder (`others`, null when nothing), so setup can offer the
-// place a second computer joins. Read only, like `status`.
+// place a second computer joins. Read only, like `status`; a machine file
+// that cannot be read leaves every copy counted as another computer's.
 function places() {
-  const machine = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id
+  let machine = null
+  try {
+    machine = base.readJson(path.join(base.dataDir(), 'machine.json'), {}).id || null
+  } catch {
+    // Read again by the first copy, which says what is wrong with it.
+  }
   const ownFile = machine ? copyName(machine) : null
-  return { places: syncPlaces().map(place => ({ ...place, others: othersChats(place.path, ownFile) })) }
+  const found = syncPlaces().map(place => {
+    const others = othersChats(path.join(place.path, 'Claude chats'), ownFile)
+    return { ...place, others }
+  })
+  return { places: found }
+}
+
+// What other computers keep in the store `chats`, read the way a sync reads
+// a store, so no link is followed: the number of projects and the computers'
+// names, or null when it holds no copy but `ownFile`. A project counts at its
+// first chat that holds another computer's copy, so a large store stays quick.
+function othersChats(chats, ownFile) {
+  if (!isRealFolder(chats)) return null
+  const computers = new Set()
+  let projects = 0
+  for (const project of projectFolders(chats)) {
+    for (const id of chatIds(path.join(chats, project))) {
+      const others = chatFiles(path.join(chats, project, id)).filter(name => name !== ownFile)
+      if (!others.length) continue
+      projects += 1
+      for (const name of others) computers.add(name.slice(0, -'.jsonl'.length))
+      break
+    }
+  }
+  return projects ? { folder: chats, projects, computers: [...computers].sort() } : null
+}
+
+// The project folders of a store: plain folders not named with a leading dot.
+function projectFolders(store) {
+  if (!store || !fs.existsSync(store)) return []
+  return fs.readdirSync(store, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map(entry => entry.name)
 }
 
 function status([root]) {
@@ -712,5 +750,5 @@ function hasGit() {
 
 module.exports = {
   run, out, bringIn, compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain,
-  placeFile, inWorkFolder, fitClone,
+  placeFile, inWorkFolder, fitClone, projectFolders, othersChats,
 }

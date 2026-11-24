@@ -9,7 +9,7 @@ const path = require('path')
 const base = require('./sync.cjs')
 const {
   compare, publish, pull, remoteBranch, chatFiles, chatIds, ensureFolder, clearUnlessPlain, placeFile, inWorkFolder,
-  fitClone,
+  fitClone, projectFolders,
 } = require('./commands.cjs')
 const { copyPlainFile } = require('./paths.cjs')
 
@@ -77,14 +77,6 @@ function clone(repo, folder) {
 function isInside(folder, parent) {
   const relative = path.relative(path.resolve(parent), path.resolve(folder))
   return !relative.startsWith('..') && !path.isAbsolute(relative)
-}
-
-// The project folders in a sync place, each holding chat files.
-function projectFolders(store) {
-  if (!store || !fs.existsSync(store)) return []
-  return fs.readdirSync(store, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-    .map(entry => entry.name)
 }
 
 // Copies every computer's copy of each chat into `to`. Where `to` already holds
