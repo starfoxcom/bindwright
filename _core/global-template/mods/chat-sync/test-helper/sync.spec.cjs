@@ -20,6 +20,16 @@ function tempDir(name) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `chat-sync-${name}-`))
 }
 
+// The sync place's folder for a project named `name` with no remote.
+function keyOfFolder(name) {
+  const root = path.join(tempDir('named'), name)
+  fs.mkdirSync(root)
+  return require(SYNC).projectKey(root)
+}
+
+// Every test computer's project is named shop.
+const SHOP = keyOfFolder('shop')
+
 function gitConfig(text) {
   const file = path.join(tempDir('gitconfig'), 'config')
   fs.writeFileSync(file, text)
@@ -209,7 +219,7 @@ test('a folder or link planted at this computer\'s temporary copy name never sto
   const a = computer('a', store)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const folder = path.join(store, 'shop', 's1')
+  const folder = path.join(store, SHOP, 's1')
   const own = fs.readdirSync(folder)[0]
   fs.mkdirSync(path.join(folder, `.${own}.folder.tmp`))
   writeChat(a, 's1', ['one', 'more'])
@@ -324,7 +334,7 @@ test('two computers writing one chat each keep their own copy, and neither is wr
   assert.deepStrictEqual(b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root), { copied: 's1' })
   writeChat(a, 's1', ['one', 'from a'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  assert.strictEqual(fs.readdirSync(path.join(store, 'shop', 's1')).length, 2)
+  assert.strictEqual(fs.readdirSync(path.join(store, SHOP, 's1')).length, 2)
   assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').conflicts, ['s1'])
   assert.strictEqual(readChat(a, 's1')[1].message.content, `from a in ${a.root}`)
 })
@@ -345,7 +355,7 @@ test('a copy that went missing from the sync place is sent again, though the cha
   const b = computer('b', store)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const folder = path.join(store, 'shop', 's1')
+  const folder = path.join(store, SHOP, 's1')
   for (const name of fs.readdirSync(folder)) fs.rmSync(path.join(folder, name))
   assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent, ['s1'])
   assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, ['s1'])
@@ -375,7 +385,7 @@ test('a chat deleted here whose copy went missing from the sync place comes back
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   b.sync('in', b.chatDir, b.root, 'other')
   b.sync('in', b.chatDir, b.root, 'other')
-  const folder = path.join(store, 'shop', 's1')
+  const folder = path.join(store, SHOP, 's1')
   assert.strictEqual(fs.readdirSync(folder).length, 2, 'both computers sent a copy')
   fs.rmSync(path.join(b.chatDir, 's1.jsonl'))
   const own = JSON.parse(fs.readFileSync(path.join(b.dataDir, 'machine.json'), 'utf8')).id
@@ -400,7 +410,7 @@ test('a project folder in the sync place that is a link is never written or read
   const store = tempDir('store')
   const outside = tempDir('outside')
   const a = computer('a', store)
-  fs.symlinkSync(outside, path.join(store, 'shop'), 'junction')
+  fs.symlinkSync(outside, path.join(store, SHOP), 'junction')
   writeChat(a, 's1', ['one'])
   assert.match(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).error, /is a link/)
   assert.deepStrictEqual(fs.readdirSync(outside), [])
@@ -436,7 +446,7 @@ test('a temporary copy left by a stopped helper is cleared at the next copy out'
   const a = computer('a', store)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const folder = path.join(store, 'shop', 's1')
+  const folder = path.join(store, SHOP, 's1')
   const left = path.join(folder, `.${fs.readdirSync(folder)[0]}.99999.tmp`)
   fs.writeFileSync(left, 'half')
   fs.utimesSync(left, new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000))
@@ -455,8 +465,8 @@ test('moving to another folder copies every chat, switches, and keeps the old co
   a.sync('out', path.join(a.chatDir, 's2.jsonl'), a.root)
   const moved = a.sync('move', 'folder', second)
   assert.strictEqual(moved.moved, 2)
-  assert.deepStrictEqual(fs.readdirSync(path.join(second, 'shop')).sort(), ['s1', 's2'])
-  assert.ok(fs.existsSync(path.join(first, 'shop', 's1')), 'old copy kept')
+  assert.deepStrictEqual(fs.readdirSync(path.join(second, SHOP)).sort(), ['s1', 's2'])
+  assert.ok(fs.existsSync(path.join(first, SHOP, 's1')), 'old copy kept')
   assert.strictEqual(a.sync('status', a.root).place.path, path.resolve(second))
   assert.deepStrictEqual(a.sync('in', a.chatDir, a.root, 'other').sent, [], 'nothing to send again')
 })
@@ -468,7 +478,8 @@ test('a project keeps one name across computers from its git remote, in https an
     execFileSync('git', ['-C', pc.root, 'remote', 'add', 'origin', remote])
     return pc.sync('status', pc.root).project
   })
-  assert.deepStrictEqual(keys, ['github.com~acme~shop', 'github.com~acme~shop'])
+  assert.strictEqual(keys[0], keys[1])
+  assert.match(keys[0], /^github\.com-acme-shop-[0-9a-f]{12}$/)
 })
 
 test('through a git repo that changes line ends, a chat goes back and forth between two computers', () => {
@@ -495,7 +506,7 @@ test('a copy left half written in the clone is written again whole', () => {
   const b = gitComputer('b', origin)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const folder = path.join(a.dataDir, 'repo', 'shop', 's1')
+  const folder = path.join(a.dataDir, 'repo', SHOP, 's1')
   fs.appendFileSync(path.join(folder, fs.readdirSync(folder)[0]), '{"cut":')
   b.sync('in', b.chatDir, b.root, 'other')
   writeChat(a, 's1', ['one', 'two'])
@@ -661,7 +672,7 @@ test('a folder planted at this computer\'s own copy is cleared, and one failing 
   const a = computer('a', store)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const folder = path.join(store, 'shop', 's1')
+  const folder = path.join(store, SHOP, 's1')
   const own = path.join(folder, fs.readdirSync(folder)[0])
   fs.rmSync(own)
   fs.mkdirSync(own)
@@ -736,7 +747,7 @@ test('a lock a stopped git left in the clone is cleared, and a recent one shows 
   const tenMinutesAgo = new Date(Date.now() - 10 * 60_000)
   fs.utimesSync(lock, tenMinutesAgo, tenMinutesAgo)
   assert.deepStrictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root), { copied: 's1', pushed: true })
-  assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
+  assert.ok(committed(origin).some(file => file.startsWith(`${SHOP}/s1/`)), 'the chat reached the repo')
 
   writeChat(a, 's2', ['two'])
   fs.writeFileSync(lock, '')
@@ -796,9 +807,9 @@ test('a repo\'s chats go only under the name git gave, and a project outside any
   const cases = [
     { name: 'in a repo, git timed out', isRepo: true, error: timedOut, refused: /git remote/, files: [] },
     { name: 'in a repo, git not installed', isRepo: true, error: noGit, refused: /cannot find git/, files: [] },
-    { name: 'in a repo with no remote', isRepo: true, error: null, files: ['shop'] },
+    { name: 'in a repo with no remote', isRepo: true, error: null, files: [SHOP] },
     { name: 'in a folder git will not take as a repo', isBroken: true, error: null, refused: /git remote/, files: [] },
-    { name: 'outside any repo, git not installed', isRepo: false, error: noGit, files: ['shop'] },
+    { name: 'outside any repo, git not installed', isRepo: false, error: noGit, files: [SHOP] },
   ]
   for (const row of cases) {
     const store = tempDir('store')
@@ -822,7 +833,7 @@ test('a session end\'s copy runs on after the command that started it returns', 
   const answer = JSON.parse(execFileSync(process.execPath, args, { env: a.env, encoding: 'utf8' }))
   assert.deepStrictEqual(answer, { started: 'out' })
   // The chat's folder is made before its copy is renamed into it, so the wait is for the copy.
-  const copy = path.join(store, 'shop', 's1')
+  const copy = path.join(store, SHOP, 's1')
   const copies = () => (fs.existsSync(copy) ? fs.readdirSync(copy).filter(name => name.endsWith('.jsonl')) : [])
   for (let waited = 0; !copies().length && waited < 20_000; waited += 200) {
     await new Promise(resolve => setTimeout(resolve, 200))
@@ -830,25 +841,34 @@ test('a session end\'s copy runs on after the command that started it returns', 
   assert.strictEqual(copies().length, 1, 'the copy reached the sync place')
 })
 
-test('projects in folders of one repo keep their names apart, and a remote\'s case does not split one', () => {
+// The sync place's folder for the project at `inside` (a path below the top)
+// of a repo whose remote is `url`.
+function keyOfRepo(url, inside = '') {
   const env = { ...process.env, ...GIT_ENV }
-  const repo = (url) => {
-    const top = tempDir('repo')
-    execFileSync('git', ['init', '-q', top], { env })
-    execFileSync('git', ['-C', top, 'remote', 'add', 'origin', url], { env })
-    fs.mkdirSync(path.join(top, 'packages', 'api'), { recursive: true })
-    return top
-  }
-  const https = repo('https://github.com/acme/shop.git')
-  const ssh = repo('git@github.com:Acme/Shop.git')
-  const sshOn443 = repo('ssh://git@ssh.github.com:443/acme/shop.git')
-  const lookalike = repo('https://github.com/acme/shop-packages-api.git')
-  const keys = inProcess({ env: {} }, () => {
-    const { projectKey } = require(SYNC)
-    return [https, path.join(https, 'packages', 'api'), ssh, sshOn443, lookalike].map(projectKey)
-  })
-  assert.deepStrictEqual(keys, ['github.com~acme~shop', 'github.com~acme~shop~packages~api', 'github.com~acme~shop',
-    'github.com~acme~shop', 'github.com~acme~shop-packages-api'])
+  const top = tempDir('repo')
+  execFileSync('git', ['init', '-q', top], { env })
+  execFileSync('git', ['-C', top, 'remote', 'add', 'origin', url], { env })
+  fs.mkdirSync(path.join(top, inside), { recursive: true })
+  return inProcess({ env: {} }, () => require(SYNC).projectKey(path.join(top, inside)))
+}
+
+test('every spelling of one remote names one project, and two different projects never share a name', () => {
+  const spellings = ['https://github.com/acme/shop.git', 'git@github.com:Acme/Shop.git',
+    'ssh://git@ssh.github.com:443/acme/shop.git', 'ssh://git@github.com:22/acme/shop']
+  assert.strictEqual(new Set(spellings.map(url => keyOfRepo(url))).size, 1, 'one remote, one name')
+  const repo = 'git@github.com:o/r.git'
+  const pairs = [
+    ['a folder of a repo, a repo named after it',
+      keyOfRepo('git@github.com:o/r.git', 'packages/api'), keyOfRepo('git@github.com:o/r-packages-api.git')],
+    ['two folders in other alphabets', keyOfRepo(repo, '文档'), keyOfRepo(repo, '测试')],
+    ['a name with a leading dot', keyOfRepo('git@github.com:o/.files.git'), keyOfRepo('git@github.com:o/files.git')],
+    ['a nested repo, a folder of its parent',
+      keyOfRepo('git@nas:repos/work/tools.git'), keyOfRepo('git@nas:repos/work.git', 'tools')],
+    ['two folders in other alphabets with no remote', keyOfFolder('文档'), keyOfFolder('测试')],
+    ['names that differ only in case, on a disk that ignores it',
+      keyOfRepo(repo, 'Docs').toLowerCase(), keyOfRepo(repo, 'docs').toLowerCase()],
+  ]
+  for (const [name, one, other] of pairs) assert.notStrictEqual(one, other, name)
 })
 
 test('a clone of another repo left by a stopped move is never pushed to, and the move it names repairs it', () => {
@@ -859,7 +879,7 @@ test('a clone of another repo left by a stopped move is never pushed to, and the
   fs.writeFileSync(record, 'me/other')
   const answer = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   assert.match(answer.error || '', /not of me\/chats/)
-  assert.ok(!fs.existsSync(path.join(a.dataDir, 'repo', 'shop')), 'nothing was written into the clone')
+  assert.ok(!fs.existsSync(path.join(a.dataDir, 'repo', SHOP)), 'nothing was written into the clone')
 
   const childProcess = require('child_process')
   const realSpawn = childProcess.spawnSync
@@ -983,7 +1003,7 @@ test('a move out of a folder that holds other things copies only the chats', () 
   fs.mkdirSync(path.join(first, 'photos', '2024'), { recursive: true })
   const target = tempDir('target')
   assert.strictEqual(a.sync('move', 'folder', target).moved, 1)
-  assert.deepStrictEqual(fs.readdirSync(target), ['shop'])
+  assert.deepStrictEqual(fs.readdirSync(target), [SHOP])
 })
 
 test('this computer\'s own copy that cannot be read never brings a deleted chat back', () => {
@@ -992,7 +1012,7 @@ test('this computer\'s own copy that cannot be read never brings a deleted chat 
   const b = computer('b', store)
   writeChat(a, 's1', ['one'])
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
-  const folder = path.join(store, 'shop', 's1')
+  const folder = path.join(store, SHOP, 's1')
   const [fromA] = fs.readdirSync(folder)
   b.sync('in', b.chatDir, b.root, 'other')
   const ownOfB = fs.readdirSync(folder).find(name => name !== fromA)
@@ -1042,7 +1062,7 @@ test('a pull that a stopped run left half done is undone, and its commits still 
   assert.notStrictEqual(stopped.status, 0, 'the rebase stopped part way')
   const answer = a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   assert.strictEqual(answer.pushed, true, JSON.stringify(answer))
-  const own = committed(origin).find(file => file.startsWith('shop/s1/'))
+  const own = committed(origin).find(file => file.startsWith(`${SHOP}/s1/`))
   const text = execFileSync('git', ['--git-dir', origin, 'show', `main:${own}`], { encoding: 'utf8' })
   assert.match(text, /two/, 'the local commit reached the repo')
 })
@@ -1055,7 +1075,7 @@ test('a move away from a repo takes the copies other computers pushed since the 
   assert.strictEqual(b.sync('out', path.join(b.chatDir, 's1.jsonl'), b.root).pushed, true)
   const target = tempDir('target')
   assert.strictEqual(a.sync('move', 'folder', target).moved, 1)
-  assert.strictEqual(fs.readdirSync(path.join(target, 'shop', 's1')).length, 1)
+  assert.strictEqual(fs.readdirSync(path.join(target, SHOP, 's1')).length, 1)
 })
 
 test('Google Drive is found under its folder name in the computer\'s language', () => {
@@ -1088,7 +1108,7 @@ test('a move into a folder inside the old place copies each chat once and makes 
   a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
   const inner = path.join(first, 'z-new')
   assert.strictEqual(a.sync('move', 'folder', inner).moved, 1)
-  assert.deepStrictEqual(fs.readdirSync(inner), ['shop'])
+  assert.deepStrictEqual(fs.readdirSync(inner), [SHOP])
 })
 
 test('a move away from a repo that cannot be read keeps the chats syncing where they did', () => {
@@ -1109,7 +1129,7 @@ test('a push that failed goes up with the next copy, though the chat did not cha
   assert.ok(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushError, 'the first push fails')
   execFileSync('git', ['-C', clone, 'remote', 'set-url', '--push', 'origin', origin])
   assert.strictEqual(a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root).pushed, true)
-  assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
+  assert.ok(committed(origin).some(file => file.startsWith(`${SHOP}/s1/`)), 'the chat reached the repo')
 })
 
 test('a computer with no git name set still commits and pushes its chats', () => {
@@ -1122,7 +1142,7 @@ test('a computer with no git name set still commits and pushes its chats', () =>
   const answer = JSON.parse(execFileSync(process.execPath, [SYNC, 'out', path.join(a.chatDir, 's1.jsonl'), a.root],
     { env, encoding: 'utf8' }))
   assert.deepStrictEqual(answer, { copied: 's1', pushed: true })
-  assert.ok(committed(origin).some(file => file.startsWith('shop/s1/')), 'the chat reached the repo')
+  assert.ok(committed(origin).some(file => file.startsWith(`${SHOP}/s1/`)), 'the chat reached the repo')
 })
 
 test('a pull that conflicts is reset to the repo whatever language git speaks', () => {
@@ -1133,7 +1153,7 @@ test('a pull that conflicts is reset to the repo whatever language git speaks', 
   const other = tempDir('other')
   const env = { ...process.env, ...GIT_ENV }
   execFileSync('git', ['clone', '-q', origin, other], { env })
-  const own = committed(origin).find(file => file.startsWith('shop/s1/'))
+  const own = committed(origin).find(file => file.startsWith(`${SHOP}/s1/`))
   fs.appendFileSync(path.join(other, own), '{"changed":"elsewhere"}\n')
   execFileSync('git', ['-C', other, 'commit', '-qam', 'elsewhere'], { env })
   execFileSync('git', ['-C', other, 'push', '-q', 'origin', 'HEAD'], { env })

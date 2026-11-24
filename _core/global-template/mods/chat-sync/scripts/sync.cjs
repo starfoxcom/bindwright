@@ -12,6 +12,7 @@
 // Each prints one line of JSON.
 'use strict'
 
+const crypto = require('crypto')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -201,24 +202,33 @@ function projectKey(root) {
   } catch {
     // The project's own file, broken or not: its folder name still names it.
   }
-  const name = project.project && project.project.name
-  return safeName(typeof name === 'string' && name.trim() ? name : folderName(root))
+  const saved = project.project && project.project.name
+  const name = (typeof saved === 'string' && saved.trim() ? saved : folderName(root)).trim()
+  return keyOf(name, ['name', name])
 }
 
 // A project's name from its remote: host, owner and repo in lower case, as
 // GitHub reads them, then the path of the project's folder below the repo's
 // top, so two projects of one repo (a monorepo's packages) keep their chats
-// apart. The parts are joined with `~`, which no part holds once made safe, so
-// two different projects never share a name. Every spelling of one remote
-// gives one name: https or ssh, any user or port, and GitHub's ssh over port
-// 443 (ssh.github.com).
+// apart. Every spelling of one remote gives one name: https or ssh, any user
+// or port, and GitHub's ssh over port 443 (ssh.github.com).
 function remoteKey(url, insideParts) {
   const hasScheme = /^[a-z+]+:\/\//i.test(url)
   let bare = url.replace(/^[a-z+]+:\/\//i, '').replace(/^[^@/]+@/, '')
   if (hasScheme) bare = bare.replace(/^([^/:]+):\d+\//, '$1/')
   const parts = bare.replace(/\.git$/i, '').toLowerCase().split(/[:/]/).filter(Boolean)
   if (parts[0] === 'ssh.github.com') parts[0] = 'github.com'
-  return [...parts, ...insideParts.filter(Boolean)].map(safeName).join('~')
+  const inside = insideParts.filter(Boolean)
+  return keyOf([...parts, ...inside].join('-'), ['remote', parts, inside])
+}
+
+// The sync place's folder for a project: a readable label, then a hash of the
+// project's exact identity in lower-case hex. Two different identities never
+// share a folder, whatever alphabet, dots or case their names hold, even on a
+// disk that ignores case, and one identity names the same folder everywhere.
+function keyOf(label, identity) {
+  const hash = crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 12)
+  return `${safeName(label.slice(0, 60))}-${hash}`
 }
 
 // The nearest folder at or above `root` that holds `.git` (a folder, or the
@@ -246,7 +256,7 @@ function safeName(text) {
 
 module.exports = {
   configDir, dataDir, readJson, writeJson, machineId, readPlace, storeRoot, quietEnv, gitSettings, git,
-  setDeadline, callTimeout, timedRun, OUT_OF_TIME, CLONE_OF, cloneOf, stopReason, projectKey, safeName,
+  setDeadline, callTimeout, timedRun, OUT_OF_TIME, CLONE_OF, cloneOf, stopReason, projectKey,
 }
 
 // Starts `out` in a process of its own and returns at once, for a session's
