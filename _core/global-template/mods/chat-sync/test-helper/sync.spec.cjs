@@ -165,10 +165,16 @@ test('a Windows chat moved to a computer without drive letters gets its paths in
 test('only this computer\'s own folders are swapped, never a longer path or name that holds them', () => {
   const windows = neutralize('C:\\work\\app', 'C:\\Users\\al')
   const posix = neutralize('/srv/app', '/home/sam')
+  const network = neutralize('\\\\nas\\projects\\foo', 'C:\\Users\\al')
+  const mac = neutralize('/srv/app', '/Users/al')
+  const short = neutralize('/srv/app', '/home/jos')
   const kept = [
     ['a longer folder name', windows, 'C:\\Users\\alex\\x'],
     ['a longer project name', windows, 'C:\\work\\apples'],
     ['inside a web address', posix, 'https://example.com/home/sam/x'],
+    ['a network path in a web address', network, 'https://nas/projects/foo/x'],
+    ['a home after a drive letter', mac, 'C:/Users/al/x'],
+    ['a longer name in another alphabet', short, '/home/josé/x'],
     ['inside a longer path', posix, '/mnt/backup/home/sam/x'],
     ['a name with a suffix', posix, '/home/sam.bak/x'],
     ['the project name in a relative path', posix, 'src/srv/app/main.ts'],
@@ -181,6 +187,7 @@ test('only this computer\'s own folders are swapped, never a longer path or name
     ['a quoted path', '"/home/sam/x"', '"__CHATSYNC_HOME_F__/x"'],
     ['a path ending a sentence', '"in /home/sam."', '"in __CHATSYNC_HOME_F__."'],
     ['a path after an escaped newline', '"a\\n/home/sam/x"', '"a\\n__CHATSYNC_HOME_F__/x"'],
+    ['a path in a list after a colon', '"PATH=/usr/bin:/home/sam/bin"', '"PATH=/usr/bin:__CHATSYNC_HOME_F__/bin"'],
   ]
   for (const [label, text, want] of swapped) assert.strictEqual(posix(text), want, label)
   const rootHome = neutralize('/srv/app', '/')
@@ -726,26 +733,45 @@ test('a move out of a folder that holds other things copies only the chats', () 
   assert.deepStrictEqual(fs.readdirSync(target), ['shop'])
 })
 
+test('this computer\'s own copy that cannot be read never brings a deleted chat back', () => {
+  const store = tempDir('store')
+  const a = computer('a', store)
+  const b = computer('b', store)
+  writeChat(a, 's1', ['one'])
+  a.sync('out', path.join(a.chatDir, 's1.jsonl'), a.root)
+  const folder = path.join(store, 'shop', 's1')
+  const [fromA] = fs.readdirSync(folder)
+  b.sync('in', b.chatDir, b.root, 'other')
+  const ownOfB = fs.readdirSync(folder).find(name => name !== fromA)
+  fs.rmSync(path.join(b.chatDir, 's1.jsonl'))
+  fs.utimesSync(path.join(folder, fromA), new Date(), new Date(Date.now() + 5_000))
+  const busy = syncWithBusyFiles(b, path.join(folder, ownOfB), 'in', b.chatDir, b.root, 'other')
+  assert.match(busy.error || '', /could not read/)
+  assert.deepStrictEqual(busy.imported, [])
+  assert.deepStrictEqual(b.sync('in', b.chatDir, b.root, 'other').imported, [], 'nobody continued it')
+})
+
 test('git asks no question of an ssh command set by the user, and signs in to GitHub through gh', () => {
-  const base = require(SYNC)
   const quoted = '"C:/Program Files/OpenSSH/ssh.exe" -i key'
+  const configured = gitConfig('[core]\n\tsshCommand = ssh -i key\n')
   const rows = [
-    ['ssh with options', 'ssh -i key', 'ssh -i key -o BatchMode=yes'],
-    ['quoted ssh.exe', quoted, `${quoted} -o BatchMode=yes`],
-    ['another program', 'plink -batch', 'plink -batch'],
+    ['ssh with options', { GIT_SSH_COMMAND: 'ssh -i key' }, 'ssh -i key -o BatchMode=yes'],
+    ['quoted ssh.exe', { GIT_SSH_COMMAND: quoted }, `${quoted} -o BatchMode=yes`],
+    ['another program', { GIT_SSH_COMMAND: 'plink -batch' }, 'plink -batch'],
+    ['GIT_SSH naming ssh.exe', { GIT_SSH: 'C:\\Windows\\OpenSSH\\ssh.exe' }, '\'C:\\Windows\\OpenSSH\\ssh.exe\' -o BatchMode=yes'],
+    ['GIT_SSH naming another program', { GIT_SSH: 'plink' }, undefined],
+    ['core.sshCommand beside GIT_SSH', { GIT_SSH: 'plink', GIT_CONFIG_GLOBAL: configured }, 'ssh -i key -o BatchMode=yes'],
+    ['nothing set', {}, 'ssh -o BatchMode=yes'],
   ]
-  const saved = process.env.GIT_SSH_COMMAND
-  try {
-    for (const [name, command, expected] of rows) {
-      process.env.GIT_SSH_COMMAND = command
-      assert.strictEqual(base.quietEnv().GIT_SSH_COMMAND, expected, name)
-    }
-  } finally {
-    if (saved === undefined) delete process.env.GIT_SSH_COMMAND
-    else process.env.GIT_SSH_COMMAND = saved
+  for (const [name, env, expected] of rows) {
+    const command = inProcess({ env: { ...GIT_ENV, ...env } }, () => {
+      for (const key of ['GIT_SSH_COMMAND', 'GIT_SSH']) if (!(key in env)) delete process.env[key]
+      return require(SYNC).quietEnv().GIT_SSH_COMMAND
+    })
+    assert.strictEqual(command, expected, name)
   }
   const helper = execFileSync('git',
-    [...base.gitSettings(), 'config', '--get-urlmatch', 'credential.helper', 'https://github.com/me/chats'],
+    [...require(SYNC).gitSettings(), 'config', '--get-urlmatch', 'credential.helper', 'https://github.com/me/chats'],
     { env: { ...process.env, ...GIT_ENV }, encoding: 'utf8' })
   assert.strictEqual(helper.trim(), '!gh auth git-credential')
 })

@@ -550,7 +550,11 @@ function sweepImports(chatDir) {
 function isContinuedElsewhere(storeChat, root) {
   return inWorkFolder(work => {
     const sent = path.join(work, 'sent')
-    if (!copyPlainFile(path.join(storeChat, ownName()), sent)) return otherCopies(storeChat).length > 0
+    const own = path.join(storeChat, ownName())
+    if (!copyPlainFile(own, sent)) {
+      if (isPlainFile(own)) throw new Error(`could not read ${own}; it is tried again at the next run`)
+      return otherCopies(storeChat).length > 0
+    }
     const asLocal = path.join(work, 'sent-here')
     transformFile(sent, asLocal, expand(root, os.homedir()), true)
     return behindCopy(storeChat, asLocal, root, work).read !== undefined

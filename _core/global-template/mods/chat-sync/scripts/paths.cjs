@@ -33,12 +33,21 @@ function escapeRegExp(text) {
 }
 
 // A path starts after a line or string start, white space, a quote, a bracket,
-// one of `=:,;|<>`, or an escaped newline or tab (`\n`, `\t`, `\r`), so
-// https://x.com/home/sam and /mnt/backup/home/sam are left alone.
-const STARTS_AFTER = '(?<=^|[\\s"\'`([{<>=:,;|]|\\\\[nrt])'
-// A path ends where the folder's name ends, so C:/Users/al never matches inside
-// C:/Users/alex or /home/sam.bak; a sentence's closing dot still ends it.
-const ENDS_BEFORE = '(?![\\w-]|\\.[\\w-])'
+// one of `=,;|<>`, an escaped newline or tab (`\n`, `\t`, `\r`), or a `:` that
+// ends no drive letter, so https://x.com/home/sam, /mnt/backup/home/sam and,
+// for a home of /Users/al, C:/Users/al are left alone. A path that starts with
+// two slashes (a network path) never starts after `:`, as in https://nas/x.
+const BEFORE = '^|[\\s"\'`([{<>=,;|]|\\\\[nrt]'
+const COLON_NOT_DRIVE = '(?<!(?:^|[^\\p{L}\\p{N}_])[A-Za-z]):'
+
+function startsAfter(text) {
+  return text.startsWith('//') ? `(?<=${BEFORE})` : `(?<=${BEFORE}|${COLON_NOT_DRIVE})`
+}
+
+// A path ends where the folder's name ends, in any alphabet, so C:/Users/al
+// never matches inside C:/Users/alex, /home/jos inside /home/josé, or
+// /home/sam.bak; a sentence's closing dot still ends it.
+const ENDS_BEFORE = '(?![\\p{L}\\p{N}_-]|\\.[\\p{L}\\p{N}_-])'
 
 // A folder with no name below the root or the drive ("/", "C:\") is everywhere
 // in a chat, so it gets no rule.
@@ -51,12 +60,12 @@ function outRules(name, folder) {
   const parts = segments(folder)
   if (!hasName(parts)) return []
   const forms = isWindowsPath(folder) ? Object.keys(FORMS) : ['F']
-  const flags = isWindowsPath(folder) ? 'gi' : 'g'
+  const flags = isWindowsPath(folder) ? 'giu' : 'gu'
   return forms
     .map(form => ({ text: parts.join(FORMS[form]), form }))
     .sort((a, b) => b.text.length - a.text.length)
     .map(({ text, form }) => ({
-      pattern: new RegExp(`${STARTS_AFTER}${escapeRegExp(text)}${ENDS_BEFORE}`, flags),
+      pattern: new RegExp(`${startsAfter(text)}${escapeRegExp(text)}${ENDS_BEFORE}`, flags),
       value: token(name, form),
     }))
 }

@@ -82,14 +82,14 @@ let sshCommand
 // fails the command at once instead of waiting, since no one is there to answer
 // it. Git asks an askpass program before the terminal, and an editor's terminal
 // sets one that opens a dialog, so none is passed on (core.askPass is emptied in
-// gitSettings). A user's own ssh command is kept, with batch mode added when its
-// program is OpenSSH's; another program (plink, a wrapper) takes other options.
+// gitSettings). A user's own ssh command or program is kept, picked in git's
+// order, with batch mode added when it is OpenSSH's; another program (plink, a
+// wrapper) takes other options, so only the time limit stops its questions.
 function quietEnv() {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GH_PROMPT_DISABLED: '1' }
   for (const name of ['GIT_ASKPASS', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']) delete env[name]
-  if (env.GIT_SSH && !env.GIT_SSH_COMMAND) return env
-  const own = env.GIT_SSH_COMMAND || configuredSshCommand()
-  env.GIT_SSH_COMMAND = !own ? 'ssh -o BatchMode=yes' : isOpenSsh(own) ? `${own} -o BatchMode=yes` : own
+  const own = env.GIT_SSH_COMMAND || configuredSshCommand() || (env.GIT_SSH ? `'${env.GIT_SSH}'` : 'ssh')
+  if (isOpenSsh(own)) env.GIT_SSH_COMMAND = `${own} -o BatchMode=yes`
   return env
 }
 
