@@ -1,7 +1,7 @@
 // Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import { crossedResearch, recordRound, redStreak, ROUNDS_FILE, SOURCES_NEEDED } from './rounds'
+import { crossedResearch, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED } from './rounds'
 import type { PrRounds } from './rounds'
 import { givenDir } from './settings'
 
@@ -65,6 +65,12 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
     await updateRounds($, key, counted).catch(() => stepBacks.delete(key))
   }
   return stepBacks
+}
+
+// The watches as shown, each with the round its head is (`roundOf`), from one read of the count file.
+export async function roundsLookup($: EngineInterface): Promise<(watches: Watch[]) => Watch[]> {
+  const rounds = await readRounds($)
+  return watches => watches.map(w => ({ ...w, round: roundOf(rounds[`${w.repo}#${w.number}`], w.headSha) }))
 }
 
 export async function redRoundsOf($: EngineInterface, pr: { repo: string; number: number }): Promise<number> {

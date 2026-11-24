@@ -37,12 +37,11 @@ export function redStreak(pr: PrRounds | undefined): number {
   return rounds.at(-1)?.red ? rounds.length : 0
 }
 
-/** Which round head `sha` is for its PR, counting from 1: its place among the rounds kept, or the one
- * after them when its checks have not settled yet. */
+/** Which round head `sha` is for its PR, counting from 1: the one after every other head's round, where
+ * `recordRound` puts it, so a head pushed again after later rounds counts as the newest. */
 export function roundOf(pr: PrRounds | undefined, sha: string): number {
   const rounds = Array.isArray(pr?.rounds) ? pr.rounds : []
-  const at = rounds.findIndex(r => r.sha === sha)
-  return (at < 0 ? rounds.length : at) + 1
+  return rounds.filter(r => r.sha !== sha).length + 1
 }
 
 /** The count's file, `{ "<owner/name>#<number>": PrRounds }`, written by the mod as watches settle and

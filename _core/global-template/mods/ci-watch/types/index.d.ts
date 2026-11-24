@@ -46,7 +46,7 @@ export type Watch = {
    * (`routine error, deep none`). Such a round is not counted, and its wake says why.
    */
   noVerdict?: string
-  /** On the band's copy only: which round of its PR this head is, counting from 1. */
+  /** Only on the copies the band and `/ci-watch` show, never saved: which round of its PR this head is. */
   round?: number
 }
 

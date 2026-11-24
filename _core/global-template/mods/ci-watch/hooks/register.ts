@@ -5,12 +5,11 @@ import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './br
 import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
-  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundOf, roundsText, stepBackOf,
-  withTopic,
+  hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsText, stepBackOf, withTopic,
 } from './rounds'
 import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
-  dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
+  dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, roundsLookup, statePath,
 } from './store'
 import { isSameRun, PENDING, reconcile, settle } from './settle'
 import { withVerdict } from './verdict'
@@ -107,9 +106,8 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
 const shown = atom({ plugin: 'ci-watch', key: 'watches' } as const, [])
 
 async function publish($: EngineInterface): Promise<void> {
-  const rounds = await readRounds($)
-  const round = (w: Watch) => roundOf(rounds[`${w.repo}#${w.number}`], w.headSha)
-  await update($, shown, () => live.watches.map(w => ({ ...w, round: round(w) })))
+  const withRounds = await roundsLookup($)
+  await update($, shown, () => withRounds(live.watches))
 }
 
 async function save($: EngineInterface): Promise<void> {
@@ -791,10 +789,11 @@ export const register: Register = (on, options) => {
       return { text: 'Stopped watching every PR in this session.' }
     }
     // The row's own words, so the command and the row never disagree; the phone also gets each check.
-    const none = live.watches.length === 0 ? ['No PR is being watched.'] : []
+    const watches = (await roundsLookup($))(live.watches)
+    const none = watches.length === 0 ? ['No PR is being watched.'] : []
     if (verb === 'phone')
-      return { text: [...none, ...live.watches.map(phoneText), '/ci-watch help for more'].join('\n') }
+      return { text: [...none, ...watches.map(phoneText), '/ci-watch help for more'].join('\n') }
     if (none.length > 0) return { text: none[0] }
-    return { text: live.watches.map(w => `${summary(w).text} (${w.repo})`).join('\n') }
+    return { text: watches.map(w => `${summary(w).text} (${w.repo})`).join('\n') }
   })
 }

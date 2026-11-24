@@ -37,7 +37,7 @@ test('a round that passed but did not merge counts red once another head follows
 const ROUND_CASES: { name: string; pr: PrRounds | undefined; sha: string; round: number }[] = [
   { name: 'a PR with no rounds yet', pr: undefined, sha: 'c0', round: 1 },
   { name: 'a head still running after two settled rounds', pr: of([true, true]), sha: 'c2', round: 3 },
-  { name: 'a head that already settled', pr: of([true, true, false]), sha: 'c1', round: 2 },
+  { name: 'a head pushed again after a later round', pr: of([true, true]), sha: 'c0', round: 2 },
   { name: 'the newest settled head', pr: of([true, false]), sha: 'c1', round: 2 },
 ]
 
@@ -451,13 +451,21 @@ test("a round adds to the count file as read right before its write", async ($, 
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   seed(seen, reds(5))
   seen.order = []
-  for (let i = 0; i < 6; i++) await clock.advance(30_000)
-  // The band and the wake read the count too, at other times; the write follows its own read directly.
-  const steps = seen.order.filter(step => step.endsWith('/rounds.json'))
-  const write = steps.indexOf(`write ${path}`)
-  expect(steps.filter(step => step.startsWith('write'))).toEqual([`write ${path}`])
-  expect(steps[write - 1]).toBe(`read ${path}`)
-  expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(6)
+  // Before each poll until the round is written, another session adds a PR of its own. The band reads
+  // the file at every poll too, so a write from any earlier copy would lose the newest of those PRs.
+  const others: string[] = []
+  for (let i = 0; i < 6; i++) {
+    if (!seen.order.includes(`write ${path}`)) {
+      others.push(`o/r#${100 + i}`)
+      const all = JSON.parse(seen.files.get(path) ?? '{}')
+      seen.files.set(path, JSON.stringify({ ...all, [others.at(-1) as string]: { rounds: [{ sha: 'x', red: true }] } }))
+    }
+    await clock.advance(30_000)
+  }
+  const saved = JSON.parse(seen.files.get(path) ?? '{}')
+  expect(seen.order.filter(step => step === `write ${path}`)).toHaveLength(1)
+  expect(others.filter(key => !(key in saved))).toEqual([])
+  expect(redStreak(saved['o/r#7'])).toBe(6)
 })
 
 // Which red settles count as a fix round: each row is one case, and this table is the rule. A settle keeps
