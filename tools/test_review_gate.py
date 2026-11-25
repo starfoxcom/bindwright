@@ -624,12 +624,15 @@ class Upsert(unittest.TestCase):
         self.assertEqual((out["conclusion"], self.existing[0]["conclusion"]), ("success", "success"))
         self.assertIn("lacks statuses: write", warning.getvalue())
 
-    def test_any_other_status_failure_stops_before_the_check(self):
+    def test_any_other_status_failure_still_writes_the_check_then_fails(self):
+        # A refused status must not keep the verdict off the check, or a gate
+        # whose status writes fail could never pass, its own repair included.
         self.status_error = "gh api POST failed: API rate limit exceeded (HTTP 403)"
         self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
         with self.assertRaises(gate.GateError):
-            gate.upsert("o/r", self.SHA, triage="reviewable", routine="block", order="5.1.1")
-        self.assertEqual(self.patches(), [])
+            gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        [patch] = self.patches()
+        self.assertEqual(patch["conclusion"], "success")
 
     def test_a_newer_runs_facts_count_as_held(self):
         self.existing = [{"id": 7, "name": "Review gate", "external_id": "routine=block;routine_by=9.1.1"}]
@@ -1345,6 +1348,35 @@ class GitHubWrites(unittest.TestCase):
             with self.subTest(name):
                 body = {"state": "success", "context": "Review gate", "description": description}
                 self.assertEqual(github_writes.refusal("POST", self.STATUS, body) is None, taken)
+
+    def test_check_runs_as_github_takes_them(self):
+        create = "repos/o/r/check-runs"
+        done = {"name": "Review gate", "head_sha": "a" * 40, "status": "completed", "conclusion": "success",
+                "output": {"title": "Routine review", "summary": "Passed."}}
+        rows = [
+            ("a completed run", done, True),
+            ("completed with no conclusion", dict(done, conclusion=None), False),
+            ("an unknown conclusion", dict(done, conclusion="passed"), False),
+            ("output with no summary", dict(done, output={"title": "Routine review"}), False),
+            ("a summary at the limit", dict(done, output={"title": "t", "summary": "x" * 65535}), True),
+            ("a summary past the limit", dict(done, output={"title": "t", "summary": "x" * 65536}), False),
+            ("no head_sha", {k: v for k, v in done.items() if k != "head_sha"}, False),
+        ]
+        for name, body, taken in rows:
+            with self.subTest(name):
+                self.assertEqual(github_writes.refusal("POST", create, body) is None, taken)
+
+    def test_every_title_becomes_a_description_github_takes(self):
+        rows = [
+            ("the verdict emoji goes", "Routine review \U0001f7e2", "Routine review"),
+            ("a run of spaces closes up", "Routine  and\tdeep reviews", "Routine and deep reviews"),
+            ("a long title is cut at 140", "y" * 150, "y" * 140),
+        ]
+        for name, title, description in rows:
+            with self.subTest(name):
+                self.assertEqual(gate._status_description(title), description)
+                body = {"state": "success", "context": "Review gate", "description": description}
+                self.assertIsNone(github_writes.refusal("POST", self.STATUS, body))
 
     def test_a_write_with_no_rule_is_refused(self):
         self.assertIn("no rule", github_writes.refusal("DELETE", "repos/o/r/check-runs/1", None))

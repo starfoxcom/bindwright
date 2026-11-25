@@ -486,12 +486,20 @@ def _set_status(repo, sha, check):
 
 def _write(repo, sha, current, note, facts):
     check = gate((current or {}).get("external_id") or "", **facts)
-    _set_status(repo, sha, check)
+    # The check carries the verdict, so a refused status write never keeps it
+    # from being written; the step still fails afterwards.
+    try:
+        _set_status(repo, sha, check)
+        refused = None
+    except GateError as error:
+        refused = error
     body = check_body(check, note)
     if current:
         _gh("repos/%s/check-runs/%d" % (repo, current["id"]), "PATCH", body)
     else:
         _gh("repos/%s/check-runs" % repo, "POST", dict(body, name=GATE, head_sha=sha))
+    if refused:
+        raise refused
     return check
 
 
