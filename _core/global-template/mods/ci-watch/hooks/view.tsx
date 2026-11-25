@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import type { Watch } from '../types'
+import { isNoCi } from './checks'
 
 // The watches as the band draws them, written by register.ts on every save and load. Each file names
 // the state with its own literal reference: the engine reads a module's state keys off its source.
@@ -32,7 +33,7 @@ export function keyOf(watch: Pick<Watch, 'repo' | 'number'>): string {
 }
 
 /** What one watch's row says, and in which color. */
-export function summary(watch: Watch): { text: string; color: 'green' | 'red' | 'yellow' } {
+export function summary(watch: Watch): { text: string; color: Tone } {
   const states = Object.entries(watch.checks)
   const failed = states.filter(([, bucket]) => FAILED.has(bucket)).map(([name]) => name)
   const done = states.filter(([, bucket]) => bucket !== PENDING).length
@@ -44,6 +45,7 @@ export function summary(watch: Watch): { text: string; color: 'green' | 'red' | 
     return { text: `⏳ ${pr} · ${done}/${states.length} done · failed so far: ${failed.join(', ')}`, color: 'red' }
   }
   if (failed.length > 0) return { text: `❌ ${pr} · failed: ${failed.join(', ')}`, color: 'red' }
+  if (isNoCi(watch)) return { text: `➖ ${pr} · no CI in this repo`, color: 'gray' }
   if (watch.outcome === 'timeout') return { text: `⏰ ${pr} · stuck pending`, color: 'yellow' }
   // Every check passed, and the watch waits out its quiet polls (a late workflow can still show up)
   // before it wakes the session: green for the checks, the hourglass for the wake still to come.

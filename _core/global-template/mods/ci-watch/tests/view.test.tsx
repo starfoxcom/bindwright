@@ -41,6 +41,12 @@ const SUMMARY_CASES: { name: string; watch: Partial<Watch>; text: string; color:
     color: 'yellow',
   },
   {
+    name: 'settled with no CI in the repo',
+    watch: { checks: {}, outcome: 'timeout', hasWorkflows: false },
+    text: '➖ PR 7 · no CI in this repo',
+    color: 'gray',
+  },
+  {
     name: 'all passed, not yet settled',
     watch: { checks: { a: 'pass', b: 'skipping' } },
     text: '⏳ PR 7 · all 2 passed, confirming',
