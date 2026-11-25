@@ -11,13 +11,14 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { follow, hookSources } from "./follow.mjs";
 import { writeFileAtomic } from "./write-file.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readState, repoKey, stateFileIn } from "./counts.mjs";
+import { isDue, savedUsage, scratchLine } from "./scratch-size.mjs";
 
 // The released version: main moves only on a release, and the plugin packs this file.
 export const LATEST_URL = "https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION";
@@ -66,14 +67,24 @@ function save(cacheFile, cache, today) {
 `);
 }
 
+// The line a check gives, or null when the check throws, so it never costs the rest of the notice.
+function lineOrNull(check) {
+  try {
+    return check();
+  } catch {
+    return null;
+  }
+}
+
 // The notice text, or null. `fetchLatest()` gives the released version or
 // null; `driftFor(repo)` the extras the repo's setup expects that this machine
 // lacks; `helperVersion` is the helper's own version; `cacheFile` remembers
 // the day of the last check, what it found, and the day each repo last saw a notice.
 // `countsFailedAt` is when this repo's last review counts send failed (ms), or null.
+// `scratchFor()` gives the line about Claude Code's scratch folders grown huge, or null.
 export async function notice({
   cwd, today, cacheFile, pluginVersion, helperVersion = null, fetchLatest, driftFor = async () => [],
-  countsFailedAt = null,
+  countsFailedAt = null, scratchFor = () => null,
 }) {
   const cache = { checked: null, latest: null, ...readJson(cacheFile) };
   cache.shown = Object.fromEntries(todays(cache.shown, today));
@@ -114,6 +125,8 @@ export async function notice({
       + "the next session start or merge tries again. If this keeps showing, check that gh is signed in "
       + "and the network is up.");
   }
+  const scratch = lineOrNull(scratchFor);
+  if (scratch) lines.push(scratch);
   if (lines.length) {
     cache.shown[key] = today;
     dirty = true;
@@ -164,6 +177,20 @@ function startCountsSend(repo, config) {
   child.unref();
 }
 
+// Measures the scratch folders again in its own process when the saved measurement is a day old,
+// so a slow walk of a huge folder never holds up a session start. The saved file is rewritten
+// first, so sessions starting meanwhile see a fresh date and start no second walk.
+function startScratchWalk(file) {
+  if (!isDue(file)) return;
+  writeFileAtomic(file, `${JSON.stringify(savedUsage(file) ?? {})}\n`);
+  const script = join(dirname(fileURLToPath(import.meta.url)), "scratch-size.mjs");
+  // Started outside the session's folder, which a running process would keep Windows from deleting.
+  const options = { detached: true, stdio: "ignore", windowsHide: true, cwd: tmpdir() };
+  const child = spawn(process.execPath, [script, "--save", file], options);
+  child.on("error", () => {});
+  child.unref();
+}
+
 // What the follow did to the hook copies: the hooks it refreshed, the edited ones it kept, and an
 // error (the next session start tries again). Only a move or a pending refresh carries `hooks`.
 function hookLines(followed, helperHome) {
@@ -193,6 +220,14 @@ async function main() {
     startCountsSend(findRepo(process.cwd()), config);
   } catch {
     // The counts never stand in the way of the notice.
+  }
+  const scratchFile = join(config, "bindwright", "scratch-size.json");
+  // The line comes from the last walk, read before this start's walk replaces it.
+  const scratch = scratchLine(savedUsage(scratchFile));
+  try {
+    startScratchWalk(scratchFile);
+  } catch {
+    // Nor does the scratch walk.
   }
   const readIn = (folder, rel) => {
     const file = join(folder, rel);
@@ -235,6 +270,7 @@ async function main() {
     fetchLatest: () => fetchVersion(url),
     driftFor: (repo) => driftOf(root, repo, config),
     countsFailedAt,
+    scratchFor: () => scratch,
   });
   if (text) process.stdout.write(`${text}\n`);
 }

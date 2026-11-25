@@ -509,23 +509,47 @@ def first_line(message):
     return message.split("\n", 1)[0].strip()
 
 
-def squash_merges():
-    """Whether the repo the hook runs in squash-merges its PRs, by the answers Bindwright's setup saved."""
+def merge_style():
+    """How the repo the hook runs in merges its PRs, by the answers Bindwright's setup saved, or None."""
     try:
         folder = os.path.abspath(CWD)
     except OSError:  # a "." whose folder was deleted
-        return False
+        return None
     while True:
         try:
             with open(os.path.join(folder, ".bindwright", "project.json"), encoding="utf-8") as answers:
-                return json.load(answers).get("advanced", {}).get("mergeStyle") == "squash"
+                style = json.load(answers).get("advanced", {}).get("mergeStyle")
+            return style if isinstance(style, str) else None
         # RecursionError: JSON nested deeper than the reader goes.
         except (OSError, ValueError, AttributeError, RecursionError):
             pass
         parent = os.path.dirname(folder)
         if parent == folder or os.path.exists(os.path.join(folder, ".git")):
-            return False
+            return None
         folder = parent
+
+
+def squash_merges():
+    return merge_style() == "squash"
+
+
+MERGE_STYLES = ("merge", "squash", "rebase")
+# The flags that rewrite a PR's commits. `--merge` is left out: gitflow merges release and cascade PRs
+# with it whatever the work PRs use, and a merge commit keeps every branch's history. A flag counts only
+# when a space or the command's end follows it: a value written onto it (`--squash=false`) is left unread.
+MERGE_FLAGS = {style: Followed(r"\bgh\s+pr\s+merge\b", r"\n|;&", r"\s(?:--%s|-%s)(?=\s|$)" % (style, style[0]),
+                               flags=0)
+               for style in ("squash", "rebase")}
+
+
+def other_merge_style(text, shell):
+    """Whether a `gh pr merge` asks for a merge style other than the one the repo saved."""
+    command = bare(text, shell)
+    asked = {style for style, flag in MERGE_FLAGS.items() if flag.search(command)}
+    if not asked:
+        return False
+    saved = merge_style()
+    return saved in MERGE_STYLES and bool(asked - {saved})
 
 
 def long_subject(text, shell):
@@ -606,6 +630,9 @@ RULES = [
      both(r"\bgit\s+(?:checkout|switch)\b(?!\s+--(?:\s|$))", r"&&|\|\||;|\n[^\S\n]*\S"),
      "a refused or failed chain can skip the switch, so the next edit lands on the wrong branch. Switch in a"
      " call of its own, check `git branch --show-current`, then go on.", OBSERVE),
+    ("a `gh pr merge` style other than the repo's", other_merge_style,
+     "the repo saved another merge style at setup (`mergeStyle` in `.bindwright/project.json`), and mixing"
+     " them breaks the history it reads. Merge with the flag `git.md` names.", OBSERVE),
 ]
 
 
