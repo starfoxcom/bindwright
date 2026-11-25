@@ -21,8 +21,6 @@ SUMMARY_MAX = 65535
 def _status(body):
     if body.get("state") not in STATUS_STATES:
         return "state must be one of %s" % sorted(STATUS_STATES)
-    if not isinstance(body.get("context"), str) or not body["context"]:
-        return "context is required"
     description = body.get("description")
     if description is None:
         return None
@@ -34,8 +32,8 @@ def _status(body):
 
 
 def _check_run(body, create):
-    if create and (not body.get("name") or not re.fullmatch(r"[0-9a-f]{40}", body.get("head_sha", ""))):
-        return "name and a 40-character head_sha are required"
+    if create and not ("name" in body and "head_sha" in body):
+        return "name and head_sha are required"
     if body.get("status", "queued") not in CHECK_STATUSES:
         return "status must be one of %s" % sorted(CHECK_STATUSES)
     conclusion = body.get("conclusion")
@@ -45,7 +43,7 @@ def _check_run(body, create):
         return "conclusion is required when status is completed"
     output = body.get("output")
     if output is not None:
-        if not output.get("title") or not output.get("summary"):
+        if "title" not in output or "summary" not in output:
             return "output needs a title and a summary"
         if len(output["summary"]) > SUMMARY_MAX:
             return "output summary is too long (maximum is %d characters)" % SUMMARY_MAX
