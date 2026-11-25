@@ -261,11 +261,12 @@ class LengthRowsTest(unittest.TestCase):
         def write(text):
             with open(path, "w", encoding="utf-8", newline="\n") as changelog:
                 changelog.write(text)
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
 
         def commit(text):
             write(text)
             subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
-            subprocess.run(git + ["commit", "-q", "-m", "docs: start"], check=True)
+            subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "docs: start"], check=True)
 
         commit(self.CHANGELOG)
         os.makedirs(os.path.join(self.folder, "sub"), exist_ok=True)
@@ -311,18 +312,21 @@ class LengthRowsTest(unittest.TestCase):
         with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
             self.assertEqual(self.logged("git commit -am x", "bash"), [])
         self.assertFalse(os.path.exists(os.path.join(tools, marker)))
-        # A changelog past the size limit is not read, and a pipe in its place is never waited on: no edit.
+        # A staged changelog past the size limit is not read: no edit.
         write(released_only.replace("- b", "- B").replace("- a\n", "- a\n" + "- x\n" * 500))
         with unittest.mock.patch.object(self.hook, "CHANGELOG_LIMIT", len(released_only) + 10):
             self.assertEqual(self.logged("git commit -am x", "bash"), [])
-        if hasattr(os, "mkfifo"):
-            os.remove(path)
-            os.mkfifo(path)
-            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        # A link staged in its place is read as git stores it, the target's name: its released sections are gone.
         if os.path.exists("/dev/zero"):
             os.remove(path)
             os.symlink("/dev/zero", path)
-            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+            self.assertEqual(self.logged("git commit -m x", "bash"), [dated])
+        # An edit on disk that is not staged is not part of the commit.
+        commit(released_only)
+        with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+            changelog.write(released_only.replace("- b", "- B"))
+        self.assertEqual(self.logged("git commit -m x", "bash"), [])
         # Outside a repo, git fails, and the row reads it as no edit.
         self.hook.CWD = tempfile.gettempdir()
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
