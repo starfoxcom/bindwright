@@ -4,6 +4,7 @@ test_guard_hooks.py."""
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -241,6 +242,44 @@ class LengthRowsTest(unittest.TestCase):
             with self.subTest(name):
                 self.project(style)
                 self.assertEqual(self.logged(command, shell), [other] if want else [])
+
+    CHANGELOG = ("# Changelog\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
+                 "## [1.1.0] - 2026-11-20\n\n### Added\n- b\n\n## [1.0.0] - 2026-11-01\n\n### Added\n- c\n")
+
+    def test_a_commit_that_edits_a_dated_changelog_section_is_logged(self):
+        dated = "a commit that edits a released CHANGELOG.md section"
+        git = ["git", "-C", self.folder, "-c", "user.name=t", "-c", "user.email=t@example.com",
+               "-c", "commit.gpgsign=false"]
+        subprocess.run(git[:3] + ["init", "-q"], check=True)
+        path = os.path.join(self.folder, "CHANGELOG.md")
+        with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+            changelog.write(self.CHANGELOG)
+        subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+        subprocess.run(git + ["commit", "-q", "-m", "docs: start"], check=True)
+        os.makedirs(os.path.join(self.folder, "sub"), exist_ok=True)
+        self.hook.CWD = os.path.join(self.folder, "sub")
+        released = "## [1.2.0] - 2026-11-24\n\n### Fixed\n- a\n\n"
+        for name, text, command, want in (
+                ("a line changed in a dated section", self.CHANGELOG.replace("- b", "- B"), "git commit -am x", True),
+                ("a line added to the end of a dated section", self.CHANGELOG.replace("- b\n", "- b\n- d\n"),
+                 "git add -u && git commit -m x", True),
+                ("a dated heading changed", self.CHANGELOG.replace("2026-11-01", "2026-11-02"), "git commit -m x",
+                 True),
+                ("a line added under [Unreleased]", self.CHANGELOG.replace("- a\n", "- a\n- e\n"),
+                 "git commit -am x", False),
+                ("a release cut from [Unreleased]",
+                 self.CHANGELOG.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released),
+                 "git commit -am x", False),
+                ("a dated section edited, with no commit", self.CHANGELOG.replace("- b", "- B"), "git status", False),
+                ("a dated section edited, a commit only mentioned", self.CHANGELOG.replace("- b", "- B"),
+                 'echo "git commit"', False)):
+            with self.subTest(name):
+                with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+                    changelog.write(text)
+                self.assertEqual(self.logged(command, "bash"), [dated] if want else [])
+        # Outside a repo, git fails, and the row reads it as no edit.
+        self.hook.CWD = tempfile.gettempdir()
+        self.assertEqual(self.logged("git commit -am x", "bash"), [])
 
 
 class ToolRulesSweepTest(unittest.TestCase):

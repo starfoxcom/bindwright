@@ -20,7 +20,8 @@ and take the first `-m` of a `git commit` or the `--title` of `gh pr create` or
 never closes, a double-quoted string holding `$(`, a `<<` inside one), the
 text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
-to slip past it.
+to slip past it. Two rows also read the repo: the merge-style row its saved
+answers, and the changelog row its CHANGELOG.md against the last commit's.
 
 Each rule carries its mode. An `enforce` rule refuses the command. An `observe`
 rule only appends what it would have refused to the user's Bindwright folder
@@ -40,6 +41,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 import time
 
@@ -566,6 +568,52 @@ def long_title(text, shell):
     return any(len(first_line(title)) > TITLE_LIMIT for title in titles) and squash_merges()
 
 
+GIT_COMMIT = both(r"\bgit\s+commit\b")
+# A changelog heading that carries a date: a released section, which a later release never edits.
+DATED_HEADING = re.compile(r"^## .*\b\d{4}-\d{2}-\d{2}\b")
+# A hunk of `git diff -U0`: the first line it touches in the old file, and how many (1 when left out).
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+", re.MULTILINE)
+
+
+def git_output(*args):
+    """What a git command run in CWD prints, or None when it fails or takes past 5 s."""
+    try:
+        done = subprocess.run(["git", "-C", CWD, *args], capture_output=True, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
+
+
+def dated_lines(changelog):
+    """The numbers, from 1, of the changelog lines inside a dated section, its heading included."""
+    dated, is_inside = set(), False
+    for number, line in enumerate(changelog.splitlines(), 1):
+        if line.startswith("## "):
+            is_inside = bool(DATED_HEADING.match(line))
+        if is_inside:
+            dated.add(number)
+    return dated
+
+
+def edits_dated_changelog(text, shell):
+    """Whether a `git commit` runs while the repo's CHANGELOG.md differs from HEAD's inside a dated section.
+
+    The working tree is compared, not the index, so a commit chained after its `git add` is read too.
+    A hunk that only adds lines counts when it adds them after a dated section's line."""
+    if not GIT_COMMIT(text, shell):
+        return False
+    old = git_output("show", "HEAD:CHANGELOG.md")
+    diff = old is not None and git_output("diff", "HEAD", "-U0", "--no-color", "--", ":(top)CHANGELOG.md")
+    if not diff:
+        return False
+    dated = dated_lines(old)
+    for start, count in HUNK.findall(diff):
+        first, size = int(start), int(count or 1)
+        if any(number in dated for number in (range(first, first + size) if size else [first])):
+            return True
+    return False
+
+
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = Followed(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b", r"\n|;&", r"\s[\w./@~^-]+:\.[^/\s.]")
 
@@ -637,6 +685,9 @@ RULES = [
     ("a `gh pr merge` style other than the repo's", other_merge_style,
      "the repo saved another merge style at setup (`mergeStyle` in `.bindwright/project.json`), and mixing"
      " them breaks the history it reads. Merge with the flag `git.md` names.", OBSERVE),
+    ("a commit that edits a released CHANGELOG.md section", edits_dated_changelog,
+     "a dated section records what that release shipped, so it never changes. Put the change under"
+     " `[Unreleased]` instead.", OBSERVE),
 ]
 
 
