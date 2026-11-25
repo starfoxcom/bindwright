@@ -460,11 +460,10 @@ async function poll($: EngineInterface): Promise<void> {
     // A failed read leaves only the time limit to settle the watch meanwhile.
     const checks = await readChecks($, base)
     const asked = await withWorkflows($, base, checks, now)
-    if (isNothingToWatch(asked, checks, now)) {
-      changed = true
-      continue
-    }
-    const polled = checks
+    // A repo with no CI settles as a time-out, so the session hears once that nothing will come.
+    const polled = isNothingToWatch(asked, checks, now)
+      ? { ...asked, outcome: 'timeout' as const, settledAt: now }
+      : checks
       ? await withMergeable($, await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs)), now)
       : now - asked.startedAt > live.timeoutMs
         ? { ...asked, outcome: 'timeout' as const, settledAt: now }

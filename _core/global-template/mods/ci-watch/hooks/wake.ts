@@ -49,6 +49,12 @@ function outcomeText(watch: Watch, now: number | undefined, red: number): string
       `view --log-failed) or the review comment, fix and push; the watch restarts on the new commit.`
     )
   }
+  if (watch.outcome === 'timeout' && watch.hasWorkflows === false && entries.length === 0) {
+    return (
+      `[ci-watch] ${pr}: the repo runs no CI workflows and the PR shows no check, so nothing will ` +
+      `settle and no other wake comes. Check the PR yourself (gh pr view) and finish it per the project rules.`
+    )
+  }
   if (watch.outcome === 'timeout') {
     const pending = entries.filter(([, bucket]) => PENDING.has(bucket)).map(([name]) => name)
     return (

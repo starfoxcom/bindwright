@@ -79,6 +79,6 @@ export async function withWorkflows(
   }
 }
 
-/** A repo without workflows whose PR still shows no check: nothing will come, so the watch ends unwoken. */
+/** A repo without workflows whose PR still shows no check: nothing will come, so the watch settles at once. */
 export const isNothingToWatch = (watch: Watch, checks: Record<string, string> | undefined, now: number) =>
   watch.hasWorkflows === false && isChecklessSince(watch, checks, now)
