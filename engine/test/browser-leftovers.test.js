@@ -140,9 +140,9 @@ test("--clean deletes the folders left behind and keeps the ones in use", { skip
   });
 });
 
-test("--clean keeps a folder a program holds a file of open", {
-  skip: skip || (process.platform !== "win32" && "only Windows refuses to rename such a folder"),
-}, async () => {
+// Only Windows refuses to rename a folder while a file inside is open, so only there does the
+// test exist; elsewhere the age rule alone decides, as the other tests check.
+if (process.platform === "win32") test("--clean keeps a folder a program holds a file of open", { skip }, async () => {
   const layout = makeLayout();
   const folder = profile(layout);
   const hold = "import sys, time\nheld = open(sys.argv[1], 'a')\nprint('ready', flush=True)\ntime.sleep(60)\n";
