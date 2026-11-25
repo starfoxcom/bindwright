@@ -108,9 +108,10 @@ def git_program():
     the current folder first is switched off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     here, repo = real_path(os.getcwd()), repo_folder(os.getcwd())
-    trusted = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
-               if os.path.isabs(entry) and real_path(entry) != here
-               and not (repo and is_within(real_path(entry), repo))]
+    folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if os.path.isabs(entry)}
+    trusted = [entry for entry, real in folders.items()
+               if real and real != here and not (repo and is_within(real, repo))]
     found = shutil.which("git", path=os.pathsep.join(trusted))
     if not found or not os.path.isabs(found):
         raise CheckError("no git found on PATH outside this repo's folders")
@@ -135,6 +136,15 @@ def repo_folder(path):
 
 def real_path(path):
     return os.path.normcase(os.path.realpath(path))
+
+
+def resolved(entry):
+    """`entry` resolved, or None when it cannot be, as Windows reports for a share that refuses the
+    sign-in; such a folder is never searched."""
+    try:
+        return real_path(entry)
+    except OSError:
+        return None
 
 
 def is_within(folder, top):
