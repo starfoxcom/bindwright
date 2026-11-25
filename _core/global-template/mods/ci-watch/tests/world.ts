@@ -23,6 +23,8 @@ export type Seen = {
   gateState?: string
   /** The PR's bot comments: when each was posted (after the push by default) and its body. */
   comments?: { at?: string; body: string }[]
+  /** The titles of the deep workflow's runs that did not skip, since the gate's first run (none by default). */
+  deepRuns?: string[]
   /** The repo's deep workflow file (one that marks its reviews by default). */
   deepWorkflow?: string
   /** `gh pr checks` fails (network, auth) with nothing on stdout. */
@@ -87,7 +89,8 @@ export type Seen = {
 
 // The head's first gate run starts at the test clock's zero.
 const GATE_STARTED = '1970-01-01T00:00:00Z'
-const MARKING_DEEP_WORKFLOW = 'mark="<!-- deep-run: $GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT review -->"\n'
+export const PR_TITLE = 'fix(x): mend the thing'
+const MARKING_DEEP_WORKFLOW ='mark="<!-- deep-run: $GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT review -->"\n'
 
 /** The answer to a gh API call the review check makes, or `undefined` for any other call. */
 function reviewAnswer(seen: Seen, args: string): string | undefined {
@@ -97,6 +100,8 @@ function reviewAnswer(seen: Seen, args: string): string | undefined {
     return rows.map(row => `${JSON.stringify(row)}\n`).join('')
   }
   if (args.includes('/contents/')) return seen.deepWorkflow ?? MARKING_DEEP_WORKFLOW
+  if (args.includes('/runs?')) return JSON.stringify(seen.deepRuns ?? [])
+  if (args.includes('--json title')) return `${PR_TITLE}\n`
   return undefined
 }
 

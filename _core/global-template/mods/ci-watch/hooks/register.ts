@@ -12,7 +12,7 @@ import {
   dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, roundsLookup, statePath,
 } from './store'
 import { isSameRun, PENDING, reconcile, settle } from './settle'
-import { withVerdict } from './verdict'
+import { withReview } from './deep-start'
 import { wakeText } from './wake'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isJudgedPass, isNothingToWatch, readChecks, withMergeable, withWorkflows } from './checks'
@@ -464,7 +464,7 @@ async function poll($: EngineInterface): Promise<void> {
     const polled = isNothingToWatch(asked, checks, now)
       ? { ...asked, outcome: 'timeout' as const, settledAt: now }
       : checks
-      ? await withMergeable($, await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs)), now)
+      ? await withMergeable($, await withReview($, settle(asked, checks, now, live.timeoutMs, live.pollMs), now), now)
       : now - asked.startedAt > live.timeoutMs
         ? { ...asked, outcome: 'timeout' as const, settledAt: now }
         : asked
