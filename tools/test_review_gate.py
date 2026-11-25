@@ -16,6 +16,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, ".github", "scripts"))
 import review_gate as gate  # noqa: E402
 
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import github_writes  # noqa: E402
+
 # The real workflow check, kept before the upsert tests stand in for it.
 READY_CHECK = gate._statuses_ready
 
@@ -492,6 +495,9 @@ class Upsert(unittest.TestCase):
 
         def fake(path, method="GET", body=None):
             self.calls.append((method, path, body))
+            refused = method != "GET" and github_writes.refusal(method, path, body)
+            if refused:
+                raise gate.GateError("gh api %s %s failed: gh: Validation failed: %s" % (method, path, refused))
             if "/statuses/" in path:
                 if self.status_error:
                     raise gate.GateError(self.status_error)
@@ -557,19 +563,24 @@ class Upsert(unittest.TestCase):
         self.assertEqual(len(self.patches()), gate.WRITE_ROUNDS)
 
     def test_each_write_sets_the_commit_status_first(self):
+        # GitHub refuses a description holding a character above U+FFFF, such as
+        # the verdict emoji in a passing title.
         rows = [
-            ("in progress reads pending", {}, "pending"),
-            ("a pass reads success", {"triage": "reviewable", "routine": "pass", "order": "5.1.1"}, "success"),
-            ("a block reads failure", {"triage": "reviewable", "routine": "block", "order": "5.1.1"}, "failure"),
+            ("in progress reads pending", {}, "pending", "Routine review in progress"),
+            ("a pass reads success, without its emoji",
+             {"triage": "reviewable", "routine": "pass", "order": "5.1.1"}, "success", "Routine review"),
+            ("a block reads failure",
+             {"triage": "reviewable", "routine": "block", "order": "5.1.1"}, "failure",
+             "Blocked by the routine review"),
         ]
-        for name, facts, state in rows:
+        for name, facts, state, description in rows:
             with self.subTest(name):
                 self.calls, self.existing = [], []
-                out = gate.upsert("o/r", self.SHA, **facts)
+                gate.upsert("o/r", self.SHA, **facts)
                 writes = [(path, body) for method, path, body in self.calls if method != "GET"]
                 self.assertEqual(writes[0], ("repos/o/r/statuses/" + self.SHA,
                                              {"state": state, "context": "Review gate",
-                                              "description": out["title"]}))
+                                              "description": description}))
                 self.assertEqual(writes[1][0], "repos/o/r/check-runs")
 
     def test_the_last_status_follows_the_check_a_newer_run_left(self):
@@ -1313,6 +1324,30 @@ class SetupScript(unittest.TestCase):
         self.assertIn("ok       Claude GitHub App", run.stdout)
         run, _, _ = self.run_setup(fresh_repo(), "--check")
         self.assertIn("note     Claude GitHub App not confirmed", run.stdout)
+
+
+class GitHubWrites(unittest.TestCase):
+    """The test fake refuses what GitHub refuses, so no write passes here that fails there."""
+
+    STATUS = "repos/o/r/statuses/" + "a" * 40
+
+    def test_status_descriptions_as_github_takes_them(self):
+        # Each row was sent to GitHub's real statuses API, which took or refused it.
+        rows = [
+            ("plain text", "Routine review", True),
+            ("a 4-byte emoji", "Routine review \U0001f7e2", False),
+            ("3-byte characters", "Routine review ✓ ·", True),
+            ("140 characters", "x" * 140, True),
+            ("141 characters", "x" * 141, False),
+            ("empty", "", True),
+        ]
+        for name, description, taken in rows:
+            with self.subTest(name):
+                body = {"state": "success", "context": "Review gate", "description": description}
+                self.assertEqual(github_writes.refusal("POST", self.STATUS, body) is None, taken)
+
+    def test_a_write_with_no_rule_is_refused(self):
+        self.assertIn("no rule", github_writes.refusal("DELETE", "repos/o/r/check-runs/1", None))
 
 
 if __name__ == "__main__":

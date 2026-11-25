@@ -461,13 +461,20 @@ def _statuses_ready(repo):
     return _READY[repo]
 
 
+def _status_description(title):
+    """The check title as a status description: GitHub refuses characters above
+    U+FFFF there (the verdict emoji) and descriptions past 140 characters."""
+    return " ".join("".join(c for c in title if ord(c) <= 0xFFFF).split())[:140]
+
+
 def _set_status(repo, sha, check):
     """Sets the commit status of the gate's name to the check's result, once
     both review workflows may. A job without statuses: write all the same gets a
     warning instead of a failed gate."""
     if not _statuses_ready(repo):
         return
-    body = {"state": STATUS_STATE[check["conclusion"]], "context": GATE, "description": check["title"][:140]}
+    body = {"state": STATUS_STATE[check["conclusion"]], "context": GATE,
+            "description": _status_description(check["title"])}
     try:
         _gh("repos/%s/statuses/%s" % (repo, sha), "POST", body)
     except GateError as error:
