@@ -30,7 +30,9 @@ MODE=setup
 REPO=""
 BRANCHES=()
 REQUIRED=("Review gate")
-MERGE_STYLE=merge
+MERGE_STYLE=""
+# Whether the repository has a develop branch, which makes it gitflow.
+HAS_DEVELOP=false
 APPROVALS=0
 ACCOUNTS=1
 DEFAULT_BRANCH=""
@@ -51,7 +53,11 @@ Usage: setup-review-gate.sh [--check] [options]
                        default branch, plus develop when it exists).
   --require NAME       Another check the branches require besides
                        "Review gate"; repeat for more.
-  --merge-style STYLE  merge, squash or rebase (default: merge).
+  --merge-style STYLE  merge, squash or rebase: how work PRs merge (default:
+                       mergeStyle in this folder's .bindwright/project.json,
+                       else merge). With a develop branch, main takes merge
+                       commits only and develop takes them too, for release,
+                       hotfix and cascade PRs.
   --approvals N        Approvals a PR needs besides the gate, 0 to 9
                        (default: 0, for a single maintainer).
   --accounts N         Claude accounts the reviews use, 1 to 5 (default: 1).
@@ -89,7 +95,19 @@ parse_args() {
     esac
     shift
   done
+  MERGE_STYLE=${MERGE_STYLE:-$(saved_merge_style)}
   validate_args
+}
+
+# The merge style setup saved in this folder's answers, or merge without them.
+saved_merge_style() {
+  local root style=""
+  root=$(git rev-parse --show-toplevel 2> /dev/null) || root=.
+  if [ -f "$root/.bindwright/project.json" ]; then
+    style=$(sed -nE 's/^[[:space:]]*"mergeStyle":[[:space:]]*"([^"]*)".*/\1/p' \
+      "$root/.bindwright/project.json" | head -n 1)
+  fi
+  echo "${style:-merge}"
 }
 
 # Names end up inside jq programs and JSON text, so anything that could
@@ -125,9 +143,10 @@ preflight() {
   admin=$(gh api "repos/$REPO" --jq .permissions.admin) || die "cannot read $REPO"
   [ "$admin" = true ] || die "$REPO: reading and changing its settings needs admin access"
   DEFAULT_BRANCH=$(gh api "repos/$REPO" --jq .default_branch)
+  if branch_exists develop; then HAS_DEVELOP=true; fi
   if [ ${#BRANCHES[@]} -eq 0 ]; then
     BRANCHES=("$DEFAULT_BRANCH")
-    if [ "$DEFAULT_BRANCH" != develop ] && branch_exists develop; then
+    if [ "$DEFAULT_BRANCH" != develop ] && [ "$HAS_DEVELOP" = true ]; then
       BRANCHES+=(develop)
     fi
   fi
@@ -168,17 +187,45 @@ step_label() {
   fi
 }
 
-# allow_merge_commit, allow_squash_merge and allow_rebase_merge for the style.
+# The merge methods a branch's PRs may use, in alphabetical order. With a
+# develop branch, release, hotfix and cascade PRs need merge commits whatever
+# work PRs use: main takes only those, develop takes them beside the style.
+merge_methods() {
+  if [ "$HAS_DEVELOP" = false ]; then
+    echo "$MERGE_STYLE"
+  elif [ "$1" = develop ] && [ "$MERGE_STYLE" != merge ]; then
+    echo "merge $MERGE_STYLE"
+  else
+    echo merge
+  fi
+}
+
+# The same list as a JSON array, for a ruleset's pull_request rule.
+methods_json() {
+  local method sep="" out="["
+  for method in $(merge_methods "$1"); do
+    out+="$sep\"$method\""
+    sep=", "
+  done
+  echo "$out]"
+}
+
+# allow_merge_commit, allow_squash_merge and allow_rebase_merge. The repository's
+# settings switch a method on for every branch and the rulesets narrow it per
+# branch, so they allow develop's list, the widest; a method the settings leave
+# off but a ruleset requires blocks every merge.
 merge_flags() {
-  case "$MERGE_STYLE" in
-    merge) echo "true false false" ;;
-    squash) echo "false true false" ;;
-    rebase) echo "false false true" ;;
-  esac
+  local method out="" methods=" $(merge_methods develop) "
+  for method in merge squash rebase; do
+    if [[ $methods == *" $method "* ]]; then out+="true "; else out+="false "; fi
+  done
+  echo "${out% }"
 }
 
 step_merge() {
-  local want have m s r what="merge settings: $MERGE_STYLE only, branch deleted on merge"
+  local want have m s r methods what
+  methods=$(merge_methods develop)
+  what="merge settings: ${methods// / and } only, branch deleted on merge"
   want="$(merge_flags) true"
   have=$(gh api "repos/$REPO" --jq '[.allow_merge_commit, .allow_squash_merge,
     .allow_rebase_merge, .delete_branch_on_merge] | map(tostring) | join(" ")')
@@ -291,7 +338,7 @@ rulesets_for() {
 
 # What the branch's rulesets lack, one line per gap; nothing when covered.
 branch_gaps() {
-  local ids id rule name types="" checks="" bypass=0
+  local ids id rule name allowed want types="" checks="" methods="" bypass=0
   ids=$(rulesets_for "$1")
   if [ -z "$ids" ]; then
     echo "no active ruleset"
@@ -302,11 +349,21 @@ branch_gaps() {
     checks+=$(gh api "repos/$REPO/rulesets/$id" --jq '.rules[]
       | select(.type == "required_status_checks")
       | .parameters.required_status_checks[].context')$'\n'
+    # A pull_request rule without the list allows every method.
+    methods+=$(gh api "repos/$REPO/rulesets/$id" --jq '.rules[] | select(.type == "pull_request")
+      | .parameters.allowed_merge_methods // ["merge", "rebase", "squash"] | sort | join(" ")')$'\n'
     bypass=$((bypass + $(gh api "repos/$REPO/rulesets/$id" --jq '.bypass_actors | length')))
   done
   for rule in deletion non_fast_forward pull_request; do
     [[ $types == *" $rule "* ]] || echo "rule $rule"
   done
+  want=$(merge_methods "$1")
+  while IFS= read -r allowed; do
+    if [ -n "$allowed" ] && [ "$allowed" != "$want" ]; then
+      echo "merge methods: ${want// / and } only (a pull_request rule allows ${allowed// / and })"
+      break
+    fi
+  done <<< "$methods"
   for name in "${REQUIRED[@]}"; do
     grep -qxF "$name" <<< "$checks" || echo "required check \"$name\""
   done
@@ -320,7 +377,7 @@ pr_rule() {
   echo "{\"type\": \"pull_request\", \"parameters\": {
     \"required_approving_review_count\": $APPROVALS, \"dismiss_stale_reviews_on_push\": true,
     \"require_code_owner_review\": false, \"require_last_push_approval\": false,
-    \"required_review_thread_resolution\": false, \"allowed_merge_methods\": [\"$MERGE_STYLE\"]}}"
+    \"required_review_thread_resolution\": false, \"allowed_merge_methods\": $(methods_json "$1")}}"
 }
 
 # The required checks as a JSON array, each reported by GitHub Actions.
@@ -338,7 +395,7 @@ new_ruleset() {
 {"name": "$1-protection", "target": "branch", "enforcement": "active",
  "conditions": {"ref_name": {"include": ["refs/heads/$1"], "exclude": []}},
  "bypass_actors": [],
- "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}, $(pr_rule),
+ "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}, $(pr_rule "$1"),
    {"type": "required_status_checks", "parameters": {
      "strict_required_status_checks_policy": false,
      "required_status_checks": $(checks_json)}}]}
@@ -350,9 +407,11 @@ ensure_rule() {
   echo "(if any(.[]; .type == \"$1\") then . else . + [$2] end) |"
 }
 
-# A jq program that repairs a ruleset read from the API. "full" adds the
-# missing rules and checks; "strip" only removes bypass actors and the old
-# deep check, for the branch's other rulesets.
+# A jq program that repairs a ruleset of the branch ($2) read from the API.
+# "full" adds the missing rules and checks; "strip" only removes bypass actors
+# and the old deep check, for the branch's other rulesets. Both set the merge
+# methods of any pull_request rule, since GitHub allows only what every rule
+# on the branch allows.
 fix_filter() {
   local ensure="" add="[]" drop="." keep
   local no_checks='{"type": "required_status_checks", "parameters": {
@@ -360,7 +419,7 @@ fix_filter() {
   if [ "$1" = full ]; then
     ensure="$(ensure_rule deletion '{"type": "deletion"}')
       $(ensure_rule non_fast_forward '{"type": "non_fast_forward"}')
-      $(ensure_rule pull_request "$(pr_rule)")
+      $(ensure_rule pull_request "$(pr_rule "$2")")
       $(ensure_rule required_status_checks "$no_checks")"
     add=$(checks_json)
   fi
@@ -372,7 +431,9 @@ fix_filter() {
   keep='. as $have | . + ['"$add"'[] | select(.context as $c | $have | all(.context != $c))]'
   echo "{name, target, enforcement, conditions, bypass_actors: [], rules: (.rules | $ensure
     map(if .type == \"required_status_checks\"
-      then .parameters.required_status_checks |= ($drop | $keep) else . end))}"
+      then .parameters.required_status_checks |= ($drop | $keep)
+      elif .type == \"pull_request\"
+      then .parameters.allowed_merge_methods = $(methods_json "$2") else . end))}"
 }
 
 apply_ruleset() {
@@ -395,7 +456,7 @@ apply_ruleset() {
   for id in $ids; do
     mode="strip"
     if [ "$id" = "$primary" ]; then mode="full"; fi
-    gh api "repos/$REPO/rulesets/$id" --jq "$(fix_filter "$mode")" \
+    gh api "repos/$REPO/rulesets/$id" --jq "$(fix_filter "$mode" "$1")" \
       | gh api -X PUT "repos/$REPO/rulesets/$id" --input - --silent
   done
 }

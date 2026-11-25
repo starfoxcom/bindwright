@@ -925,8 +925,9 @@ class SetupScript(unittest.TestCase):
             env["CLAUDECODE"] = "1"
         repo = ["--repo", "acme/game"] if script == SETUP else []
         # The full path: on Windows a bare "bash" can start WSL's instead.
+        # From the temp folder, so this repo's own saved answers stay out of the runs.
         run = subprocess.run([tool("bash"), script, *repo, *args], env=env, input=stdin or "",
-                             capture_output=True, text=True)
+                             capture_output=True, text=True, cwd=self.dir)
         with open(self.state) as f:
             after = json.load(f)
         with open(self.log) as f:
@@ -987,11 +988,65 @@ class SetupScript(unittest.TestCase):
         self.assertEqual(extra_after["rules"], [{"type": "required_linear_history"}])
         self.assertEqual(extra_after["bypass_actors"] + main["bypass_actors"], [])
 
+    def test_each_branch_allows_the_merge_methods_its_prs_need(self):
+        # Release, hotfix and cascade PRs take merge commits; work PRs take the style.
+        rows = [
+            ("squash saved, gitflow", "squash", [], ["main", "develop"],
+             [True, True, False], {"main": ["merge"], "develop": ["merge", "squash"]}),
+            ("flag over saved, gitflow", "squash", ["--merge-style", "rebase"], ["main", "develop"],
+             [True, False, True], {"main": ["merge"], "develop": ["merge", "rebase"]}),
+            ("rebase saved, trunk", "rebase", [], ["main"],
+             [False, False, True], {"main": ["rebase"]}),
+            ("no answers, gitflow", None, [], ["main", "develop"],
+             [True, False, False], {"main": ["merge"], "develop": ["merge"]}),
+        ]
+        answers = os.path.join(self.dir, ".bindwright", "project.json")
+        os.makedirs(os.path.dirname(answers), exist_ok=True)
+        for name, saved, args, branches, flags, methods in rows:
+            with self.subTest(name):
+                if saved:
+                    with open(answers, "w") as f:
+                        json.dump({"advanced": {"branching": "gitflow", "mergeStyle": saved}}, f,
+                                  indent=2)
+                elif os.path.exists(answers):
+                    os.remove(answers)
+                state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], branches=branches)
+                run, after, _ = self.run_setup(state, *args)
+                self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                repo = after["repo"]
+                self.assertEqual([repo["allow_merge_commit"], repo["allow_squash_merge"],
+                                  repo["allow_rebase_merge"]], flags)
+                allowed = {r["name"].split("-")[0]: next(
+                    rule["parameters"]["allowed_merge_methods"] for rule in r["rules"]
+                    if rule["type"] == "pull_request") for r in after["rulesets"]}
+                self.assertEqual(allowed, methods)
+                run, _, _ = self.run_setup(after, "--check", *args)
+                self.assertIn("All set.", run.stdout)
+
+    def test_a_ruleset_allowing_other_merge_methods_is_reported_and_repaired(self):
+        ruleset = old_ruleset()
+        ruleset["bypass_actors"] = []
+        ruleset["rules"][1]["parameters"]["required_status_checks"] = [
+            {"context": "Review gate", "integration_id": 15368}]
+        ruleset["rules"] += [{"type": "deletion"}, {"type": "pull_request", "parameters": {
+            "required_approving_review_count": 0, "allowed_merge_methods": ["squash"]}}]
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset],
+                           branches=["main"])
+        run, _, _ = self.run_setup(state, "--check")
+        self.assertIn("MISSING  ruleset on main: merge methods: merge only"
+                      " (a pull_request rule allows squash)", run.stdout)
+        run, after, _ = self.run_setup(state)
+        self.assertIn("set up   ruleset on main", run.stdout)
+        rule = next(r for r in after["rulesets"][0]["rules"] if r["type"] == "pull_request")
+        self.assertEqual(rule["parameters"], {"required_approving_review_count": 0,
+                                              "allowed_merge_methods": ["merge"]})
+
     def test_checks_two_keeps_the_old_deep_check(self):
         ruleset = old_ruleset()
         ruleset["rules"][1]["parameters"]["required_status_checks"].append(
             {"context": "Review gate", "integration_id": 15368})
-        ruleset["rules"] += [{"type": "deletion"}, {"type": "pull_request"}]
+        ruleset["rules"] += [{"type": "deletion"}, {"type": "pull_request", "parameters": {
+            "allowed_merge_methods": ["merge"]}}]
         ruleset["bypass_actors"] = []
         state = fresh_repo(rulesets=[ruleset], branches=["main"], gate_yml="checks: two\n")
         run, _, _ = self.run_setup(state, "--check")
