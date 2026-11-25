@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **A second review run on the same commit no longer leaves the merge blocked.** Closing and reopening a PR, or opening a new PR on a commit that was already reviewed, could file the `Review gate` check under a check suite the merge no longer counts, so the merge reported the check as expected although it had passed. The gate script now also sets a commit status named `Review gate` to the same result on every write, and the newest status for a name always counts, while a failing check of that name still blocks. The review workflows grant `statuses: write` to the jobs that run the script; a project whose workflows predate that gets a warning and keeps the check alone. `review-tiers.md` drops its rule against closing and reopening a PR.
+
 ## [v7.19.1] — 2026-11-25
 
 ### Fixed
