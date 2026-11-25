@@ -1,18 +1,18 @@
-r"""PreToolUse hook, observe mode: notes a pull request that adds a write to an outside
+r"""PostToolUse hook, observe mode: notes a pull request that adds a write to an outside
 service without a `Live check:` line in its body.
 
 testing.md asks for one real send of each new kind of write before the work is done, and the
-pull request's body records it. This hook reads a plain `gh pr create` that passes a body file,
-takes the lines the branch adds from `git diff` (outside test files and the bind's record under
-.bindwright/), and when one of them makes a write (an API call with a write method, or an HTTP
-client's post, put, patch or delete) and the body has no `Live check:` line, it appends the match
-to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and hands the session one line of context.
+pull request's body records it. After a `gh pr create` or `gh pr edit` prints the pull request's
+address, this hook asks GitHub for that pull request's body and diff, so the branch, base and repo
+are the ones GitHub holds, never a guess from the command's text. When a line the diff adds
+outside test files and the bind's record under .bindwright/ makes a write (an API call with a
+write method, or an HTTP client's post, put, patch or delete) and the body has no `Live check:`
+line, it appends the match to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and hands the session
+one line of context.
 
 It never blocks: every outcome exits 0, so the log shows how often the note fires before any
-version refuses. A command is read only when it is plain: outside its quotes it holds letters,
-digits and the characters in PLAIN_CHARACTERS. Anything else (chains, pipes, expansions, a
-multi-line command) goes unread and makes no note, and so does a create for another branch or
-repo (--head, --repo) or one whose base branch git cannot find.
+version refuses. Output with no address, or with more than one, makes no note, and so does a gh
+that fails or runs out of time.
 """
 
 import datetime
@@ -26,23 +26,18 @@ NOTE = ("Live check: this PR adds a write to an outside service and its body has
         "line (testing.md § Test the real code)")
 HOME_VARIABLE = "BINDWRIGHT_HOME"
 LOG_PARTS = ("live-check", "observed.jsonl")
-GIT_SECONDS = 6
+# Two gh calls at most, inside the 30 s the settings entry gives the hook.
+GH_SECONDS = 10
 MAX_MATCHES = 5
 MAX_MATCH_CHARS = 200
 # Past this a line is generated (a minified bundle, a source map), not code someone wrote, and
 # the patterns' cost on it could outrun the hook's timeout.
 MAX_LINE_CHARS = 500
-BODY_FILE_OPTIONS = ("--body-file", "-F")
-BASE_OPTIONS = ("--base", "-B")
-OTHER_TARGET_OPTIONS = ("--head", "-H", "--repo", "-R")
-QUOTES = ('"', "'")
-# Outside quotes a word may hold letters, digits and these; `\` is a path separator for PowerShell
-# only, and `@` (splatting) and `,` (arrays) are plain in bash only.
-PLAIN_CHARACTERS = {
-    "bash": set("-_./:=@+,"),
-    "powershell": set("-_./:=+\\"),
-}
-SHELLS = {"Bash": "bash", "PowerShell": "powershell"}
+SHELLS = {"Bash", "PowerShell"}
+PR_COMMAND = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
+# gh prints the pull request's address on a line of its own.
+PR_ADDRESS = re.compile(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/\d+")
+FILE_HEADER = re.compile(r'diff --git (?:"a/.*" "b/(.*)"|a/.* b/(.*))')
 WRITE_METHOD = r"(?:POST|PUT|PATCH|DELETE)"
 WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\bgh\s+api\b.*(?:-X|--method)[\s=,\"']+" + WRITE_METHOD + r"\b",
@@ -50,85 +45,37 @@ WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\b(?:requests|httpx|axios)\.(?:post|put|patch|delete)\(",
     r"\bfetch\((?=.*\bmethod\s*:\s*[\"']?" + WRITE_METHOD + r"\b)",
 )]
-# Files that never send anything to a real service: the bind's record, which stores whole files
-# as strings, and test files. Git leaves them out of the diff, so no diff line is parsed for paths.
-SENDS_NOTHING = [":(top,exclude).bindwright"] + [":(top,exclude,glob,icase)" + pattern for pattern in (
-    "**/test_*", "**/*_test.*", "**/*.test.*", "**/*.spec.*",
-    "**/test/**", "**/tests/**", "**/__tests__/**", "**/spec/**",
-)]
+RECORD_FOLDER = ".bindwright"
+TEST_FOLDERS = {"test", "tests", "__tests__", "spec"}
+TEST_NAME_MARKERS = ("_test.", ".test.", ".spec.")
 LIVE_CHECK_LINE = re.compile(r"(?:[-*] )?live check:", re.IGNORECASE)
 
 
-def read_words(command, shell):
-    """The command's words as the shell reads them, or None when the command is not plain.
-
-    A quote wraps a whole word and holds printable ASCII only: the shells split a word glued to
-    a quote differently, and PowerShell also ends a string at typographic quotes."""
-    plain = PLAIN_CHARACTERS[shell]
-    words, word, quote, started, closed = [], [], None, False, False
-    for char in command:
-        if quote:
-            if char == quote:
-                quote, closed = None, True
-            elif not (char.isascii() and char.isprintable()) or (quote == '"' and char in "$`\\"):
-                return None
-            else:
-                word.append(char)
-            continue
-        if char == " ":
-            if started:
-                words.append("".join(word))
-            word, started, closed = [], False, False
-        elif closed or (char in QUOTES and started):
-            return None
-        elif char in QUOTES:
-            quote, started = char, True
-        elif (char.isascii() and char.isalnum()) or char in plain:
-            word.append(char)
-            started = True
-        else:
-            return None
-    if quote:
-        return None
-    if started:
-        words.append("".join(word))
-    return words
-
-
-def option_value(words, names):
-    """The value the last of `names` takes: `--name value`, `--name=value` or `-N value`."""
-    value = None
-    for index, word in enumerate(words):
-        name, has_equals, rest = word.partition("=")
-        if name not in names:
-            continue
-        if has_equals:
-            value = rest
-        else:
-            value = words[index + 1] if index + 1 < len(words) else ""
-    return value
-
-
-def pr_request(command, shell):
-    """(the body file, the base option) for a plain `gh pr create` of the checked-out branch that
-    passes a body file; None for any other command."""
-    words = read_words(command, shell) or []
-    if words[:3] != ["gh", "pr", "create"] or option_value(words, OTHER_TARGET_OPTIONS) is not None:
-        return None
-    # gh also takes a short option with its value attached (-Hother) or several at once (-dH):
-    # only a lone one is read.
-    if any(word.startswith("-") and not word.startswith("--") and len(word) != 2 for word in words):
-        return None
-    body_file = option_value(words, BODY_FILE_OPTIONS)
-    if not body_file:
-        return None
-    return body_file, option_value(words, BASE_OPTIONS)
+def sends_nothing(path):
+    """Whether a repo path holds text that never reaches a real service: a test file, or the
+    bind's record under .bindwright/, which stores whole files as strings."""
+    parts = path.lower().split("/")
+    name = parts[-1]
+    return (parts[0] == RECORD_FOLDER or any(part in TEST_FOLDERS for part in parts[:-1])
+            or name.startswith("test_") or any(marker in name for marker in TEST_NAME_MARKERS))
 
 
 def write_lines(diff):
-    """The added lines of a diff that make a write to an outside service, without their `+`."""
-    added = [line[1:].strip() for line in diff.splitlines()
-             if line.startswith("+") and not line.startswith("+++ ") and len(line) <= MAX_LINE_CHARS]
+    """The lines a diff adds that make a write to an outside service, without their `+`.
+
+    A section starts at its `diff --git` line and its added lines come after its first `@@`, so
+    content that reads like a header is never taken for one."""
+    added, skipped, in_hunk = [], True, False
+    for line in diff.splitlines():
+        header = FILE_HEADER.fullmatch(line)
+        if header:
+            skipped, in_hunk = sends_nothing(header.group(1) or header.group(2)), False
+        elif line.startswith("diff --git "):
+            skipped, in_hunk = True, False
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif in_hunk and not skipped and line.startswith("+") and len(line) <= MAX_LINE_CHARS:
+            added.append(line[1:].strip())
     return [line for line in added if any(pattern.search(line) for pattern in WRITE_PATTERNS)]
 
 
@@ -137,47 +84,41 @@ def has_live_check(body):
     return any(LIVE_CHECK_LINE.match(line) for line in body.splitlines())
 
 
-def read_body(path):
-    """The body file's text, or None when it cannot be read."""
+def gh(*args):
+    """What gh prints, or None when it fails or runs out of time."""
     try:
-        with open(path, encoding="utf-8", errors="replace") as handle:
-            return handle.read()
-    except OSError:
-        return None
-
-
-def git(cwd, *args):
-    """What git prints, stripped, or None when git fails or runs out of time."""
-    try:
-        done = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=GIT_SECONDS)
+        done = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=GH_SECONDS)
     except (OSError, subprocess.SubprocessError):
         return None
-    return done.stdout.strip() if done.returncode == 0 else None
+    return done.stdout if done.returncode == 0 else None
 
 
-def base_ref(cwd, base):
-    """The ref the PR's diff starts from, or None when git cannot find it: `origin/<base>` (or a
-    local `<base>`) for --base, else the remote's default branch, which gh targets without one."""
-    if base is None:
-        candidates = [git(cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")]
-    else:
-        candidates = ["origin/" + base, base]
-    for ref in candidates:
-        if ref and git(cwd, "rev-parse", "--verify", "--quiet", ref + "^{commit}"):
-            return ref
-    return None
+def pr_address(event):
+    """The address a `gh pr create` or `gh pr edit` printed, or None for any other call."""
+    if not isinstance(event, dict) or event.get("tool_name") not in SHELLS:
+        return None
+    tool_input = event.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(command, str) or not PR_COMMAND.search(command):
+        return None
+    response = event.get("tool_response")
+    if isinstance(response, dict):
+        response = response.get("stdout") if isinstance(response.get("stdout"), str) else response.get("output")
+    if not isinstance(response, str):
+        return None
+    addresses = [line.strip() for line in response.splitlines() if PR_ADDRESS.fullmatch(line.strip())]
+    return addresses[0] if len(addresses) == 1 else None
 
 
-def record(repo, matches):
+def record(address, matches):
     """Appends one JSON line describing the note to the log."""
     home = os.environ.get(HOME_VARIABLE) or os.path.join(os.path.expanduser("~"), ".bindwright")
     folder = os.path.join(home, LOG_PARTS[0])
     os.makedirs(folder, exist_ok=True)
     entry = {
         "time": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "repo": repo,
-        "command": "gh pr create",
+        "pull_request": address,
         "matches": [line[:MAX_MATCH_CHARS] for line in matches[:MAX_MATCHES]],
     }
     with open(os.path.join(folder, LOG_PARTS[1]), "a", encoding="utf-8") as handle:
@@ -185,44 +126,29 @@ def record(repo, matches):
 
 
 def observe(event):
-    """Records the command when it adds an unchecked write; returns whether it did."""
-    if not isinstance(event, dict) or event.get("tool_name") not in SHELLS:
+    """Records the pull request when it adds an unchecked write; returns whether it did."""
+    address = pr_address(event)
+    body = gh("pr", "view", address, "--json", "body", "--jq", ".body") if address else None
+    if body is None or has_live_check(body):
         return False
-    tool_input = event.get("tool_input")
-    command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    cwd = event.get("cwd")
-    if not isinstance(command, str) or not isinstance(cwd, str) or not cwd:
+    diff = gh("pr", "diff", address, "--color", "never")
+    matches = write_lines(diff) if diff is not None else []
+    if not matches:
         return False
-    request = pr_request(command, SHELLS[event["tool_name"]])
-    if request is None:
-        return False
-    body_file, base = request
-    body = read_body(os.path.join(cwd, body_file))
-    repo = git(cwd, "rev-parse", "--show-toplevel")
-    start = base_ref(cwd, base) if body is not None and repo else None
-    if start is None:
-        return False
-    diff = git(cwd, "diff", "--no-color", "--no-ext-diff", "--no-textconv", start + "...HEAD",
-               "--", ":/", *SENDS_NOTHING)
-    if diff is None:
-        return False
-    matches = write_lines(diff)
-    if not matches or has_live_check(body):
-        return False
-    record(repo, matches)
+    record(address, matches)
     return True
 
 
 def main():
-    # Windows searches the working folder for a program before PATH; a repo's own git must not run.
+    # Windows searches the working folder for a program before PATH; a repo's own gh must not run.
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     try:
         noted = observe(json.loads(sys.stdin.buffer.read().decode("utf-8", "replace")))
     except Exception:  # observe mode: no failure of this hook may block the tool call
         return 0
     if noted:
-        # Claude Code shows the session a PreToolUse hook's additionalContext; stderr on exit 0 it drops.
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": NOTE}}))
+        # Claude Code shows the session a hook's additionalContext; stderr on exit 0 it drops.
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": NOTE}}))
     return 0
 
 

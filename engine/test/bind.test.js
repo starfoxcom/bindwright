@@ -1048,11 +1048,14 @@ test("guard hooks and settings follow the hook location and the attribution guar
       if (attributionGuard) assert.deepEqual(settings.attribution, { commit: "", pr: "", sessionUrl: false }, label);
       assert.equal("hooks" in settings, repoHooks, `${label}: hooks block`);
       if (repoHooks) {
-        const commands = settings.hooks.PreToolUse.flatMap((e) => e.hooks.map((h) => h.command));
-        assert.deepEqual(commands.map((c) => c.match(/exec sh "\$0" ([\w-]+)'/)[1]),
-          attributionGuard ? ["no-ai-attribution", "push-guard", "tool-rules", "live-check"]
-            : ["push-guard", "tool-rules", "live-check"], label);
-        for (const c of commands) assert.ok(c.includes("${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh"), label);
+        const names = (event) => settings.hooks[event].flatMap((e) => e.hooks.map((h) => h.command));
+        const hookName = (c) => c.match(/exec sh "\$0" ([\w-]+)'/)[1];
+        assert.deepEqual(names("PreToolUse").map(hookName),
+          attributionGuard ? ["no-ai-attribution", "push-guard", "tool-rules"] : ["push-guard", "tool-rules"], label);
+        assert.deepEqual(names("PostToolUse").map(hookName), ["live-check"], label);
+        for (const c of [...names("PreToolUse"), ...names("PostToolUse")]) {
+          assert.ok(c.includes("${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh"), label);
+        }
       }
       assert.equal(files.has(".claude/hooks/run-hook.sh"), repoHooks, `${label}: launcher`);
       assert.equal(files.has(".claude/hooks/push-guard.py"), repoHooks, `${label}: push guard`);
