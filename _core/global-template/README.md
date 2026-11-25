@@ -11,6 +11,7 @@ global-template/
 ├── memory-template/
 │   └── MEMORY.md                          # Empty index — copy to the per-project memory dir
 ├── hooks/
+│   ├── browser-leftovers.py               # SessionStart hook that finds browser profiles sessions left behind
 │   ├── code-research-first.py.template    # Generic PreToolUse hook (rendered at bind time)
 │   ├── code-research-profiles.json        # Per-tool profiles consumed by the renderer
 │   ├── push-guard.py                      # PreToolUse hook that blocks ordinary force pushes
@@ -172,6 +173,14 @@ By default a bind ships both guards inside the project instead (`.claude/hooks/`
 `mods/` holds ten function-hook plugins that run inside Claude Code: session facts on every prompt, a session row (model, project, branch), a compaction hand-off, a local CI watcher, an in-process guard, a shared-machine work queue, skill step checks, task-list upkeep, a plan-usage pause and a local CI runner row. Each is optional; every mod but `runners` and `shared-pc` is recommended for everyone, and `session-facts` puts the date and time on every prompt. They install globally through `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json` and keep their data under `~/.claude/mods-data/<mod>/`. Four of them draw rows above the prompt that take the place of a status line, in the terminal and in the Desktop app (see `mods/README.md`).
 
 See [`mods/README.md`](mods/README.md) for what each mod does, its default and options, how to install, test and validate it, and notes for writing your own.
+
+## 4d. Install the browser leftovers check (recommended)
+
+`hooks/browser-leftovers.py` looks in Claude Code's temp folder (`claude`, or `claude-<user id>` where the system temp folder is shared between users, and only when it is a real folder this user owns with no write access for its group or others, never a link), which holds every session's scratchpad, for the browser profile folders earlier sessions' scripts left behind: a folder holding a Chromium-family browser's `Local State` or `Default/Preferences`. A script that drives a headless browser often gives it a profile folder of its own (`--user-data-dir`), and one that dies or skips its cleanup leaves the folder, up to a gigabyte a run. The CLI frees a scratchpad only together with its session's transcript, weeks later, so nothing else catches it in time.
+
+It runs when a new session starts (not on a resume or a compaction), at most once a day, and deletes nothing. A folder counts as left behind by age, the way the system temp cleaners (systemd-tmpfiles, macOS's daily cleanup) pick files: nothing anywhere inside it changed for three days, and no browser holds the lock a full Chromium-family browser keeps in its profile (a `lockfile` held open on Windows, a `SingletonLock` link naming the browser's host and process elsewhere; one that names another computer, or cannot be read, counts as held). A profile that cannot be read in full within the time limit is left out. Like those cleaners, it cannot see a program that keeps no lock, such as a headless shell, and has written nothing in three days. Every folder on the way down must be this user's with no write access for its group or others, and the starting session's own folder is never counted. The hook tells the assistant how many folders it found, how much space they hold and which projects' sessions made them, and the assistant offers the cleanup. On a yes, `browser-leftovers.py --clean <session id>` picks the same folders again, renames them all aside, reads each again and puts back any that changed in between, then deletes the rest. It never stops a browser, and on Windows the rename fails, so the folder stays, while a program holds a file inside it open. The time of the last finished look is kept in `~/.bindwright/browser-leftovers/last-check`.
+
+`/bindwright:setup` installs it to `~/.claude/hooks/browser-leftovers.py` and registers it for `SessionStart`.
 
 ---
 

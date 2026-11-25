@@ -17,6 +17,7 @@ PERSONAL = "bindwright/settings.json"
 # folder that shows it is installed. A mod's file is its folder under mods/.
 EXTRA_FILES = {
     "attribution-guard": "hooks/no-ai-attribution.py",
+    "browser-leftovers": "hooks/browser-leftovers.py",
     "builder": "agents/builder.md",
     "code-style": "rules/code-style.md",
     "global-instructions": "CLAUDE.md",

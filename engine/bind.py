@@ -199,8 +199,8 @@ def plan_files(answers, core_files, precommit_profiles):
 def _global_files(a, ctx, read_file):
     """The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
     additions, the memory index, the push guard, the builder agent, the reply
-    style, the session-title hook, the attribution guard when the guards live in
-    ~/.claude, and the research hook for a tool without its own."""
+    style, the session-title and browser-leftovers hooks, the attribution guard when
+    the guards live in ~/.claude, and the research hook for a tool without its own."""
     def verbatim(p):
         return read_file(GLOBAL_CORE + p).replace("\r\n", "\n")
 
@@ -213,6 +213,7 @@ def _global_files(a, ctx, read_file):
         ["hooks/push-guard.py", verbatim("hooks/push-guard.py")],
         ["hooks/tool-rules.py", verbatim("hooks/tool-rules.py")],
         ["hooks/session-title.py", verbatim("hooks/session-title.py")],
+        ["hooks/browser-leftovers.py", verbatim("hooks/browser-leftovers.py")],
         ["hooks/reply-style.py", verbatim("hooks/reply-style.py")],
         ["agents/builder.md", verbatim("agents/builder.md")],
         ["output-styles/straight-talk.md", verbatim("output-styles/straight-talk.md")],
