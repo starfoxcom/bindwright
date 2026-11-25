@@ -1,5 +1,8 @@
 """Tests for .github/scripts/review_gate.py, the review gate's shared logic."""
 
+import base64
+import contextlib
+import io
 import json
 import os
 import runpy
@@ -12,6 +15,9 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, ".github", "scripts"))
 import review_gate as gate  # noqa: E402
+
+# The real workflow check, kept before the upsert tests stand in for it.
+READY_CHECK = gate._statuses_ready
 
 SCRIPT = os.path.join(ROOT, ".github", "scripts", "review_gate.py")
 MARK = r"Code Review[^a-zA-Z]+claude-code-templates"
@@ -479,11 +485,17 @@ class Upsert(unittest.TestCase):
         # A fake check store. `wipes` stands for another workflow whose stale
         # write lands right after each of the next N PATCHes, putting back the
         # start state.
-        self.calls, self.existing, self.wipes = [], [], 0
+        # `status_error` stands for a status write that GitHub refuses, and
+        # `overwrite` for a newer run's write landing right after the next PATCH.
+        self.calls, self.existing, self.wipes, self.status_error, self.overwrite = [], [], 0, None, None
         real, settle = gate._gh, gate.SETTLE_SECONDS
 
         def fake(path, method="GET", body=None):
             self.calls.append((method, path, body))
+            if "/statuses/" in path:
+                if self.status_error:
+                    raise gate.GateError(self.status_error)
+                return {}
             if method == "GET":
                 return {"check_runs": self.existing}
             if method == "POST":
@@ -491,11 +503,15 @@ class Upsert(unittest.TestCase):
                 return {}
             run = next(r for r in self.existing if path.endswith("/%d" % r["id"]))
             run["external_id"] = body["external_id"]
+            if self.overwrite:
+                run["external_id"], self.overwrite = self.overwrite, None
             if self.wipes:
                 self.wipes -= 1
                 run["external_id"] = ""
             return {}
-        gate._gh, gate.SETTLE_SECONDS = fake, (0, 0)
+        self.ready, ready = True, gate._statuses_ready
+        gate._gh, gate.SETTLE_SECONDS, gate._statuses_ready = fake, (0, 0), lambda repo: self.ready
+        self.addCleanup(setattr, gate, "_statuses_ready", ready)
         self.addCleanup(setattr, gate, "_gh", real)
         self.addCleanup(setattr, gate, "SETTLE_SECONDS", settle)
 
@@ -505,7 +521,7 @@ class Upsert(unittest.TestCase):
     def test_first_call_creates_the_check_with_the_start_state(self):
         out = gate.upsert("o/r", self.SHA, "Set up by the routine workflow.")
         self.assertEqual(out["status"], "in_progress")
-        [(method, path, body)] = [c for c in self.calls if c[0] != "GET"]
+        [(method, path, body)] = [c for c in self.calls if c[0] != "GET" and "/check-runs" in c[1]]
         self.assertEqual((method, path), ("POST", "repos/o/r/check-runs"))
         self.assertEqual((body["name"], body["head_sha"], body["status"]), ("Review gate", self.SHA, "in_progress"))
         self.assertNotIn("conclusion", body)
@@ -539,6 +555,70 @@ class Upsert(unittest.TestCase):
         with self.assertRaises(gate.GateError):
             gate.upsert("o/r", self.SHA, deep="pass", order="5.1.1")
         self.assertEqual(len(self.patches()), gate.WRITE_ROUNDS)
+
+    def test_each_write_sets_the_commit_status_first(self):
+        rows = [
+            ("in progress reads pending", {}, "pending"),
+            ("a pass reads success", {"triage": "reviewable", "routine": "pass", "order": "5.1.1"}, "success"),
+            ("a block reads failure", {"triage": "reviewable", "routine": "block", "order": "5.1.1"}, "failure"),
+        ]
+        for name, facts, state in rows:
+            with self.subTest(name):
+                self.calls, self.existing = [], []
+                out = gate.upsert("o/r", self.SHA, **facts)
+                writes = [(path, body) for method, path, body in self.calls if method != "GET"]
+                self.assertEqual(writes[0], ("repos/o/r/statuses/" + self.SHA,
+                                             {"state": state, "context": "Review gate",
+                                              "description": out["title"]}))
+                self.assertEqual(writes[1][0], "repos/o/r/check-runs")
+
+    def test_the_last_status_follows_the_check_a_newer_run_left(self):
+        self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
+        self.overwrite = "triage=reviewable;routine=block;escalated=no;deep=none;routine_by=9.1.1;deep_by=0.0.0"
+        gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        states = [body["state"] for _, path, body in self.calls if "/statuses/" in path]
+        self.assertEqual((states[0], states[-1]), ("success", "failure"))
+
+    def test_no_status_until_both_workflows_may_write_one(self):
+        self.ready = False
+        out = gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        self.assertEqual([path for _, path, _ in self.calls if "/statuses/" in path], [])
+        self.assertEqual((out["conclusion"], self.existing[0]["conclusion"]), ("success", "success"))
+
+    def test_the_workflows_read_decides_whether_statuses_are_written(self):
+        granted, missing = "    permissions:\n      statuses: write\n", "      # statuses: write\n"
+        rows = [
+            ("both workflows grant it", {"review": granted, "claude": granted}, True),
+            ("one workflow lacks it", {"review": granted, "claude": missing}, False),
+            ("a lookup fails", {"review": granted, "claude": None}, False),
+        ]
+        self.addCleanup(setattr, gate, "_READY", {})
+        for name, texts, expected in rows:
+            with self.subTest(name):
+                def fake(path, method="GET", body=None):
+                    if path == "repos/o/r":
+                        return {"default_branch": "main"}
+                    text = texts["review" if "claude-code-review" in path else "claude"]
+                    if text is None:
+                        raise gate.GateError("gh api GET failed: Not Found (HTTP 404)")
+                    return {"content": base64.b64encode(text.encode("utf-8")).decode("ascii")}
+                gate._gh, gate._READY = fake, {}
+                self.assertIs(READY_CHECK("o/r"), expected)
+
+    def test_a_job_without_the_status_permission_still_writes_the_check(self):
+        self.status_error = "gh api POST failed: Resource not accessible by integration (HTTP 403)"
+        warning = io.StringIO()
+        with contextlib.redirect_stderr(warning):
+            out = gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        self.assertEqual((out["conclusion"], self.existing[0]["conclusion"]), ("success", "success"))
+        self.assertIn("lacks statuses: write", warning.getvalue())
+
+    def test_any_other_status_failure_stops_before_the_check(self):
+        self.status_error = "gh api POST failed: API rate limit exceeded (HTTP 403)"
+        self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
+        with self.assertRaises(gate.GateError):
+            gate.upsert("o/r", self.SHA, triage="reviewable", routine="block", order="5.1.1")
+        self.assertEqual(self.patches(), [])
 
     def test_a_newer_runs_facts_count_as_held(self):
         self.existing = [{"id": 7, "name": "Review gate", "external_id": "routine=block;routine_by=9.1.1"}]
