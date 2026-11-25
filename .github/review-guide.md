@@ -25,6 +25,7 @@ Mistakes this repo has made more than once. Each item names a trigger the diff s
 | A hook or script under `_core/` changes | Every copy of it matches byte for byte (`.claude/hooks/`, `.github/scripts/`, the project template's copy of a global hook), and when this repo's bind writes the file, so `.bindwright/pristine.json` has a key for it, that entry changes in the same commit | #931 |
 | A test or script compares a file's text line by line, or replays a saved file | It drops `\r` before comparing, since a Windows checkout turns line endings into CRLF | #382, #938 |
 | Rule, README or CHANGELOG text states how many of something there are (checks, counts, rows, tests) | The number matches the code after this diff | #940 |
+| `CHANGELOG.md` changes | Only `[Unreleased]` changes: a section under a released version's heading stays as it shipped, typos included, and a correction goes into `[Unreleased]` instead | #136 |
 | A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says it does with input it cannot read, whether that is to block with what to fix or to let the call through | #350, #740 |
 
 ## Bindwright template text
