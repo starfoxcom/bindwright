@@ -602,7 +602,8 @@ RULES = [
      lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
      "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root.", ENFORCE),
     ("`gh run rerun --failed` or `--job`",
-     both(Followed(r"\bgh\s+run\s+rerun\b", r"\n|;&", r"\s(?:--failed|--job|-j)\b")),
+     # A flag counts only when a space or the command's end follows it: `--failed=false` is left unread.
+     both(Followed(r"\bgh\s+run\s+rerun\b", r"\n|;&", r"\s(?:--failed|--job|-j)(?=\s|$)")),
      "a re-run of only some jobs can leave a required check stuck. Re-run the whole run, or push again.", OBSERVE),
     ("an interactive git command (`-i`, `-p`)",
      # `git stash show -p` only prints, and a rebase given a scripted editor never waits for keys.
