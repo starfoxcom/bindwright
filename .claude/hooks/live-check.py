@@ -12,8 +12,8 @@ call with a write method, or an HTTP client's post, put, patch or delete) and th
 hands the session one line of context.
 
 It never blocks: every outcome exits 0, so the log shows how often the note fires before any
-version refuses. Output with no address, or with more than one, makes no note, and so does a gh
-that fails or runs out of time.
+version refuses. Output with no github.com address, or with more than one, makes no note, and so
+does a gh that fails or runs out of time; a pull request on a GitHub Enterprise host gets none.
 """
 
 import datetime
@@ -36,8 +36,11 @@ MAX_MATCH_CHARS = 200
 MAX_LINE_CHARS = 500
 SHELLS = {"Bash", "PowerShell"}
 PR_COMMAND = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
-# gh prints the pull request's address on a line of its own.
-PR_ADDRESS = re.compile(r"https://([A-Za-z0-9.-]+)/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/(\d+)")
+# gh prints the pull request's address on a line of its own. Only github.com is read, and the
+# host is never taken from the output: gh hands an Enterprise token to any host it does not
+# know, so a printed address must not choose where a request goes.
+GITHUB_HOST = "github.com"
+PR_ADDRESS = re.compile(r"https://github\.com/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/(\d+)")
 WRITE_METHOD = r"(?:POST|PUT|PATCH|DELETE)"
 WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\bgh\s+api\b.*(?:-X|--method)[\s=,\"']+" + WRITE_METHOD + r"\b",
@@ -106,8 +109,8 @@ def gh(*args):
 
 
 def pr_address(event):
-    """(host, owner/repo, number) of the address a `gh pr create` or `gh pr edit` printed, or None
-    for any other call."""
+    """(owner/repo, number) of the github.com address a `gh pr create` or `gh pr edit` printed, or
+    None for any other call."""
     if not isinstance(event, dict) or event.get("tool_name") not in SHELLS:
         return None
     tool_input = event.get("tool_input")
@@ -138,12 +141,12 @@ def record(address, matches):
         handle.write(json.dumps(entry) + "\n")
 
 
-def read_pull_request(host, repo, number):
-    """(the body, the changed files) GitHub holds for the pull request, or None when gh cannot
+def read_pull_request(repo, number):
+    """(the body, the changed files) github.com holds for the pull request, or None when gh cannot
     read them. Both come as JSON, whose strings keep every character of the text."""
     path = "repos/%s/pulls/%s" % (repo, number)
-    pull = gh("api", "--hostname", host, path)
-    files = gh("api", "--hostname", host, "--paginate", path + "/files") if pull is not None else None
+    pull = gh("api", "--hostname", GITHUB_HOST, path)
+    files = gh("api", "--hostname", GITHUB_HOST, "--paginate", path + "/files") if pull is not None else None
     if files is None:
         return None
     body = json.loads(pull).get("body") or ""
@@ -159,8 +162,7 @@ def observe(event):
     matches = write_lines(pull_request[1])
     if not matches:
         return False
-    host, repo, number = address
-    record("https://%s/%s/pull/%s" % (host, repo, number), matches)
+    record("https://%s/%s/pull/%s" % (GITHUB_HOST, *address), matches)
     return True
 
 

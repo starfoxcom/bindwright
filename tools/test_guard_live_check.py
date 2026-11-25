@@ -101,6 +101,17 @@ class WhichCalls(HookTest):
                 self.assertEqual(self.observe(the_event), expect_note)
 
 
+class OtherHosts(HookTest):
+    def test_an_address_on_another_host_sends_gh_nowhere(self):
+        calls = []
+        self.hook.gh = lambda *args: calls.append(args)
+        for address in ("https://collector.example/a/b/pull/1", "https://github.com.collector.example/a/b/pull/1",
+                        "https://ghe.example.com/a/b/pull/1"):
+            with self.subTest(address):
+                self.assertFalse(self.hook.observe(event(stdout=address + "\n")))
+        self.assertEqual(calls, [])
+
+
 class WhatThePullRequestHolds(HookTest):
     # name, body, changed files, a note expected
     ROWS = [
