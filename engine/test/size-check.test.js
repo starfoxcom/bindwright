@@ -113,6 +113,27 @@ test("a new hard breach fails, and the baseline lets it stay but never grow", { 
   assert.match(r.out, /soft: app\.py: file - = 20 \(soft limit 10\)/);
 });
 
+test("a new file not added to git is named, since CI would measure it", { skip }, () => {
+  const { root, put } = makeRepo({ "app.py": "x\n" });
+  put("new.py", lines(21));
+  put(".gitignore", "ignored.py\n");
+  put("ignored.py", lines(21));
+  const r = check(root);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /note: \d+ new file\(s\) are not measured until added to git: .*new\.py/);
+  assert.doesNotMatch(r.out, /ignored\.py/);
+});
+
+// Only Linux takes a file name that is not UTF-8; Windows and macOS refuse it.
+test("a new file whose name is not UTF-8 is named, never a crash", { skip: skip || process.platform !== "linux" },
+  () => {
+    const { root } = makeRepo({ "app.py": "x\n" });
+    writeFileSync(Buffer.concat([Buffer.from(`${root}/r`), Buffer.from([0xe9]), Buffer.from("sum.py")]), "x\n");
+    const r = check(root);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /new file\(s\) are not measured until added to git: .*sum\.py/);
+  });
+
 test("a leftover same-named baseline line cannot excuse a new breach", { skip }, () => {
   const { root, put, git } = makeRepo({ "app.py": "x\n" });
   put(".github/size-check/baseline.txt", "app.py|function|(anonymous)|30\napp.py|function|(anonymous)|20\n");
