@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { bind } from "../bind.js";
 import { defaults } from "../model.js";
 import { applyFiles } from "../apply.js";
+import "./quiet-git.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const coreFiles = JSON.parse(readFileSync(join(engine, "core-files.json"), "utf8"));

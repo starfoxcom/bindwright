@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { python } from "./python.js";
+import "./quiet-git.js";
 import { researchTool } from "../model.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { python } from "./python.js";
+import "./quiet-git.js";
 
 const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
 

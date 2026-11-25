@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { python } from "./python.js";
+import "./quiet-git.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SCRIPT = join(repo, "_core", "project-template", ".github", "scripts", "size_check.py");
