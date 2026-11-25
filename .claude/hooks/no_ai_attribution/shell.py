@@ -40,17 +40,42 @@ def parser_script():
     return next((script for script in scripts if os.path.isfile(script)), None)
 
 
+def real_path(path):
+    return os.path.normcase(os.path.realpath(path))
+
+
+def is_within(folder, top):
+    """Whether `folder` is `top` or below it; two paths on different drives never are."""
+    try:
+        return os.path.commonpath([folder, top]) == top
+    except ValueError:
+        return False
+
+
+def repo_folder(cwd):
+    """The top folder of the repo holding `cwd`, where a repo could ship its own programs; None
+    outside a repo, or for a repo at the home folder, whose subfolders hold the user's own installs."""
+    folder = real_path(cwd)
+    while not os.path.exists(os.path.join(folder, ".git")):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return None
+        folder = parent
+    return None if folder == real_path(os.path.expanduser("~")) else folder
+
+
 def node_program(cwd):
-    """The `node` on PATH, or None when the only one is the session folder's own. On Windows a
+    """The `node` on PATH, or None when the first one found is the project's own. On Windows a
     bare name is looked up in the current folder first, so a repo could ship its own
-    `node.exe`: that search is switched off, and a match that is relative (a `.` on PATH) or
-    sits in the session folder is refused."""
+    `node.exe`: that search is switched off, and a match that is relative (a `.` on PATH), sits
+    in the session folder or the current folder, or anywhere in the session folder's repo is refused."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     found = shutil.which("node")
     if not found or not os.path.isabs(found):
         return None
-    here = {os.path.normcase(os.path.realpath(folder)) for folder in (cwd, os.getcwd())}
-    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
+    folder, repo = real_path(os.path.dirname(found)), repo_folder(cwd)
+    here = {real_path(place) for place in (cwd, os.getcwd())}
+    return None if folder in here or (repo and is_within(folder, repo)) else found
 
 
 def node_too_old(node, deadline):

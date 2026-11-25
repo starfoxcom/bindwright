@@ -559,24 +559,27 @@ class Hook(unittest.TestCase):
 
 class TrustedProgram(unittest.TestCase):
     # A repo can ship its own git (or node) beside its code; the hook must never run that one.
-    def test_a_program_in_the_project_folder_is_never_picked(self):
+    def test_a_program_anywhere_in_the_project_is_never_picked(self):
         spec = importlib.util.spec_from_file_location("version_check_hook", HOOK)
         hook = importlib.util.module_from_spec(spec)
         # No __pycache__ beside the template, which the template file list would then hold.
         with mock.patch.object(sys, "dont_write_bytecode", True):
             spec.loader.exec_module(hook)
         here = os.getcwd()
-        with tempfile.TemporaryDirectory() as project, mock.patch.dict(os.environ):
-            planted = os.path.join(project, "git.bat" if os.name == "nt" else "git")
-            pathlib.Path(planted).write_text("exit 0\n")
-            os.chmod(planted, 0o755)
-            os.environ["PATH"] = project + os.pathsep + os.environ["PATH"]
-            os.chdir(project)
-            try:
-                found = hook.trusted_program("git", project)
-            finally:
-                os.chdir(here)
-            self.assertIsNone(found)
+        for name, folder in (("the top folder", ""), ("a subfolder on PATH, as direnv adds", "bin")):
+            with self.subTest(name), tempfile.TemporaryDirectory() as project, mock.patch.dict(os.environ):
+                tools = os.path.join(project, folder)
+                os.makedirs(tools, exist_ok=True)
+                planted = os.path.join(tools, "git.bat" if os.name == "nt" else "git")
+                pathlib.Path(planted).write_text("exit 0\n")
+                os.chmod(planted, 0o755)
+                os.environ["PATH"] = tools + os.pathsep + os.environ["PATH"]
+                os.chdir(project)
+                try:
+                    found = hook.trusted_program("git", project)
+                finally:
+                    os.chdir(here)
+                self.assertIsNone(found)
 
 
 if __name__ == "__main__":

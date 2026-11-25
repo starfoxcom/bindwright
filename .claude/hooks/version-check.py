@@ -116,13 +116,25 @@ def trusted_program(name, project):
     """The program on PATH as an absolute path, or None when the first one found is the project's.
     Windows looks a bare name up in the current folder first, so a repo could ship its own
     `git.exe` or `node.exe`: that search is switched off, and a relative match or one in the
-    project or the current folder is refused."""
+    current folder or anywhere in the project is refused."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     found = shutil.which(name)
     if not found or not os.path.isabs(found):
         return None
-    here = {os.path.normcase(os.path.realpath(folder)) for folder in (project, os.getcwd())}
-    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
+    folder = real_path(os.path.dirname(found))
+    return None if is_within(folder, real_path(project)) or folder == real_path(os.getcwd()) else found
+
+
+def real_path(path):
+    return os.path.normcase(os.path.realpath(path))
+
+
+def is_within(folder, top):
+    """Whether `folder` is `top` or below it; two paths on different drives never are."""
+    try:
+        return os.path.commonpath([folder, top]) == top
+    except ValueError:
+        return False
 
 
 def shell_commands(command, shell, project):
