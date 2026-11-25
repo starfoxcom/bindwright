@@ -243,8 +243,11 @@ class LengthRowsTest(unittest.TestCase):
                 self.project(style)
                 self.assertEqual(self.logged(command, shell), [other] if want else [])
 
-    CHANGELOG = ("# Changelog\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
-                 "## [1.1.0] - 2026-11-20\n\n### Added\n- b\n\n## [1.0.0] - 2026-11-01\n\n### Added\n- c\n")
+    # A form feed in the title: git counts only `\n` as a line break, and so must the row.
+    CHANGELOG = ("# Changelog\f\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
+                 "## [1.1.0] - 2026-11-20\n\n### Added\n- b\n\n## [1.0.0] - 2026-11-01\n\n### Added\n- c\n\n"
+                 "[unreleased]: https://x/compare/v1.1.0...HEAD\n[1.1.0]: https://x/compare/v1.0.0...v1.1.0\n"
+                 "[1.0.0]: https://x/releases/tag/v1.0.0\n")
 
     def test_a_commit_that_edits_a_dated_changelog_section_is_logged(self):
         dated = "a commit that edits a released CHANGELOG.md section"
@@ -259,17 +262,22 @@ class LengthRowsTest(unittest.TestCase):
         os.makedirs(os.path.join(self.folder, "sub"), exist_ok=True)
         self.hook.CWD = os.path.join(self.folder, "sub")
         released = "## [1.2.0] - 2026-11-24\n\n### Fixed\n- a\n\n"
+        cut = self.CHANGELOG.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released).replace(
+            "[unreleased]: https://x/compare/v1.1.0...HEAD\n",
+            "[unreleased]: https://x/compare/v1.2.0...HEAD\n[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n")
         for name, text, command, want in (
                 ("a line changed in a dated section", self.CHANGELOG.replace("- b", "- B"), "git commit -am x", True),
                 ("a line added to the end of a dated section", self.CHANGELOG.replace("- b\n", "- b\n- d\n"),
                  "git add -u && git commit -m x", True),
-                ("a dated heading changed", self.CHANGELOG.replace("2026-11-01", "2026-11-02"), "git commit -m x",
-                 True),
+                ("the newest dated heading changed", self.CHANGELOG.replace("2026-11-20", "2026-11-21"),
+                 "git commit -m x", True),
                 ("a line added under [Unreleased]", self.CHANGELOG.replace("- a\n", "- a\n- e\n"),
                  "git commit -am x", False),
-                ("a release cut from [Unreleased]",
-                 self.CHANGELOG.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released),
+                ("a release cut from [Unreleased], its links bumped", cut, "git commit -am x", False),
+                ("a link added for an [Unreleased] entry", self.CHANGELOG + "[#42]: https://x/issues/42\n",
                  "git commit -am x", False),
+                ("a line changed in the oldest section, above the links", self.CHANGELOG.replace("- c", "- C"),
+                 "git commit -am x", True),
                 ("a dated section edited, with no commit", self.CHANGELOG.replace("- b", "- B"), "git status", False),
                 ("a dated section edited, a commit only mentioned", self.CHANGELOG.replace("- b", "- B"),
                  'echo "git commit"', False)):

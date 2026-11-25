@@ -571,26 +571,36 @@ def long_title(text, shell):
 GIT_COMMIT = both(r"\bgit\s+commit\b")
 # A changelog heading that carries a date: a released section, which a later release never edits.
 DATED_HEADING = re.compile(r"^## .*\b\d{4}-\d{2}-\d{2}\b")
+# A link reference line (`[1.0.0]: https://...`), which Keep a Changelog keeps at the file's end: a release
+# cut edits these, so they belong to no section.
+LINK_REFERENCE = re.compile(r"^\[[^\]]+\]:\s")
 # A hunk of `git diff -U0`: the first line it touches in the old file, and how many (1 when left out).
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+", re.MULTILINE)
+# Seconds both git calls of the changelog row share, well inside the hook's 10 s limit in a project.
+GIT_BUDGET = 4.0
 
 
-def git_output(*args):
-    """What a git command run in CWD prints, or None when it fails or takes past 5 s."""
+def git_output(deadline, *args):
+    """What a git command run in CWD prints, or None when it fails or `deadline` (monotonic) passes."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        return None
     try:
-        done = subprocess.run(["git", "-C", CWD, *args], capture_output=True, timeout=5, check=False)
+        done = subprocess.run(["git", "-C", CWD, *args], capture_output=True, timeout=left, check=False)
     except (OSError, subprocess.SubprocessError):
         return None
     return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
 
 
 def dated_lines(changelog):
-    """The numbers, from 1, of the changelog lines inside a dated section, its heading included."""
+    """The numbers, from 1, of the changelog lines inside a dated section, its heading included.
+
+    Lines split on `\\n` alone, as git counts them in a hunk."""
     dated, is_inside = set(), False
-    for number, line in enumerate(changelog.splitlines(), 1):
+    for number, line in enumerate(changelog.split("\n"), 1):
         if line.startswith("## "):
             is_inside = bool(DATED_HEADING.match(line))
-        if is_inside:
+        if is_inside and not LINK_REFERENCE.match(line):
             dated.add(number)
     return dated
 
@@ -602,8 +612,11 @@ def edits_dated_changelog(text, shell):
     A hunk that only adds lines counts when it adds them after a dated section's line."""
     if not GIT_COMMIT(text, shell):
         return False
-    old = git_output("show", "HEAD:CHANGELOG.md")
-    diff = old is not None and git_output("diff", "HEAD", "-U0", "--no-color", "--", ":(top)CHANGELOG.md")
+    deadline = time.monotonic() + GIT_BUDGET
+    old = git_output(deadline, "cat-file", "blob", "HEAD:CHANGELOG.md")
+    # No external diff tool or text conversion: either would change the hunks' line numbers or drop them.
+    diff = old is not None and git_output(deadline, "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff",
+                                          "--no-textconv", "--", ":(top)CHANGELOG.md")
     if not diff:
         return False
     dated = dated_lines(old)
