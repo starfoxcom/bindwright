@@ -454,7 +454,7 @@ async function poll($: EngineInterface): Promise<void> {
             quietSince: undefined,
             incident: undefined,
             incidentPending: undefined,
-            deepStarted: undefined,
+            deep: undefined,
             isSilent: isForeign(current, now) || undefined,
           }
         : current

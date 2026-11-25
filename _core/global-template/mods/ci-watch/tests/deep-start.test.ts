@@ -12,7 +12,7 @@ const REVIEW_PENDING = [
 
 type Row = { name: string; seen: Partial<Seen>; isEarly: boolean }
 
-// Whether the watch wakes the session within 20 minutes of the push, well before its hour runs out.
+// Whether the watch wakes the session within 25 minutes of the push, well before its hour runs out.
 const ROWS: Row[] = [
   { name: 'an owed deep review that never started', seen: {}, isEarly: true },
   { name: "another PR's deep run", seen: { deepRuns: ['docs: something else'] }, isEarly: true },
@@ -34,7 +34,7 @@ for (const { name, seen: given, isEarly } of ROWS) {
     Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true }, given)
     await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
     await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
-    for (let poll = 0; poll < (20 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+    for (let poll = 0; poll < (25 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
     expect(seen.prompts.length).toBe(isEarly ? 1 : 0)
   })
 }
@@ -51,14 +51,49 @@ test('the wake for a deep review that never started says to tell the user, and c
   expect(seen.prompts[0]).not.toContain('Checks finished')
 })
 
+test('a deep run created just after the gate turned owed is found, not missed', async ($, on) => {
+  const { seen, clock } = world(on)
+  Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true })
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let poll = 0; poll < (16 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  seen.deepRuns = [PR_TITLE]
+  for (let poll = 0; poll < (15 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.filter(text => text.includes('deep review')).length).toBe(0)
+})
+
+test('a routine review that blocked is named in the wake', async ($, on) => {
+  const { seen, clock } = world(on)
+  const rows = [{ name: 'Review gate', bucket: 'pending' }, { name: 'Evaluate review outcome', bucket: 'fail' }]
+  const gateState = 'triage=reviewable;routine=block;escalated=yes;deep=none'
+  Object.assign(seen, { bucket: 'pass', rows, gateState, isReadable: true })
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let poll = 0; poll < (25 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('Meanwhile Evaluate review outcome failed')
+})
+
+test('during an Actions incident the incident wake keeps its place', async ($, on) => {
+  const { seen, clock } = world(on)
+  const incident = { name: 'Incident with Actions', status: 'investigating', components: [{ name: 'Actions' }] }
+  const status = JSON.stringify({ incidents: [incident] })
+  Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true, status })
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let poll = 0; poll < (25 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.some(text => text.includes('Incident with Actions'))).toBe(true)
+  expect(seen.prompts.some(text => text.includes('waits for a deep review'))).toBe(false)
+})
+
 test('a deep run found on one head is looked for again on the next', async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true, deepRuns: [PR_TITLE] })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
-  for (let poll = 0; poll < (20 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  for (let poll = 0; poll < (25 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
   Object.assign(seen, { head: 'b2', deepRuns: [] })
-  for (let poll = 0; poll < (20 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  for (let poll = 0; poll < (25 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
   expect(seen.prompts.length).toBe(1)
   expect(seen.prompts[0]).toContain('the review gate waits for a deep review')
 })

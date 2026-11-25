@@ -92,7 +92,7 @@ export type Seen = {
 // The head's first gate run starts at the test clock's zero.
 const GATE_STARTED = '1970-01-01T00:00:00Z'
 export const PR_TITLE = 'fix(x): mend the thing'
-const MARKING_DEEP_WORKFLOW ='mark="<!-- deep-run: $GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT review -->"\n'
+const MARKING_DEEP_WORKFLOW = 'mark="<!-- deep-run: $GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT review -->"\n'
 
 /** The answer to a gh API call the review check makes, or `undefined` for any other call. */
 function reviewAnswer(seen: Seen, args: string): string | undefined {

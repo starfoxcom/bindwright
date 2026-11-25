@@ -12,6 +12,9 @@ import { GATE, readGate, REVIEW_JOBS, withVerdict } from './verdict'
 /** How long after the push a deep review the gate owes must have started: the routine review asks within minutes. */
 export const DEEP_START_MS = 15 * 60_000
 
+/** How long the gate must owe a deep review before a missing run counts as never started. */
+export const DEEP_GRACE_MS = 5 * 60_000
+
 // The deep review's workflow, as the review gate's setup names it.
 const DEEP_WORKFLOW = 'claude.yml'
 
@@ -54,19 +57,24 @@ async function deepRunsSince($: EngineInterface, watch: Watch, since: string): P
 }
 
 /**
- * The watch settled as `deepNeverStarted` when the gate owes a deep review and none started since its first
- * run, or marked `deepStarted` once one has, so it is looked up no more. Anything that cannot be read leaves the
- * watch as it is, for the next poll or the time limit.
+ * The watch settled as `deepNeverStarted` when the gate has owed a deep review for `DEEP_GRACE_MS` and none
+ * started since its first run, or marked `deep.isStarted` once one has, so it is looked up no more. While
+ * GitHub reports an Actions incident the incident wake keeps its place. Anything that cannot be read leaves
+ * the watch as it is, for the next poll or the time limit.
  */
 export async function withDeepStart($: EngineInterface, watch: Watch, now: number): Promise<Watch> {
-  if (watch.outcome || watch.deepStarted || now - watch.startedAt < DEEP_START_MS || !isWaitingOnReview(watch)) {
+  const isTooSoon = now - watch.startedAt < DEEP_START_MS
+  if (watch.outcome || watch.incident || watch.deep?.isStarted || isTooSoon || !isWaitingOnReview(watch)) {
     return watch
   }
   const gate = await readGate($, watch)
   if (!gate?.startedAt || !isOwedDeep(gate.state)) return watch
+  // The request posts before the gate records it, so the deep run gets time to be created.
+  if (watch.deep === undefined) return { ...watch, deep: { owedSince: now } }
+  if (now - watch.deep.owedSince < DEEP_GRACE_MS) return watch
   const started = await deepRunsSince($, watch, gate.startedAt)
   if (started === undefined) return watch
-  if (started > 0) return { ...watch, deepStarted: true }
+  if (started > 0) return { ...watch, deep: { ...watch.deep, isStarted: true } }
   return { ...watch, outcome: 'timeout', settledAt: now, deepNeverStarted: true }
 }
 
