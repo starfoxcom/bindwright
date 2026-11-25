@@ -991,14 +991,17 @@ class SetupScript(unittest.TestCase):
     def test_each_branch_allows_the_merge_methods_its_prs_need(self):
         # Release, hotfix and cascade PRs take merge commits; work PRs take the style.
         rows = [
-            ("squash saved, gitflow", "squash", [], ["main", "develop"],
+            ("squash saved, gitflow", ("gitflow", "squash"), [], ["main", "develop"],
              [True, True, False], {"main": ["merge"], "develop": ["merge", "squash"]}),
-            ("flag over saved, gitflow", "squash", ["--merge-style", "rebase"], ["main", "develop"],
+            ("flag over saved, gitflow", ("gitflow", "squash"), ["--merge-style", "rebase"],
+             ["main", "develop"],
              [True, False, True], {"main": ["merge"], "develop": ["merge", "rebase"]}),
-            ("rebase saved, trunk", "rebase", [], ["main"],
-             [False, False, True], {"main": ["rebase"]}),
-            ("no answers, gitflow", None, [], ["main", "develop"],
+            ("rebase saved, trunk with a leftover develop", ("trunk", "rebase"), ["--branch", "main"],
+             ["main", "develop"], [False, False, True], {"main": ["rebase"]}),
+            ("no answers, a develop branch", None, [], ["main", "develop"],
              [True, False, False], {"main": ["merge"], "develop": ["merge"]}),
+            ("no answers, no develop branch", None, ["--merge-style", "squash"], ["main"],
+             [False, True, False], {"main": ["squash"]}),
         ]
         answers = os.path.join(self.dir, ".bindwright", "project.json")
         os.makedirs(os.path.dirname(answers), exist_ok=True)
@@ -1006,7 +1009,7 @@ class SetupScript(unittest.TestCase):
             with self.subTest(name):
                 if saved:
                     with open(answers, "w") as f:
-                        json.dump({"advanced": {"branching": "gitflow", "mergeStyle": saved}}, f,
+                        json.dump({"advanced": {"branching": saved[0], "mergeStyle": saved[1]}}, f,
                                   indent=2)
                 elif os.path.exists(answers):
                     os.remove(answers)
@@ -1047,13 +1050,17 @@ class SetupScript(unittest.TestCase):
         ruleset["rules"] += [{"type": "pull_request", "parameters": {
             "allowed_merge_methods": ["squash"]}}]
         state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset])
-        run, after, _ = self.run_setup(state, "--merge-style", "squash")
-        self.assertIn("All set.", run.stdout)
-        rule = next(r for r in after["rulesets"][0]["rules"] if r["type"] == "pull_request")
-        self.assertEqual(rule["parameters"]["allowed_merge_methods"], ["merge", "squash"])
-        run, _, calls = self.run_setup(after, "--check", "--merge-style", "squash")
-        self.assertIn("All set.", run.stdout)
-        self.assertEqual(self.writes(calls), [])
+        # A run for main alone must not narrow develop's PRs through the shared rule.
+        for branches in ([], ["--branch", "main"]):
+            with self.subTest(branches=branches):
+                run, after, _ = self.run_setup(state, "--merge-style", "squash", *branches)
+                self.assertIn("All set.", run.stdout)
+                rule = next(r for r in after["rulesets"][0]["rules"] if r["type"] == "pull_request")
+                self.assertEqual(rule["parameters"]["allowed_merge_methods"], ["merge", "squash"])
+                run, _, calls = self.run_setup(after, "--check", "--merge-style", "squash",
+                                               *branches)
+                self.assertIn("All set.", run.stdout)
+                self.assertEqual(self.writes(calls), [])
 
     def test_checks_two_keeps_the_old_deep_check(self):
         ruleset = old_ruleset()

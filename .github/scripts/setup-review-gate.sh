@@ -31,8 +31,9 @@ REPO=""
 BRANCHES=()
 REQUIRED=("Review gate")
 MERGE_STYLE=""
-# Whether the repository has a develop branch, which makes it gitflow.
-HAS_DEVELOP=false
+# Whether release, hotfix and cascade PRs run between main and develop: the
+# saved branching answer, or whether a develop branch exists without one.
+GITFLOW=false
 APPROVALS=0
 ACCOUNTS=1
 DEFAULT_BRANCH=""
@@ -55,9 +56,10 @@ Usage: setup-review-gate.sh [--check] [options]
                        "Review gate"; repeat for more.
   --merge-style STYLE  merge, squash or rebase: how work PRs merge (default:
                        mergeStyle in this folder's .bindwright/project.json,
-                       else merge). With a develop branch, main takes merge
-                       commits only and develop takes them too, for release,
-                       hotfix and cascade PRs.
+                       else merge). Under gitflow (branching there, else a
+                       develop branch), main takes merge commits only and
+                       develop takes them too, for release, hotfix and
+                       cascade PRs.
   --approvals N        Approvals a PR needs besides the gate, 0 to 9
                        (default: 0, for a single maintainer).
   --accounts N         Claude accounts the reviews use, 1 to 5 (default: 1).
@@ -95,19 +97,19 @@ parse_args() {
     esac
     shift
   done
-  MERGE_STYLE=${MERGE_STYLE:-$(saved_merge_style)}
+  MERGE_STYLE=${MERGE_STYLE:-$(saved_answer mergeStyle)}
+  MERGE_STYLE=${MERGE_STYLE:-merge}
   validate_args
 }
 
-# The merge style setup saved in this folder's answers, or merge without them.
-saved_merge_style() {
-  local root style=""
+# A text answer setup saved in this folder's .bindwright/project.json, or
+# nothing without one.
+saved_answer() {
+  local root
   root=$(git rev-parse --show-toplevel 2> /dev/null) || root=.
-  if [ -f "$root/.bindwright/project.json" ]; then
-    style=$(sed -nE 's/^[[:space:]]*"mergeStyle":[[:space:]]*"([^"]*)".*/\1/p' \
-      "$root/.bindwright/project.json" | head -n 1)
-  fi
-  echo "${style:-merge}"
+  [ -f "$root/.bindwright/project.json" ] || return 0
+  sed -nE "s/^[[:space:]]*\"$1\":[[:space:]]*\"([^\"]*)\".*/\1/p" \
+    "$root/.bindwright/project.json" | head -n 1
 }
 
 # Names end up inside jq programs and JSON text, so anything that could
@@ -143,10 +145,16 @@ preflight() {
   admin=$(gh api "repos/$REPO" --jq .permissions.admin) || die "cannot read $REPO"
   [ "$admin" = true ] || die "$REPO: reading and changing its settings needs admin access"
   DEFAULT_BRANCH=$(gh api "repos/$REPO" --jq .default_branch)
-  if branch_exists develop; then HAS_DEVELOP=true; fi
+  local has_develop=false
+  if branch_exists develop; then has_develop=true; fi
+  case "$(saved_answer branching)" in
+    gitflow) GITFLOW=true ;;
+    trunk) GITFLOW=false ;;
+    *) GITFLOW=$has_develop ;;
+  esac
   if [ ${#BRANCHES[@]} -eq 0 ]; then
     BRANCHES=("$DEFAULT_BRANCH")
-    if [ "$DEFAULT_BRANCH" != develop ] && [ "$HAS_DEVELOP" = true ]; then
+    if [ "$DEFAULT_BRANCH" != develop ] && [ "$has_develop" = true ]; then
       BRANCHES+=(develop)
     fi
   fi
@@ -187,11 +195,11 @@ step_label() {
   fi
 }
 
-# The merge methods a branch's PRs may use, in alphabetical order. With a
-# develop branch, release, hotfix and cascade PRs need merge commits whatever
-# work PRs use: main takes only those, develop takes them beside the style.
+# The merge methods a branch's PRs may use, in alphabetical order. Under
+# gitflow, release, hotfix and cascade PRs need merge commits whatever work
+# PRs use: main takes only those, develop takes them beside the style.
 merge_methods() {
-  if [ "$HAS_DEVELOP" = false ]; then
+  if [ "$GITFLOW" = false ]; then
     echo "$MERGE_STYLE"
   elif [ "$1" = develop ] && [ "$MERGE_STYLE" != merge ]; then
     echo "merge $MERGE_STYLE"
@@ -201,11 +209,12 @@ merge_methods() {
 }
 
 # The merge methods a ruleset's pull_request rule allows: every list of the
-# protected branches it covers, in alphabetical order, since one rule cannot
-# tell those branches apart.
+# branches it covers, in alphabetical order, since one rule cannot tell those
+# branches apart. Develop and the default branch count even when --branch
+# leaves them out, so a run for one branch never narrows another's PRs.
 ruleset_methods() {
   local branch method all="" out=""
-  for branch in "${BRANCHES[@]}"; do
+  for branch in "${BRANCHES[@]}" "$DEFAULT_BRANCH" develop; do
     if [ "$(gh api "repos/$REPO/rulesets/$1" --jq "$(covers_filter "$branch")")" = true ]; then
       all+=" $(merge_methods "$branch")"
     fi
