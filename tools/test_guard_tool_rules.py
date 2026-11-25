@@ -331,11 +331,11 @@ class LengthRowsTest(unittest.TestCase):
         with unittest.mock.patch.object(self.hook, "CHANGELOG_LIMIT", len(released_only) + 10):
             self.assertEqual(self.logged("git commit -am x", "bash"), [])
         # A link staged in its place is read as git stores it, the target's name: its released sections are gone.
-        if os.path.exists("/dev/zero"):
-            os.remove(path)
-            os.symlink("/dev/zero", path)
-            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
-            self.assertEqual(self.logged("git commit -m x", "bash"), [dated])
+        # It goes straight into the index, so the file on disk stays a plain file for the checks after it.
+        link = subprocess.run(git + ["hash-object", "-w", "--stdin"], input="/dev/zero", capture_output=True,
+                              text=True, check=True).stdout.strip()
+        subprocess.run(git + ["update-index", "--cacheinfo", f"120000,{link},CHANGELOG.md"], check=True)
+        self.assertEqual(self.logged("git commit -m x", "bash"), [dated])
         # An edit on disk that is not staged is not part of the commit.
         commit(released_only)
         with open(path, "w", encoding="utf-8", newline="\n") as changelog:
