@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **Fakes of outside services refuse what the service refuses.** `testing.md` § Test the real code gains the rule, along with one real call for each new kind of write to an outside service, and the review guide's checklist gains the matching row.
+- **Fakes of outside services refuse what the service refuses.** `testing.md` § Test the real code gains the rule, along with one real call for each new kind of write to an outside service, and the review guide's checklist gains the matching row. A new project hook, `live-check.py`, notes a `gh pr create` or `gh pr edit` whose branch adds such a write with no `Live check:` line in the body; it only logs for now, and never blocks.
 
 ### Fixed
 

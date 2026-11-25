@@ -144,6 +144,7 @@ def _included(path, a, flags):
         ".claude/hooks/run-hook.sh": flags["guard_hooks_repo"],
         ".claude/hooks/push-guard.py": flags["guard_hooks_repo"],
         ".claude/hooks/tool-rules.py": flags["guard_hooks_repo"],
+        ".claude/hooks/live-check.py": flags["guard_hooks_repo"],
         ".claude/hooks/no-ai-attribution.py": flags["guard_hooks_repo"] and flags["attribution_guard"],
         ".github/scripts/version_check.py": flags["version_check"],
         ".claude/hooks/version-check.py": flags["guard_hooks_repo"] and flags["version_check"],
