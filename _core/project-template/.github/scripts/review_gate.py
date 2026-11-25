@@ -10,9 +10,10 @@ runner's `gh`, Python 3.8+. The workflows run the copy from the base branch.
     review_gate.py gate --state STATE [--triage T] [--routine R] [--escalated] [--deep D] [--order O]
         -> {"status", "conclusion", "title", "summary", "state"} for the "Review gate" check
     review_gate.py upsert --repo OWNER/NAME --sha HEAD [facts as for gate] [--note TEXT]
-        -> the same, after creating or updating the check on that commit (GH_TOKEN
-           needs checks: write); --note is appended to the check's summary, and
-           --order is required with --triage, --routine or --deep
+        -> the same, after setting the commit status and creating or updating the
+           check on that commit (GH_TOKEN needs statuses: write and checks: write);
+           --note is appended to the check's summary, and --order is required
+           with --triage, --routine or --deep
     review_gate.py settings [--file .github/review-gate.yml] -> KEY=value lines
         (dots become underscores; runner_labels adds the runner as a JSON list)
     review_gate.py escalate FILES DIFF [--file .github/review-gate.yml]
@@ -43,6 +44,12 @@ that harmless:
     that replaced it.
   - After writing, upsert reads the check back twice, a few seconds apart, and
     writes again when its own facts are gone.
+
+Every write also sets a commit status named "Review gate" to the same result,
+before the check, so a failed status write leaves the check as it was. A
+second run on one head commit (a reopened PR) can leave the check in a check
+suite the merge no longer counts, while the newest status for a name always
+counts; a failing check of that name still blocks beside a passing status.
 
 Every command prints one line; a bad argument prints {"error": ...} and exits 1.
 """
@@ -428,8 +435,26 @@ def _newest(repo, sha):
     return max(mine, key=lambda r: r["id"]) if mine else None
 
 
+STATUS_STATE = {"success": "success", "failure": "failure", None: "pending"}
+
+
+def _set_status(repo, sha, check):
+    """Sets the commit status of the gate's name to the check's result. A job
+    without statuses: write (a project whose workflows predate it) gets a
+    warning instead of a failed gate, and the check alone carries the result."""
+    body = {"state": STATUS_STATE[check["conclusion"]], "context": GATE, "description": check["title"][:140]}
+    try:
+        _gh("repos/%s/statuses/%s" % (repo, sha), "POST", body)
+    except GateError as error:
+        if "Resource not accessible by integration" not in str(error):
+            raise
+        print("::warning::The Review gate commit status was not set: this job lacks statuses: write",
+              file=sys.stderr)
+
+
 def _write(repo, sha, current, note, facts):
     check = gate((current or {}).get("external_id") or "", **facts)
+    _set_status(repo, sha, check)
     body = check_body(check, note)
     if current:
         _gh("repos/%s/check-runs/%d" % (repo, current["id"]), "PATCH", body)
