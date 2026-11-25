@@ -64,9 +64,10 @@ def write_lines(diff):
     """The lines a diff adds that make a write to an outside service, without their `+`.
 
     A section starts at its `diff --git` line and its added lines come after its first `@@`, so
-    content that reads like a header is never taken for one."""
+    content that reads like a header is never taken for one. Git ends a diff line only at `\n`,
+    so the diff is split there alone: a form feed or U+2028 inside a line stays inside it."""
     added, skipped, in_hunk = [], True, False
-    for line in diff.splitlines():
+    for line in diff.split("\n"):
         header = FILE_HEADER.fullmatch(line)
         if header:
             skipped, in_hunk = sends_nothing(header.group(1) or header.group(2)), False
@@ -81,7 +82,7 @@ def write_lines(diff):
 
 def has_live_check(body):
     """Whether a line of the body starts with `Live check:`, optionally as a list item."""
-    return any(LIVE_CHECK_LINE.match(line) for line in body.splitlines())
+    return any(LIVE_CHECK_LINE.match(line) for line in body.split("\n"))
 
 
 def gh(*args):
@@ -107,7 +108,7 @@ def pr_address(event):
         response = response.get("stdout") if isinstance(response.get("stdout"), str) else response.get("output")
     if not isinstance(response, str):
         return None
-    addresses = [line.strip() for line in response.splitlines() if PR_ADDRESS.fullmatch(line.strip())]
+    addresses = [line.strip() for line in response.split("\n") if PR_ADDRESS.fullmatch(line.strip())]
     return addresses[0] if len(addresses) == 1 else None
 
 

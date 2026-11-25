@@ -106,6 +106,8 @@ class WhatThePullRequestHolds(HookTest):
         ("a body with the Live check line makes no note", BODY_WITH_CHECK, diff_of("api.py", [POST_LINE]), False),
         ("a dash-list Live check line makes no note", "- Live check: sent it\n", diff_of("api.py", [POST_LINE]),
          False),
+        ("a Live check after a form feed mid-line is no Live check line",
+         "See \x0cLive check: later\n", diff_of("api.py", [POST_LINE]), True),
         ("a diff that adds no write makes no note", BODY, diff_of("api.py", [PLAIN_LINE]), False),
         ("a body gh cannot read makes no note", None, diff_of("api.py", [POST_LINE]), False),
         ("a diff gh cannot read makes no note", BODY, None, False),
@@ -119,6 +121,8 @@ class WhatThePullRequestHolds(HookTest):
          BODY, diff_of("tests/fakes.py", [POST_LINE]) + diff_of("api.py", [POST_LINE]), True),
         ("an added line that reads like a header keeps its file",
          BODY, diff_of("api.py", ["++ b/tests/fakes.py", POST_LINE]), True),
+        ("a form feed inside an added line does not start a new section",
+         BODY, diff_of("api.py", ["x = '\x0cdiff --git a/t b/tests/t'", POST_LINE]), True),
         ("a line past 500 characters, as in a minified bundle, is skipped",
          BODY, diff_of("api.py", ["requests.post(" + "gh api x " * 60 + ")"]), False),
     ]
