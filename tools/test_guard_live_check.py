@@ -1,8 +1,8 @@
 """Tests for _core/project-template/.claude/hooks/live-check.py, the observe-only guard that notes
 a pull request adding a write to an outside service without a `Live check:` line in its body.
 
-The hook asks GitHub for the pull request through gh; these tests stand in for gh alone, the
-network edge, with a fake that answers the two reads the hook makes and fails any other call.
+The hook asks GitHub's API for the pull request through gh; these tests stand in for gh alone,
+the network edge, with a fake that answers the two reads the hook makes and fails any other call.
 BINDWRIGHT_HOME points at a temp folder, so the real log is never touched.
 """
 
@@ -18,6 +18,7 @@ from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOK = os.path.join(ROOT, "_core", "project-template", ".claude", "hooks", "live-check.py")
 ADDRESS = "https://github.com/owner/repo/pull/12"
+PULL_PATH = "repos/owner/repo/pulls/12"
 POST_LINE = "requests.post(url, json=payload)"
 PLAIN_LINE = "def add(a, b):"
 BODY = "## What\nAdds the sync.\n"
@@ -33,10 +34,10 @@ def load_hook():
     return module
 
 
-def diff_of(path, lines):
-    """A unified diff that adds `lines` to `path`, as gh pr diff prints it."""
-    return ("diff --git a/%s b/%s\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/%s\n"
-            "@@ -0,0 +1,%d @@\n" % (path, path, path, len(lines))) + "".join("+" + line + "\n" for line in lines)
+def file_of(path, lines):
+    """One changed file as GitHub's list of pull request files gives it."""
+    patch = "@@ -0,0 +1,%d @@\n" % len(lines) + "\n".join("+" + line for line in lines)
+    return {"filename": path, "status": "added", "patch": patch}
 
 
 def event(command="gh pr create --base develop --body-file body.md", stdout=ADDRESS + "\n", tool="Bash"):
@@ -44,13 +45,14 @@ def event(command="gh pr create --base develop --body-file body.md", stdout=ADDR
             "tool_response": {"stdout": stdout, "stderr": ""}, "cwd": "/repo"}
 
 
-def fake_gh(body, diff):
-    """gh answering the pull request's body and diff for ADDRESS, and failing every other call."""
+def fake_gh(body, files):
+    """gh answering the pull request and its files for ADDRESS, one page per file the way
+    --paginate prints pages, and failing every other call."""
     def gh(*args):
-        if args[:3] == ("pr", "view", ADDRESS) and args[3:] == ("--json", "body", "--jq", ".body"):
-            return body
-        if args[:3] == ("pr", "diff", ADDRESS):
-            return diff
+        if args == ("api", "--hostname", "github.com", PULL_PATH) and body is not None:
+            return json.dumps({"number": 12, "body": body})
+        if args == ("api", "--hostname", "github.com", "--paginate", PULL_PATH + "/files") and files is not None:
+            return "".join(json.dumps([changed]) for changed in files) or "[]"
         return None
     return gh
 
@@ -64,8 +66,8 @@ class HookTest(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def observe(self, the_event, body=BODY, diff=None):
-        self.hook.gh = fake_gh(body, diff_of("api.py", [POST_LINE]) if diff is None else diff)
+    def observe(self, the_event, body=BODY, files=None):
+        self.hook.gh = fake_gh(body, [file_of("api.py", [POST_LINE])] if files is None else files)
         return self.hook.observe(the_event)
 
     def observed(self):
@@ -100,37 +102,37 @@ class WhichCalls(HookTest):
 
 
 class WhatThePullRequestHolds(HookTest):
-    # name, body, diff, a note expected
+    # name, body, changed files, a note expected
     ROWS = [
-        ("a write and no Live check line notes", BODY, diff_of("api.py", [POST_LINE]), True),
-        ("a body with the Live check line makes no note", BODY_WITH_CHECK, diff_of("api.py", [POST_LINE]), False),
-        ("a dash-list Live check line makes no note", "- Live check: sent it\n", diff_of("api.py", [POST_LINE]),
+        ("a write and no Live check line notes", BODY, [file_of("api.py", [POST_LINE])], True),
+        ("a body with the Live check line makes no note", BODY_WITH_CHECK, [file_of("api.py", [POST_LINE])], False),
+        ("a dash-list Live check line makes no note", "- Live check: sent it\n", [file_of("api.py", [POST_LINE])],
          False),
-        ("a Live check after a form feed mid-line is no Live check line",
-         "See \x0cLive check: later\n", diff_of("api.py", [POST_LINE]), True),
-        ("a diff that adds no write makes no note", BODY, diff_of("api.py", [PLAIN_LINE]), False),
-        ("a body gh cannot read makes no note", None, diff_of("api.py", [POST_LINE]), False),
-        ("a diff gh cannot read makes no note", BODY, None, False),
-        ("a test_ file makes no note", BODY, diff_of("tools/test_sync.py", [POST_LINE]), False),
-        ("a .test. file makes no note", BODY, diff_of("engine/test/sync.test.js", [POST_LINE]), False),
-        ("a file under tests/ makes no note", BODY, diff_of("tests/fakes.py", [POST_LINE]), False),
-        ("a _test. file makes no note", BODY, diff_of("sync_test.go", [POST_LINE]), False),
-        ("the bind's record makes no note", BODY, diff_of(".bindwright/pristine.json", [POST_LINE]), False),
-        ("a file whose name only holds the word test notes", BODY, diff_of("latest.py", [POST_LINE]), True),
-        ("a write after a test file's section notes",
-         BODY, diff_of("tests/fakes.py", [POST_LINE]) + diff_of("api.py", [POST_LINE]), True),
-        ("an added line that reads like a header keeps its file",
-         BODY, diff_of("api.py", ["++ b/tests/fakes.py", POST_LINE]), True),
-        ("a form feed inside an added line does not start a new section",
-         BODY, diff_of("api.py", ["x = '\x0cdiff --git a/t b/tests/t'", POST_LINE]), True),
+        ("a Live check after a carriage return or form feed mid-line is no Live check line",
+         "See \r\x0cLive check: later\n", [file_of("api.py", [POST_LINE])], True),
+        ("files that add no write make no note", BODY, [file_of("api.py", [PLAIN_LINE])], False),
+        ("a pull request gh cannot read makes no note", None, [file_of("api.py", [POST_LINE])], False),
+        ("files gh cannot read make no note", BODY, None, False),
+        ("a file GitHub sends no patch for, as for a binary or huge one, makes no note",
+         BODY, [{"filename": "api.py", "status": "modified"}], False),
+        ("a test_ file makes no note", BODY, [file_of("tools/test_sync.py", [POST_LINE])], False),
+        ("a .test. file makes no note", BODY, [file_of("engine/test/sync.test.js", [POST_LINE])], False),
+        ("a file under tests/ makes no note", BODY, [file_of("tests/fakes.py", [POST_LINE])], False),
+        ("a _test. file makes no note", BODY, [file_of("sync_test.go", [POST_LINE])], False),
+        ("the bind's record makes no note", BODY, [file_of(".bindwright/pristine.json", [POST_LINE])], False),
+        ("a file whose name only holds the word test notes", BODY, [file_of("latest.py", [POST_LINE])], True),
+        ("a write on a later page, after a test file, notes",
+         BODY, [file_of("tests/fakes.py", [POST_LINE]), file_of("api.py", [POST_LINE])], True),
+        ("content that reads like a diff header keeps its file",
+         BODY, [file_of("api.py", ["x = '\r\x0cdiff --git a/t b/tests/t'", "++ b/tests/t", POST_LINE])], True),
         ("a line past 500 characters, as in a minified bundle, is skipped",
-         BODY, diff_of("api.py", ["requests.post(" + "gh api x " * 60 + ")"]), False),
+         BODY, [file_of("api.py", ["requests.post(" + "gh api x " * 60 + ")"])], False),
     ]
 
     def test_pull_request_rows(self):
-        for name, body, diff, expect_note in self.ROWS:
+        for name, body, files, expect_note in self.ROWS:
             with self.subTest(name):
-                self.hook.gh = fake_gh(body, diff)
+                self.hook.gh = fake_gh(body, files)
                 self.assertEqual(self.hook.observe(event()), expect_note)
 
 
@@ -155,19 +157,27 @@ class WriteLines(HookTest):
     def test_write_rows(self):
         for name, line, expect_write in self.ROWS:
             with self.subTest(name):
-                self.assertEqual(bool(self.hook.write_lines(diff_of("api.py", [line]))), expect_write)
+                self.assertEqual(bool(self.hook.write_lines([file_of("api.py", [line])])), expect_write)
 
 
 class LogEntry(HookTest):
     def test_entry_keeps_five_matches_cut_to_200_characters(self):
         lines = ['gh api -X POST repos/owner/repo/%s%d' % ("x" * 300, i) for i in range(7)]
-        self.assertTrue(self.observe(event(), diff=diff_of("api.py", lines)))
+        self.assertTrue(self.observe(event(), files=[file_of("api.py", lines)]))
         entries = self.observed()
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["pull_request"], ADDRESS)
         self.assertEqual(len(entries[0]["matches"]), 5)
         self.assertTrue(all(len(match) <= 200 for match in entries[0]["matches"]))
         self.assertTrue(entries[0]["time"])
+
+
+class GhOutput(unittest.TestCase):
+    def test_gh_output_keeps_every_line_ending(self):
+        hook = load_hook()
+        done = subprocess.CompletedProcess([], 0, stdout=b'{"body": "a"}\r\nb\rc')
+        with mock.patch.object(hook.subprocess, "run", return_value=done):
+            self.assertEqual(hook.gh("api", "x"), '{"body": "a"}\r\nb\rc')
 
 
 class NeverBlocks(unittest.TestCase):
@@ -193,7 +203,7 @@ class NeverBlocks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"BINDWRIGHT_HOME": home}), \
                 mock.patch("sys.stdin", mock.Mock(buffer=mock.Mock(read=lambda: json.dumps(event()).encode()))), \
                 mock.patch("builtins.print") as printed:
-            hook.gh = fake_gh(BODY, diff_of("api.py", [POST_LINE]))
+            hook.gh = fake_gh(BODY, [file_of("api.py", [POST_LINE])])
             self.assertEqual(hook.main(), 0)
         output = json.loads(printed.call_args[0][0])["hookSpecificOutput"]
         self.assertEqual(output["hookEventName"], "PostToolUse")

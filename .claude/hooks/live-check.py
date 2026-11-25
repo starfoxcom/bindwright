@@ -3,12 +3,13 @@ service without a `Live check:` line in its body.
 
 testing.md asks for one real send of each new kind of write before the work is done, and the
 pull request's body records it. After a `gh pr create` or `gh pr edit` prints the pull request's
-address, this hook asks GitHub for that pull request's body and diff, so the branch, base and repo
-are the ones GitHub holds, never a guess from the command's text. When a line the diff adds
-outside test files and the bind's record under .bindwright/ makes a write (an API call with a
-write method, or an HTTP client's post, put, patch or delete) and the body has no `Live check:`
-line, it appends the match to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and hands the session
-one line of context.
+address, this hook asks GitHub's API for that pull request's body and changed files, so the
+branch, base and repo are the ones GitHub holds, never a guess from the command's text, and each
+file's path and patch arrive as separate JSON fields, never parsed out of diff text. When a line
+a file adds outside test files and the bind's record under .bindwright/ makes a write (an API
+call with a write method, or an HTTP client's post, put, patch or delete) and the body has no
+`Live check:` line, it appends the match to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and
+hands the session one line of context.
 
 It never blocks: every outcome exits 0, so the log shows how often the note fires before any
 version refuses. Output with no address, or with more than one, makes no note, and so does a gh
@@ -36,8 +37,7 @@ MAX_LINE_CHARS = 500
 SHELLS = {"Bash", "PowerShell"}
 PR_COMMAND = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
 # gh prints the pull request's address on a line of its own.
-PR_ADDRESS = re.compile(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/\d+")
-FILE_HEADER = re.compile(r'diff --git (?:"a/.*" "b/(.*)"|a/.* b/(.*))')
+PR_ADDRESS = re.compile(r"https://([A-Za-z0-9.-]+)/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/pull/(\d+)")
 WRITE_METHOD = r"(?:POST|PUT|PATCH|DELETE)"
 WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\bgh\s+api\b.*(?:-X|--method)[\s=,\"']+" + WRITE_METHOD + r"\b",
@@ -60,24 +60,34 @@ def sends_nothing(path):
             or name.startswith("test_") or any(marker in name for marker in TEST_NAME_MARKERS))
 
 
-def write_lines(diff):
-    """The lines a diff adds that make a write to an outside service, without their `+`.
+def write_lines(files):
+    """The lines the pull request's files add that make a write to an outside service.
 
-    A section starts at its `diff --git` line and its added lines come after its first `@@`, so
-    content that reads like a header is never taken for one. Git ends a diff line only at `\n`,
-    so the diff is split there alone: a form feed or U+2028 inside a line stays inside it."""
-    added, skipped, in_hunk = [], True, False
-    for line in diff.split("\n"):
-        header = FILE_HEADER.fullmatch(line)
-        if header:
-            skipped, in_hunk = sends_nothing(header.group(1) or header.group(2)), False
-        elif line.startswith("diff --git "):
-            skipped, in_hunk = True, False
-        elif line.startswith("@@"):
-            in_hunk = True
-        elif in_hunk and not skipped and line.startswith("+") and len(line) <= MAX_LINE_CHARS:
-            added.append(line[1:].strip())
+    `files` is GitHub's list of changed files: each names its path in `filename` and holds its
+    hunks in `patch`, so no line of content can be taken for a path. A hunk line ends only at
+    `\n`; a form feed or `\r` inside one stays inside it."""
+    added = []
+    for changed in files:
+        if not isinstance(changed, dict) or not isinstance(changed.get("filename"), str):
+            continue
+        patch = changed.get("patch")
+        if sends_nothing(changed["filename"]) or not isinstance(patch, str):
+            continue
+        added += [line[1:].strip() for line in patch.split("\n")
+                  if line.startswith("+") and len(line) <= MAX_LINE_CHARS]
     return [line for line in added if any(pattern.search(line) for pattern in WRITE_PATTERNS)]
+
+
+def json_documents(text):
+    """Every JSON document in `text` one after another, as `gh api --paginate` prints pages."""
+    decoder, documents, index = json.JSONDecoder(), [], 0
+    while index < len(text):
+        if text[index].isspace():
+            index += 1
+            continue
+        document, index = decoder.raw_decode(text, index)
+        documents.append(document)
+    return documents
 
 
 def has_live_check(body):
@@ -86,17 +96,18 @@ def has_live_check(body):
 
 
 def gh(*args):
-    """What gh prints, or None when it fails or runs out of time."""
+    """What gh prints, decoded from its bytes so no line ending is rewritten, or None when it
+    fails or runs out of time."""
     try:
-        done = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=GH_SECONDS)
+        done = subprocess.run(["gh", *args], capture_output=True, timeout=GH_SECONDS)
     except (OSError, subprocess.SubprocessError):
         return None
-    return done.stdout if done.returncode == 0 else None
+    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
 
 
 def pr_address(event):
-    """The address a `gh pr create` or `gh pr edit` printed, or None for any other call."""
+    """(host, owner/repo, number) of the address a `gh pr create` or `gh pr edit` printed, or None
+    for any other call."""
     if not isinstance(event, dict) or event.get("tool_name") not in SHELLS:
         return None
     tool_input = event.get("tool_input")
@@ -108,7 +119,8 @@ def pr_address(event):
         response = response.get("stdout") if isinstance(response.get("stdout"), str) else response.get("output")
     if not isinstance(response, str):
         return None
-    addresses = [line.strip() for line in response.split("\n") if PR_ADDRESS.fullmatch(line.strip())]
+    addresses = [PR_ADDRESS.fullmatch(line.strip()) for line in response.split("\n")]
+    addresses = [address.groups() for address in addresses if address]
     return addresses[0] if len(addresses) == 1 else None
 
 
@@ -126,17 +138,29 @@ def record(address, matches):
         handle.write(json.dumps(entry) + "\n")
 
 
+def read_pull_request(host, repo, number):
+    """(the body, the changed files) GitHub holds for the pull request, or None when gh cannot
+    read them. Both come as JSON, whose strings keep every character of the text."""
+    path = "repos/%s/pulls/%s" % (repo, number)
+    pull = gh("api", "--hostname", host, path)
+    files = gh("api", "--hostname", host, "--paginate", path + "/files") if pull is not None else None
+    if files is None:
+        return None
+    body = json.loads(pull).get("body") or ""
+    return body, [changed for page in json_documents(files) for changed in page]
+
+
 def observe(event):
     """Records the pull request when it adds an unchecked write; returns whether it did."""
     address = pr_address(event)
-    body = gh("pr", "view", address, "--json", "body", "--jq", ".body") if address else None
-    if body is None or has_live_check(body):
+    pull_request = read_pull_request(*address) if address else None
+    if pull_request is None or has_live_check(pull_request[0]):
         return False
-    diff = gh("pr", "diff", address, "--color", "never")
-    matches = write_lines(diff) if diff is not None else []
+    matches = write_lines(pull_request[1])
     if not matches:
         return False
-    record(address, matches)
+    host, repo, number = address
+    record("https://%s/%s/pull/%s" % (host, repo, number), matches)
     return True
 
 
