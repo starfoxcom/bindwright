@@ -1,7 +1,9 @@
 // Runs both engines' --update on identical bound repos; shared by the update tests.
 
 import assert from "node:assert/strict";
-import { cpSync, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -25,23 +27,37 @@ const enginesIn = (root) => [
 ];
 export const engines = enginesIn(project);
 
-// A throwaway kit whose task-tracking rule template reads `edit(text)`, so the templates
-// a test binds from can name paths of its own.
-function kitWith(edit) {
+// A throwaway kit whose templates change as `edits` says, keyed by template path: a function
+// edits that template's text, a string adds a new template with that text, and null drops it.
+// The kit's list of core files follows the change, since the bind reads templates from it.
+function kitWith(edits) {
   const kit = mkdtempSync(join(tmpdir(), "update-kit-"));
   const skipTests = (src) => !/[\\/](test|__pycache__)$/.test(src);
   cpSync(join(project, "engine"), join(kit, "engine"), { recursive: true, filter: skipTests });
   cpSync(join(project, "_core"), join(kit, "_core"), { recursive: true });
   copyFileSync(join(project, "VERSION"), join(kit, "VERSION"));
-  const rule = join(kit, "_core", "project-template", RULE);
-  writeFileSync(rule, edit(readFileSync(rule, "utf8")));
+  const core = join(kit, "_core", "project-template");
+  const manifest = join(kit, "engine", "core-files.json");
+  let files = JSON.parse(readFileSync(manifest, "utf8"));
+  for (const [path, edit] of Object.entries(edits)) {
+    const target = join(core, ...path.split("/"));
+    if (edit === null) {
+      rmSync(target);
+      files = files.filter((file) => file !== path);
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, typeof edit === "string" ? edit : edit(readFileSync(target, "utf8")));
+    if (!files.includes(path)) files.push(path);
+  }
+  writeFileSync(manifest, `${JSON.stringify(files.sort(), null, 2)}\n`);
   return kit;
 }
 
-// Both engines on identical copies; returns the JS repo and its report. With `template`, the
-// engines bind from a kit whose task-tracking rule template is `template(text)`.
-export async function update(change, { template } = {}) {
-  const kit = template ? kitWith(template) : project;
+// Both engines on identical copies; returns the JS repo and its report. With `edits`, the
+// engines bind from a kit whose templates change as `kitWith` says.
+export async function update(change, { edits } = {}) {
+  const kit = edits ? kitWith(edits) : project;
   const runs = [];
   for (const [cmd, args] of python ? enginesIn(kit) : enginesIn(kit).slice(0, 1)) {
     const repo = await makeRepo(change);
@@ -55,7 +71,7 @@ export async function update(change, { template } = {}) {
     }
   }
   for (const r of runs.slice(1)) rmSync(r.repo.at(""), { recursive: true, force: true });
-  if (template) rmSync(kit, { recursive: true, force: true });
+  if (edits) rmSync(kit, { recursive: true, force: true });
   return runs[0];
 }
 

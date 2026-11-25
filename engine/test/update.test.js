@@ -363,15 +363,117 @@ const NAMED_ROWS = [
   },
 ];
 
+// The task-tracking template with `line` added at its end.
+const addLine = (line) => (text) => `${text}\n${line}\n`;
+// Makes `line` a line that the saved record and the repo both hold.
+const withBase = (line) => (r) => {
+  const base = `${r.read(RULE)}\n${line}\n`;
+  r.pristine.files[RULE] = base;
+  r.write(RULE, base);
+};
+// Owns the testing rule in the repo, with a copy that lacks its "Testing" heading.
+const ownTesting = (r) => {
+  r.write(".bindwright/owned", `${OTHER}\n`);
+  r.write(OTHER, "# Other\n");
+};
+// Owns the task-tracking rule, so its new template text waits in the staging folder.
+const ownRule = (r) => r.write(".bindwright/owned", `${RULE}\n`);
+// Appends `line` to the testing rule's copy in the repo, so the copy differs from its base.
+const editTesting = (line) => (r) => r.write(OTHER, `${r.read(OTHER)}${line}\n`);
+// Runs one row's change and checks one report key. `updated` defaults to the task-tracking rule.
+async function checkRow(row) {
+  const { out } = await update(row.repo ?? (() => {}), { edits: row.kit });
+  assert.deepEqual(out.updated, row.updated ?? [RULE]);
+  assert.deepEqual(out[row.key ?? "missing"], row.expect);
+}
+
+const namedRow = (row) => ({
+  kit: { [RULE]: addLine(row.line) },
+  repo: row.base === undefined ? undefined : withBase(row.base),
+  expect: row.missing,
+});
 for (const row of NAMED_ROWS) {
-  test(`named paths: ${row.name}`, needsPython, async () => {
-    const { out } = await update((r) => {
-      if (row.base === undefined) return;
-      const base = `${r.read(RULE)}\n${row.base}\n`;
-      r.pristine.files[RULE] = base;
-      r.write(RULE, base);
-    }, { template: (text) => `${text}\n${row.line}\n` });
-    assert.deepEqual(out.updated, [RULE]);
-    assert.deepEqual(out.missing, row.missing);
-  });
+  test(`named paths: ${row.name}`, needsPython, () => checkRow(namedRow(row)));
+}
+
+// Each row adds a line naming a section of the testing rule to the task-tracking template.
+const SECTION_LINE = `See \`${OTHER}\` § Testing.`;
+const SECTION_ROWS = [
+  {
+    name: "a section the repo's owned copy lacks is reported",
+    kit: { [RULE]: addLine(SECTION_LINE) },
+    repo: ownTesting,
+    expect: [{ file: RULE, names: [`${OTHER} § Testing`] }],
+  },
+  {
+    name: "a section the repo's copy has is not reported",
+    kit: { [RULE]: addLine(SECTION_LINE) },
+    expect: [],
+  },
+  {
+    name: "section text matching no template heading is not reported",
+    kit: { [RULE]: addLine(`See \`${OTHER}\` § Nothing here.`) },
+    repo: ownTesting,
+    expect: [],
+  },
+  {
+    name: "a section ref the base text already holds is not reported",
+    kit: { [RULE]: addLine(`New \`${OTHER}\` § Testing.`) },
+    repo: (r) => {
+      ownTesting(r);
+      withBase(`Old \`${OTHER}\` § Testing.`)(r);
+    },
+    expect: [],
+  },
+];
+for (const row of SECTION_ROWS) {
+  test(`section names: ${row.name}`, needsPython, () => checkRow(row));
+}
+
+// An added doc that the task-tracking template points at, so its pointer can land in a file.
+const NEW_DOC = "docs/new-guide.md";
+const POINTER_KIT = { [NEW_DOC]: "# New guide\n", [RULE]: addLine(`See \`${NEW_DOC}\`.`) };
+const UNLINKED_ROWS = [
+  {
+    name: "an added file whose pointer lands in an owned file is listed",
+    kit: POINTER_KIT,
+    repo: ownRule,
+    expect: [{ file: NEW_DOC, from: [RULE] }],
+    updated: [],
+  },
+  {
+    name: "the same file not owned, so updated, gives no entry",
+    kit: POINTER_KIT,
+    expect: [],
+  },
+];
+for (const row of UNLINKED_ROWS) {
+  test(`unlinked: ${row.name}`, needsPython, () => checkRow({ ...row, key: "unlinked" }));
+}
+
+// Each row drops templates from the kit, then edits the testing rule's copy in the repo.
+const STALE_ROWS = [
+  {
+    name: "a kept edited file naming a section the update dropped is reported",
+    kit: { [OTHER]: null, [RULE]: (text) => text.replace("# Task tracking", "# Work queue") },
+    repo: editTesting(`See \`${RULE}\` § Task tracking.`),
+    expect: [{ file: OTHER, names: [`${RULE} § Task tracking`] }],
+  },
+  {
+    name: "a kept edited file naming a removed file is reported",
+    kit: { [OTHER]: null, [THIRD]: null },
+    repo: editTesting(`See \`${THIRD}\`.`),
+    expect: [{ file: OTHER, names: [THIRD] }],
+    updated: [],
+  },
+  {
+    name: "a kept edited file naming only what still exists gives no entry",
+    kit: { [OTHER]: null },
+    repo: editTesting("See `.claude/settings.json`."),
+    expect: [],
+    updated: [],
+  },
+];
+for (const row of STALE_ROWS) {
+  test(`stale: ${row.name}`, needsPython, () => checkRow({ ...row, key: "stale" }));
 }

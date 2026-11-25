@@ -11,7 +11,7 @@ import tempfile
 
 from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
-from missing import missing_report
+from missing import missing_report, stale_report, unlinked_report
 from model import expand_answers
 from propose import parse_plain_object
 
@@ -364,7 +364,9 @@ def run_update(root, bind_with, version, state_json):
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
     out.update(renamed=plan["renamed"], owned_changed=plan["owned_changed"], skipped=skipped,
-               missing=missing_report(root, _written_files(plan, pristine)))
+               missing=missing_report(root, _written_files(plan, pristine), repo_files(rendered)),
+               unlinked=unlinked_report(root, plan["added"], repo_files(rendered), pristine["files"]),
+               stale=stale_report(root, plan, pristine["files"]))
     return out
 
 
