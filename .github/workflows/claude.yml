@@ -15,8 +15,9 @@
 # "Review gate" check on the PR head commit through the shared script
 # (.github/scripts/review_gate.py, taken from the PR's base commit, or from the
 # default branch when the base predates the gate), which
-# combines it with the routine result stored on the same check. See the
-# comment block in claude-code-review.yml. With `checks: two` in the gate
+# combines it with the routine result stored on the same check and sets the
+# commit status of the same name. See the comment block in
+# claude-code-review.yml. With `checks: two` in the gate
 # settings it also moves the older `Claude On-Demand` check to success or
 # failure, as before.
 #
@@ -147,6 +148,9 @@ jobs:
       # both at job start (in_progress) and after the deep review completes
       # (success/failure based on verdict).
       checks: write
+      # The Review gate's commit status, which the gate script sets beside
+      # its check.
+      statuses: write
     # What every deep attempt is told and returns. Attempts post nothing:
     # each returns its review as structured output, and "Post the deep
     # review" posts the first one the gate can read.
