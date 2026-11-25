@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.18.0] — 2026-11-25
+
 ### Added
 
 - **The tool-rules guard notes a branch switch chained with other commands.** `git checkout <branch> && ...` or `git switch <branch>; ...` is logged in observe mode, since a refused or failed chain can skip the switch and leave the next edit on the wrong branch. A `git checkout -- <file>` restore is not a switch and is left alone.
