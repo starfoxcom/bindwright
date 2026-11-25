@@ -11,6 +11,7 @@ import tempfile
 
 from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
+from missing import missing_report
 from model import expand_answers
 from propose import parse_plain_object
 
@@ -362,10 +363,18 @@ def run_update(root, bind_with, version, state_json):
         _remove_moved(at(path))
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
-    out["renamed"] = plan["renamed"]
-    out["owned_changed"] = plan["owned_changed"]
-    out["skipped"] = skipped
+    out.update(renamed=plan["renamed"], owned_changed=plan["owned_changed"], skipped=skipped,
+               missing=missing_report(root, _written_files(plan, pristine)))
     return out
+
+
+def _written_files(plan, pristine):
+    """The files this update wrote with a new text, as (path, new text, base) triples; the base is
+    the file's text in the record before the update.
+    """
+    written = dict(plan["write"])
+    paths = [path for outcome in ("added", "merged", "updated") for path in plan[outcome]]
+    return [(path, written[path], pristine["files"].get(path)) for path in paths]
 
 
 def _record_of(text, what):

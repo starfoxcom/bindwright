@@ -330,3 +330,48 @@ test("a merge that drops a kept section counts as a conflict", () => {
   assert.deepEqual(plan.write, []);
   assert.deepEqual(plan.stage, [[`${STAGING}x.py`, "b\n"]]);
 });
+
+// Each row adds one line to the rule's template and checks the report's `missing` key.
+// `base` is a line the saved record and the repo already hold before the update.
+const NAMED_ROWS = [
+  { name: "a path at the repo root is found", line: "See `.claude/settings.json`.", missing: [] },
+  { name: "a bare name beside the naming file is found", line: "See `testing.md`.", missing: [] },
+  {
+    name: "a path the repo lacks is reported",
+    line: "See `docs/never-written.md`.",
+    missing: [{ file: RULE, names: ["docs/never-written.md"] }],
+  },
+  {
+    name: "a name repeated in the new text is reported once",
+    line: "See `docs/never-written.md` and `docs/never-written.md`.",
+    missing: [{ file: RULE, names: ["docs/never-written.md"] }],
+  },
+  {
+    name: "a span the base text already names is not reported",
+    base: "Old `docs/known.md` wording.",
+    line: "New `docs/known.md` wording.",
+    missing: [],
+  },
+  { name: "a placeholder is not reported", line: "Copy `<path>/x.md` or `*.md`.", missing: [] },
+  { name: "a URL is not reported", line: "See `https://example.com/a/b.md`.", missing: [] },
+  { name: "a branch name is not reported", line: "Branch as `feature/user-auth-flow`.", missing: [] },
+  { name: "a version is not reported", line: "Since `7.19.1`.", missing: [] },
+  {
+    name: "a folder the repo lacks is reported",
+    line: "See `docs/never/`.",
+    missing: [{ file: RULE, names: ["docs/never/"] }],
+  },
+];
+
+for (const row of NAMED_ROWS) {
+  test(`named paths: ${row.name}`, needsPython, async () => {
+    const { out } = await update((r) => {
+      if (row.base === undefined) return;
+      const base = `${r.read(RULE)}\n${row.base}\n`;
+      r.pristine.files[RULE] = base;
+      r.write(RULE, base);
+    }, { template: (text) => `${text}\n${row.line}\n` });
+    assert.deepEqual(out.updated, [RULE]);
+    assert.deepEqual(out.missing, row.missing);
+  });
+}

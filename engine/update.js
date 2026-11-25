@@ -14,6 +14,7 @@ import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
 import { parsePlainObject } from "./propose.js";
+import { missingReport } from "./missing.js";
 
 // The file in git's folder that holds the pristine record the last update replaced.
 const BEFORE = "bindwright-pristine-before.json";
@@ -352,7 +353,8 @@ function entry(root, path) {
 // what merged cleanly, stages new files the repo already has and conflicts,
 // and records the new pristine render. `bindWith(answers, { year, version })`
 // returns a bind. Returns every outcome list plus `skipped`: staged copies
-// left from before, which stay as they were.
+// left from before, which stay as they were; and `missing`: the repo paths
+// the written files name that the repo lacks (missing.js).
 export async function runUpdate(root, { bindWith, version }) {
   const read = reader(root);
   const [answers, saved] = [ANSWERS, PRISTINE].map(read);
@@ -392,7 +394,17 @@ export async function runUpdate(root, { bindWith, version }) {
     renamed: plan.renamed,
     owned_changed: plan.owned_changed,
     skipped,
+    missing: missingReport(root, writtenFiles(plan, pristine)),
   };
+}
+
+// The files this update wrote with a new text (added, merged or updated), each with that text
+// and the base it had in the record before the update.
+function writtenFiles(plan, pristine) {
+  const written = new Map(plan.write);
+  return [...plan.added, ...plan.merged, ...plan.updated].map((path) => ({
+    path, text: written.get(path), base: pristine.files[path],
+  }));
 }
 
 // A pristine record parsed from its JSON text, with a files object; anything else is refused,
