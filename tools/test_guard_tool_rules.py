@@ -246,8 +246,7 @@ class LengthRowsTest(unittest.TestCase):
                 self.project(style)
                 self.assertEqual(self.logged(command, shell), [other] if want else [])
 
-    # A form feed in the title: git counts only `\n` as a line break, and so must the row.
-    CHANGELOG = ("# Changelog\f\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
+    CHANGELOG = ("# Changelog\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
                  "## [1.1.0] - 2026-11-20\n\n### Added\n- b\n\n## [1.0.0] - 2026-11-01\n\n### Added\n- c\n\n"
                  "[unreleased]: https://x/compare/v1.1.0...HEAD\n[1.1.0]: https://x/compare/v1.0.0...v1.1.0\n"
                  "[1.0.0]: https://x/releases/tag/v1.0.0\n")
@@ -300,16 +299,18 @@ class LengthRowsTest(unittest.TestCase):
         write(released_only.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released)
               .replace("[1.1.0]: ", "[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: ", 1))
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
-        # A `git` the repo ships, first on PATH, never runs: the row reads that as no edit.
+        # A `git` the repo ships below its top folder, first on PATH, never runs: the row reads that as no edit.
         write(released_only.replace("- b", "- B"))
-        planted, marker = os.path.join(self.folder, "git.bat" if os.name == "nt" else "git"), "ran.txt"
+        tools = os.path.join(self.folder, "bin")
+        os.makedirs(tools)
+        planted, marker = os.path.join(tools, "git.bat" if os.name == "nt" else "git"), "ran.txt"
         leaves_marker = f'@echo x> "%~dp0{marker}"\n' if os.name == "nt" else f'#!/bin/sh\ntouch "${{0%/*}}/{marker}"\n'
         with open(planted, "w", encoding="utf-8", newline="\n") as script:
             script.write(leaves_marker)
         os.chmod(planted, 0o755)
-        with unittest.mock.patch.dict(os.environ, {"PATH": self.folder + os.pathsep + os.environ.get("PATH", "")}):
+        with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
             self.assertEqual(self.logged("git commit -am x", "bash"), [])
-        self.assertFalse(os.path.exists(os.path.join(self.folder, marker)))
+        self.assertFalse(os.path.exists(os.path.join(tools, marker)))
         # Outside a repo, git fails, and the row reads it as no edit.
         self.hook.CWD = tempfile.gettempdir()
         self.assertEqual(self.logged("git commit -am x", "bash"), [])

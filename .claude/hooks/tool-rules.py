@@ -594,16 +594,29 @@ def repo_root():
     return folder
 
 
+def real_path(path):
+    return os.path.normcase(os.path.realpath(path))
+
+
+def is_within(folder, top):
+    """Whether `folder` is `top` or below it; two paths on different drives never are."""
+    try:
+        return os.path.commonpath([folder, top]) == top
+    except ValueError:
+        return False
+
+
 def trusted_git(root):
     """git on PATH as an absolute path, or None when the first one found is the repo's own.
     Windows looks a bare name up in the current folder first, so a repo could ship its own `git.exe`:
-    that search is switched off, and a relative match or one in the repo or the current folder is refused."""
+    that search is switched off, and a relative match, one anywhere in the repo or one in the current
+    folder is refused."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     found = shutil.which("git")
     if not found or not os.path.isabs(found):
         return None
-    here = {os.path.normcase(os.path.realpath(folder)) for folder in (root, os.getcwd())}
-    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
+    folder = real_path(os.path.dirname(found))
+    return None if is_within(folder, real_path(root)) or folder == real_path(os.getcwd()) else found
 
 
 def committed_changelog(root):
@@ -643,7 +656,8 @@ def edits_dated_changelog(text, shell):
     if not old:
         return False
     try:
-        with open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8", errors="replace") as changelog:
+        # Read as git stores it, line endings untouched, so both copies split the same way.
+        with open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8", errors="replace", newline="") as changelog:
             new = dated_sections(changelog.read())
     except OSError:
         return False
