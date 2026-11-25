@@ -62,7 +62,8 @@ ENGINE_FILES = [
 GLOBAL_FILES = [
     "CLAUDE.md.additions", "memory-template/MEMORY.md",
     "hooks/push-guard.py", "hooks/tool-rules.py",
-    "hooks/no-ai-attribution.py", "hooks/session-title.py", "hooks/reply-style.py",
+    "hooks/no-ai-attribution.py", "hooks/session-title.py", "hooks/browser-leftovers.py",
+    "hooks/reply-style.py",
     *(f"hooks/no_ai_attribution/{m}.py" for m in ("__init__", "files", "routes", "shell")),
     "hooks/code-research-profiles.json", "hooks/code-research-first.py.template",
     "agents/builder.md", "output-styles/straight-talk.md", "output-styles/straight-talk.retired.json",

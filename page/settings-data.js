@@ -54,6 +54,13 @@ export const COMPUTER = [
     keys: ["extra:session-title"],
   },
   {
+    id: "browser-leftovers",
+    title: "Browser leftovers check",
+    text: "Once a day, offers to clean up browser profiles that earlier sessions' scripts left behind.",
+    value: "Yes",
+    keys: ["extra:browser-leftovers"],
+  },
+  {
     id: "builder",
     title: "Builder agent",
     text: "A cheap Haiku helper writes the code, and the main model checks it.",

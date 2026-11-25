@@ -36,3 +36,5 @@ When responses slow down or degrade, the same file keeps getting re-read, or sys
 ## Scratch and build output
 
 Scratch files, test copies and captures go in the session's scratchpad, or in the project's git-ignored build folder, never in a fixed folder such as `C:/tmp` or `/tmp`. The CLI deletes a session's scratchpad together with its transcript once both are older than `cleanupPeriodDays`, so anything worth keeping moves into the project before the session ends.
+
+A script that starts a browser with a profile folder of its own (`--user-data-dir`) stops that browser and deletes the folder on every exit path, errors, timeouts and stop signals included, and its next run clears what a run killed outright left behind: each profile can reach a gigabyte, and a browser whose script died keeps running, so forgotten runs fill the disk long before the scratchpad is freed.

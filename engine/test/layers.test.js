@@ -83,8 +83,8 @@ test("the extras list matches the mods setup ships, plus the file and setting ex
   const mods = readdirSync(join(engine, "..", "_core", "global-template", "mods"), { withFileTypes: true })
     .filter((d) => d.isDirectory()).map((d) => d.name);
   const files = [
-    "attribution-guard", "builder", "code-style", "global-instructions", "plugin-auto-update", "push-guard",
-    "reply-style", "session-title",
+    "attribution-guard", "browser-leftovers", "builder", "code-style", "global-instructions",
+    "plugin-auto-update", "push-guard", "reply-style", "session-title",
   ];
   assert.deepEqual(EXTRAS, [...mods, ...files].sort());
 });
