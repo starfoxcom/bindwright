@@ -1,7 +1,8 @@
-// Whether a deep review the review gate waits for ever started. With `needs-deep-review` on, the gate stays
-// pending until a deep verdict comes, so a deep run that never started leaves the watch waiting out its whole
-// time limit. Past `DEEP_START_MS` with only the review's own checks pending, the watch looks once for the run
-// and settles at once when there is none.
+// Whether a deep review the review gate waits for can still report. With `needs-deep-review` on, the gate
+// stays pending until a deep verdict comes, so a deep run that never started leaves the watch waiting out its
+// whole time limit. From `DEEP_START_MS` after the push, with only the review's own checks pending, the watch
+// notes when the gate first owes a deep review; `DEEP_GRACE_MS` later it looks for a live deep run on each
+// poll until it finds one, and settles when there is none.
 
 import type { EngineInterface } from 'claude-code'
 
@@ -35,10 +36,14 @@ async function lines($: EngineInterface, argv: string[]): Promise<string[] | und
   return exitCode === 0 ? stdout.split('\n').map(line => line.trim()).filter(Boolean) : undefined
 }
 
-// How many deep runs for this PR started since `since`; a run for a comment that asked for none is skipped.
-// The deep workflow runs on the comment, so its run carries the PR's title as it was then, not its head:
-// a PR renamed since cannot be told apart, so it reads as `undefined`.
-async function deepRunsSince($: EngineInterface, watch: Watch, since: string): Promise<number | undefined> {
+// The states of a run that has not finished. A deep run that finished wrote its verdict into the gate, so
+// while the gate still owes one, only a run in one of these states can still report.
+const ALIVE = ['requested', 'queued', 'pending', 'waiting', 'in_progress']
+
+// How many deep runs for this PR are alive, however early they were created. The deep workflow runs on the
+// comment, so its run carries the PR's title as it was then, not its head: a PR renamed since the gate's
+// first run (`since`) cannot be told apart, so it reads as `undefined`.
+async function deepRunsAlive($: EngineInterface, watch: Watch, since: string): Promise<number | undefined> {
   try {
     const events = `repos/${watch.repo}/issues/${watch.number}/events?per_page=100`
     const renames = '.[] | select(.event == "renamed") | .created_at'
@@ -47,10 +52,14 @@ async function deepRunsSince($: EngineInterface, watch: Watch, since: string): P
     const view = ['gh', 'pr', 'view', String(watch.number), '--repo', watch.repo, '--json', 'title', '--jq', '.title']
     const [title] = (await lines($, view)) ?? []
     if (title === undefined) return undefined
-    const path = `repos/${watch.repo}/actions/workflows/${DEEP_WORKFLOW}/runs?per_page=100&created=%3E%3D${since}`
-    const runs = '.workflow_runs[] | select(.conclusion != "skipped") | .display_title'
-    const titles = await lines($, ['gh', 'api', '--paginate', path, '--jq', runs])
-    return titles?.filter(name => name === title).length
+    let count = 0
+    for (const status of ALIVE) {
+      const path = `repos/${watch.repo}/actions/workflows/${DEEP_WORKFLOW}/runs?per_page=100&status=${status}`
+      const titles = await lines($, ['gh', 'api', '--paginate', path, '--jq', '.workflow_runs[] | .display_title'])
+      if (titles === undefined) return undefined
+      count += titles.filter(name => name === title).length
+    }
+    return count
   } catch {
     return undefined
   }
@@ -72,9 +81,9 @@ export async function withDeepStart($: EngineInterface, watch: Watch, now: numbe
   // The request posts before the gate records it, so the deep run gets time to be created.
   if (watch.deep === undefined) return { ...watch, deep: { owedSince: now } }
   if (now - watch.deep.owedSince < DEEP_GRACE_MS) return watch
-  const started = await deepRunsSince($, watch, gate.startedAt)
-  if (started === undefined) return watch
-  if (started > 0) return { ...watch, deep: { ...watch.deep, isStarted: true } }
+  const alive = await deepRunsAlive($, watch, gate.startedAt)
+  if (alive === undefined) return watch
+  if (alive > 0) return { ...watch, deep: { ...watch.deep, isStarted: true } }
   return { ...watch, outcome: 'timeout', settledAt: now, deepNeverStarted: true }
 }
 

@@ -102,7 +102,11 @@ function reviewAnswer(seen: Seen, args: string): string | undefined {
     return rows.map(row => `${JSON.stringify(row)}\n`).join('')
   }
   if (args.includes('/contents/')) return seen.deepWorkflow ?? MARKING_DEEP_WORKFLOW
-  if (args.includes('/runs?')) return (seen.deepRuns ?? []).map(title => `${title}\n`).join('')
+  // The deep runs are alive (in progress), whatever status a query names: one answer per call is enough.
+  if (args.includes('/runs?')) {
+    const isFirstStatus = args.includes('status=requested')
+    return isFirstStatus ? (seen.deepRuns ?? []).map(title => `${title}\n`).join('') : ''
+  }
   if (args.includes('/events?')) return (seen.renamedAt ?? []).map(at => `${at}\n`).join('')
   if (args.includes('--json title')) return `${PR_TITLE}\n`
   return undefined

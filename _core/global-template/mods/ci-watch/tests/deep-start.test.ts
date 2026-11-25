@@ -16,7 +16,11 @@ type Row = { name: string; seen: Partial<Seen>; isEarly: boolean }
 const ROWS: Row[] = [
   { name: 'an owed deep review that never started', seen: {}, isEarly: true },
   { name: "another PR's deep run", seen: { deepRuns: ['docs: something else'] }, isEarly: true },
-  { name: "this PR's deep run, still working", seen: { deepRuns: [PR_TITLE] }, isEarly: false },
+  {
+    name: "this PR's deep run, still working, however early it was created",
+    seen: { deepRuns: [PR_TITLE] },
+    isEarly: false,
+  },
   { name: 'a check besides the review still running', seen: { bucket: 'pending' }, isEarly: false },
   { name: 'a check besides the review failed', seen: { bucket: 'fail' }, isEarly: false },
   { name: 'a PR renamed since the gate first ran', seen: { renamedAt: ['1970-01-01T00:05:00Z'] }, isEarly: false },
@@ -104,5 +108,5 @@ test("a deep run found started is not looked up again", async ($, on) => {
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let poll = 0; poll < (30 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
-  expect(seen.ghCalls.filter(call => call.includes('/runs?')).length).toBe(1)
+  expect(seen.ghCalls.filter(call => call.includes('status=requested')).length).toBe(1)
 })
