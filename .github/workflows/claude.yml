@@ -147,8 +147,6 @@ jobs:
       # both at job start (in_progress) and after the deep review completes
       # (success/failure based on verdict).
       checks: write
-      # Lets the gate script set the Review gate's commit status.
-      statuses: write
     # What every deep attempt is told and returns. Attempts post nothing:
     # each returns its review as structured output, and "Post the deep
     # review" posts the first one the gate can read.
