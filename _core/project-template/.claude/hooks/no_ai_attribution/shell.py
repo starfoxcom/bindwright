@@ -15,8 +15,9 @@ PARSE_SECONDS = 20  # one parse
 MAX_NESTED_SHELLS = 3  # `bash -c` inside `bash -c` ... read this many levels deep
 POSIX_SHELLS = {"bash", "sh", "dash", "zsh", "ksh", "mksh", "ash"}
 WRAPPERS = {"sudo", "doas", "env", "command", "builtin", "exec", "nohup", "nice", "time", "xargs"}
-NO_NODE = ("this computer has no Node 18 or later, which the guard's parser needs to read the"
-           " command. Install Node, then run /bindwright:update.")
+NO_NODE = ("no Node 18 or later is on PATH outside this project's folders, and the guard's parser"
+           " needs one to read the command (a node the project ships is never run). Install Node,"
+           " or put one from outside the project on PATH, then run /bindwright:update.")
 NO_HELPER = "Bindwright's helper, which holds the guard's parser, is missing. Run /bindwright:update to install it."
 OLD_HELPER = "Bindwright's helper is older than this guard. Run /bindwright:update to update it."
 UNREAD = ("the guard's parser could not read this command (an array built at run time, PowerShell's"
@@ -65,17 +66,18 @@ def repo_folder(cwd):
 
 
 def node_program(cwd):
-    """The `node` on PATH, or None when the first one found is the project's own. On Windows a
-    bare name is looked up in the current folder first, so a repo could ship its own
-    `node.exe`: that search is switched off, and a match that is relative (a `.` on PATH), sits
-    in the session folder or the current folder, or anywhere in the session folder's repo is refused."""
+    """`node` as an absolute path, from the first PATH folder a repo cannot have shipped it in,
+    or None when no such folder holds one. A PATH folder that is relative (a `.`), is the session
+    folder or the current folder, or sits anywhere in the session folder's repo is skipped, so a
+    repo's own `node` never runs; Windows's search of the current folder first is switched off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    found = shutil.which("node")
-    if not found or not os.path.isabs(found):
-        return None
-    folder, repo = real_path(os.path.dirname(found)), repo_folder(cwd)
+    repo = repo_folder(cwd)
     here = {real_path(place) for place in (cwd, os.getcwd())}
-    return None if folder in here or (repo and is_within(folder, repo)) else found
+    trusted = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if os.path.isabs(entry) and real_path(entry) not in here
+               and not (repo and is_within(real_path(entry), repo))]
+    found = shutil.which("node", path=os.pathsep.join(trusted))
+    return found if found and os.path.isabs(found) else None
 
 
 def node_too_old(node, deadline):

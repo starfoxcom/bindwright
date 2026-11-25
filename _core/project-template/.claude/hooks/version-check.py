@@ -92,7 +92,8 @@ OUT_OF_TIME = (f"the version check did not finish within {HOOK_SECONDS} s. Run t
                "once the computer is less busy.")
 UNREAD = ("Blocked: this command may make a release, and the version check could not read it. "
           "The check reads commands with the shell parser in Bindwright's helper, which needs "
-          "Node 18 or later: install both with `/bindwright:setup`, or turn the check off with "
+          "Node 18 or later on PATH outside this project's folders (a node the project ships is "
+          "never run): install both with `/bindwright:setup`, or turn the check off with "
           "\"versioning\": \"none\" in .bindwright/project.json. With both installed, the parser "
           "could not read this command: run the release as a plain git tag, gh release create "
           "or gh pr create command of its own.")
@@ -113,17 +114,18 @@ def parser_script():
 
 
 def trusted_program(name, project):
-    """The program on PATH as an absolute path, or None when the first one found is the project's.
-    Windows looks a bare name up in the current folder first, so a repo could ship its own
-    `git.exe` or `node.exe`: that search is switched off, and a match that is relative, sits in
-    the project folder or the current folder, or anywhere in the project folder's repo is refused."""
+    """The program as an absolute path, from the first PATH folder a repo cannot have shipped it
+    in, or None when no such folder holds it. A PATH folder that is relative, is the project
+    folder or the current folder, or sits anywhere in the project folder's repo is skipped, so a
+    repo's own `git` or `node` never runs; Windows's search of the current folder first is off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    found = shutil.which(name)
-    if not found or not os.path.isabs(found):
-        return None
-    folder, repo = real_path(os.path.dirname(found)), repo_folder(project)
+    repo = repo_folder(project)
     here = {real_path(place) for place in (project, os.getcwd())}
-    return None if folder in here or (repo and is_within(folder, repo)) else found
+    trusted = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if os.path.isabs(entry) and real_path(entry) not in here
+               and not (repo and is_within(real_path(entry), repo))]
+    found = shutil.which(name, path=os.pathsep.join(trusted))
+    return found if found and os.path.isabs(found) else None
 
 
 def repo_folder(path):
