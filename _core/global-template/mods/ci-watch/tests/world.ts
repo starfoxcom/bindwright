@@ -23,7 +23,7 @@ export type Seen = {
   gateState?: string
   /** The PR's bot comments: when each was posted (after the push by default) and its body. */
   comments?: { at?: string; body: string }[]
-  /** The titles of the deep workflow's runs that did not skip, since the gate's first run (none by default). */
+  /** The titles of the deep workflow's runs in progress, however early they were created (none by default). */
   deepRuns?: string[]
   /** When the PR was renamed, each time (none by default). */
   renamedAt?: string[]
@@ -102,10 +102,9 @@ function reviewAnswer(seen: Seen, args: string): string | undefined {
     return rows.map(row => `${JSON.stringify(row)}\n`).join('')
   }
   if (args.includes('/contents/')) return seen.deepWorkflow ?? MARKING_DEEP_WORKFLOW
-  // The deep runs are alive (in progress), whatever status a query names: one answer per call is enough.
+  // Every deep run in `deepRuns` is in progress, so only that status's query lists them.
   if (args.includes('/runs?')) {
-    const isFirstStatus = args.includes('status=requested')
-    return isFirstStatus ? (seen.deepRuns ?? []).map(title => `${title}\n`).join('') : ''
+    return args.includes('status=in_progress') ? (seen.deepRuns ?? []).map(title => `${title}\n`).join('') : ''
   }
   if (args.includes('/events?')) return (seen.renamedAt ?? []).map(at => `${at}\n`).join('')
   if (args.includes('--json title')) return `${PR_TITLE}\n`

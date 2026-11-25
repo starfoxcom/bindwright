@@ -64,7 +64,8 @@ function outcomeText(watch: Watch, now: number | undefined, red: number): string
     return (
       `[ci-watch] ${pr}: the review gate waits for a deep review (needs-deep-review is on), but no deep ` +
       `run for this PR is running or queued, so none will report and the gate stays pending. Tell the ` +
-      `user, and start no review yourself: the project's review rules leave starting one to them.${blocked}`
+      `user, and start no review yourself: the project's review rules leave starting one to them. Once ` +
+      `they start one, call the watch tool on this PR, so its verdict wakes you.${blocked}`
     )
   }
   if (watch.outcome === 'timeout') {

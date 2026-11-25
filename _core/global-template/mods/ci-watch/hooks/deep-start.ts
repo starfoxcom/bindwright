@@ -19,7 +19,11 @@ export const DEEP_GRACE_MS = 5 * 60_000
 // The deep review's workflow, as the review gate's setup names it.
 const DEEP_WORKFLOW = 'claude.yml'
 
-const isOwedDeep = (state: string) => /(?:^|;)escalated=yes(?:;|$)/.test(state) && /(?:^|;)deep=none(?:;|$)/.test(state)
+// The gate owes a deep review and the routine review has its verdict: while it still runs (a re-run on the
+// same head keeps `escalated=yes`), its request may not be posted yet.
+const has = (state: string, fact: string) => new RegExp(`(?:^|;)${fact}(?:;|$)`).test(state)
+const isOwedDeep = (state: string) =>
+  has(state, 'escalated=yes') && has(state, 'deep=none') && !has(state, 'routine=pending')
 
 // Only the review is left: the gate still pending, every other pending check one of its own jobs, and no
 // other check failed, since a failure wakes the session to fix it anyway.
