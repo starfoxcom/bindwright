@@ -227,7 +227,9 @@ class LengthRowsTest(unittest.TestCase):
                 ("-m where PRs merge", "merge", "gh pr merge 5 -m", "bash", False),
                 ("no style flag", "merge", "gh pr merge 5 --auto", "bash", False),
                 ("a mention in a message", "merge", 'git commit -m "gh pr merge 5 --squash"', "bash", False),
-                ("no saved style", None, "gh pr merge 5 --squash", "bash", False)):
+                ("no saved style", None, "gh pr merge 5 --squash", "bash", False),
+                ("a saved style that is a list", ["merge"], "gh pr merge 5 --squash", "bash", False),
+                ("a saved style that is an object", {}, "gh pr merge 5 --squash", "bash", False)):
             with self.subTest(name):
                 self.project(style)
                 self.assertEqual(self.logged(command, shell), [other] if want else [])

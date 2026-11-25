@@ -518,7 +518,8 @@ def merge_style():
     while True:
         try:
             with open(os.path.join(folder, ".bindwright", "project.json"), encoding="utf-8") as answers:
-                return json.load(answers).get("advanced", {}).get("mergeStyle")
+                style = json.load(answers).get("advanced", {}).get("mergeStyle")
+            return style if isinstance(style, str) else None
         # RecursionError: JSON nested deeper than the reader goes.
         except (OSError, ValueError, AttributeError, RecursionError):
             pass
