@@ -2,6 +2,7 @@
 // ago they finished. Pure, no engine access.
 
 import type { Watch } from '../types'
+import { isNoCi } from './checks'
 import { incidentText } from './incident'
 import { isResearchDue, researchText } from './rounds'
 import { FAILED, PENDING } from './settle'
@@ -19,7 +20,7 @@ export function wakeText(watch: Watch, now?: number, red = 0): string {
   // A latched step back asks for research too: a streak that jumped past the 3rd round never lands on it.
   const isStepBack = isResearchDue(red) || watch.stepBackTopics !== undefined
   const research = isCounted && isStepBack ? researchText(pr, red) : ''
-  return `${outcomeText(watch, now, red)}${research}${finishedAgo(watch, now)}`
+  return `${outcomeText(watch, now, red)}${research}${isNoCi(watch) ? '' : finishedAgo(watch, now)}`
 }
 
 // Only the review failed, because a review run never got to post its review: the code was not judged, so the round is
@@ -49,7 +50,7 @@ function outcomeText(watch: Watch, now: number | undefined, red: number): string
       `view --log-failed) or the review comment, fix and push; the watch restarts on the new commit.`
     )
   }
-  if (watch.outcome === 'timeout' && watch.hasWorkflows === false && entries.length === 0) {
+  if (isNoCi(watch)) {
     return (
       `[ci-watch] ${pr}: the repo runs no CI workflows and the PR shows no check, so nothing will ` +
       `settle and no other wake comes. Check the PR yourself (gh pr view) and finish it per the project rules.`

@@ -259,6 +259,7 @@ test('a PR with no check in a repo with no workflows wakes once after the grace 
   expect(seen.ghCalls.filter(call => call.includes('/actions/workflows')).length).toBe(1)
   expect(seen.prompts.length).toBe(1)
   expect(seen.prompts[0]).toContain('o/r#7: the repo runs no CI workflows')
+  expect(seen.prompts[0]).not.toContain('Checks finished')
   await clock.advance(HOUR)
   expect(seen.prompts.length).toBe(1)
 })

@@ -79,6 +79,10 @@ export async function withWorkflows(
   }
 }
 
+/** A watch settled because its repo has no CI: no check ever came, so none finished. */
+export const isNoCi = (watch: Watch) =>
+  watch.outcome === 'timeout' && watch.hasWorkflows === false && Object.keys(watch.checks).length === 0
+
 /** A repo without workflows whose PR still shows no check: nothing will come, so the watch settles at once. */
 export const isNothingToWatch = (watch: Watch, checks: Record<string, string> | undefined, now: number) =>
   watch.hasWorkflows === false && isChecklessSince(watch, checks, now)
