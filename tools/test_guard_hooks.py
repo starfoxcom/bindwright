@@ -1016,9 +1016,9 @@ class GuardHookTest(unittest.TestCase):
             with open(os.path.join(root, name), "w", newline="") as f:
                 f.write(text)
             os.chmod(os.path.join(root, name), 0o755)
-        # With the project's own `node` first on PATH, the guard has no parser and refuses.
-        self.assert_denied(self.attr("git commit -m x", project=root,
-                                     path=root + os.pathsep + os.environ.get("PATH", "")), "Install Node")
+        # With the project's own `node` first on PATH, the guard skips it and reads with the next one.
+        self.assert_passes(self.attr("git commit -m x", project=root,
+                                     path=root + os.pathsep + os.environ.get("PATH", "")))
         self.assertFalse(os.path.exists(marker))
 
     def test_without_its_parser_the_guard_refuses_what_it_reads(self):
