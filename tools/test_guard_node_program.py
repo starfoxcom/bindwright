@@ -19,11 +19,13 @@ class NodeProgramTest(unittest.TestCase):
 
     def test_a_node_the_repo_ships_is_refused_and_others_run(self):
         name = "node.bat" if os.name == "nt" else "node"
-        for label, is_repo, folder, home_is_repo, refused in (
-                ("in the repo's top folder", True, "", False, True),
-                ("in a repo subfolder on PATH, as direnv adds", True, "bin", False, True),
-                ("in a subfolder of a folder that is no repo", False, "bin", False, False),
-                ("in a subfolder of a repo at the home folder", True, "bin", True, False)):
+        # `home` is where the mocked home folder sits inside the temp folder; None keeps the real one.
+        for label, is_repo, folder, home, refused in (
+                ("in the repo's top folder", True, "", None, True),
+                ("in a repo subfolder on PATH, as direnv adds", True, "bin", None, True),
+                ("in a subfolder of a folder that is no repo", False, "bin", None, False),
+                ("in a subfolder of a repo at the home folder", True, "bin", "", False),
+                ("in a subfolder of a repo above the home folder", True, "bin", "home", False)):
             with self.subTest(label), tempfile.TemporaryDirectory() as root, mock.patch.dict(os.environ):
                 if is_repo:
                     os.makedirs(os.path.join(root, ".git"))
@@ -34,8 +36,8 @@ class NodeProgramTest(unittest.TestCase):
                     script.write("exit 0\n")
                 os.chmod(planted, 0o755)
                 os.environ["PATH"] = tools + os.pathsep + os.environ["PATH"]
-                home = root if home_is_repo else os.path.expanduser("~")
-                with mock.patch("os.path.expanduser", return_value=home):
+                home_folder = os.path.expanduser("~") if home is None else os.path.join(root, home)
+                with mock.patch("os.path.expanduser", return_value=home_folder):
                     found = node_program(root)
                 self.assertEqual(found is None, refused, found)
 

@@ -566,10 +566,14 @@ class TrustedProgram(unittest.TestCase):
         with mock.patch.object(sys, "dont_write_bytecode", True):
             spec.loader.exec_module(hook)
         here = os.getcwd()
-        for name, folder in (("the top folder", ""), ("a subfolder on PATH, as direnv adds", "bin")):
-            with self.subTest(name), tempfile.TemporaryDirectory() as project, mock.patch.dict(os.environ):
-                tools = os.path.join(project, folder)
+        for name, folder, cwd in (("the top folder", "", ""),
+                                  ("a subfolder on PATH, as direnv adds", "bin", ""),
+                                  ("a subfolder on PATH, from a session in another subfolder", "bin", "src")):
+            with self.subTest(name), tempfile.TemporaryDirectory() as repo, mock.patch.dict(os.environ):
+                os.makedirs(os.path.join(repo, ".git"))
+                tools, project = os.path.join(repo, folder), os.path.join(repo, cwd)
                 os.makedirs(tools, exist_ok=True)
+                os.makedirs(project, exist_ok=True)
                 planted = os.path.join(tools, "git.bat" if os.name == "nt" else "git")
                 pathlib.Path(planted).write_text("exit 0\n")
                 os.chmod(planted, 0o755)

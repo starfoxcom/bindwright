@@ -115,14 +115,27 @@ def parser_script():
 def trusted_program(name, project):
     """The program on PATH as an absolute path, or None when the first one found is the project's.
     Windows looks a bare name up in the current folder first, so a repo could ship its own
-    `git.exe` or `node.exe`: that search is switched off, and a relative match or one in the
-    current folder or anywhere in the project is refused."""
+    `git.exe` or `node.exe`: that search is switched off, and a match that is relative, sits in
+    the project folder or the current folder, or anywhere in the project folder's repo is refused."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     found = shutil.which(name)
     if not found or not os.path.isabs(found):
         return None
-    folder = real_path(os.path.dirname(found))
-    return None if is_within(folder, real_path(project)) or folder == real_path(os.getcwd()) else found
+    folder, repo = real_path(os.path.dirname(found)), repo_folder(project)
+    here = {real_path(place) for place in (project, os.getcwd())}
+    return None if folder in here or (repo and is_within(folder, repo)) else found
+
+
+def repo_folder(path):
+    """The top folder of the repo holding `path`, where a repo could ship its own programs; None
+    outside a repo, or for a repo at the home folder or above it, which holds the user's own installs."""
+    folder = real_path(path)
+    while not os.path.exists(os.path.join(folder, ".git")):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return None
+        folder = parent
+    return None if is_within(real_path(os.path.expanduser("~")), folder) else folder
 
 
 def real_path(path):
