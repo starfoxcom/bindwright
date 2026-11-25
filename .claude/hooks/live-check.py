@@ -36,10 +36,11 @@ BODY_FILE_OPTIONS = ("--body-file", "-F")
 BASE_OPTIONS = ("--base", "-B")
 OTHER_TARGET_OPTIONS = ("--head", "-H", "--repo", "-R")
 QUOTES = ('"', "'")
-# Outside quotes a word may hold letters, digits and these; `\` is a path separator for PowerShell only.
+# Outside quotes a word may hold letters, digits and these; `\` is a path separator for PowerShell
+# only, and `@` (splatting) and `,` (arrays) are plain in bash only.
 PLAIN_CHARACTERS = {
     "bash": set("-_./:=@+,"),
-    "powershell": set("-_./:=@+,\\"),
+    "powershell": set("-_./:=+\\"),
 }
 SHELLS = {"Bash": "bash", "PowerShell": "powershell"}
 WRITE_METHOD = r"(?:POST|PUT|PATCH|DELETE)"
@@ -59,34 +60,34 @@ LIVE_CHECK_LINE = re.compile(r"(?:[-*] )?live check:", re.IGNORECASE)
 
 
 def read_words(command, shell):
-    """The command's words as the shell reads them, or None when the command is not plain."""
+    """The command's words as the shell reads them, or None when the command is not plain.
+
+    A quote wraps a whole word and holds printable ASCII only: the shells split a word glued to
+    a quote differently, and PowerShell also ends a string at typographic quotes."""
     plain = PLAIN_CHARACTERS[shell]
-    words, word, quote, started, previous = [], [], None, False, ""
+    words, word, quote, started, closed = [], [], None, False, False
     for char in command:
         if quote:
             if char == quote:
-                quote = None
-            elif quote == '"' and char in "$`\\":
+                quote, closed = None, True
+            elif not (char.isascii() and char.isprintable()) or (quote == '"' and char in "$`\\"):
                 return None
             else:
                 word.append(char)
-            previous = char
             continue
-        if char in QUOTES:
-            # Adjacent quotes mean different things in bash and PowerShell, so they go unread.
-            if previous in QUOTES:
-                return None
-            quote, started = char, True
-        elif char == " ":
+        if char == " ":
             if started:
                 words.append("".join(word))
-            word, started = [], False
+            word, started, closed = [], False, False
+        elif closed or (char in QUOTES and started):
+            return None
+        elif char in QUOTES:
+            quote, started = char, True
         elif (char.isascii() and char.isalnum()) or char in plain:
             word.append(char)
             started = True
         else:
             return None
-        previous = char
     if quote:
         return None
     if started:
@@ -113,6 +114,10 @@ def pr_request(command, shell):
     passes a body file; None for any other command."""
     words = read_words(command, shell) or []
     if words[:3] != ["gh", "pr", "create"] or option_value(words, OTHER_TARGET_OPTIONS) is not None:
+        return None
+    # gh also takes a short option with its value attached (-Hother) or several at once (-dH):
+    # only a lone one is read.
+    if any(word.startswith("-") and not word.startswith("--") and len(word) != 2 for word in words):
         return None
     body_file = option_value(words, BODY_FILE_OPTIONS)
     if not body_file:

@@ -122,6 +122,32 @@ class PullRequestNotes(unittest.TestCase):
         self.assertIn(NOTE, context)
 
 
+class Reader(unittest.TestCase):
+    # name, shell tool, the arguments after a plain create, a note expected
+    CREATE = "gh pr create --base main --body-file body.md "
+    ROWS = [
+        ("a plain PowerShell create notes", "PowerShell", "--title 'x y'", True),
+        ("a typographic single quote PowerShell ends a string at", "PowerShell", "--title 'x’ -H other ’'",
+         False),
+        ("a typographic double quote PowerShell ends a string at", "PowerShell", '--title "x” -H other “"',
+         False),
+        ("a word glued after a quote", "PowerShell", "--title 'x'-H other", False),
+        ("a quote glued after a word", "Bash", "--title x'y z'", False),
+        ("a short option with its value attached", "Bash", "-Hother", False),
+        ("short options run together", "Bash", "-dH other", False),
+        ("PowerShell splatting", "PowerShell", "@extra", False),
+    ]
+
+    def test_reader_rows(self):
+        for name, tool, arguments, expect_note in self.ROWS:
+            with self.subTest(name), tempfile.TemporaryDirectory() as folder, \
+                    tempfile.TemporaryDirectory() as home:
+                make_repo(folder, [POST_LINE], BODY)
+                code, context = run_hook(folder, home, self.CREATE + arguments, tool)
+                self.assertEqual(code, 0)
+                self.assertEqual(NOTE in context, expect_note)
+
+
 class WriteLines(unittest.TestCase):
     # name, added line, a write expected
     ROWS = [
