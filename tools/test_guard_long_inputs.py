@@ -58,6 +58,9 @@ class LongInputTest(unittest.TestCase):
              "git commit " + "-av " * 2470 + "-m 'x'"),
             ("tool rules: a PR edit of many titles", lambda t: self.rules.refusal(t, "bash"),
              "gh pr edit " + "-t x " * 1975),
+            *[(f"tool rules: a branch switch before many blank lines ({shell})",
+               lambda t, shell=shell: self.rules.refusal(t, shell), "git checkout x" + "\n" * 100000)
+              for shell in ("bash", "powershell")],
             ("attribution: one line of repeated `gh pr`", self.attribution.routes_in, "gh pr " * 3000),
             ("attribution: one line of repeated `git config`", self.attribution.routes_in, "git config " * 2000),
             ("attribution: a long separator run after `made by`", scan, "made by" + " " * 20000 + "x"),

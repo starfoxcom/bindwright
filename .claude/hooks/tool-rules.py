@@ -603,7 +603,7 @@ RULES = [
      "the title becomes the commit subject, and GitHub adds ` (#123)` to it. Shorten it to 64.", OBSERVE),
     # `git checkout -- <file>` restores files and switches nothing.
     ("a branch switch chained with other commands",
-     both(r"\bgit\s+(?:checkout|switch)\b(?!\s+--(?:\s|$))", r"&&|\|\||;|\n\s*\S"),
+     both(r"\bgit\s+(?:checkout|switch)\b(?!\s+--(?:\s|$))", r"&&|\|\||;|\n[^\S\n]*\S"),
      "a refused or failed chain can skip the switch, so the next edit lands on the wrong branch. Switch in a"
      " call of its own, check `git branch --show-current`, then go on.", OBSERVE),
 ]
