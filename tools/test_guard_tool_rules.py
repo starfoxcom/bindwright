@@ -354,6 +354,22 @@ class LengthRowsTest(unittest.TestCase):
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
 
 
+class TrustedGitTest(unittest.TestCase):
+    def test_a_path_folder_that_cannot_be_resolved_is_skipped(self):
+        # Windows raises for a share that refuses the sign-in; the guard skips that folder and goes on.
+        hook = load_tool_rules()
+        share, real = os.path.join(tempfile.gettempdir(), "unreachable-share"), hook.real_path
+
+        def refusing(path):
+            if path == share:
+                raise OSError(1326, "The user name or password is incorrect")
+            return real(path)
+
+        with unittest.mock.patch.dict(os.environ, {"PATH": share + os.pathsep + os.environ.get("PATH", "")}), \
+                unittest.mock.patch.object(hook, "real_path", refusing):
+            self.assertIsNotNone(hook.trusted_git(REPO))
+
+
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
     a comment or a here-document body, always passes, and the same trigger run as a command is
