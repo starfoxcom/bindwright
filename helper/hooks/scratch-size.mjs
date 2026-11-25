@@ -19,7 +19,7 @@ export const MEASURE_EVERY_MS = 24 * 60 * 60 * 1000;
 
 // Claude Code keeps `<project>/<session>/` folders in `claude` inside its temp folder, or in
 // `claude-<user id>` where the system temp folder is shared between users: only this user's counts.
-const scratchNames = (uid) => new Set(uid === undefined ? ["claude"] : ["claude", `claude-${uid}`]);
+const scratchNames = (uid) => new Set(uid == null ? ["claude"] : ["claude", `claude-${uid}`]);
 
 // The folder's entries, or none when it cannot be read (gone, or no permission).
 function entries(dir) {
@@ -40,9 +40,10 @@ function sizeOf(path) {
 
 /**
  * This user's Claude Code scratch folders in its temp folder (`CLAUDE_CODE_TMPDIR`, else the system's).
- * `uid` is the user id where the system has them (not on Windows).
+ * `uid` is the user id where the system has them, and `null` where it has none (Windows): an
+ * `undefined` takes the running process's own.
  */
-export function scratchRoots(env = process.env, uid = process.getuid?.()) {
+export function scratchRoots(env = process.env, uid = process.getuid?.() ?? null) {
   const base = env.CLAUDE_CODE_TMPDIR || tmpdir();
   const names = scratchNames(uid);
   return entries(base).filter((e) => e.isDirectory() && names.has(e.name)).map((e) => join(base, e.name));

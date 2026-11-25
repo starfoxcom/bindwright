@@ -53,7 +53,7 @@ test("this user's Claude Code folder is found under both of its names, and nobod
   const usage = scratchUsage({ roots: scratchRoots(env, 1000) });
   assert.deepEqual(relative(base, usage), [["claude-1000/p/s", 4], ["claude/p/s", 3]]);
   // A system with no user ids (Windows) has only the one name.
-  assert.deepEqual(relative(base, scratchUsage({ roots: scratchRoots(env, undefined) })), [["claude/p/s", 3]]);
+  assert.deepEqual(relative(base, scratchUsage({ roots: scratchRoots(env, null) })), [["claude/p/s", 3]]);
 });
 
 test("the line comes at the limit and not one byte under it", () => {
