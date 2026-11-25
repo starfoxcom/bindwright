@@ -67,6 +67,8 @@ jobs:
     permissions:
       contents: read
       checks: write
+      # Lets the gate script set the Review gate's commit status.
+      statuses: write
       pull-requests: read
     outputs:
       # The commit every job below reads the gate's files from: the base
@@ -2513,6 +2515,8 @@ jobs:
       # PATCH of Claude On-Demand to skipped (otherwise it would stay at
       # in_progress on docs-only PRs and block the merge).
       checks: write
+      # Lets the gate script set the Review gate's commit status.
+      statuses: write
     # As in Diff triage: the light checkout gets a folder of its own.
     defaults:
       run:
