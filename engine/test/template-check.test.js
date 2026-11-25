@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { bind } from "../bind.js";
 import { defaults } from "../model.js";
 import { python } from "./python.js";
+import "./quiet-git.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CHECK = join(repo, "_core", "project-template", ".github", "review-checks");
@@ -26,13 +27,9 @@ const ANSWERS = defaults({ team: true });
 const UNEDITED = ".claude/rules/git.md";
 const EDITED = ".claude/rules/testing.md";
 
-// No hooks: a hooks folder set for this computer would run on every test commit.
-const NO_HOOKS = mkdtempSync(join(tmpdir(), "template-hooks-"));
-after(() => rmSync(NO_HOOKS, { recursive: true, force: true }));
 const git = (cwd, ...args) => {
   // autocrlf off: the line-ending rows need each file committed byte for byte.
-  const config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", `core.hooksPath=${NO_HOOKS}`,
-    "-c", "core.autocrlf=false"];
+  const config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false"];
   const r = spawnSync("git", [...config, ...args], { cwd, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout.trim();

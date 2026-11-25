@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -518,6 +518,27 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
     : r.status === 0 && /"permissionDecision": "ask"/.test(r.stdout) ? "ask"
     : r.status === 0 && r.stdout === "" ? "allow" : `exit ${r.status}: ${r.stdout}${r.stderr}`;
   const verdict = (tool, command) => decide(runHook(home, JSON.stringify({ tool_name: tool, tool_input: { command } })));
+  // The table rows below are each their own hook process, so eight run at a time.
+  const runHookLater = (input) => new Promise((resolve) => {
+    const child = spawn(entry.command, entry.args);
+    let stdout = "", stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (part) => { stdout += part; });
+    child.stderr.setEncoding("utf8").on("data", (part) => { stderr += part; });
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
+    child.stdin.end(input);
+  });
+  const verdicts = async (rows) => {
+    const results = [];
+    let next = 0;
+    const worker = async () => {
+      for (let i = next++; i < rows.length; i = next++) {
+        const [tool, command] = rows[i];
+        results[i] = decide(await runHookLater(JSON.stringify({ tool_name: tool, tool_input: { command } })));
+      }
+    };
+    await Promise.all(Array.from({ length: 8 }, worker));
+    return results;
+  };
   const missing = runHook(mkdtempSync(join(tmpdir(), "no-hook-")), JSON.stringify({ tool_name: "Bash", tool_input: { command: "ls" } }));
   assert.notEqual(missing.status, 2, "a missing hook file must not block every call");
   // Certain force pushes in plain commands are blocked.
@@ -850,17 +871,17 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
     "git push $(echo -qf) origin main", "git push -{q,f} origin main", "make force-push",
     "git -C \"My notes dir\" push -f origin main", "echo '$('; git push origin main ')' -f",
   ];
-  for (const cmd of both) {
-    assert.equal(verdict("Bash", cmd), "deny", `Bash should block: ${cmd}`);
-    assert.equal(verdict("PowerShell", cmd), "deny", `PowerShell should block: ${cmd}`);
-  }
-  for (const cmd of bashOnly) assert.equal(verdict("Bash", cmd), "deny", `Bash should block: ${cmd}`);
-  for (const cmd of powershellOnly) assert.equal(verdict("PowerShell", cmd), "deny", `PowerShell should block: ${cmd}`);
-  for (const cmd of allowed) assert.equal(verdict("Bash", cmd), "allow", `should allow: ${cmd}`);
-  for (const cmd of hidden) assert.equal(verdict("Bash", cmd), "deny", `Bash should block: ${cmd}`);
-  for (const cmd of mentions) assert.equal(verdict("Bash", cmd), "deny", `text mentions block: ${cmd}`);
-  for (const cmd of unguarded) assert.equal(verdict("Bash", cmd), "allow", `passes by design: ${cmd}`);
-  for (const cmd of ["git push origin feature/x 2>&1 | Select-Object -Last 1", "git push origin x 2>&1 | tail -1",
+  const row = (tool, want, label) => (cmd) => [tool, cmd, want, label];
+  const rows = [
+    ...both.flatMap((cmd) => [row("Bash", "deny", "Bash should block")(cmd),
+      row("PowerShell", "deny", "PowerShell should block")(cmd)]),
+    ...bashOnly.map(row("Bash", "deny", "Bash should block")),
+    ...powershellOnly.map(row("PowerShell", "deny", "PowerShell should block")),
+    ...allowed.map(row("Bash", "allow", "should allow")),
+    ...hidden.map(row("Bash", "deny", "Bash should block")),
+    ...mentions.map(row("Bash", "deny", "text mentions block")),
+    ...unguarded.map(row("Bash", "allow", "passes by design")),
+    ...["git push origin feature/x 2>&1 | Select-Object -Last 1", "git push origin x 2>&1 | tail -1",
     // A carriage return ends a PowerShell line, so the `#` after it starts a comment.
     "git push origin main\r# -qf",
     // A parenthesized argument is one value; its words are not the push's.
@@ -870,12 +891,10 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
     "if ($LASTEXITCODE -eq 0) { git push -u origin feature } else { Write-Host 'push skipped' -f Yellow }",
     "git push -u origin (Split-Path -Leaf (Get-Location))", "git push -u origin \"$($ticket)-fix\"",
     "git push -u origin (\"${TICKET}-fix\")", "git push -u origin @(\"$($t)-feature\")",
-    "git push -u origin (\"$(git branch --show-current)-fix\")"]) {
-    assert.equal(verdict("PowerShell", cmd), "allow", `PowerShell should allow: ${cmd}`);
-  }
-  // PowerShell text the guard reads although PowerShell would parse it differently:
-  // a here-string, curly quotes, a Unicode space, text piped into `iex`.
-  for (const cmd of ["$s = @'\ngit push -qf origin main\n'@",
+    "git push -u origin (\"$(git branch --show-current)-fix\")"].map(row("PowerShell", "allow", "PowerShell should allow")),
+    // PowerShell text the guard reads although PowerShell would parse it differently:
+    // a here-string, curly quotes, a Unicode space, text piped into `iex`.
+    ...["$s = @'\ngit push -qf origin main\n'@",
     "git push origin main \u201c-qf\u201d", "git push origin \"x\u201c -qf \u201cy\"", "git push origin main\u00a0-qf",
     "echo 'git push -qf origin main' | iex", "Write-Output '; git push -qf origin main' | git commit --allow-empty -F - | iex",
     "echo 'git push -qf origin main'\n| iex", "Write-Output 'git push -qf origin main'\r\n| iex",
@@ -888,20 +907,21 @@ test("the push guard blocks force pushes in any flag bundle", { skip: !python &&
     "git push origin 'main@{1}:main' --force", "git push origin \"@{u}\" -f", "git -c a.b=`; push -f origin main",
     "git -C \"$(Get-Location)\" push -f origin main", "git -C \"${env:REPO}\" push -f origin main",
     // A `\` ending a PowerShell path is no continuation; a backtick continuation is a space.
-    "Set-Location C:\\work\\repo\\\ngit push -f origin main", "git push`\n-f origin main", "git push`\r\n-f origin main"]) {
-    assert.equal(verdict("PowerShell", cmd), "deny", `PowerShell should block: ${cmd}`);
-  }
-  // PowerShell forms whose force flag is not in the text.
-  for (const cmd of ["git push @args", "git push $flags origin main",
+    "Set-Location C:\\work\\repo\\\ngit push -f origin main", "git push`\n-f origin main", "git push`\r\n-f origin main"]
+      .map(row("PowerShell", "deny", "PowerShell should block")),
+    // PowerShell forms whose force flag is not in the text.
+    ...["git push @args", "git push $flags origin main",
     // PowerShell evaluates a parenthesized argument; Set-Item changes the environment next to a push.
     "git push origin main ('-q'+'f')", "git push origin (\"+{0}\" -f $b)", "Set-Item Env:HOME C:/e; git push origin",
     // After `--%` PowerShell passes separators through as words.
     "git push origin main -o --% ; -qf",
     // A program name built at run time, and a PowerShell alias for git.
     "&('gi'+'t') push -qf origin main",
-    "sal -Value git g; g push -qf origin main", "Set-Alias -Value git -Name g; g push -qf origin main"]) {
-    assert.equal(verdict("PowerShell", cmd), "allow", `PowerShell passes by design: ${cmd}`);
-  }
+    "sal -Value git g; g push -qf origin main", "Set-Alias -Value git -Name g; g push -qf origin main"]
+      .map(row("PowerShell", "allow", "PowerShell passes by design")),
+  ];
+  const got = await verdicts(rows);
+  rows.forEach(([, cmd, want, label], i) => assert.equal(got[i], want, `${label}: ${cmd}`));
   // Hooks run in the project directory; a repo's own json.py must not replace the hook's imports.
   const shadowed = mkdtempSync(join(tmpdir(), "push-guard-cwd-"));
   writeFileSync(join(shadowed, "json.py"), "raise SystemExit(1)\n");
