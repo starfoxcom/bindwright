@@ -49,8 +49,9 @@ name: Claude Code Review
 
 on:
   pull_request:
-    # No `reopened`: a reopen keeps the head commit, so a second run there would start a new check
-    # suite, and the merge does not count the gate check the first run's suite holds. A push reviews again.
+    # No `reopened`: a second run on a head that already holds the gate check starts a new check
+    # suite, and the merge does not count the gate the first suite holds. So a reopen starts no
+    # review, even after commits pushed while the PR was closed; a push then reviews it.
     types: [opened, synchronize]
     branches: [develop, main]
 
