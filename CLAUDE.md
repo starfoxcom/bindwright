@@ -2,7 +2,7 @@
 
 This repo is Bindwright itself, and it runs on its own setup. `.claude/rules/` is the bind the engine renders from `_core/project-template/.claude/rules/` with this project's answers in `.bindwright/project.json`, exactly what a downstream project gets. The canonical templates live only in `_core/`.
 
-After a change in `_core/`, re-bind with `node engine/cli.js --update .` (the same three-way merge `/bindwright:update` runs, against `.bindwright/pristine.json`) and commit the result with it. Two hand tunes stay on top of the render: `code-size.md` lists only JavaScript and Python, and `collaboration.md` § Who reviews describes the solo-maintainer gate. `guard-hooks.md` is this repo's own, with no template behind it: it loads when a session opens a guard hook or its tests.
+After a change in `_core/`, re-bind with `node engine/cli.js --update .` (the same three-way merge `/bindwright:update` runs, against `.bindwright/pristine.json`) and commit the result with it. Two hand tunes stay on top of the render: `code-size.md` lists only JavaScript and Python, and `collaboration.md` § Who reviews describes the solo-maintainer gate. `guard-hooks.md` and `templates.md` are this repo's own, with no template behind them: the first loads when a session opens a guard hook or its tests, the second when it opens a file under `_core/project-template/`.
 
 ## Project overview
 
