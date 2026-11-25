@@ -200,10 +200,26 @@ merge_methods() {
   fi
 }
 
-# The same list as a JSON array, for a ruleset's pull_request rule.
+# The merge methods a ruleset's pull_request rule allows: every list of the
+# protected branches it covers, in alphabetical order, since one rule cannot
+# tell those branches apart.
+ruleset_methods() {
+  local branch method all="" out=""
+  for branch in "${BRANCHES[@]}"; do
+    if [ "$(gh api "repos/$REPO/rulesets/$1" --jq "$(covers_filter "$branch")")" = true ]; then
+      all+=" $(merge_methods "$branch")"
+    fi
+  done
+  for method in merge rebase squash; do
+    [[ "$all " == *" $method "* ]] && out+="$method "
+  done
+  echo "${out% }"
+}
+
+# A list of merge methods as a JSON array, for a ruleset's pull_request rule.
 methods_json() {
   local method sep="" out="["
-  for method in $(merge_methods "$1"); do
+  for method in $1; do
     out+="$sep\"$method\""
     sep=", "
   done
@@ -338,7 +354,7 @@ rulesets_for() {
 
 # What the branch's rulesets lack, one line per gap; nothing when covered.
 branch_gaps() {
-  local ids id rule name allowed want types="" checks="" methods="" bypass=0
+  local ids id rule name allowed want types="" checks="" methods="" bypass=0 wrong=""
   ids=$(rulesets_for "$1")
   if [ -z "$ids" ]; then
     echo "no active ruleset"
@@ -350,20 +366,20 @@ branch_gaps() {
       | select(.type == "required_status_checks")
       | .parameters.required_status_checks[].context')$'\n'
     # A pull_request rule without the list allows every method.
-    methods+=$(gh api "repos/$REPO/rulesets/$id" --jq '.rules[] | select(.type == "pull_request")
-      | .parameters.allowed_merge_methods // ["merge", "rebase", "squash"] | sort | join(" ")')$'\n'
+    methods=$(gh api "repos/$REPO/rulesets/$id" --jq '.rules[] | select(.type == "pull_request")
+      | .parameters.allowed_merge_methods // ["merge", "rebase", "squash"] | sort | join(" ")')
+    if [ -n "$methods" ] && [ -z "$wrong" ]; then
+      want=$(ruleset_methods "$id")
+      while IFS= read -r allowed; do
+        [ "$allowed" = "$want" ] || wrong="${want// / and } only (a pull_request rule allows ${allowed// / and })"
+      done <<< "$methods"
+    fi
     bypass=$((bypass + $(gh api "repos/$REPO/rulesets/$id" --jq '.bypass_actors | length')))
   done
   for rule in deletion non_fast_forward pull_request; do
     [[ $types == *" $rule "* ]] || echo "rule $rule"
   done
-  want=$(merge_methods "$1")
-  while IFS= read -r allowed; do
-    if [ -n "$allowed" ] && [ "$allowed" != "$want" ]; then
-      echo "merge methods: ${want// / and } only (a pull_request rule allows ${allowed// / and })"
-      break
-    fi
-  done <<< "$methods"
+  [ -z "$wrong" ] || echo "merge methods: $wrong"
   for name in "${REQUIRED[@]}"; do
     grep -qxF "$name" <<< "$checks" || echo "required check \"$name\""
   done
@@ -395,7 +411,7 @@ new_ruleset() {
 {"name": "$1-protection", "target": "branch", "enforcement": "active",
  "conditions": {"ref_name": {"include": ["refs/heads/$1"], "exclude": []}},
  "bypass_actors": [],
- "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}, $(pr_rule "$1"),
+ "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}, $(pr_rule "$(merge_methods "$1")"),
    {"type": "required_status_checks", "parameters": {
      "strict_required_status_checks_policy": false,
      "required_status_checks": $(checks_json)}}]}
@@ -407,11 +423,11 @@ ensure_rule() {
   echo "(if any(.[]; .type == \"$1\") then . else . + [$2] end) |"
 }
 
-# A jq program that repairs a ruleset of the branch ($2) read from the API.
-# "full" adds the missing rules and checks; "strip" only removes bypass actors
-# and the old deep check, for the branch's other rulesets. Both set the merge
-# methods of any pull_request rule, since GitHub allows only what every rule
-# on the branch allows.
+# A jq program that repairs a ruleset read from the API. "full" adds the
+# missing rules and checks; "strip" only removes bypass actors and the old
+# deep check, for the branch's other rulesets. Both give any pull_request rule
+# the merge methods $2, since GitHub allows only what every rule on the branch
+# allows.
 fix_filter() {
   local ensure="" add="[]" drop="." keep
   local no_checks='{"type": "required_status_checks", "parameters": {
@@ -456,7 +472,7 @@ apply_ruleset() {
   for id in $ids; do
     mode="strip"
     if [ "$id" = "$primary" ]; then mode="full"; fi
-    gh api "repos/$REPO/rulesets/$id" --jq "$(fix_filter "$mode" "$1")" \
+    gh api "repos/$REPO/rulesets/$id" --jq "$(fix_filter "$mode" "$(ruleset_methods "$id")")" \
       | gh api -X PUT "repos/$REPO/rulesets/$id" --input - --silent
   done
 }

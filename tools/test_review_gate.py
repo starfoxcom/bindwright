@@ -1041,6 +1041,20 @@ class SetupScript(unittest.TestCase):
         self.assertEqual(rule["parameters"], {"required_approving_review_count": 0,
                                               "allowed_merge_methods": ["merge"]})
 
+    def test_a_ruleset_covering_both_branches_settles_on_their_combined_methods(self):
+        ruleset = old_ruleset()
+        ruleset["conditions"]["ref_name"]["include"] = ["refs/heads/main", "refs/heads/develop"]
+        ruleset["rules"] += [{"type": "pull_request", "parameters": {
+            "allowed_merge_methods": ["squash"]}}]
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset])
+        run, after, _ = self.run_setup(state, "--merge-style", "squash")
+        self.assertIn("All set.", run.stdout)
+        rule = next(r for r in after["rulesets"][0]["rules"] if r["type"] == "pull_request")
+        self.assertEqual(rule["parameters"]["allowed_merge_methods"], ["merge", "squash"])
+        run, _, calls = self.run_setup(after, "--check", "--merge-style", "squash")
+        self.assertIn("All set.", run.stdout)
+        self.assertEqual(self.writes(calls), [])
+
     def test_checks_two_keeps_the_old_deep_check(self):
         ruleset = old_ruleset()
         ruleset["rules"][1]["parameters"]["required_status_checks"].append(
