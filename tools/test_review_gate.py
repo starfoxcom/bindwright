@@ -1026,6 +1026,13 @@ class SetupScript(unittest.TestCase):
                 run, _, _ = self.run_setup(after, "--check", *args)
                 self.assertIn("All set.", run.stdout)
 
+    def test_with_develop_as_default_main_is_checked_too(self):
+        state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"])
+        state["repo"]["default_branch"] = "develop"
+        run, _, _ = self.run_setup(state, "--check")
+        self.assertIn("MISSING  ruleset on develop: no active ruleset", run.stdout)
+        self.assertIn("MISSING  ruleset on main: no active ruleset", run.stdout)
+
     def test_a_ruleset_allowing_other_merge_methods_is_reported_and_repaired(self):
         ruleset = old_ruleset()
         ruleset["bypass_actors"] = []
