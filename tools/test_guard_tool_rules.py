@@ -227,6 +227,8 @@ class LengthRowsTest(unittest.TestCase):
                  "gh pr merge 5 --squash --delete-branch --match-head-commit ab12", "bash", False),
                 ("-r where PRs rebase", "rebase", "gh pr merge 5 -r --delete-branch", "powershell", False),
                 ("-m where PRs merge", "merge", "gh pr merge 5 -m", "bash", False),
+                ("--squash=false where PRs merge", "merge", "gh pr merge 5 --merge --squash=false", "bash", False),
+                ("-r=false where PRs squash", "squash", "gh pr merge 5 --squash -r=false", "powershell", False),
                 ("no style flag", "merge", "gh pr merge 5 --auto", "bash", False),
                 ("a mention in a message", "merge", 'git commit -m "gh pr merge 5 --squash"', "bash", False),
                 ("no saved style", None, "gh pr merge 5 --squash", "bash", False),

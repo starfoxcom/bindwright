@@ -535,8 +535,10 @@ def squash_merges():
 
 MERGE_STYLES = ("merge", "squash", "rebase")
 # The flags that rewrite a PR's commits. `--merge` is left out: gitflow merges release and cascade PRs
-# with it whatever the work PRs use, and a merge commit keeps every branch's history.
-MERGE_FLAGS = {style: Followed(r"\bgh\s+pr\s+merge\b", r"\n|;&", r"\s(?:--%s|-%s)\b" % (style, style[0]), flags=0)
+# with it whatever the work PRs use, and a merge commit keeps every branch's history. A flag counts only
+# when a space or the command's end follows it: a value written onto it (`--squash=false`) is left unread.
+MERGE_FLAGS = {style: Followed(r"\bgh\s+pr\s+merge\b", r"\n|;&", r"\s(?:--%s|-%s)(?=\s|$)" % (style, style[0]),
+                               flags=0)
                for style in ("squash", "rebase")}
 
 
