@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Added
 
-- **Fakes of outside services refuse what the service refuses.** `testing.md` § Test the real code now says that a test fake of an API, a database or a payment provider refuses that service's documented limits, anything it has been seen to refuse, and any call it has no rule for, and that a change adding a new kind of write to an outside service sends it once to the real service before it merges, with a `Live check:` line in the PR's Notes. The review guide's checklist gains the matching row, so the review blocks a new outside write tested only against a fake that takes every request.
+- **Fakes of outside services refuse what the service refuses.** `testing.md` § Test the real code gains the rule, along with one real call for each new kind of write to an outside service, and the review guide's checklist gains the matching row.
 
 ### Fixed
 
