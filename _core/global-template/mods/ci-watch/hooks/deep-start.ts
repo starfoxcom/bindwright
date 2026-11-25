@@ -69,12 +69,7 @@ async function deepRunsAlive($: EngineInterface, watch: Watch, since: string): P
   }
 }
 
-/**
- * The watch settled as `deepNeverStarted` when the gate has owed a deep review for `DEEP_GRACE_MS` and none
- * started since its first run, or marked `deep.isStarted` once one has, so it is looked up no more. While
- * GitHub reports an Actions incident the incident wake keeps its place. Anything that cannot be read leaves
- * the watch as it is, for the next poll or the time limit.
- */
+/** The watch with this file's rule applied (its header says when it settles); unreadable input changes nothing. */
 export async function withDeepStart($: EngineInterface, watch: Watch, now: number): Promise<Watch> {
   const isTooSoon = now - watch.startedAt < DEEP_START_MS
   if (watch.outcome || watch.incident || watch.deep?.isStarted || isTooSoon || !isWaitingOnReview(watch)) {
