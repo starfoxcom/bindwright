@@ -167,7 +167,7 @@ CI watching lives in `token-efficiency.md`.
 It also holds the cascade: after a release or hotfix merges into `{{MAIN_BRANCH}}`, a cascade PR carries it back into `{{DEV_BRANCH}}`, and the work is done only when that PR merges. Read it before cutting a hotfix too.
 <!-- TOGGLE:github_no_actions:off START -->
 <!-- TOGGLE:default_branch_is_dev:off START -->
-A change to `.github/workflows/` starts on a `hotfix/<name>` branch from `{{MAIN_BRANCH}}`, never from `{{DEV_BRANCH}}`; `releases.md` says why.
+A change to `.github/workflows/` or `.github/ISSUE_TEMPLATE/` starts on a `hotfix/<name>` branch from `{{MAIN_BRANCH}}`, never from `{{DEV_BRANCH}}`; `releases.md` says why.
 <!-- TOGGLE:default_branch_is_dev:off END -->
 <!-- TOGGLE:github_no_actions:off END -->
 <!-- TOGGLE:branching_model_gitflow END -->

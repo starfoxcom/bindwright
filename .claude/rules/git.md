@@ -86,7 +86,7 @@ Review tiers, the verdict rule and CI watching live in `review-tiers.md` and `to
 
 `releases.md` holds how releases are numbered and tagged. It loads when a session reads a changelog or a file that carries the version (`VERSION`, `package.json`, `pyproject.toml` and the like); read it before cutting a release or bumping a version.
 It also holds the cascade: after a release or hotfix merges into `main`, a cascade PR carries it back into `develop`, and the work is done only when that PR merges. Read it before cutting a hotfix too.
-A change to `.github/workflows/` starts on a `hotfix/<name>` branch from `main`, never from `develop`; `releases.md` says why.
+A change to `.github/workflows/` or `.github/ISSUE_TEMPLATE/` starts on a `hotfix/<name>` branch from `main`, never from `develop`; `releases.md` says why.
 
 ## Dead code does not ship
 

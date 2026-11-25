@@ -11,6 +11,7 @@ paths:
   - "**/*.csproj"
   - "**/build.gradle*"
   - ".github/workflows/**"
+  - ".github/ISSUE_TEMPLATE/**"
   - ".github/scripts/version_check.py"
 ---
 
@@ -48,3 +49,5 @@ The hotfix or release is done only when the cascade PR is merged and its branch 
 
 Review workflows triggered by comments or schedules run the copy on the GitHub default branch, and the review app refuses its token to a run whose copy of the review workflow differs from that copy, so its review is never posted.
 Because `main` is the default branch, a change to `.github/workflows/` lands on `main` first as a `hotfix/<name>` PR, then cascades to `develop`. A workflow change made on a feature branch fails the review check.
+
+Issue forms and templates (`.github/ISSUE_TEMPLATE/`) follow the same path: GitHub reads them only from the default branch, so a change merged into `develop` stays invisible to everyone opening an issue until the next release. Land it as a `hotfix/<name>` PR too.
