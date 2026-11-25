@@ -15,6 +15,10 @@
 # step that wrote it, and every write is read back and redone if another one
 # wiped it. So this workflow and claude.yml can finish in either order, or at
 # the same moment, and the gate still holds both results.
+# Every write also sets a commit status named "Review gate" to the same
+# result. A second run on one head commit (a reopened PR) can leave the check
+# in a check suite the merge no longer counts, but the newest status for a
+# name always counts, so the required check still has a current answer.
 #
 # The older pair stays for branch rules that still require it: the
 # "Evaluate review outcome" job reports either way, and `checks: two` in the
@@ -67,6 +71,8 @@ jobs:
     permissions:
       contents: read
       checks: write
+      # The Review gate's commit status, beside its check.
+      statuses: write
       pull-requests: read
     outputs:
       # The commit every job below reads the gate's files from: the base
@@ -2513,6 +2519,8 @@ jobs:
       # PATCH of Claude On-Demand to skipped (otherwise it would stay at
       # in_progress on docs-only PRs and block the merge).
       checks: write
+      # The Review gate's commit status, beside its check.
+      statuses: write
     # As in Diff triage: the light checkout gets a folder of its own.
     defaults:
       run:
@@ -2547,6 +2555,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           echo "::error::The review gate's own files could not be checked out, so the routine verdict cannot be read or written: failing closed. Re-run the workflow."
+          if ! gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" -f state=failure -f context="Review gate" \
+            -f "description=The review gate's files could not be checked out" > /dev/null; then
+            echo "::warning::Could not mark the Review gate status as failed"
+          fi
           id=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=Review%20gate&per_page=100" \
             --jq '[.check_runs[] | select(.name == "Review gate") | .id] | max // empty' 2> /dev/null || true)
           # A failed lookup can print an error body instead of an id.
