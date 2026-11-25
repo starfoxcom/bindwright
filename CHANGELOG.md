@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Changed
+
+- **`/bindwright:update` offers the code types the size rule misses.** A project set up from the size rule's own shorter file list could leave out Vue, Svelte, `.mts`, MQL5, shell and other code it tracks, so the rule never loaded for those files and an update never revisited the list. The update now compares the rule's list with the code types the repo tracks, offers to add the missing ones, and, when the size check is there, says how many new breaches they bring and offers to record them in the baseline or fix them first, so the next PR does not fail on files it did not touch.
+
 ## [v7.18.0] — 2026-11-25
 
 ### Added
