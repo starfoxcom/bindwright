@@ -301,7 +301,7 @@ class LengthRowsTest(unittest.TestCase):
         write(released_only.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released)
               .replace("[1.1.0]: ", "[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: ", 1))
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
-        # A `git` the repo ships below its top folder, first on PATH, never runs: the row reads that as no edit.
+        # A `git` the repo ships, first on PATH, never runs: the row reads the edit with the user's own git.
         write(released_only.replace("- b", "- B"))
         tools = os.path.join(self.folder, "bin")
         os.makedirs(tools)
@@ -311,7 +311,15 @@ class LengthRowsTest(unittest.TestCase):
             script.write(leaves_marker)
         os.chmod(planted, 0o755)
         with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
-            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+            self.assertEqual(self.logged("git commit -am x", "bash"), [dated])
+        self.assertFalse(os.path.exists(os.path.join(tools, marker)))
+        # Nor from a session in a submodule, where the nearest `.git` is the submodule's own.
+        submodule = os.path.join(self.folder, "lib")
+        os.makedirs(os.path.join(submodule, ".git"))
+        outer, self.hook.CWD = self.hook.CWD, submodule
+        with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
+            self.logged("git commit -am x", "bash")
+        self.hook.CWD = outer
         self.assertFalse(os.path.exists(os.path.join(tools, marker)))
         # A git whose own child holds the output open past the deadline, as a launcher's does, is not waited on.
         slow = tempfile.mkdtemp()
@@ -344,6 +352,22 @@ class LengthRowsTest(unittest.TestCase):
         # Outside a repo, git fails, and the row reads it as no edit.
         self.hook.CWD = tempfile.gettempdir()
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
+
+
+class TrustedGitTest(unittest.TestCase):
+    def test_a_path_folder_that_cannot_be_resolved_is_skipped(self):
+        # Windows raises for a share that refuses the sign-in; the guard skips that folder and goes on.
+        hook = load_tool_rules()
+        share, real = os.path.join(tempfile.gettempdir(), "unreachable-share"), hook.real_path
+
+        def refusing(path):
+            if path == share:
+                raise OSError(1326, "The user name or password is incorrect")
+            return real(path)
+
+        with unittest.mock.patch.dict(os.environ, {"PATH": share + os.pathsep + os.environ.get("PATH", "")}), \
+                unittest.mock.patch.object(hook, "real_path", refusing):
+            self.assertIsNotNone(hook.trusted_git(REPO))
 
 
 class ToolRulesSweepTest(unittest.TestCase):
