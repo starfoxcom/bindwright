@@ -20,8 +20,9 @@ and take the first `-m` of a `git commit` or the `--title` of `gh pr create` or
 never closes, a double-quoted string holding `$(`, a `<<` inside one), the
 text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
-to slip past it. Two rows also read the repo: the merge-style row its saved
-answers, and the changelog row its CHANGELOG.md against the last commit's.
+to slip past it. Three rows also read the repo: the merge-style and PR-title
+rows its saved answers, and the changelog row its CHANGELOG.md against the last
+commit's.
 
 Each rule carries its mode. An `enforce` rule refuses the command. An `observe`
 rule only appends what it would have refused to the user's Bindwright folder
@@ -609,20 +610,26 @@ def edits_dated_changelog(text, shell):
     """Whether a `git commit` runs while the repo's CHANGELOG.md differs from HEAD's inside a dated section.
 
     The working tree is compared, not the index, so a commit chained after its `git add` is read too.
-    A hunk that only adds lines counts when it adds them after a dated section's line."""
+    A hunk that only adds lines counts when it adds them after a dated section's line, unless a link line
+    comes right after them: a release cut adds its link above the older ones."""
     if not GIT_COMMIT(text, shell):
         return False
     deadline = time.monotonic() + GIT_BUDGET
     old = git_output(deadline, "cat-file", "blob", "HEAD:CHANGELOG.md")
-    # No external diff tool or text conversion: either would change the hunks' line numbers or drop them.
-    diff = old is not None and git_output(deadline, "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff",
-                                          "--no-textconv", "--", ":(top)CHANGELOG.md")
+    # No external diff tool, text conversion, folder-relative diff or merged hunks: each would drop the
+    # hunks or change the line ranges they name.
+    diff = old is not None and git_output(deadline, "-c", "diff.relative=false", "-c", "diff.interHunkContext=0",
+                                          "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff", "--no-textconv",
+                                          "--", ":(top)CHANGELOG.md")
     if not diff:
         return False
-    dated = dated_lines(old)
+    lines, dated = old.split("\n"), dated_lines(old)
     for start, count in HUNK.findall(diff):
         first, size = int(start), int(count or 1)
-        if any(number in dated for number in (range(first, first + size) if size else [first])):
+        if size:
+            if any(number in dated for number in range(first, first + size)):
+                return True
+        elif first in dated and not (first < len(lines) and LINK_REFERENCE.match(lines[first])):
             return True
     return False
 

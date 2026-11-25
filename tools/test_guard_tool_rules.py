@@ -254,11 +254,21 @@ class LengthRowsTest(unittest.TestCase):
         git = ["git", "-C", self.folder, "-c", "user.name=t", "-c", "user.email=t@example.com",
                "-c", "commit.gpgsign=false"]
         subprocess.run(git[:3] + ["init", "-q"], check=True)
+        # Settings that would hide the changes outside the session's folder, or merge distant hunks into one.
+        subprocess.run(git[:3] + ["config", "diff.relative", "true"], check=True)
+        subprocess.run(git[:3] + ["config", "diff.interHunkContext", "50"], check=True)
         path = os.path.join(self.folder, "CHANGELOG.md")
-        with open(path, "w", encoding="utf-8", newline="\n") as changelog:
-            changelog.write(self.CHANGELOG)
-        subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
-        subprocess.run(git + ["commit", "-q", "-m", "docs: start"], check=True)
+
+        def write(text):
+            with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+                changelog.write(text)
+
+        def commit(text):
+            write(text)
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+            subprocess.run(git + ["commit", "-q", "-m", "docs: start"], check=True)
+
+        commit(self.CHANGELOG)
         os.makedirs(os.path.join(self.folder, "sub"), exist_ok=True)
         self.hook.CWD = os.path.join(self.folder, "sub")
         released = "## [1.2.0] - 2026-11-24\n\n### Fixed\n- a\n\n"
@@ -282,9 +292,14 @@ class LengthRowsTest(unittest.TestCase):
                 ("a dated section edited, a commit only mentioned", self.CHANGELOG.replace("- b", "- B"),
                  'echo "git commit"', False)):
             with self.subTest(name):
-                with open(path, "w", encoding="utf-8", newline="\n") as changelog:
-                    changelog.write(text)
+                write(text)
                 self.assertEqual(self.logged(command, "bash"), [dated] if want else [])
+        # Links that name only the releases: the cut adds its own above them, after the oldest section's end.
+        released_only = self.CHANGELOG.replace("[unreleased]: https://x/compare/v1.1.0...HEAD\n", "")
+        commit(released_only)
+        write(released_only.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released)
+              .replace("[1.1.0]: ", "[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: ", 1))
+        self.assertEqual(self.logged("git commit -am x", "bash"), [])
         # Outside a repo, git fails, and the row reads it as no edit.
         self.hook.CWD = tempfile.gettempdir()
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
