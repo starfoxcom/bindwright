@@ -46,8 +46,10 @@ that harmless:
     writes again when its own facts are gone.
 
 Every write also sets a commit status named "Review gate" to the same result,
-before the check, so a failed status write leaves the check as it was, and
-once the read-back settles it sets the status again from the check it read. A
+before the check. A status GitHub refuses is sent once more without its
+description; if that is refused too, the check is still written with the
+verdict and the step fails after it. Once the read-back settles, the status
+is set again from the check it read. A
 second run on one head commit (a reopened PR) can leave the check in a check
 suite the merge no longer counts, while the newest status for a name always
 counts; a failing check of that name still blocks beside a passing status.
@@ -478,10 +480,16 @@ def _set_status(repo, sha, check):
     try:
         _gh("repos/%s/statuses/%s" % (repo, sha), "POST", body)
     except GateError as error:
-        if "Resource not accessible by integration" not in str(error):
-            raise
-        print("::warning::The Review gate commit status was not set: this job lacks statuses: write",
+        if "Resource not accessible by integration" in str(error):
+            print("::warning::The Review gate commit status was not set: this job lacks statuses: write",
+                  file=sys.stderr)
+            return
+        # GitHub takes a status with no description, so a refused description
+        # cannot leave the status behind the check.
+        print("::warning::The Review gate commit status was refused; sending it without a description",
               file=sys.stderr)
+        body.pop("description")
+        _gh("repos/%s/statuses/%s" % (repo, sha), "POST", body)
 
 
 def _write(repo, sha, current, note, facts):

@@ -490,7 +490,9 @@ class Upsert(unittest.TestCase):
         # start state.
         # `status_error` stands for a status write that GitHub refuses, and
         # `overwrite` for a newer run's write landing right after the next PATCH.
+        # `refuse_description` stands for GitHub refusing any status that carries one.
         self.calls, self.existing, self.wipes, self.status_error, self.overwrite = [], [], 0, None, None
+        self.refuse_description = False
         real, settle = gate._gh, gate.SETTLE_SECONDS
 
         def fake(path, method="GET", body=None):
@@ -501,6 +503,8 @@ class Upsert(unittest.TestCase):
             if "/statuses/" in path:
                 if self.status_error:
                     raise gate.GateError(self.status_error)
+                if self.refuse_description and "description" in body:
+                    raise gate.GateError("gh api POST %s failed: gh: Validation failed (HTTP 422)" % path)
                 return {}
             if method == "GET":
                 return {"check_runs": self.existing}
@@ -624,12 +628,22 @@ class Upsert(unittest.TestCase):
         self.assertEqual((out["conclusion"], self.existing[0]["conclusion"]), ("success", "success"))
         self.assertIn("lacks statuses: write", warning.getvalue())
 
+    def test_a_refused_description_still_moves_the_status_with_the_verdict(self):
+        # The pending status took, the passing one is refused: without the
+        # retry, the newest status would stay pending and the merge blocked.
+        gate.upsert("o/r", self.SHA, "Set up.")
+        self.refuse_description = True
+        with contextlib.redirect_stderr(io.StringIO()):
+            out = gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        statuses = [body for method, path, body in self.calls if "/statuses/" in path]
+        self.assertEqual((out["conclusion"], statuses[-1]), ("success", {"state": "success", "context": "Review gate"}))
+
     def test_any_other_status_failure_still_writes_the_check_then_fails(self):
         # A refused status must not keep the verdict off the check, or a gate
         # whose status writes fail could never pass, its own repair included.
         self.status_error = "gh api POST failed: API rate limit exceeded (HTTP 403)"
         self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
-        with self.assertRaises(gate.GateError):
+        with self.assertRaises(gate.GateError), contextlib.redirect_stderr(io.StringIO()):
             gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
         [patch] = self.patches()
         self.assertEqual(patch["conclusion"], "success")
