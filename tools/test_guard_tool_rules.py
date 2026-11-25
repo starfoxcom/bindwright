@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 import unittest.mock
 
@@ -312,6 +313,19 @@ class LengthRowsTest(unittest.TestCase):
         with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
             self.assertEqual(self.logged("git commit -am x", "bash"), [])
         self.assertFalse(os.path.exists(os.path.join(tools, marker)))
+        # A git whose own child holds the output open past the deadline, as a launcher's does, is not waited on.
+        slow = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, slow, ignore_errors=True)
+        stall = "@ping -n 11 127.0.0.1 >nul\n" if os.name == "nt" else "#!/bin/sh\nsleep 10\n"
+        slow_git = os.path.join(slow, "git.bat" if os.name == "nt" else "git")
+        with open(slow_git, "w", encoding="utf-8", newline="\n") as script:
+            script.write(stall)
+        os.chmod(slow_git, 0o755)
+        started = time.monotonic()
+        with unittest.mock.patch.dict(os.environ, {"PATH": slow + os.pathsep + os.environ.get("PATH", "")}), \
+                unittest.mock.patch.object(self.hook, "GIT_SECONDS", 1):
+            self.assertEqual(self.logged("git commit -m x", "bash"), [])
+        self.assertLess(time.monotonic() - started, 4)
         # A staged changelog past the size limit is not read: no edit.
         write(released_only.replace("- b", "- B").replace("- a\n", "- a\n" + "- x\n" * 500))
         with unittest.mock.patch.object(self.hook, "CHANGELOG_LIMIT", len(released_only) + 10):

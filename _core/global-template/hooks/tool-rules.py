@@ -617,8 +617,12 @@ def trusted_git(root):
     found = shutil.which("git")
     if not found or not os.path.isabs(found):
         return None
+    try:
+        here = real_path(os.getcwd())
+    except OSError:  # the hook's own folder was deleted
+        return None
     folder = real_path(os.path.dirname(found))
-    return None if is_within(folder, real_path(root)) or folder == real_path(os.getcwd()) else found
+    return None if is_within(folder, real_path(root)) or folder == here else found
 
 
 def git_output(git, root, deadline, *args):
@@ -626,11 +630,21 @@ def git_output(git, root, deadline, *args):
     left = deadline - time.monotonic()
     if left <= 0:
         return None
+    # Nothing to wait on: no input, no credential prompt, no fetch of a missing object.
+    quiet = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1")
     try:
-        done = subprocess.run([git, "-C", root, *args], capture_output=True, timeout=left, check=False)
-    except (OSError, subprocess.SubprocessError):
+        process = subprocess.Popen([git, "-C", root, *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, env=quiet)
+    except OSError:
         return None
-    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
+    try:
+        out, _ = process.communicate(timeout=left)
+    except subprocess.TimeoutExpired:
+        # Waiting again for the output, as `subprocess.run` does, can outlast the deadline: on Windows a
+        # launcher's child keeps the pipe open after the launcher is killed.
+        process.kill()
+        return None
+    return out.decode("utf-8", "replace") if process.returncode == 0 else None
 
 
 def stored_text(git, root, deadline, spec):
