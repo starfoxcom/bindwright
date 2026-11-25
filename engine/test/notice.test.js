@@ -266,7 +266,8 @@ test("the notice, run from the helper as /start-session runs it, tells the user 
     const cases = [["helper", helper, plugin], ["linked", linked, plugin], ["checkout", helper, checkout]];
     for (const [name, root, pluginFolder] of cases) {
       const env = {
-        ...process.env, CLAUDE_CONFIG_DIR: join(s.root, `config-${name}`),
+        // An empty temp folder, so the scratch walk the notice starts ends at once.
+        ...process.env, CLAUDE_CONFIG_DIR: join(s.root, `config-${name}`), CLAUDE_CODE_TMPDIR: join(s.root, "tmp"),
         BINDWRIGHT_LATEST_URL: "http://127.0.0.1:9/VERSION", // nothing listens there: offline
       };
       const setup = { schema: 1, extras: { tasks: "recommended" } };
