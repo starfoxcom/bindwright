@@ -27,4 +27,3 @@ jobs:
           else
             gh api -X POST "repos/$REPO/check-runs" -f name="Review gate" -f head_sha="$SHA" -f status=completed -f conclusion="$CHECK_CONCLUSION" > /dev/null
           fi
-          gh api -X POST "repos/$REPO/statuses/$SHA" -f state=success -f context="Review gate" -f description="probe $ACTION" > /dev/null
