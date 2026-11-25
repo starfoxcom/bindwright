@@ -11,7 +11,6 @@ paths:
   - "**/*.csproj"
   - "**/build.gradle*"
   - ".github/workflows/**"
-  - ".github/ISSUE_TEMPLATE/**"
   - ".github/scripts/version_check.py"
 ---
 

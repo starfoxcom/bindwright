@@ -11,7 +11,6 @@ paths:
   - "**/*.csproj"
   - "**/build.gradle*"
   - ".github/workflows/**"
-  - ".github/ISSUE_TEMPLATE/**"
   - ".github/scripts/version_check.py"
 ---
 
@@ -58,8 +57,10 @@ Because `{{DEV_BRANCH}}` is the default branch, workflow changes are ordinary wo
 <!-- TOGGLE:default_branch_is_dev END -->
 <!-- TOGGLE:default_branch_is_dev:off START -->
 Because `{{MAIN_BRANCH}}` is the default branch, a change to `.github/workflows/` lands on `{{MAIN_BRANCH}}` first as a `hotfix/<name>` PR, then cascades to `{{DEV_BRANCH}}`. A workflow change made on a feature branch fails the review check.
+<!-- TOGGLE:code_host_github START -->
 
 Issue forms and templates (`.github/ISSUE_TEMPLATE/`) follow the same path: GitHub reads them only from the default branch, so a change merged into `{{DEV_BRANCH}}` stays invisible to everyone opening an issue until the next release. Land it as a `hotfix/<name>` PR too.
+<!-- TOGGLE:code_host_github END -->
 <!-- TOGGLE:default_branch_is_dev:off END -->
 <!-- TOGGLE:github_no_actions:off END -->
 <!-- TOGGLE:branching_model_gitflow END -->
