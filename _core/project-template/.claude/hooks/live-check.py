@@ -3,9 +3,10 @@ service without a `Live check:` line in its body.
 
 testing.md asks for one real send of each new kind of write before the work is done, and the
 pull request's body records it. This hook reads a plain `gh pr create` or `gh pr edit` that
-passes a body file, takes the lines the branch adds from `git diff`, and when one of them makes
-a write (an API call with a write method, or an HTTP client's post, put, patch or delete) and the
-body has no `Live check:` line, it appends the match to
+passes a body file, takes the lines the branch adds from `git diff` (outside test files and the
+bind's record under .bindwright/), and when one of them makes a write (an API call with a write
+method, or an HTTP client's post, put, patch or delete) and the body has no `Live check:` line,
+it appends the match to
 `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and prints one line to stderr.
 
 It never blocks: every outcome exits 0, so the log shows how often the note fires before any
@@ -44,6 +45,9 @@ WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\b(?:requests|httpx|axios)\.(?:post|put|patch|delete)\(",
     r"\bfetch\((?=.*\bmethod\s*:\s*[\"']?" + WRITE_METHOD + r"\b)",
 )]
+RECORD_FOLDER = ".bindwright"
+TEST_FOLDERS = {"test", "tests", "__tests__", "spec"}
+TEST_NAME_MARKERS = ("_test.", ".test.", ".spec.")
 LIVE_CHECK_LINE = re.compile(r"(?:[-*] )?live check:", re.IGNORECASE)
 
 
@@ -109,10 +113,25 @@ def pr_request(command, shell):
     return "gh pr " + words[2], body_file, option_value(words, BASE_OPTIONS)
 
 
+def sends_nothing(path):
+    """Whether a repo path holds text that never reaches a real service: a test file, or the
+    bind's record under .bindwright/, which stores whole files as strings."""
+    parts = path.lower().split("/")
+    name = parts[-1]
+    return (parts[0] == RECORD_FOLDER or any(part in TEST_FOLDERS for part in parts[:-1])
+            or name.startswith("test_") or any(marker in name for marker in TEST_NAME_MARKERS))
+
+
 def write_lines(diff):
-    """The added lines of a diff that make a write to an outside service, without their `+`."""
-    added = [line[1:].strip() for line in diff.splitlines()
-             if line.startswith("+") and not line.startswith("+++")]
+    """The added lines of a diff that make a write to an outside service, without their `+`,
+    leaving out files that send nothing."""
+    added, skipped = [], False
+    for line in diff.splitlines():
+        if line.startswith("+++"):
+            path = line[4:].strip()
+            skipped = sends_nothing(path[2:] if path.startswith("b/") else path)
+        elif line.startswith("+") and not skipped:
+            added.append(line[1:].strip())
     return [line for line in added if any(pattern.search(line) for pattern in WRITE_PATTERNS)]
 
 

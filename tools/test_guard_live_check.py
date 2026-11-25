@@ -33,15 +33,16 @@ def write(folder, name, text):
         handle.write(text)
 
 
-def make_repo(folder, added_lines, body=None):
-    """A repo whose feature branch adds `added_lines` to api.py, with the body in body.md."""
+def make_repo(folder, added_lines, body=None, path="api.py"):
+    """A repo whose feature branch adds `added_lines` to `path`, with the body in body.md."""
     git(folder, "init", "-q", "-b", "main")
     write(folder, "README.md", "base\n")
     git(folder, "add", "README.md")
     git(folder, "commit", "-q", "-m", "chore: base")
     git(folder, "checkout", "-q", "-b", "feature")
-    write(folder, "api.py", "".join(line + "\n" for line in added_lines))
-    git(folder, "add", "api.py")
+    os.makedirs(os.path.dirname(os.path.join(folder, path)), exist_ok=True)
+    write(folder, path, "".join(line + "\n" for line in added_lines))
+    git(folder, "add", path)
     git(folder, "commit", "-q", "-m", "feat: add the sync")
     if body is not None:
         write(folder, "body.md", body)
@@ -127,6 +128,26 @@ class WriteLines(unittest.TestCase):
                 make_repo(folder, [line], BODY)
                 run_hook(folder, home, "gh pr create --base main --body-file body.md")
                 self.assertEqual(len(observed(home)), 1 if expect_write else 0)
+
+
+class FilesThatSendNothing(unittest.TestCase):
+    # name, path the write is added in, a note expected
+    ROWS = [
+        ("the bind's record under .bindwright/ makes no note", ".bindwright/pristine.json", False),
+        ("a test_ file makes no note", "tools/test_sync.py", False),
+        ("a .test. file makes no note", "engine/test/sync.test.js", False),
+        ("a file under tests/ makes no note", "tests/fakes.py", False),
+        ("a _test. file makes no note", "sync_test.go", False),
+        ("a file whose name only holds the word test notes", "latest.py", True),
+    ]
+
+    def test_test_file_rows(self):
+        for name, path, expect_note in self.ROWS:
+            with self.subTest(name), tempfile.TemporaryDirectory() as folder, \
+                    tempfile.TemporaryDirectory() as home:
+                make_repo(folder, [POST_LINE], BODY, path)
+                run_hook(folder, home, "gh pr create --base main --body-file body.md")
+                self.assertEqual(len(observed(home)), 1 if expect_note else 0)
 
 
 class LogEntry(unittest.TestCase):
