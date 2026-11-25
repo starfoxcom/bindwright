@@ -19,7 +19,7 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
           ACTION: ${{ github.event.action }}
-          CHECK_CONCLUSION: success
+          CHECK_CONCLUSION: failure
         run: |
           ID=$(gh api "repos/$REPO/commits/$SHA/check-runs?check_name=Review%20gate" --jq '[.check_runs[] | .id] | max // empty')
           if [ "$ACTION" = reopened ] && [ -n "$ID" ]; then
@@ -27,3 +27,4 @@ jobs:
           else
             gh api -X POST "repos/$REPO/check-runs" -f name="Review gate" -f head_sha="$SHA" -f status=completed -f conclusion="$CHECK_CONCLUSION" > /dev/null
           fi
+          gh api -X POST "repos/$REPO/statuses/$SHA" -f state=success -f context="Review gate" -f description="probe $ACTION" > /dev/null
