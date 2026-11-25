@@ -59,7 +59,12 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
     BODY = "an inline body for `gh pr` or `gh issue`"
     SCRATCH = "a scratch file in a fixed folder (`/tmp`, `C:/tmp`)"
     JQ = "`jq` in Git Bash"
-    ROWS = (("gh run rerun 5 --failed", "bash", RERUN), ("gh run rerun 5 --job 7", "powershell", RERUN),
+    SWITCH = "a branch switch chained with other commands"
+    ROWS = (("git checkout develop && git pull", "bash", SWITCH),
+            ("git switch -c x; ls", "powershell", SWITCH),
+            ("git checkout develop", "bash", None), ("git checkout -- a.txt && git status", "bash", None),
+            ('git commit -m "then git checkout x && go"', "bash", None),
+            ("gh run rerun 5 --failed", "bash", RERUN), ("gh run rerun 5 --job 7", "powershell", RERUN),
             ("gh run rerun 5", "bash", None),
             ("git rebase -i HEAD~3", "bash", INTERACTIVE), ("git add -p src", "powershell", INTERACTIVE),
             ("git commit -i -m x", "bash", None), ("git stash show -p", "bash", None),
