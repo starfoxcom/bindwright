@@ -118,13 +118,34 @@ def is_test(path):
     return any(p in TEST_DIRS for p in parts[:-1]) or TEST_NAME.search(parts[-1]) is not None
 
 
-def tracked_files(by_ext, *options):
-    """The measured files git lists: tracked by default, or new and not ignored with `--others`."""
+def listed_files(by_ext, options=(), errors="strict"):
     # -z: paths come back raw, not quoted and escaped when they hold non-ASCII.
     out = subprocess.run(["git", "ls-files", "-z", *options], cwd=ROOT, capture_output=True, text=True,
-                         check=True, encoding="utf-8")
+                         check=True, encoding="utf-8", errors=errors)
     return [f for f in out.stdout.split("\0")
             if os.path.splitext(f)[1] in by_ext and not SKIP_DIRS.intersection(f.split("/")[:-1])]
+
+
+def tracked_files(by_ext):
+    return listed_files(by_ext)
+
+
+def untracked_files(by_ext):
+    """New files of a measured type that git does not ignore, or none when git cannot list them.
+
+    Their names are only printed, never opened, so a name that is not UTF-8 is decoded with
+    replacement characters instead of failing the check over a file no commit holds.
+    """
+    try:
+        return listed_files(by_ext, ("--others", "--exclude-standard"), errors="replace")
+    except (subprocess.CalledProcessError, OSError):
+        return []
+
+
+def printable(text):
+    """The text as the console can always show it: what its encoding lacks becomes an escape."""
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, "backslashreplace").decode(encoding)
 
 
 def venv_site_packages():
@@ -424,10 +445,11 @@ def main(argv=None):
         print("SIZE_RULE_EMPTY: .claude/rules/code-size.md gives limits for no file type")
         return 1
     files = tracked_files(by_ext)
-    # CI measures only what a commit holds, so a file never added would read clean here and fail there.
-    new = tracked_files(by_ext, "--others", "--exclude-standard")
+    # CI measures only what a commit holds, so a file added after this run reads clean here and can fail there.
+    new = untracked_files(by_ext)
     if new:
-        print(f"note: {len(new)} new file(s) are not measured until added to git: {', '.join(sorted(new))}")
+        names = printable(", ".join(sorted(new)))
+        print(f"note: {len(new)} new file(s) are not measured until added to git: {names}")
     found = Findings()
     for path in files:
         measure_file(found, path, shared, by_ext[os.path.splitext(path)[1]])
