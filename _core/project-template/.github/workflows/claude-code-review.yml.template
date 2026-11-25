@@ -2560,7 +2560,7 @@ jobs:
           # on this commit, still counts beside the failed check, so it fails
           # too; with none there, the failed check blocks on its own. A failed
           # lookup prints no count, so the status is set then too.
-          count=$(gh api "repos/$REPO/commits/$HEAD_SHA/status" \
+          count=$(gh api "repos/$REPO/commits/$HEAD_SHA/status?per_page=100" \
             --jq '[.statuses[] | select(.context == "Review gate")] | length' 2> /dev/null || true)
           if [ "$count" != 0 ] && ! gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
             -f context="Review gate" -f "description=The review gate's files could not be checked out" > /dev/null; then
