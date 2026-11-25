@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import runpy
 import subprocess
 import sys
@@ -15,6 +16,9 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, ".github", "scripts"))
 import review_gate as gate  # noqa: E402
+
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import github_writes  # noqa: E402
 
 # The real workflow check, kept before the upsert tests stand in for it.
 READY_CHECK = gate._statuses_ready
@@ -492,6 +496,9 @@ class Upsert(unittest.TestCase):
 
         def fake(path, method="GET", body=None):
             self.calls.append((method, path, body))
+            refused = method != "GET" and github_writes.refusal(method, path, body)
+            if refused:
+                raise gate.GateError("gh api %s %s failed: gh: Validation failed: %s" % (method, path, refused))
             if "/statuses/" in path:
                 if self.status_error:
                     raise gate.GateError(self.status_error)
@@ -1318,6 +1325,43 @@ class SetupScript(unittest.TestCase):
         self.assertIn("ok       Claude GitHub App", run.stdout)
         run, _, _ = self.run_setup(fresh_repo(), "--check")
         self.assertIn("note     Claude GitHub App not confirmed", run.stdout)
+
+
+class GitHubWrites(unittest.TestCase):
+    """The test fake refuses what GitHub refuses, so no write passes here that fails there."""
+
+    STATUS = "repos/o/r/statuses/" + "a" * 40
+
+    def test_status_descriptions_as_github_takes_them(self):
+        # Each row was sent to GitHub's real statuses API, which took or refused it.
+        rows = [
+            ("plain text", "Routine review", True),
+            ("a 4-byte emoji", "Routine review \U0001f7e2", False),
+            ("3-byte characters", "Routine review ✓ ·", True),
+            ("140 characters", "x" * 140, True),
+            ("141 characters", "x" * 141, False),
+            ("empty", "", True),
+        ]
+        for name, description, taken in rows:
+            with self.subTest(name):
+                body = {"state": "success", "context": "Review gate", "description": description}
+                self.assertEqual(github_writes.refusal("POST", self.STATUS, body) is None, taken)
+
+    def test_every_write_the_script_makes_has_a_rule(self):
+        with open(SCRIPT, encoding="utf-8") as fh:
+            source = fh.read()
+        writes = re.findall(r'_gh\("([^"]+)" % (?:\([^)]*\)|\w+), "(POST|PATCH|PUT|DELETE)"', source)
+        # Every write call is read here, none skipped by an unusual spelling.
+        self.assertEqual(len(writes), len(re.findall(r'_gh\(.*"(?:POST|PATCH|PUT|DELETE)"', source)))
+        self.assertTrue(writes)
+        for template, method in writes:
+            with self.subTest(method + " " + template):
+                values = iter(["o/r"] + ["a" * 40] * 3)
+                path = re.sub(r"%[sd]", lambda m: "1" if m.group() == "%d" else next(values), template)
+                self.assertNotIn("no rule", github_writes.refusal(method, path, {}) or "")
+
+    def test_a_write_with_no_rule_is_refused(self):
+        self.assertIn("no rule", github_writes.refusal("DELETE", "repos/o/r/check-runs/1", None))
 
 
 if __name__ == "__main__":
