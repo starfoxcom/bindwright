@@ -68,7 +68,7 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
             ("gh run rerun 5", "bash", None), ("gh run rerun 5 --failed=false", "bash", None),
             ("gh run rerun 5 --failed;gh run view 5", "bash", RERUN),
             ("gh run rerun 5 --failed|tee log", "bash", RERUN),
-            ("(cd ci; gh run rerun 5 --job 7)", "bash", RERUN),
+            ("(cd ci; gh run rerun 5 --failed)", "bash", RERUN),
             ("git rebase -i HEAD~3", "bash", INTERACTIVE), ("git add -p src", "powershell", INTERACTIVE),
             ("git commit -i -m x", "bash", None), ("git stash show -p", "bash", None),
             ('GIT_SEQUENCE_EDITOR="sed -i s/pick/fixup/" git rebase -i HEAD~3', "bash", None),
