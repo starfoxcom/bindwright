@@ -557,19 +557,24 @@ class Upsert(unittest.TestCase):
         self.assertEqual(len(self.patches()), gate.WRITE_ROUNDS)
 
     def test_each_write_sets_the_commit_status_first(self):
+        # GitHub refuses a description holding a character above U+FFFF, such as
+        # the verdict emoji in a passing title.
         rows = [
-            ("in progress reads pending", {}, "pending"),
-            ("a pass reads success", {"triage": "reviewable", "routine": "pass", "order": "5.1.1"}, "success"),
-            ("a block reads failure", {"triage": "reviewable", "routine": "block", "order": "5.1.1"}, "failure"),
+            ("in progress reads pending", {}, "pending", "Routine review in progress"),
+            ("a pass reads success, without its emoji",
+             {"triage": "reviewable", "routine": "pass", "order": "5.1.1"}, "success", "Routine review"),
+            ("a block reads failure",
+             {"triage": "reviewable", "routine": "block", "order": "5.1.1"}, "failure",
+             "Blocked by the routine review"),
         ]
-        for name, facts, state in rows:
+        for name, facts, state, description in rows:
             with self.subTest(name):
                 self.calls, self.existing = [], []
-                out = gate.upsert("o/r", self.SHA, **facts)
+                gate.upsert("o/r", self.SHA, **facts)
                 writes = [(path, body) for method, path, body in self.calls if method != "GET"]
                 self.assertEqual(writes[0], ("repos/o/r/statuses/" + self.SHA,
                                              {"state": state, "context": "Review gate",
-                                              "description": out["title"]}))
+                                              "description": description}))
                 self.assertEqual(writes[1][0], "repos/o/r/check-runs")
 
     def test_the_last_status_follows_the_check_a_newer_run_left(self):
