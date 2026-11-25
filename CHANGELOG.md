@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.19.0] — 2026-11-25
+
 ### Fixed
 
 - **The review gate's setup gives each branch the merge methods its PRs need, from the saved merge style.** The setup script ignored the style saved at setup unless it was passed by hand, and it allowed only that one style on every branch and in the repository's settings. A project that squash- or rebase-merges its work PRs could then not merge its release, hotfix or cascade PRs, which need merge commits. The script now reads the saved style and branch model, and under gitflow it allows merge commits alone on main and merge commits beside the style on develop, while a trunk project's main takes the style alone; a ruleset that covers several branches takes all their methods combined, since one rule cannot tell them apart; the repository's settings allow every method a branch needs, since they switch a method on for all branches and each branch's ruleset narrows it. Its check also reports, and a run without `--check` repairs, a ruleset whose pull request rule allows other methods, since GitHub merges only with a method every rule on the branch allows. The git rules now name hotfix PRs among the PRs that always merge with a merge commit.
