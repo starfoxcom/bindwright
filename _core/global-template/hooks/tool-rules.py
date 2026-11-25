@@ -20,7 +20,9 @@ and take the first `-m` of a `git commit` or the `--title` of `gh pr create` or
 never closes, a double-quoted string holding `$(`, a `<<` inside one), the
 text is left unread: a missed pattern costs less than a refused command. It is
 a safety net for the ordinary spelling, not a sandbox against a command built
-to slip past it.
+to slip past it. Three rows also read the repo: the merge-style and PR-title
+rows its saved answers, and the changelog row the staged CHANGELOG.md against
+the last commit's, both as git stores them.
 
 Each rule carries its mode. An `enforce` rule refuses the command. An `observe`
 rule only appends what it would have refused to the user's Bindwright folder
@@ -40,6 +42,8 @@ import json
 import os
 import re
 import shlex
+import shutil
+import subprocess
 import sys
 import time
 
@@ -566,6 +570,126 @@ def long_title(text, shell):
     return any(len(first_line(title)) > TITLE_LIMIT for title in titles) and squash_merges()
 
 
+GIT_COMMIT = both(r"\bgit\s+commit\b")
+# A changelog heading that carries a date: a released section, which a later release never edits.
+DATED_HEADING = re.compile(r"^## .*\b\d{4}-\d{2}-\d{2}\b")
+# A link reference line (`[1.0.0]: https://...`), which Keep a Changelog keeps at the file's end: a release
+# cut edits these, so they belong to no section.
+LINK_REFERENCE = re.compile(r"^\[[^\]]+\]:\s")
+# Seconds the changelog row's git calls share, well inside the hook's 10 s limit in a project.
+GIT_SECONDS = 4
+# The largest changelog the row reads, in bytes, either copy: a long-lived project's runs to a few hundred KB.
+CHANGELOG_LIMIT = 4 * 1024 * 1024
+
+
+def repo_root():
+    """The folder holding CWD's `.git` (a folder, or a worktree's file), or None outside a repo."""
+    try:
+        folder = os.path.abspath(CWD)
+    except OSError:  # a "." whose folder was deleted
+        return None
+    while not os.path.exists(os.path.join(folder, ".git")):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return None
+        folder = parent
+    return folder
+
+
+def real_path(path):
+    return os.path.normcase(os.path.realpath(path))
+
+
+def is_within(folder, top):
+    """Whether `folder` is `top` or below it; two paths on different drives never are."""
+    try:
+        return os.path.commonpath([folder, top]) == top
+    except ValueError:
+        return False
+
+
+def trusted_git(root):
+    """git on PATH as an absolute path, or None when the first one found is the repo's own.
+    Windows looks a bare name up in the current folder first, so a repo could ship its own `git.exe`:
+    that search is switched off, and a relative match, one anywhere in the repo or one in the current
+    folder is refused."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    found = shutil.which("git")
+    if not found or not os.path.isabs(found):
+        return None
+    try:
+        here = real_path(os.getcwd())
+    except OSError:  # the hook's own folder was deleted
+        return None
+    folder = real_path(os.path.dirname(found))
+    return None if is_within(folder, real_path(root)) or folder == here else found
+
+
+def git_output(git, root, deadline, *args):
+    """What a git command run in the repo prints, or None when it fails or the monotonic `deadline` passes."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        return None
+    # Nothing to wait on: no input, no credential prompt, no fetch of a missing object.
+    quiet = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_NO_LAZY_FETCH="1")
+    try:
+        process = subprocess.Popen([git, "-C", root, *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, env=quiet)
+    except OSError:
+        return None
+    try:
+        out, _ = process.communicate(timeout=left)
+    except subprocess.TimeoutExpired:
+        # Waiting again for the output, as `subprocess.run` does, can outlast the deadline: on Windows a
+        # launcher's child keeps the pipe open after the launcher is killed.
+        process.kill()
+        return None
+    return out.decode("utf-8", "replace") if process.returncode == 0 else None
+
+
+def stored_text(git, root, deadline, spec):
+    """The blob git stores at `spec` (`HEAD:CHANGELOG.md`, `:CHANGELOG.md` for the staged copy), or None when
+    there is none, it passes CHANGELOG_LIMIT or git cannot read it. A link is stored as its target's name,
+    so nothing outside git's own data is ever opened."""
+    size = git_output(git, root, deadline, "cat-file", "-s", spec)
+    if size is None or not size.strip().isdigit() or int(size) > CHANGELOG_LIMIT:
+        return None
+    return git_output(git, root, deadline, "cat-file", "blob", spec)
+
+
+def dated_sections(changelog):
+    """Each dated section's text by its heading line, without link lines or trailing blank lines."""
+    sections, heading = {}, None
+    for line in changelog.split("\n"):
+        line = line.rstrip("\r")
+        if line.startswith("## "):
+            heading = line if DATED_HEADING.match(line) else None
+            if heading is not None:
+                sections[heading] = []
+        elif heading is not None and not LINK_REFERENCE.match(line):
+            sections[heading].append(line)
+    return {heading: "\n".join(lines).rstrip() for heading, lines in sections.items()}
+
+
+def edits_dated_changelog(text, shell):
+    """Whether a `git commit` runs while a dated section of the last commit's CHANGELOG.md is changed or gone
+    in the staged copy. Only what git stores is read, never the file on disk, which the repo controls, so a
+    change staged in the same command as the commit (`git add`, `git commit -a`) is not seen."""
+    if not GIT_COMMIT(text, shell):
+        return False
+    root = repo_root()
+    git = root and trusted_git(root)
+    if not git:
+        return False
+    deadline = time.monotonic() + GIT_SECONDS
+    old = stored_text(git, root, deadline, "HEAD:CHANGELOG.md")
+    new = old and stored_text(git, root, deadline, ":CHANGELOG.md")
+    if new is None or not old:
+        return False
+    current = dated_sections(new)
+    return any(current.get(heading) != section for heading, section in dated_sections(old).items())
+
+
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
 REV_DOT_PATH = Followed(r"\bgit\s+(?:show|cat-file|ls-tree|diff)\b", r"\n|;&", r"\s[\w./@~^-]+:\.[^/\s.]")
 
@@ -637,6 +761,9 @@ RULES = [
     ("a `gh pr merge` style other than the repo's", other_merge_style,
      "the repo saved another merge style at setup (`mergeStyle` in `.bindwright/project.json`), and mixing"
      " them breaks the history it reads. Merge with the flag `git.md` names.", OBSERVE),
+    ("a commit that edits a released CHANGELOG.md section", edits_dated_changelog,
+     "a dated section records what that release shipped, so it never changes. Put the change under"
+     " `[Unreleased]` instead.", OBSERVE),
 ]
 
 

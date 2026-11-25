@@ -4,8 +4,11 @@ test_guard_hooks.py."""
 import json
 import os
 import shutil
+import subprocess
 import tempfile
+import time
 import unittest
+import unittest.mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,6 +19,8 @@ def load_tool_rules():
     spec = importlib.util.spec_from_file_location("tool_rules", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Outside any repo, so a row that reads the repo never reads the checkout the tests run from.
+    module.CWD = tempfile.gettempdir()
     return module
 
 
@@ -241,6 +246,104 @@ class LengthRowsTest(unittest.TestCase):
             with self.subTest(name):
                 self.project(style)
                 self.assertEqual(self.logged(command, shell), [other] if want else [])
+
+    CHANGELOG = ("# Changelog\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
+                 "## [1.1.0] - 2026-11-20\n\n### Added\n- b\n\n## [1.0.0] - 2026-11-01\n\n### Added\n- c\n\n"
+                 "[unreleased]: https://x/compare/v1.1.0...HEAD\n[1.1.0]: https://x/compare/v1.0.0...v1.1.0\n"
+                 "[1.0.0]: https://x/releases/tag/v1.0.0\n")
+
+    def test_a_commit_that_edits_a_dated_changelog_section_is_logged(self):
+        dated = "a commit that edits a released CHANGELOG.md section"
+        git = ["git", "-C", self.folder, "-c", "user.name=t", "-c", "user.email=t@example.com",
+               "-c", "commit.gpgsign=false"]
+        subprocess.run(git[:3] + ["init", "-q"], check=True)
+        path = os.path.join(self.folder, "CHANGELOG.md")
+
+        def write(text):
+            with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+                changelog.write(text)
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+
+        def commit(text):
+            write(text)
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+            subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "docs: start"], check=True)
+
+        commit(self.CHANGELOG)
+        os.makedirs(os.path.join(self.folder, "sub"), exist_ok=True)
+        self.hook.CWD = os.path.join(self.folder, "sub")
+        released = "## [1.2.0] - 2026-11-24\n\n### Fixed\n- a\n\n"
+        cut = self.CHANGELOG.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released).replace(
+            "[unreleased]: https://x/compare/v1.1.0...HEAD\n",
+            "[unreleased]: https://x/compare/v1.2.0...HEAD\n[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n")
+        for name, text, command, want in (
+                ("a line changed in a dated section", self.CHANGELOG.replace("- b", "- B"), "git commit -am x", True),
+                ("a line added to the end of a dated section", self.CHANGELOG.replace("- b\n", "- b\n- d\n"),
+                 "git add -u && git commit -m x", True),
+                ("the newest dated heading changed", self.CHANGELOG.replace("2026-11-20", "2026-11-21"),
+                 "git commit -m x", True),
+                ("a line added under [Unreleased]", self.CHANGELOG.replace("- a\n", "- a\n- e\n"),
+                 "git commit -am x", False),
+                ("a release cut from [Unreleased], its links bumped", cut, "git commit -am x", False),
+                ("a link added for an [Unreleased] entry", self.CHANGELOG + "[#42]: https://x/issues/42\n",
+                 "git commit -am x", False),
+                ("a line changed in the oldest section, above the links", self.CHANGELOG.replace("- c", "- C"),
+                 "git commit -am x", True),
+                ("a dated section edited, with no commit", self.CHANGELOG.replace("- b", "- B"), "git status", False),
+                ("a dated section edited, a commit only mentioned", self.CHANGELOG.replace("- b", "- B"),
+                 'echo "git commit"', False)):
+            with self.subTest(name):
+                write(text)
+                self.assertEqual(self.logged(command, "bash"), [dated] if want else [])
+        # Links that name only the releases: the cut adds its own above them, after the oldest section's end.
+        released_only = self.CHANGELOG.replace("[unreleased]: https://x/compare/v1.1.0...HEAD\n", "")
+        commit(released_only)
+        write(released_only.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released)
+              .replace("[1.1.0]: ", "[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: ", 1))
+        self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        # A `git` the repo ships below its top folder, first on PATH, never runs: the row reads that as no edit.
+        write(released_only.replace("- b", "- B"))
+        tools = os.path.join(self.folder, "bin")
+        os.makedirs(tools)
+        planted, marker = os.path.join(tools, "git.bat" if os.name == "nt" else "git"), "ran.txt"
+        leaves_marker = f'@echo x> "%~dp0{marker}"\n' if os.name == "nt" else f'#!/bin/sh\ntouch "${{0%/*}}/{marker}"\n'
+        with open(planted, "w", encoding="utf-8", newline="\n") as script:
+            script.write(leaves_marker)
+        os.chmod(planted, 0o755)
+        with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        self.assertFalse(os.path.exists(os.path.join(tools, marker)))
+        # A git whose own child holds the output open past the deadline, as a launcher's does, is not waited on.
+        slow = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, slow, ignore_errors=True)
+        stall = "@ping -n 11 127.0.0.1 >nul\n" if os.name == "nt" else "#!/bin/sh\nsleep 10\n"
+        slow_git = os.path.join(slow, "git.bat" if os.name == "nt" else "git")
+        with open(slow_git, "w", encoding="utf-8", newline="\n") as script:
+            script.write(stall)
+        os.chmod(slow_git, 0o755)
+        started = time.monotonic()
+        with unittest.mock.patch.dict(os.environ, {"PATH": slow + os.pathsep + os.environ.get("PATH", "")}), \
+                unittest.mock.patch.object(self.hook, "GIT_SECONDS", 1):
+            self.assertEqual(self.logged("git commit -m x", "bash"), [])
+        self.assertLess(time.monotonic() - started, 4)
+        # A staged changelog past the size limit is not read: no edit.
+        write(released_only.replace("- b", "- B").replace("- a\n", "- a\n" + "- x\n" * 500))
+        with unittest.mock.patch.object(self.hook, "CHANGELOG_LIMIT", len(released_only) + 10):
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        # A link staged in its place is read as git stores it, the target's name: its released sections are gone.
+        # It goes straight into the index, so the file on disk stays a plain file for the checks after it.
+        link = subprocess.run(git + ["hash-object", "-w", "--stdin"], input="/dev/zero", capture_output=True,
+                              text=True, check=True).stdout.strip()
+        subprocess.run(git + ["update-index", "--cacheinfo", f"120000,{link},CHANGELOG.md"], check=True)
+        self.assertEqual(self.logged("git commit -m x", "bash"), [dated])
+        # An edit on disk that is not staged is not part of the commit.
+        commit(released_only)
+        with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+            changelog.write(released_only.replace("- b", "- B"))
+        self.assertEqual(self.logged("git commit -m x", "bash"), [])
+        # Outside a repo, git fails, and the row reads it as no edit.
+        self.hook.CWD = tempfile.gettempdir()
+        self.assertEqual(self.logged("git commit -am x", "bash"), [])
 
 
 class ToolRulesSweepTest(unittest.TestCase):
