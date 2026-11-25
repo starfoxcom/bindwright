@@ -1,24 +1,21 @@
 """SessionStart hook: find the browser profile folders that earlier sessions left in Claude Code's
-temp folder, and the headless browsers still using them, and ask the assistant to offer their
-cleanup.
+temp folder, and ask the assistant to offer their cleanup.
 
 A script that drives a browser often gives it a profile folder of its own (`--user-data-dir`)
 in the session's scratchpad. When the script dies, or forgets to clean up, each run leaves a
-folder that can reach a gigabyte, and a browser whose script was killed keeps running. Claude
-Code frees a scratchpad only together with its session's transcript, weeks later.
+folder that can reach a gigabyte. Claude Code frees a scratchpad only together with its
+session's transcript, weeks later.
 
 The hook deletes nothing. It looks at most once a day, at the start of a new session. On the
 user's yes, the assistant runs this file with `--clean <session id>`, which picks the same
-folders again, stops every browser using one, then deletes them. A folder is picked only when
-nothing wrote it for an hour and no browser whose script still runs uses it; when the running
-processes cannot be listed, nothing is picked.
+folders again and deletes them. A folder is picked only when nothing in it changed for an hour
+and no running browser holds its lock, the one Chromium keeps in every profile it has open.
 """
 import json
 import os
 import shutil
-import signal
+import socket
 import stat
-import subprocess
 import sys
 import tempfile
 import time
@@ -29,9 +26,8 @@ IN_USE_SECONDS = 60 * 60
 # How deep below the temp folder a profile is looked for: <project>/<session>/scratchpad/ and
 # a few folders more.
 MAX_DEPTH = 7
-# Claude Code stops the hook at 30 s; these three steps together stay well inside that.
+# Claude Code stops the hook at 30 s; these two steps together stay well inside that.
 WALK_SECONDS = 5
-LIST_SECONDS = 15
 SIZE_SECONDS = 5
 GIGABYTE = 1024 ** 3
 REPARSE_POINT = 0x400  # a Windows junction or link, which a walk must not follow
@@ -39,23 +35,31 @@ REPARSE_POINT = 0x400  # a Windows junction or link, which a walk must not follo
 
 def temp_roots():
     """Claude Code's temp folders, which hold each session's scratchpad: `claude` in its temp
-    folder, or `claude-<user id>` where the system's temp folder is shared between users.
-    Spelled as the sessions spell them, so the paths scripts pass their browsers compare equal."""
+    folder, or `claude-<user id>` where the system's temp folder is shared between users."""
     base = os.path.abspath(os.environ.get("CLAUDE_CODE_TMPDIR") or tempfile.gettempdir())
     names = ["claude"] + (["claude-{}".format(os.getuid())] if hasattr(os, "getuid") else [])
     return [os.path.join(base, name) for name in names if is_own_folder(os.path.join(base, name))]
 
 
 def is_own_folder(path):
-    """Whether `path` is a real folder, not a link or junction, owned by this user where the
-    system has user ids: a shared temp folder lets anyone else create a `claude` there."""
+    """Whether `path` is a real folder, not a link or junction, that only this user can change
+    where the system has user ids: a shared temp folder lets anyone else create a `claude`
+    there, and a folder others can write to lets them swap a link in while it is deleted."""
     try:
         info = os.lstat(path)
     except OSError:
         return False
     is_link = stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & REPARSE_POINT
-    is_mine = not hasattr(os, "getuid") or info.st_uid == os.getuid()
+    is_mine = not hasattr(os, "getuid") or only_mine(info)
     return stat.S_ISDIR(info.st_mode) and not is_link and is_mine
+
+
+def only_mine(info):
+    """Whether a folder is this user's and no one else can write in it. A group's write access
+    counts only when the group is not the user's own, as Linux gives each user a group."""
+    is_group_shared = info.st_mode & stat.S_IWGRP and info.st_gid != os.getgid()
+    is_shared = info.st_mode & stat.S_IWOTH or is_group_shared
+    return info.st_uid == os.getuid() and not is_shared
 
 
 def is_plain_folder(entry):
@@ -98,92 +102,67 @@ def profile_folders(root, skip, deadline):
 
 
 def last_written(folder):
-    """When the browser last wrote the profile, as seconds since the epoch."""
+    """When anything in the profile or its Default folder last changed, as seconds since the
+    epoch; a profile that cannot be read counts as changed now."""
     times = []
-    for path in (folder, os.path.join(folder, "Local State"), os.path.join(folder, "Default")):
+    for place in (folder, os.path.join(folder, "Default")):
+        if not os.path.isdir(place):
+            continue
         try:
-            times.append(os.stat(path).st_mtime)
+            times.append(os.stat(place).st_mtime)
+            times += [entry.stat(follow_symlinks=False).st_mtime for entry in os.scandir(place)]
         except OSError:
-            pass
+            return time.time()
     return max(times, default=0)
 
 
-def running_processes():
-    """(pid, parent pid, command line) of every running process, or None when they cannot be
-    listed, which then picks no folder: a browser that cannot be seen may still be in use."""
+def is_locked(folder):
+    """Whether a running browser holds the profile, by the lock Chromium keeps in it while it
+    runs: on Windows a `lockfile` the browser holds open for writing, elsewhere a
+    `SingletonLock` link that names `<host>-<pid>`. A lock that cannot be read counts as held."""
     if os.name == "nt":
-        command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-                   "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process"
-                   " | ForEach-Object { \"$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.CommandLine)\" }"]
-    else:
-        # `ww`: every command line in full, never cut at the terminal's width.
-        command = ["ps", "-axww", "-o", "pid=,ppid=,args="]
+        return is_held_open(os.path.join(folder, "lockfile"))
+    return names_live_browser(os.path.join(folder, "SingletonLock"))
+
+
+def is_held_open(path):
+    """Whether another program holds `path` open against writing, as a running browser does."""
+    if not os.path.lexists(path):
+        return False
     try:
-        listed = subprocess.run(command, capture_output=True, timeout=LIST_SECONDS)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    processes = []
-    for line in listed.stdout.decode("utf-8", "replace").splitlines():
-        parts = line.split("\t", 2) if os.name == "nt" else line.split(None, 2)
-        if len(parts) >= 2 and parts[0].strip().isdigit() and parts[1].strip().isdigit():
-            processes.append((int(parts[0]), int(parts[1]), parts[2] if len(parts) == 3 else ""))
-    return processes if listed.returncode == 0 and processes else None
-
-
-def comparable(text):
-    """A path or command line in the one spelling both are compared in."""
-    text = text.replace('"', "")
-    return text.replace("\\", "/").lower() if os.name == "nt" else text
-
-
-def profile_flags(folder):
-    """The `--user-data-dir=` texts that pass `folder`: its own spelling and its resolved one."""
-    return {"--user-data-dir=" + comparable(spelling).rstrip("/")
-            for spelling in (folder, os.path.realpath(folder))}
-
-
-def uses_profile(line, flags):
-    """Whether the comparable command line `line` holds one of `flags` as the whole path, with
-    or without a closing slash, not as the start of a longer one."""
-    for flag in flags:
-        at = line.find(flag)
-        while at != -1:
-            rest = line[at + len(flag):]
-            rest = rest[1:] if rest.startswith("/") else rest
-            if rest[:1] in ("", " "):
-                return True
-            at = line.find(flag, at + 1)
+        handle = os.open(path, os.O_WRONLY)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    os.close(handle)
     return False
 
 
-def has_relative_profile(line):
-    """Whether the comparable command line `line` passes a profile path that is not absolute."""
-    values = [part.split(" ", 1)[0] for part in line.split("--user-data-dir=")[1:]]
-    return any(not os.path.isabs(value) for value in values)
+def names_live_browser(path):
+    """Whether the lock link at `path` names a process that may still run: one on another
+    host cannot be checked from here, so it counts as running."""
+    if not os.path.lexists(path):
+        return False
+    try:
+        host, _, pid = os.readlink(path).rpartition("-")
+    except OSError:
+        return True
+    if host != socket.gethostname() or not pid.isdigit():
+        return True
+    try:
+        os.kill(int(pid), 0)  # signal 0 only asks whether the process exists
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
 
 
-def left_behind(folders, processes, now):
-    """{folder: [pids of the browsers using it]} for each folder nothing wrote for
-    IN_USE_SECONDS that no browser with a running parent uses. On Linux and macOS a process
-    whose parent exits is handed to process 1, so that parent counts as gone."""
-    running = {pid for pid, _, _ in (processes or [])} - ({1} if os.name != "nt" else set())
-    browsers = [(pid, parent, comparable(line)) for pid, parent, line in (processes or [])
-                if "--user-data-dir=" in line]
-    # A browser whose profile path is relative, or a list that cannot be read, could be using
-    # any of the folders, so none is picked.
-    if processes is None or any(has_relative_profile(line) for _, _, line in browsers):
-        return {}
-    picked = {}
-    for folder in folders:
-        if now - last_written(folder) <= IN_USE_SECONDS:
-            continue
-        flags = profile_flags(folder)
-        users = [(pid, parent) for pid, parent, line in browsers if uses_profile(line, flags)]
-        own = {pid for pid, _ in users}
-        # The browser's main process is the one whose parent is not one of its own processes.
-        if not any(parent in running for _, parent in users if parent not in own):
-            picked[folder] = sorted(own)
-    return picked
+def left_behind(folders, now):
+    """The folders nothing changed for IN_USE_SECONDS that no running browser holds."""
+    return [folder for folder in folders
+            if now - last_written(folder) > IN_USE_SECONDS and not is_locked(folder)]
 
 
 def total_size(folders, deadline):
@@ -230,14 +209,14 @@ def projects_of(folders, roots):
 
 
 def leftovers(session):
-    """(temp folders, {folder: [pids]}) for the profiles earlier sessions left behind; the
-    session `session` itself is left out."""
+    """(temp folders, [folders]) for the profiles earlier sessions left behind; the session
+    `session` itself is left out."""
     roots, deadline, folders = temp_roots(), time.monotonic() + WALK_SECONDS, []
     for root in roots:
         own = next((os.path.join(project, session) for project in subfolders(root)
                     if session and os.path.isdir(os.path.join(project, session))), None)
         folders += profile_folders(root, own, deadline)
-    return roots, left_behind(folders, running_processes() if folders else [], time.time())
+    return roots, left_behind(folders, time.time())
 
 
 def stamp_path():
@@ -271,33 +250,16 @@ def report(roots, picked, session):
     projects = projects_of(picked, roots)
     if projects:
         lines.append("They came from sessions of: {}.".format(", ".join(projects)))
-    running = sum(1 for pids in picked.values() if pids)
-    if running:
-        lines.append("{} of them still have a headless browser running whose script is gone.".format(running))
     lines.append("Nothing was deleted. Tell the user this in a line or two and offer to clean them up."
-                 " On a yes, run `\"{}\" \"{}\" --clean {}`, which stops those browsers and deletes the"
-                 " folders.".format(sys.executable, os.path.abspath(__file__), session))
+                 " On a yes, run `\"{}\" \"{}\" --clean {}`, which deletes the folders no running"
+                 " browser holds.".format(sys.executable, os.path.abspath(__file__), session))
     return " ".join(lines)
 
 
-def stop(pids):
-    for pid in pids:
-        try:
-            if os.name == "nt":
-                subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True,
-                               timeout=LIST_SECONDS)
-            else:
-                os.kill(pid, signal.SIGKILL)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-
-
 def clean(session):
-    """Stops the browsers of the profiles left behind, all before any folder is deleted, so no
-    process id is reused in between, then deletes the folders and prints which were removed and
-    which are still there (a file another program holds open)."""
+    """Deletes the profiles left behind and prints which were removed and which are still there
+    (a file another program holds open)."""
     _, picked = leftovers(session)
-    stop(sorted({pid for pids in picked.values() for pid in pids}))
     removed, kept = [], []
     for folder in picked:
         shutil.rmtree(folder, ignore_errors=True)

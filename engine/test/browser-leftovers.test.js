@@ -1,11 +1,11 @@
 // browser-leftovers.py (the global hook) runs on a throwaway temp folder and home folder.
 // The hook is checked by what it prints at session start and what `--clean` leaves on
-// disk; which profiles count as left behind is checked against a given process list.
+// disk; which profiles count as left behind is checked against the lock a browser keeps in each.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -131,55 +131,59 @@ test("--clean deletes the folders left behind and keeps the ones in use", { skip
   });
 });
 
-// Runs the hook's own selection on a process list given as [pid, parent pid, command line].
-function leftBehind(folders, processes) {
-  const driver = "import importlib.util, json, sys, time\n"
-    + "spec = importlib.util.spec_from_file_location('hook', sys.argv[1])\n"
-    + "hook = importlib.util.module_from_spec(spec)\n"
-    + "spec.loader.exec_module(hook)\n"
-    + "folders, processes = json.load(sys.stdin)\n"
-    + "processes = None if processes is None else [tuple(p) for p in processes]\n"
-    + "print(json.dumps(hook.left_behind(folders, processes, time.time())))\n";
-  const r = spawnSync(python, ["-I", "-c", driver, hook], {
-    input: JSON.stringify([folders, processes]), encoding: "utf8",
+// Puts the lock Chromium keeps in a running browser's profile into each folder, as the row
+// says, ages it, and runs the hook's own selection. On Windows a held lock is a `lockfile`
+// opened the way Chromium opens it (others may read it but not write it); elsewhere a lock is
+// a `SingletonLock` link to <host>-<pid>.
+const LOCK_DRIVER = `
+import ctypes, importlib.util, json, os, socket, sys, time
+spec = importlib.util.spec_from_file_location("hook", sys.argv[1])
+hook = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hook)
+cases, dead_pid = json.load(sys.stdin)
+old, handles = time.time() - 7200, []
+for folder, lock in cases:
+    link = os.path.join(folder, "SingletonLock")
+    owners = {"live": socket.gethostname(), "dead": socket.gethostname(), "elsewhere": "another-host"}
+    if lock in owners:
+        os.symlink("%s-%d" % (owners[lock], dead_pid if lock == "dead" else os.getpid()), link)
+        os.utime(link, (old, old), follow_symlinks=False)
+    elif lock == "plain":
+        open(link, "w").close()
+        os.utime(link, (old, old))
+    elif lock in ("held", "released"):
+        path = os.path.join(folder, "lockfile")
+        if lock == "held":
+            kernel = ctypes.WinDLL("kernel32")
+            kernel.CreateFileW.restype = ctypes.c_void_p
+            handles.append(kernel.CreateFileW(path, 0x40000000, 1, None, 2, 0x80, None))
+        else:
+            open(path, "w").close()
+        os.utime(path, (old, old))
+    os.utime(folder, (old, old))
+print(json.dumps(hook.left_behind([folder for folder, _ in cases], time.time())))
+`;
+
+function leftBehind(cases) {
+  const deadPid = spawnSync(process.execPath, ["-e", ""]).pid;
+  const r = spawnSync(python, ["-I", "-c", LOCK_DRIVER, hook], {
+    input: JSON.stringify([cases, deadPid]), encoding: "utf8",
   });
   assert.equal(r.status, 0, r.stderr);
   return JSON.parse(r.stdout);
 }
 
-test("a profile is picked only after an hour unwritten, with no live script's browser on it", { skip }, () => {
+test("an old profile is picked only when no running browser holds its lock", { skip }, () => {
   withLayout((layout) => {
-    const old = profile(layout, { name: "old" });
-    const fresh = profile(layout, { name: "fresh", hoursAgo: 0 });
-    const flag = (folder) => `msedge --headless --user-data-dir="${folder}"`;
-    const script = [10, 9, "node drive.mjs"];
-    const rows = [
-      ["no browser", [script], { [old]: [] }],
-      ["a running script's browser on the old profile", [script, [20, 10, flag(old)], [21, 20, flag(old)]], {}],
-      ["the same, its path written with a closing slash", [script, [20, 10, `${flag(old)}/`]], {}],
-      ["a browser whose script is gone, on the old profile", [script, [20, 9, flag(old)], [21, 20, flag(old)]],
-        { [old]: [20, 21] }],
-      ["a browser whose script is gone, on the fresh profile", [script, [20, 9, flag(fresh)]], { [old]: [] }],
-      ["a browser on a longer path that starts with the old one's", [script, [20, 10, flag(`${old}2`)]],
-        { [old]: [] }],
-      ["a process list that could not be read", null, {}],
-      ["a browser whose profile path is relative", [script, [30, 10, "chrome --user-data-dir=profile"]], {}],
-    ];
-    for (const [name, processes, expected] of rows) {
-      assert.deepEqual(leftBehind([old, fresh], processes), expected, name);
-    }
+    const rows = process.platform === "win32"
+      ? [["no lock", "none", true], ["a lockfile a running browser holds", "held", false],
+        ["a lockfile nothing holds", "released", true]]
+      : [["no lock", "none", true], ["a lock naming a running process", "live", false],
+        ["a lock naming a process that ended", "dead", true],
+        ["a lock naming another computer's process", "elsewhere", false],
+        ["a lock that is not a link", "plain", false]];
+    const cases = rows.map(([, lock], i) => [profile(layout, { name: `p${i}` }), lock]);
+    const picked = leftBehind(cases);
+    rows.forEach(([name, , isPicked], i) => assert.equal(picked.includes(cases[i][0]), isPicked, name));
   });
-});
-
-test("an old profile that a browser with a running parent uses is left alone", { skip }, async () => {
-  const layout = makeLayout();
-  const old = profile(layout);
-  const browser = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", "--", `--user-data-dir=${old}`]);
-  try {
-    await new Promise((ready) => setTimeout(ready, 500));
-    assert.equal(start(layout), "");
-  } finally {
-    browser.kill();
-    rmSync(layout.base, { recursive: true, force: true });
-  }
 });
