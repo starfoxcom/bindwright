@@ -5,7 +5,7 @@ import { isPushOrPr, mergedNumber, targetFolder } from '../hooks/command'
 import { plainPush } from '../hooks/plain'
 import { claimWake, HELP, wakeText } from '../hooks/register'
 import { settle } from '../hooks/settle'
-import { moment, type Seen, world } from './world'
+import { LONG, moment, type Seen, world } from './world'
 
 const BASE: Watch = { repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: {}, stablePolls: 0 }
 const HOUR = 60 * 60_000
@@ -250,17 +250,18 @@ test('a push starts a watch and the session is woken once when it passes', async
   expect(seen.prompts.length).toBe(1)
 })
 
-test('a PR with no check in a repo with no workflows is dropped after the grace time, unwoken', async ($, on) => {
+test('a PR with no check in a repo with no workflows wakes once after the grace time: no CI', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { workflows: 0, isCheckless: true, isReadable: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let poll = 0; poll < 25; poll++) await clock.advance(POLL_MS)
-  const saved = JSON.parse(seen.files.get('C:/Users/me/.claude/mods-data/ci-watch/s1.json') ?? '{}')
-  expect(saved.watches).toEqual([])
   expect(seen.ghCalls.filter(call => call.includes('/actions/workflows')).length).toBe(1)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('o/r#7: the repo runs no CI workflows')
+  expect(seen.prompts[0]).not.toContain('Checks finished')
   await clock.advance(HOUR)
-  expect(seen.prompts).toEqual([])
+  expect(seen.prompts.length).toBe(1)
 })
 
 test('checks from outside Actions are watched in a repo with no workflows, as in any other', async ($, on) => {
@@ -290,7 +291,7 @@ test('failed reads after the grace time never drop a watch whose checks came fro
   expect(seen.prompts[0]).toContain('o/r#7: all 1 checks settled')
 })
 
-test('a PR still with no check where workflows exist keeps its watch until the time limit', async ($, on) => {
+test('a PR still with no check where workflows exist keeps its watch until the time limit', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isCheckless = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -612,7 +613,7 @@ test('one command that merges a PR and pushes the next branch forgets the one an
 
 // An open PR is unfinished work: its settled watch stays on the row, however long ago it settled, until
 // the PR is merged or closed.
-test('a settled watch stays until its PR is merged or closed, not for a set time', async ($, on) => {
+test('a settled watch stays until its PR is merged or closed, not for a set time', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -631,7 +632,7 @@ test('a settled watch stays until its PR is merged or closed, not for a set time
 })
 
 // Past the hour after this session's push, a new head is someone else's: the row follows it, no wake.
-test("a head pushed long after the session's own push updates the row and wakes no one", async ($, on) => {
+test("a head pushed long after the session's own push updates the row and wakes no one", LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -649,7 +650,7 @@ test("a head pushed long after the session's own push updates the row and wakes 
 })
 
 // The session's own push hours later still wakes it, even when GitHub names the new commit only later.
-test('an own push hours later wakes the session for its new head', async ($, on) => {
+test('an own push hours later wakes the session for its new head', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
@@ -665,7 +666,7 @@ test('an own push hours later wakes the session for its new head', async ($, on)
 })
 
 // A silent watch still running when the session pushes becomes the session's own again.
-test('an own push onto a silent watch still running wakes the session', async ($, on) => {
+test('an own push onto a silent watch still running wakes the session', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
@@ -719,7 +720,7 @@ test("a watch saved with no push stamp keeps its push time across a head move", 
 // that watch's checks: the push makes the watch the session's own, so its settlement wakes the session.
 // (The push finds the watch only after its last wait, so no poll can swap the object between its lookup
 // and its stamp; the test kit cannot pause inside the clock read to show the old window.)
-test("a same-head push made while a poll reads a silent watch's checks makes it the session's own", async (
+test("a same-head push made while a poll reads a silent watch's checks makes it the session's own", LONG, async (
   $,
   on,
 ) => {
@@ -753,7 +754,7 @@ test("a same-head push made while a poll reads a silent watch's checks makes it 
 })
 
 // A push made while a poll reads the saved file stays the session's own: the poll does not undo its mark.
-test('an own push made mid-poll keeps the session its wake', async ($, on) => {
+test('an own push made mid-poll keeps the session its wake', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -817,7 +818,7 @@ test('a same-head push made while the settling poll checks the file before wakin
   expect(seen.prompts).toHaveLength(1)
 })
 
-test('a watch settled long ago asks GitHub about its PR every ten minutes, not every poll', async ($, on) => {
+test('a watch settled long ago asks GitHub about its PR every ten minutes, not every poll', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
@@ -953,10 +954,11 @@ test('/ci-watch answers in the row words, and phone adds each check and the link
   ]
   await clock.advance(POLL_MS)
   // A count of finished checks, never of passed ones under the word "done".
-  expect(await ask('')).toEqual(['⏳ PR 7 · 1/2 done (o/r)'])
+  // The round its head is, as the row names it: the first one on this PR.
+  expect(await ask('')).toEqual(['⏳ PR 7 · round 1 · 1/2 done (o/r)'])
   // The checks in the row's own order, which is the order they were first seen.
   const phone = await ask('phone')
-  expect(phone[0]).toBe('⏳ PR 7 · 1/2 done')
+  expect(phone[0]).toBe('⏳ PR 7 · round 1 · 1/2 done')
   expect(phone.slice(1, 3).sort()).toEqual(['   ⏳ build', '   ✅ review'])
   expect(phone.slice(3)).toEqual(['   https://github.com/o/r/pull/7', '/ci-watch help for more'])
 })

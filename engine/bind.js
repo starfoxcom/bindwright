@@ -77,6 +77,7 @@ function included(path, a, flags) {
     ".claude/rules/tracker.md": github,
     ".github/ISSUE_TEMPLATE/work-item.md": github,
     ".claude/scripts/research-adherence.py": flags.code_research_count,
+    "docs/ci-watching.md": flags.ci_checks,
     ".github/scripts/size_check.py": flags.code_size_check,
     ".github/workflows/size-check.yml": flags.code_size_check,
     ".github/size-check/exceptions.txt": flags.code_size_check,
@@ -147,8 +148,8 @@ export function planFiles(answers, coreFiles, precommitProfiles) {
 
 // The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
 // additions, the memory index, the push guard, the builder agent, the reply
-// style, the session-title hook, the attribution guard when the guards live in
-// ~/.claude, and the research hook for a tool without its own.
+// style, the session-title and browser-leftovers hooks, the attribution guard when
+// the guards live in ~/.claude, and the research hook for a tool without its own.
 async function globalFiles(a, ctx, readFile) {
   const verbatim = async (p) => (await readFile(GLOBAL_CORE + p)).replace(/\r\n/g, "\n");
   const render = async (p) => renderTemplate(await readFile(GLOBAL_CORE + p), ctx, GLOBAL_CORE + p);
@@ -158,6 +159,7 @@ async function globalFiles(a, ctx, readFile) {
     ["hooks/push-guard.py", await verbatim("hooks/push-guard.py")],
     ["hooks/tool-rules.py", await verbatim("hooks/tool-rules.py")],
     ["hooks/session-title.py", await verbatim("hooks/session-title.py")],
+    ["hooks/browser-leftovers.py", await verbatim("hooks/browser-leftovers.py")],
     ["hooks/reply-style.py", await verbatim("hooks/reply-style.py")],
     ["agents/builder.md", await verbatim("agents/builder.md")],
     ["output-styles/straight-talk.md", await verbatim("output-styles/straight-talk.md")],

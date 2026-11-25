@@ -54,6 +54,13 @@ export const COMPUTER = [
     keys: ["extra:session-title"],
   },
   {
+    id: "browser-leftovers",
+    title: "Browser leftovers check",
+    text: "Once a day, offers to clean up browser profiles that earlier sessions' scripts left behind.",
+    value: "Yes",
+    keys: ["extra:browser-leftovers"],
+  },
+  {
     id: "builder",
     title: "Builder agent",
     text: "A cheap Haiku helper writes the code, and the main model checks it.",
@@ -157,7 +164,7 @@ export const PROJECT = [
     id: "visual-steps",
     title: "Visual changes in small steps",
     text: "Anything people see changes one checked step at a time.",
-    value: "On",
+    value: "Projects with a UI",
     keys: ["advanced.uiRule"],
     engine: [{ flags: {}, key: "advanced.uiRule", value: true }],
   },

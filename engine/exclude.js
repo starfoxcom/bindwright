@@ -11,14 +11,15 @@ import { dirname, resolve } from "node:path";
 export const LOCAL_FOLDERS = [
   { path: ".claude/", always: true },
   { path: ".bindwright/", always: true },
-  { path: "docs/lazy/" },
+  // Kept out on every run: a clone may still hold the docs/lazy/README.md older setups wrote.
+  { path: "docs/lazy/", always: true },
   { path: ".github/size-check/" },
 ];
 // Files the sessions write when the work state lives in the repo, listed on every run.
 export const ALWAYS_FILES = ["ROADMAP.md"];
 // Files, listed only when the plan writes them.
 export const LOCAL_FILES = [
-  "CLAUDE.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
+  "CLAUDE.md", "docs/ci-watching.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
   "docs/security-posture.md", ".github/scripts/size_check.py", ".github/workflows/size-check.yml",
 ];
 

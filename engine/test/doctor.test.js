@@ -40,13 +40,14 @@ async function scene(change) {
 const engines = [[process.execPath, [join(engine, "cli.js")]], [python, ["-I", join(engine, "bind.py")]]];
 
 // Both engines' --doctor on identical scenes; returns the shared report.
-async function doctor(change = () => {}, agent = "claude-code_2-1-316_agent") {
+// `extraArgs(scene)` adds command-line options built from the scene's folders.
+async function doctor(change = () => {}, agent = "claude-code_2-1-316_agent", extraArgs = () => []) {
   const outs = [];
   for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
     const s = await scene(change);
     try {
       const env = { ...process.env, CLAUDE_CONFIG_DIR: s.config, AI_AGENT: agent };
-      const out = spawnSync(cmd, [...args, "--doctor", s.repo], { env, encoding: "utf8" });
+      const out = spawnSync(cmd, [...args, "--doctor", s.repo, ...extraArgs(s)], { env, encoding: "utf8" });
       outs.push(out.stdout.replaceAll(JSON.stringify(s.repo).slice(1, -1), "<repo>"));
     } finally {
       rmSync(s.root, { recursive: true, force: true });
@@ -77,6 +78,13 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     const scoped = `﻿---\npaths:\n\n  # sources\n  - "src/**"\n---\n${"x".repeat(200000)}`;
     const quiet = await doctor(({ at }) => writeFileSync(at(".claude/rules/big.md"), scoped));
     assert.ok(!failing(quiet).includes("instructions"), "a path-scoped rule loads only for its files");
+    const flow = `---\npaths: ["**",\n  "src/**"]\n---\n${"x".repeat(200000)}`;
+    const wrapped = await doctor(({ at }) => {
+      writeFileSync(at(".claude/rules/wrapped.md"), flow);
+      writeFileSync(at(".claude/rules/blank.md"), `---\npaths: [""]\n---\n${"x".repeat(200000)}`);
+    });
+    assert.ok(!failing(wrapped).includes("instructions"),
+      "a flow list that runs onto the next line, or holds only empty items, stays scoped");
     const loaded = await doctor(({ at }) => {
       writeFileSync(at(".claude/rules/spaced.md"), `---\npaths: [ ] # none yet\n---\n${"x".repeat(50000)}`);
       writeFileSync(at(".claude/rules/null.md"), `---\npaths: ~\n---\n${"x".repeat(49000)}`);
@@ -106,6 +114,53 @@ test("instruction files near Claude Code's limit are named, and a rule loaded by
     assert.match(found.say, largest, "a linked folder is read once and a loop ends");
     assert.doesNotMatch(found.say, /client-notes/, "a personal rule's name stays out, however it is reached");
   });
+
+test("the instructions total is split between the repo and ~/.claude", needsPython, async () => {
+  const report = await doctor(({ at, config }) => {
+    mkdirSync(join(config, "rules"), { recursive: true });
+    writeFileSync(join(config, "CLAUDE.md"), "p".repeat(1000));
+    writeFileSync(join(config, "rules", "mine.md"), "p".repeat(2000));
+    writeFileSync(at(".claude/rules/big.md"), "x".repeat(60000));
+  });
+  const say = report.checks.find((c) => c.id === "instructions").say;
+  assert.match(say, /of it from this repo and 3\.0k from ~\/\.claude\. /);
+  assert.match(say, /The largest: \.claude\/rules\/big\.md \(60\.0k\)/);
+});
+
+// Each row: the index's text (null: no file at the given path), whether the path is passed, and the
+// sentence the instructions check ends with (null: none).
+const PAST = "It is past the 200 lines or 25KB Claude Code loads, so the rest of it never reaches a session.";
+const MEMORY_ROWS = [
+  { name: "a 3,000-character index adds 3.0k", index: "x".repeat(3000), note: "adds 3.0k more." },
+  { name: "exactly 200 lines is not past the limit", index: `${"x".repeat(99)}\n`.repeat(200),
+    note: "adds 20.0k more." },
+  { name: "250 short lines count the first 200", index: `${"x".repeat(99)}\n`.repeat(250),
+    note: `adds 20.0k more. ${PAST}` },
+  { name: "30,000 bytes in 10 lines count 25,000", index: `${"x".repeat(2999)}\n`.repeat(10),
+    note: `adds 25.0k more. ${PAST}` },
+  { name: "bytes that are not UTF-8 are past the limit once the count is cut",
+    index: Buffer.alloc(9000, 0xff), note: `adds 8.3k more. ${PAST}` },
+  { name: "a path with no file there gives no note", index: null, note: null },
+  { name: "no path given gives no note", index: "x".repeat(3000), unpassed: true, note: null },
+];
+
+test("the memory index the session names is noted in the instructions check", needsPython, async (t) => {
+  const plain = (await doctor()).checks.find((c) => c.id === "instructions").say;
+  for (const row of MEMORY_ROWS) {
+    await t.test(row.name, async () => {
+      const file = (s) => join(s.root, "memory", "MEMORY.md");
+      const change = ({ at }) => {
+        if (row.index === null) return;
+        const path = join(dirname(at("x")), "..", "memory", "MEMORY.md");
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, row.index);
+      };
+      const report = await doctor(change, undefined, (s) => (row.unpassed ? [] : ["--memory-index", file(s)]));
+      const say = report.checks.find((c) => c.id === "instructions").say;
+      assert.equal(say, row.note ? `${plain} Auto memory's index (MEMORY.md) ${row.note}` : plain);
+    });
+  }
+});
 
 test("broken or missing state files stop at the first check, with the fix", needsPython, async () => {
   const broken = await doctor(({ at }) => writeFileSync(at(".bindwright/project.json"), "{"));

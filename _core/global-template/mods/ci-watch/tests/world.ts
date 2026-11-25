@@ -4,6 +4,9 @@ import { mock } from 'claude-code/testing'
 import { STATUS_SCRIPT } from '../hooks/incident'
 import { MKDIR_SCRIPT, SWEEP_SCRIPT } from '../hooks/register'
 
+// For a test of dozens of fake-clock polls: a slow runner can take past the default 5 s.
+export const LONG = { timeoutMs: 15_000 }
+
 // The engine beneath ci-watch in its tests: gh, the state files, the clock and the session's prompts.
 export type Seen = {
   prompts: string[]
@@ -23,6 +26,10 @@ export type Seen = {
   gateState?: string
   /** The PR's bot comments: when each was posted (after the push by default) and its body. */
   comments?: { at?: string; body: string }[]
+  /** The titles of the deep workflow's runs in progress, however early they were created (none by default). */
+  deepRuns?: string[]
+  /** When the PR was renamed, each time (none by default). */
+  renamedAt?: string[]
   /** The repo's deep workflow file (one that marks its reviews by default). */
   deepWorkflow?: string
   /** `gh pr checks` fails (network, auth) with nothing on stdout. */
@@ -87,6 +94,7 @@ export type Seen = {
 
 // The head's first gate run starts at the test clock's zero.
 const GATE_STARTED = '1970-01-01T00:00:00Z'
+export const PR_TITLE = 'fix(x): mend the thing'
 const MARKING_DEEP_WORKFLOW = 'mark="<!-- deep-run: $GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT review -->"\n'
 
 /** The answer to a gh API call the review check makes, or `undefined` for any other call. */
@@ -97,6 +105,12 @@ function reviewAnswer(seen: Seen, args: string): string | undefined {
     return rows.map(row => `${JSON.stringify(row)}\n`).join('')
   }
   if (args.includes('/contents/')) return seen.deepWorkflow ?? MARKING_DEEP_WORKFLOW
+  // Every deep run in `deepRuns` is in progress, so only that status's query lists them.
+  if (args.includes('/runs?')) {
+    return args.includes('status=in_progress') ? (seen.deepRuns ?? []).map(title => `${title}\n`).join('') : ''
+  }
+  if (args.includes('/events?')) return (seen.renamedAt ?? []).map(at => `${at}\n`).join('')
+  if (args.includes('--json title')) return `${PR_TITLE}\n`
   return undefined
 }
 

@@ -168,6 +168,9 @@ It also holds the cascade: after a release or hotfix merges into `{{MAIN_BRANCH}
 <!-- TOGGLE:github_no_actions:off START -->
 <!-- TOGGLE:default_branch_is_dev:off START -->
 A change to `.github/workflows/` starts on a `hotfix/<name>` branch from `{{MAIN_BRANCH}}`, never from `{{DEV_BRANCH}}`; `releases.md` says why.
+<!-- TOGGLE:code_host_github START -->
+So does a change to the issue forms in `.github/ISSUE_TEMPLATE/`.
+<!-- TOGGLE:code_host_github END -->
 <!-- TOGGLE:default_branch_is_dev:off END -->
 <!-- TOGGLE:github_no_actions:off END -->
 <!-- TOGGLE:branching_model_gitflow END -->

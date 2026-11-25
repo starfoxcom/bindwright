@@ -3,16 +3,16 @@ import { type Engine, expect, test } from 'claude-code/testing'
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
 import {
-  crossedResearch, isResearchDue, type PrRounds, recordRound, redStreak, roundsText, roundsToResearch, withTopic,
+  crossedResearch, isResearchDue, mayBeRound, type PrRounds, recordRound, redStreak, roundOf, roundsText,
+  roundsToResearch,
+  withTopic,
 } from '../hooks/rounds'
 import type { Watch } from '../types'
-import { type Seen, world } from './world'
+import { LONG, type Seen, world } from './world'
 
 const RED = 'FAILURE'
 const reds = (n: number) => Array.from({ length: n }, () => RED)
 const path = 'C:/Users/me/.claude/mods-data/ci-watch/rounds.json'
-// Dozens of fake-clock polls: a slow runner can take past the default 5 s.
-const LONG = { timeoutMs: 15_000 }
 
 // The rounds ci-watch saw settle on the PR, oldest first: any result but SUCCESS had a failed check.
 function seed(seen: Seen, results: string[]) {
@@ -32,6 +32,42 @@ test('a round that passed but did not merge counts red once another head follows
   expect(redStreak(of([true, false]))).toBe(0)
   expect(redStreak({ rounds: [] })).toBe(0)
 })
+
+const ROUND_CASES: { name: string; pr: PrRounds | undefined; sha: string; round: number }[] = [
+  { name: 'a PR with no rounds yet', pr: undefined, sha: 'c0', round: 1 },
+  { name: 'a head still running after two settled rounds', pr: of([true, true]), sha: 'c2', round: 3 },
+  { name: 'a head pushed again after a later round', pr: of([true, true]), sha: 'c0', round: 2 },
+  { name: 'a new head once the 50 rounds kept are full', pr: of(Array(50).fill(true)), sha: 'new', round: 50 },
+  { name: 'the newest settled head', pr: of([true, false]), sha: 'c1', round: 2 },
+]
+
+for (const { name, pr, sha, round } of ROUND_CASES) {
+  test(`round of ${name}`, () => {
+    expect(roundOf(pr, sha)).toBe(round)
+  })
+}
+
+// The heads the count records, and so the ones a row numbers: the same rule for both.
+const HEAD: Watch = { repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: {}, stablePolls: 0 }
+const MAY_BE_ROUND: { name: string; watch: Partial<Watch>; counts: boolean }[] = [
+  { name: 'running', watch: {}, counts: true },
+  { name: 'passed', watch: { outcome: 'passed' }, counts: true },
+  { name: 'failed', watch: { outcome: 'failed' }, counts: true },
+  { name: 'timed out', watch: { outcome: 'timeout' }, counts: false },
+  { name: "someone else's head", watch: { isSilent: true }, counts: false },
+  { name: 'conflicting with its base', watch: { isConflicting: true, outcome: 'passed' }, counts: false },
+  {
+    name: 'failed on a review that never posted',
+    watch: { outcome: 'failed', noVerdict: 'routine error' },
+    counts: false,
+  },
+]
+
+for (const { name, watch, counts } of MAY_BE_ROUND) {
+  test(`a watch ${name} ${counts ? 'is' : 'is not'} a round`, () => {
+    expect(mayBeRound({ ...HEAD, ...watch })).toBe(counts)
+  })
+}
 
 // Red, red, passed, red: the streak jumps from 0 to 4 and steps over the 3rd, which still owes its step back.
 test('a streak that jumps past a research step still asks for it', () => {
@@ -437,11 +473,21 @@ test("a round adds to the count file as read right before its write", async ($, 
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   seed(seen, reds(5))
   seen.order = []
-  for (let i = 0; i < 6; i++) await clock.advance(30_000)
-  // The wake then reads the count once more, for its research step.
-  const steps = seen.order.filter(step => step.endsWith('/rounds.json'))
-  expect(steps).toEqual([`read ${path}`, `write ${path}`, `read ${path}`])
-  expect(redStreak(JSON.parse(seen.files.get(path) ?? '{}')['o/r#7'])).toBe(6)
+  // Before each poll until the round is written, another session adds a PR of its own. The band reads
+  // the file at every poll too, so a write from any earlier copy would lose the newest of those PRs.
+  const others: string[] = []
+  for (let i = 0; i < 6; i++) {
+    if (!seen.order.includes(`write ${path}`)) {
+      others.push(`o/r#${100 + i}`)
+      const all = JSON.parse(seen.files.get(path) ?? '{}')
+      seen.files.set(path, JSON.stringify({ ...all, [others.at(-1) as string]: { rounds: [{ sha: 'x', red: true }] } }))
+    }
+    await clock.advance(30_000)
+  }
+  const saved = JSON.parse(seen.files.get(path) ?? '{}')
+  expect(seen.order.filter(step => step === `write ${path}`)).toHaveLength(1)
+  expect(others.filter(key => !(key in saved))).toEqual([])
+  expect(redStreak(saved['o/r#7'])).toBe(6)
 })
 
 // Which red settles count as a fix round: each row is one case, and this table is the rule. A settle keeps

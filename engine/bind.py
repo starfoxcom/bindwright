@@ -14,7 +14,7 @@
 #   python engine/bind.py --audit DIR                    -> how its rules held up in recent sessions (audit.py)
 #   python engine/bind.py --export DIR < choices.json    -> the project's setup object written (share.py)
 #   python engine/bind.py --remember DIR --layer L < choices.json -> one person's choices written to layer L
-#   python engine/bind.py --doctor DIR                   -> a health check of that repo and this machine (doctor.py)
+#   python engine/bind.py --doctor DIR [--memory-index FILE] -> a health check of that repo and this machine (doctor.py)
 #   python engine/bind.py --remove-plan DIR              -> what setup wrote, sorted for removal
 #   python engine/bind.py --remove-files DIR < {"paths": [...], "state": true} -> files removed
 #   python engine/bind.py --clean-staging DIR [--discard-incoming] -> setup's staging folders removed
@@ -125,6 +125,7 @@ def _included(path, a, flags):
         ".claude/rules/tracker.md": github,
         ".github/ISSUE_TEMPLATE/work-item.md": github,
         ".claude/scripts/research-adherence.py": flags["code_research_count"],
+        "docs/ci-watching.md": flags["ci_checks"],
         ".github/scripts/size_check.py": flags["code_size_check"],
         ".github/workflows/size-check.yml": flags["code_size_check"],
         ".github/size-check/exceptions.txt": flags["code_size_check"],
@@ -198,8 +199,8 @@ def plan_files(answers, core_files, precommit_profiles):
 def _global_files(a, ctx, read_file):
     """The ~/.claude files, as [dest, text] under GLOBAL: the global CLAUDE.md
     additions, the memory index, the push guard, the builder agent, the reply
-    style, the session-title hook, the attribution guard when the guards live in
-    ~/.claude, and the research hook for a tool without its own."""
+    style, the session-title and browser-leftovers hooks, the attribution guard when
+    the guards live in ~/.claude, and the research hook for a tool without its own."""
     def verbatim(p):
         return read_file(GLOBAL_CORE + p).replace("\r\n", "\n")
 
@@ -212,6 +213,7 @@ def _global_files(a, ctx, read_file):
         ["hooks/push-guard.py", verbatim("hooks/push-guard.py")],
         ["hooks/tool-rules.py", verbatim("hooks/tool-rules.py")],
         ["hooks/session-title.py", verbatim("hooks/session-title.py")],
+        ["hooks/browser-leftovers.py", verbatim("hooks/browser-leftovers.py")],
         ["hooks/reply-style.py", verbatim("hooks/reply-style.py")],
         ["agents/builder.md", verbatim("agents/builder.md")],
         ["output-styles/straight-talk.md", verbatim("output-styles/straight-talk.md")],
@@ -393,7 +395,8 @@ def _doctor(argv, read_file):
         folder = _option(argv, "--doctor")
         version = read_file("VERSION").strip(JS_WHITESPACE).lstrip("v")
         config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-        return run_doctor(folder, config, version, cli_version_from(os.environ.get("AI_AGENT")))
+        return run_doctor(folder, config, version, cli_version_from(os.environ.get("AI_AGENT")),
+                          _option(argv, "--memory-index"))
     except Exception as e:  # every failure is reported, as the JS engine throws it
         return {"error": str(e)}
 

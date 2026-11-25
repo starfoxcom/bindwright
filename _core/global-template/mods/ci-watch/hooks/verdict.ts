@@ -11,7 +11,7 @@ import { FAILED } from './settle'
 /** The check both review tiers report into. */
 export const GATE = 'Review gate'
 // The review workflows' own jobs, which fail beside the gate when a review cannot run.
-const REVIEW_JOBS = new Set([
+export const REVIEW_JOBS = new Set([
   GATE, 'Init review gate', 'Diff triage', 'Project triggers', 'Project pre-screen', 'Auto review', 'Post review',
   'Evaluate review outcome', 'Claude On-Demand',
   'Check who asked for the deep review', 'On-demand deep review (@claude)',
@@ -45,7 +45,7 @@ function run($: EngineInterface, args: string[]) {
  * The newest gate run's state on the watch's head, picked as the gate script picks it, and when the first
  * gate run on that head started, by GitHub's clock; `undefined` when they cannot be read.
  */
-async function readGate($: EngineInterface, watch: Watch) {
+export async function readGate($: EngineInterface, watch: Watch) {
   try {
     const query = `check_name=${encodeURIComponent(GATE)}&per_page=100`
     const path = `repos/${watch.repo}/commits/${watch.headSha}/check-runs?${query}`

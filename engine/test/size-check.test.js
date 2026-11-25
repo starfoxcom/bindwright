@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { python } from "./python.js";
+import "./quiet-git.js";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SCRIPT = join(repo, "_core", "project-template", ".github", "scripts", "size_check.py");
@@ -112,6 +113,27 @@ test("a new hard breach fails, and the baseline lets it stay but never grow", { 
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /soft: app\.py: file - = 20 \(soft limit 10\)/);
 });
+
+test("a new file not added to git is named, since CI would measure it", { skip }, () => {
+  const { root, put } = makeRepo({ "app.py": "x\n" });
+  put("new.py", lines(21));
+  put(".gitignore", "ignored.py\n");
+  put("ignored.py", lines(21));
+  const r = check(root);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /note: \d+ new file\(s\) are not measured until added to git: .*new\.py/);
+  assert.doesNotMatch(r.out, /ignored\.py/);
+});
+
+// Only Linux takes a file name that is not UTF-8; Windows and macOS refuse it.
+test("a new file whose name is not UTF-8 is named, never a crash", { skip: skip || process.platform !== "linux" },
+  () => {
+    const { root } = makeRepo({ "app.py": "x\n" });
+    writeFileSync(Buffer.concat([Buffer.from(`${root}/r`), Buffer.from([0xe9]), Buffer.from("sum.py")]), "x\n");
+    const r = check(root);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /new file\(s\) are not measured until added to git: .*sum\.py/);
+  });
 
 test("a leftover same-named baseline line cannot excuse a new breach", { skip }, () => {
   const { root, put, git } = makeRepo({ "app.py": "x\n" });
@@ -237,6 +259,21 @@ test("the shipped rule's tables parse: named rows, Other, and spaced thousands",
   assert.match(r.out, /b\.rb: file - = 1201 \(hard limit 1200\)/);
   assert.match(r.out, /c\.h: file - = 1501 \(hard limit 1500\)/);
   assert.doesNotMatch(r.out, /d\.ts/);
+});
+
+test("module TypeScript and C++ header and inline files get their language's rows, not Other", { skip }, () => {
+  // Line endings dropped first: a Windows checkout may give the rule CRLF.
+  const rule = readFileSync(RULE, "utf8").replace(/\r\n/g, "\n")
+    .replace(/^paths:\n {2}- ".*"$/m, 'paths:\n  - "**/*.{mts,cts,hxx,inl}"');
+  assert.ok(rule.includes("mts,cts,hxx,inl"), "the rule's paths line was replaced");
+  const files = { "a.mts": lines(801), "b.cts": lines(801), "c.hxx": lines(1501), "d.inl": lines(1501) };
+  const { root } = makeRepo(files, rule);
+  const r = check(root);
+  assert.equal(r.code, 1, r.out);
+  for (const [name, size, limit] of [["a.mts", 801, 800], ["b.cts", 801, 800], ["c.hxx", 1501, 1500],
+    ["d.inl", 1501, 1500]]) {
+    assert.ok(r.out.includes(`${name}: file - = ${size} (hard limit ${limit})`), `${name}\n${r.out}`);
+  }
 });
 
 test("a TypeScript file that is not UTF-8 is measured, not a crash", { skip }, () => {

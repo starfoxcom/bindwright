@@ -9,10 +9,10 @@ import {
 } from './rounds'
 import { givenDir, applyFile, register as settings, SETTINGS_PANE } from './settings'
 import {
-  dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, statePath,
+  dataFolder, ensureDir, readRounds, recordRounds, redRoundsOf, roundsLookup, statePath,
 } from './store'
 import { isSameRun, PENDING, reconcile, settle } from './settle'
-import { withVerdict } from './verdict'
+import { withReview } from './deep-start'
 import { wakeText } from './wake'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isJudgedPass, isNothingToWatch, readChecks, withMergeable, withWorkflows } from './checks'
@@ -106,7 +106,8 @@ export async function isRetired($: EngineInterface): Promise<boolean> {
 const shown = atom({ plugin: 'ci-watch', key: 'watches' } as const, [])
 
 async function publish($: EngineInterface): Promise<void> {
-  await update($, shown, () => live.watches.map(w => ({ ...w })))
+  const withRounds = await roundsLookup($)
+  await update($, shown, () => withRounds(live.watches))
 }
 
 async function save($: EngineInterface): Promise<void> {
@@ -453,18 +454,18 @@ async function poll($: EngineInterface): Promise<void> {
             quietSince: undefined,
             incident: undefined,
             incidentPending: undefined,
+            deep: undefined,
             isSilent: isForeign(current, now) || undefined,
           }
         : current
     // A failed read leaves only the time limit to settle the watch meanwhile.
     const checks = await readChecks($, base)
     const asked = await withWorkflows($, base, checks, now)
-    if (isNothingToWatch(asked, checks, now)) {
-      changed = true
-      continue
-    }
-    const polled = checks
-      ? await withMergeable($, await withVerdict($, settle(asked, checks, now, live.timeoutMs, live.pollMs)), now)
+    // A repo with no CI settles as a time-out, so the session hears once that nothing will come.
+    const polled = isNothingToWatch(asked, checks, now)
+      ? { ...asked, outcome: 'timeout' as const, settledAt: now }
+      : checks
+      ? await withMergeable($, await withReview($, settle(asked, checks, now, live.timeoutMs, live.pollMs), now), now)
       : now - asked.startedAt > live.timeoutMs
         ? { ...asked, outcome: 'timeout' as const, settledAt: now }
         : asked
@@ -788,10 +789,11 @@ export const register: Register = (on, options) => {
       return { text: 'Stopped watching every PR in this session.' }
     }
     // The row's own words, so the command and the row never disagree; the phone also gets each check.
-    const none = live.watches.length === 0 ? ['No PR is being watched.'] : []
+    const watches = (await roundsLookup($))(live.watches)
+    const none = watches.length === 0 ? ['No PR is being watched.'] : []
     if (verb === 'phone')
-      return { text: [...none, ...live.watches.map(phoneText), '/ci-watch help for more'].join('\n') }
+      return { text: [...none, ...watches.map(phoneText), '/ci-watch help for more'].join('\n') }
     if (none.length > 0) return { text: none[0] }
-    return { text: live.watches.map(w => `${summary(w).text} (${w.repo})`).join('\n') }
+    return { text: watches.map(w => `${summary(w).text} (${w.repo})`).join('\n') }
   })
 }

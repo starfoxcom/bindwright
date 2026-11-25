@@ -4,8 +4,11 @@ test_guard_hooks.py."""
 import json
 import os
 import shutil
+import subprocess
 import tempfile
+import time
 import unittest
+import unittest.mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,6 +19,8 @@ def load_tool_rules():
     spec = importlib.util.spec_from_file_location("tool_rules", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Outside any repo, so a row that reads the repo never reads the checkout the tests run from.
+    module.CWD = tempfile.gettempdir()
     return module
 
 
@@ -59,8 +64,16 @@ class ToolRulesObserveRowsTest(unittest.TestCase):
     BODY = "an inline body for `gh pr` or `gh issue`"
     SCRATCH = "a scratch file in a fixed folder (`/tmp`, `C:/tmp`)"
     JQ = "`jq` in Git Bash"
-    ROWS = (("gh run rerun 5 --failed", "bash", RERUN), ("gh run rerun 5 --job 7", "powershell", RERUN),
-            ("gh run rerun 5", "bash", None),
+    SWITCH = "a branch switch chained with other commands"
+    ROWS = (("git checkout develop && git pull", "bash", SWITCH),
+            ("git switch -c x; ls", "powershell", SWITCH),
+            ("git checkout develop", "bash", None), ("git checkout -- a.txt && git status", "bash", None),
+            ('git commit -m "then git checkout x && go"', "bash", None),
+            ("gh run rerun 5 --failed", "bash", RERUN), ("gh run rerun 5 --job 7", "powershell", RERUN),
+            ("gh run rerun 5", "bash", None), ("gh run rerun 5 --failed=false", "bash", None),
+            ("gh run rerun 5 --failed;gh run view 5", "bash", RERUN),
+            ("gh run rerun 5 --failed|tee log", "bash", RERUN),
+            ("(cd ci; gh run rerun 5 --failed)", "bash", RERUN),
             ("git rebase -i HEAD~3", "bash", INTERACTIVE), ("git add -p src", "powershell", INTERACTIVE),
             ("git commit -i -m x", "bash", None), ("git stash show -p", "bash", None),
             ('GIT_SEQUENCE_EDITOR="sed -i s/pick/fixup/" git rebase -i HEAD~3', "bash", None),
@@ -121,6 +134,240 @@ class SecretWriteRowTest(unittest.TestCase):
                         "cmp .github/scripts/set-review-tokens.sh _core/x/set-review-tokens.sh"):
             with self.subTest(command=command):
                 self.assertIsNone(hook.refusal(command, "bash"))
+
+
+class LengthRowsTest(unittest.TestCase):
+    """A commit subject over 72 characters, and a PR title over 64 where PRs squash-merge, are logged when
+    they are the first message or title of a plain Bash command; anything else, or a command Bash would
+    change, is not."""
+
+    SUBJECT = "a commit subject over 72 characters"
+    TITLE = "a PR title over 64 characters where PRs squash-merge"
+    LONG = "docs(changelog): say the four file types are now measured wherever their row stays"  # 82
+    AT_LIMIT = "x" * 72
+    TITLE_LONG = "fix(size-check): measure .mts, .cts, .hxx and .inl with their language"  # 70
+    SUBJECT_ROWS = (
+        ("-m, double quotes", f'git commit -m "{LONG}"', "bash", True),
+        ("a cluster ending in m", f"git commit -am '{LONG}'", "bash", True),
+        ("git's own options first", f'git -C sub commit -m "{LONG}"', "bash", True),
+        ("--message=", f'git commit --message="{LONG}"', "bash", True),
+        ("a value stuck to -m", f'git commit -m"{LONG}"', "bash", True),
+        ("a flag before -m", f'git commit --amend -m "{LONG}"', "bash", True),
+        ("the second command of a line", f'git add . && git commit -m "{LONG}"', "bash", True),
+        ("a body under a long subject", f'git commit -m "{LONG}\n\nWhy it changed."', "bash", True),
+        ("a bare -S before -m", f'git commit -S -m "{LONG}"', "bash", True),
+        ("a bare -u before -m", f'git commit -u -m "{LONG}"', "bash", True),
+        ("an attached -S key holding an m", f'git commit -Sabcm "{LONG}"', "bash", False),
+        ("a long body under a short subject", f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
+        ("an example command in a quoted body", f"git commit -m \"short\n\ngit commit -m '{LONG}'\"", "bash", False),
+        ("PowerShell, whose word splitting changes by version", f"git commit -m '{LONG}'", "powershell", False),
+        ("a glob", f'git commit -m "{LONG}" src/*.py', "bash", False),
+        ("a dash-led value of a long option", f'git commit --author "-m{LONG}" -m "short"', "bash", False),
+        ("exactly 72", f'git commit -m "{AT_LIMIT}"', "bash", False),
+        ("a second -m", f'git commit -m "short" -m "{LONG}"', "bash", False),
+        ("a bare first value", f'git commit -m wip -m "{LONG}"', "bash", False),
+        ("a bare value stuck to -m", f'git commit -mwip -m "{LONG}"', "bash", False),
+        ("a long path after the message", f'git commit -m "short" "{LONG}"', "bash", False),
+        ("ANSI-C quoting", f"git commit -m $'fix: x' \"{LONG}\"", "bash", False),
+        ("an escape", f'git commit -m \\a "{LONG}"', "bash", False),
+        ("a mention", f'echo "git commit -m {LONG}"', "bash", False),
+        ("a substitution", f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
+        ("a comment", f"git commit -F msg.txt  # -m '{LONG}'", "bash", False),
+    )
+
+    def setUp(self):
+        self.hook = load_tool_rules()
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.hook.OBSERVED_LOG = os.path.join(self.folder, "tool-rules", "observed.jsonl")
+
+    def project(self, merge_style):
+        os.makedirs(os.path.join(self.folder, ".git"), exist_ok=True)
+        os.makedirs(os.path.join(self.folder, ".bindwright"), exist_ok=True)
+        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
+            json.dump({"advanced": {"mergeStyle": merge_style}}, answers)
+        self.hook.CWD = os.path.join(self.folder, "sub")
+
+    def logged(self, command, shell):
+        before = len(observed(self.hook))
+        self.assertIsNone(self.hook.refusal(command, shell))
+        return [entry["rule"] for entry in observed(self.hook)[before:]]
+
+    def test_a_long_subject_is_logged_and_the_rest_are_not(self):
+        for name, command, shell, want in self.SUBJECT_ROWS:
+            with self.subTest(name):
+                self.assertEqual(self.logged(command, shell), [self.SUBJECT] if want else [])
+
+    def test_a_long_title_is_logged_only_where_prs_squash_merge(self):
+        create = f'gh pr create --base develop --title "{self.TITLE_LONG}" --body-file b.md'
+        for name, style, shell, command, want in (
+                ("--title", "squash", "bash", create, True),
+                ("-t", "squash", "bash", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
+                ("a bare -t=, whose value is =", "squash", "bash", f'gh pr edit -t= "{self.TITLE_LONG}"', False),
+                ("a short title", "squash", "bash", 'gh pr create --title "fix(x): short"', False),
+                ("a line break quoted before the title", "squash", "bash",
+                 f'gh pr create --label "a\nb" --title "{self.TITLE_LONG}"', True),
+                ("-t= at exactly 64", "squash", "bash", f'gh pr create -t="{self.TITLE_LONG[:64]}"', False),
+                ("a dash-led body before the title", "squash", "bash",
+                 f'gh pr create --body-file b.md --label "-t{self.TITLE_LONG}" --title "short"', False),
+                ("a later title wins, as in gh", "squash", "bash", f'gh pr create -tshort --title "{self.TITLE_LONG}"',
+                 True),
+                ("a short title after a long one", "squash", "bash",
+                 f'gh pr edit 5 --title "{self.TITLE_LONG}" --title "fix(x): short"', False),
+                ("ANSI-C quoting", "squash", "bash", f"gh pr create --title $'x' \"{self.TITLE_LONG}\"", False),
+                ("merge commits", "merge", "bash", create, False)):
+            with self.subTest(name):
+                self.project(style)
+                self.assertEqual(self.logged(command, shell), [self.TITLE] if want else [])
+        # Answers nested deeper than the JSON reader goes read as no squash, never as a crash.
+        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
+            answers.write("[" * 100000)
+        self.assertEqual(self.logged(create, "bash"), [])
+
+    def test_a_merge_flag_other_than_the_saved_style_is_logged(self):
+        other = "a `gh pr merge` style other than the repo's"
+        for name, style, command, shell, want in (
+                ("--squash where PRs merge", "merge", "gh pr merge 5 --squash --delete-branch", "bash", True),
+                ("-r where PRs merge", "merge", "gh pr merge 5 -r", "powershell", True),
+                ("--rebase where PRs squash", "squash", "gh pr merge 5 --rebase", "bash", True),
+                ("--merge where PRs squash, as gitflow releases do", "squash", "gh pr merge 5 --merge", "bash", False),
+                ("--squash where PRs squash", "squash",
+                 "gh pr merge 5 --squash --delete-branch --match-head-commit ab12", "bash", False),
+                ("-r where PRs rebase", "rebase", "gh pr merge 5 -r --delete-branch", "powershell", False),
+                ("-m where PRs merge", "merge", "gh pr merge 5 -m", "bash", False),
+                ("--squash=false where PRs merge", "merge", "gh pr merge 5 --merge --squash=false", "bash", False),
+                ("--squash before a ; where PRs merge", "merge", "gh pr merge 5 --squash;echo done", "bash", True),
+                ("-r=false where PRs squash", "squash", "gh pr merge 5 --squash -r=false", "powershell", False),
+                ("no style flag", "merge", "gh pr merge 5 --auto", "bash", False),
+                ("a mention in a message", "merge", 'git commit -m "gh pr merge 5 --squash"', "bash", False),
+                ("no saved style", None, "gh pr merge 5 --squash", "bash", False),
+                ("a saved style that is a list", ["merge"], "gh pr merge 5 --squash", "bash", False),
+                ("a saved style that is an object", {}, "gh pr merge 5 --squash", "bash", False)):
+            with self.subTest(name):
+                self.project(style)
+                self.assertEqual(self.logged(command, shell), [other] if want else [])
+
+    CHANGELOG = ("# Changelog\n\n## [Unreleased]\n\n### Fixed\n- a\n\n"
+                 "## [1.1.0] - 2026-11-20\n\n### Added\n- b\n\n## [1.0.0] - 2026-11-01\n\n### Added\n- c\n\n"
+                 "[unreleased]: https://x/compare/v1.1.0...HEAD\n[1.1.0]: https://x/compare/v1.0.0...v1.1.0\n"
+                 "[1.0.0]: https://x/releases/tag/v1.0.0\n")
+
+    def test_a_commit_that_edits_a_dated_changelog_section_is_logged(self):
+        dated = "a commit that edits a released CHANGELOG.md section"
+        git = ["git", "-C", self.folder, "-c", "user.name=t", "-c", "user.email=t@example.com",
+               "-c", "commit.gpgsign=false"]
+        subprocess.run(git[:3] + ["init", "-q"], check=True)
+        path = os.path.join(self.folder, "CHANGELOG.md")
+
+        def write(text):
+            with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+                changelog.write(text)
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+
+        def commit(text):
+            write(text)
+            subprocess.run(git + ["add", "CHANGELOG.md"], check=True)
+            subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "docs: start"], check=True)
+
+        commit(self.CHANGELOG)
+        os.makedirs(os.path.join(self.folder, "sub"), exist_ok=True)
+        self.hook.CWD = os.path.join(self.folder, "sub")
+        released = "## [1.2.0] - 2026-11-24\n\n### Fixed\n- a\n\n"
+        cut = self.CHANGELOG.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released).replace(
+            "[unreleased]: https://x/compare/v1.1.0...HEAD\n",
+            "[unreleased]: https://x/compare/v1.2.0...HEAD\n[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n")
+        for name, text, command, want in (
+                ("a line changed in a dated section", self.CHANGELOG.replace("- b", "- B"), "git commit -am x", True),
+                ("a line added to the end of a dated section", self.CHANGELOG.replace("- b\n", "- b\n- d\n"),
+                 "git add -u && git commit -m x", True),
+                ("the newest dated heading changed", self.CHANGELOG.replace("2026-11-20", "2026-11-21"),
+                 "git commit -m x", True),
+                ("a line added under [Unreleased]", self.CHANGELOG.replace("- a\n", "- a\n- e\n"),
+                 "git commit -am x", False),
+                ("a release cut from [Unreleased], its links bumped", cut, "git commit -am x", False),
+                ("a link added for an [Unreleased] entry", self.CHANGELOG + "[#42]: https://x/issues/42\n",
+                 "git commit -am x", False),
+                ("a line changed in the oldest section, above the links", self.CHANGELOG.replace("- c", "- C"),
+                 "git commit -am x", True),
+                ("a dated section edited, with no commit", self.CHANGELOG.replace("- b", "- B"), "git status", False),
+                ("a dated section edited, a commit only mentioned", self.CHANGELOG.replace("- b", "- B"),
+                 'echo "git commit"', False)):
+            with self.subTest(name):
+                write(text)
+                self.assertEqual(self.logged(command, "bash"), [dated] if want else [])
+        # Links that name only the releases: the cut adds its own above them, after the oldest section's end.
+        released_only = self.CHANGELOG.replace("[unreleased]: https://x/compare/v1.1.0...HEAD\n", "")
+        commit(released_only)
+        write(released_only.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released)
+              .replace("[1.1.0]: ", "[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: ", 1))
+        self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        # A `git` the repo ships, first on PATH, never runs: the row reads the edit with the user's own git.
+        write(released_only.replace("- b", "- B"))
+        tools = os.path.join(self.folder, "bin")
+        os.makedirs(tools)
+        planted, marker = os.path.join(tools, "git.bat" if os.name == "nt" else "git"), "ran.txt"
+        leaves_marker = f'@echo x> "%~dp0{marker}"\n' if os.name == "nt" else f'#!/bin/sh\ntouch "${{0%/*}}/{marker}"\n'
+        with open(planted, "w", encoding="utf-8", newline="\n") as script:
+            script.write(leaves_marker)
+        os.chmod(planted, 0o755)
+        with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
+            self.assertEqual(self.logged("git commit -am x", "bash"), [dated])
+        self.assertFalse(os.path.exists(os.path.join(tools, marker)))
+        # Nor from a session in a submodule, where the nearest `.git` is the submodule's own.
+        submodule = os.path.join(self.folder, "lib")
+        os.makedirs(os.path.join(submodule, ".git"))
+        outer, self.hook.CWD = self.hook.CWD, submodule
+        with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
+            self.logged("git commit -am x", "bash")
+        self.hook.CWD = outer
+        self.assertFalse(os.path.exists(os.path.join(tools, marker)))
+        # A git whose own child holds the output open past the deadline, as a launcher's does, is not waited on.
+        slow = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, slow, ignore_errors=True)
+        stall = "@ping -n 11 127.0.0.1 >nul\n" if os.name == "nt" else "#!/bin/sh\nsleep 10\n"
+        slow_git = os.path.join(slow, "git.bat" if os.name == "nt" else "git")
+        with open(slow_git, "w", encoding="utf-8", newline="\n") as script:
+            script.write(stall)
+        os.chmod(slow_git, 0o755)
+        started = time.monotonic()
+        with unittest.mock.patch.dict(os.environ, {"PATH": slow + os.pathsep + os.environ.get("PATH", "")}), \
+                unittest.mock.patch.object(self.hook, "GIT_SECONDS", 1):
+            self.assertEqual(self.logged("git commit -m x", "bash"), [])
+        self.assertLess(time.monotonic() - started, 4)
+        # A staged changelog past the size limit is not read: no edit.
+        write(released_only.replace("- b", "- B").replace("- a\n", "- a\n" + "- x\n" * 500))
+        with unittest.mock.patch.object(self.hook, "CHANGELOG_LIMIT", len(released_only) + 10):
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        # A link staged in its place is read as git stores it, the target's name: its released sections are gone.
+        # It goes straight into the index, so the file on disk stays a plain file for the checks after it.
+        link = subprocess.run(git + ["hash-object", "-w", "--stdin"], input="/dev/zero", capture_output=True,
+                              text=True, check=True).stdout.strip()
+        subprocess.run(git + ["update-index", "--cacheinfo", f"120000,{link},CHANGELOG.md"], check=True)
+        self.assertEqual(self.logged("git commit -m x", "bash"), [dated])
+        # An edit on disk that is not staged is not part of the commit.
+        commit(released_only)
+        with open(path, "w", encoding="utf-8", newline="\n") as changelog:
+            changelog.write(released_only.replace("- b", "- B"))
+        self.assertEqual(self.logged("git commit -m x", "bash"), [])
+        # Outside a repo, git fails, and the row reads it as no edit.
+        self.hook.CWD = tempfile.gettempdir()
+        self.assertEqual(self.logged("git commit -am x", "bash"), [])
+
+
+class TrustedGitTest(unittest.TestCase):
+    def test_a_path_folder_that_cannot_be_resolved_is_skipped(self):
+        # Windows raises for a share that refuses the sign-in; the guard skips that folder and goes on.
+        hook = load_tool_rules()
+        share, real = os.path.join(tempfile.gettempdir(), "unreachable-share"), hook.real_path
+
+        def refusing(path):
+            if path == share:
+                raise OSError(1326, "The user name or password is incorrect")
+            return real(path)
+
+        with unittest.mock.patch.dict(os.environ, {"PATH": share + os.pathsep + os.environ.get("PATH", "")}), \
+                unittest.mock.patch.object(hook, "real_path", refusing):
+            self.assertIsNotNone(hook.trusted_git(REPO))
 
 
 class ToolRulesSweepTest(unittest.TestCase):

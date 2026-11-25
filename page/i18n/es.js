@@ -315,6 +315,10 @@ export default {
   "settings.session-title.title": "Títulos de sesión",
   "settings.session-title.text": "Nombra cada sesión según su proyecto y en qué está trabajando.",
   "settings.session-title.value": "Sí",
+  "settings.browser-leftovers.title": "Navegadores que se quedaron",
+  "settings.browser-leftovers.text":
+    "Una vez al día, ofrece borrar los perfiles de navegador que dejaron los scripts de sesiones anteriores.",
+  "settings.browser-leftovers.value": "Sí",
   "settings.builder.title": "Agente constructor",
   "settings.builder.text": "Un ayudante barato con Haiku escribe el código, y el modelo principal lo revisa.",
   "settings.builder.value": "Sí",
@@ -358,7 +362,7 @@ export default {
   "settings.plain-writing.value": "Activada",
   "settings.visual-steps.title": "Cambios visuales en pasos chicos",
   "settings.visual-steps.text": "Lo que la gente ve cambia un paso revisado a la vez.",
-  "settings.visual-steps.value": "Activada",
+  "settings.visual-steps.value": "Proyectos con interfaz",
   "settings.code-host.title": "Dónde vive el código",
   "settings.code-host.text": "GitHub, GitHub con apps, Actions y tableros bloqueados, solo esta computadora "
     + "u otro sitio. GitHub bloqueado conserva los pull requests y los issues; solo esta computadora no necesita "

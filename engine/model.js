@@ -369,6 +369,8 @@ export function flagsFor(a) {
     version_check: adv.versioning !== "none",
     code_size_check: adv.codeSizeCheck,
     public_roadmap: adv.tracker === "github" && adv.publicRoadmap !== null && adv.publicRoadmap !== undefined,
+    tracker_board: adv.tracker === "github" && typeof adv.trackerProject === "string",
+    ui_rule: adv.uiRule,
     handoff_file: adv.tracker === "github" && adv.handoffFile,
     pr_reviewers: Array.isArray(adv.prReviewers),
     local_review: adv.localReview,
@@ -377,7 +379,6 @@ export function flagsFor(a) {
     license_file: !a.client,
     audit_trail_commits: a.client && a.private,
     definition_of_done_verification: true,
-    lazy_rules_folder: true,
     memory_system: true,
   };
 }

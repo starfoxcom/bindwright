@@ -11,14 +11,15 @@ from apply import _code_units
 LOCAL_FOLDERS = [
     (".claude/", True),
     (".bindwright/", True),
-    ("docs/lazy/", False),
+    # Kept out on every run: a clone may still hold the docs/lazy/README.md older setups wrote.
+    ("docs/lazy/", True),
     (".github/size-check/", False),
 ]
 # Files the sessions write when the work state lives in the repo, listed on every run.
 ALWAYS_FILES = ["ROADMAP.md"]
 # Files, listed only when the plan writes them.
 LOCAL_FILES = [
-    "CLAUDE.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
+    "CLAUDE.md", "docs/ci-watching.md", "docs/comment-audit.md", "docs/docs-audit.md", "docs/test-audit.md",
     "docs/security-posture.md", ".github/scripts/size_check.py", ".github/workflows/size-check.yml",
 ]
 

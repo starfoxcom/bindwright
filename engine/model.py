@@ -463,6 +463,8 @@ def flags_for(a):
         "version_check": adv["versioning"] != "none",
         "code_size_check": adv["codeSizeCheck"],
         "public_roadmap": adv["tracker"] == "github" and adv.get("publicRoadmap") is not None,
+        "tracker_board": adv["tracker"] == "github" and isinstance(adv.get("trackerProject"), str),
+        "ui_rule": adv["uiRule"],
         "handoff_file": adv["tracker"] == "github" and adv["handoffFile"],
         "pr_reviewers": isinstance(adv["prReviewers"], list),
         "local_review": adv["localReview"],
@@ -471,7 +473,6 @@ def flags_for(a):
         "license_file": not a["client"],
         "audit_trail_commits": a["client"] and a["private"],
         "definition_of_done_verification": True,
-        "lazy_rules_folder": True,
         "memory_system": True,
     }
 
