@@ -216,6 +216,22 @@ class LengthRowsTest(unittest.TestCase):
             answers.write("[" * 100000)
         self.assertEqual(self.logged(create, "bash"), [])
 
+    def test_a_merge_flag_other_than_the_saved_style_is_logged(self):
+        other = "a `gh pr merge` style other than the repo's"
+        for name, style, command, shell, want in (
+                ("--squash where PRs merge", "merge", "gh pr merge 5 --squash --delete-branch", "bash", True),
+                ("-r where PRs merge", "merge", "gh pr merge 5 -r", "powershell", True),
+                ("--merge where PRs squash", "squash", "gh pr merge 5 --merge", "bash", True),
+                ("the saved style", "merge", "gh pr merge 5 --merge --delete-branch --match-head-commit ab12",
+                 "bash", False),
+                ("-m where PRs merge", "merge", "gh pr merge 5 -m", "bash", False),
+                ("no style flag", "merge", "gh pr merge 5 --auto", "bash", False),
+                ("a mention in a message", "merge", 'git commit -m "gh pr merge 5 --squash"', "bash", False),
+                ("no saved style", None, "gh pr merge 5 --squash", "bash", False)):
+            with self.subTest(name):
+                self.project(style)
+                self.assertEqual(self.logged(command, shell), [other] if want else [])
+
 
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
