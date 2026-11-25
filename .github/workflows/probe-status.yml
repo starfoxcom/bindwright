@@ -1,4 +1,4 @@
-# Throwaway probe: posts a commit status with the job token. Never merged.
+# Throwaway probe: a check run and a commit status of one name. Never merged.
 name: Probe status
 
 on:
@@ -6,16 +6,25 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
+  checks: write
   statuses: write
 
 jobs:
   post:
     runs-on: ubuntu-latest
     steps:
-      - name: Post the status
+      - name: Post the check and the status
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
-          RUN: ${{ github.run_id }}
-        run: gh api -X POST "repos/$REPO/statuses/$SHA" -f state=success -f context="Review gate" -f description="probe run $RUN"
+          ACTION: ${{ github.event.action }}
+          CHECK_CONCLUSION: success
+        run: |
+          ID=$(gh api "repos/$REPO/commits/$SHA/check-runs?check_name=Review%20gate" --jq '[.check_runs[] | .id] | max // empty')
+          if [ "$ACTION" = reopened ] && [ -n "$ID" ]; then
+            gh api -X PATCH "repos/$REPO/check-runs/$ID" -f status=completed -f conclusion="$CHECK_CONCLUSION" > /dev/null
+          else
+            gh api -X POST "repos/$REPO/check-runs" -f name="Review gate" -f head_sha="$SHA" -f status=completed -f conclusion="$CHECK_CONCLUSION" > /dev/null
+          fi
+          gh api -X POST "repos/$REPO/statuses/$SHA" -f state=success -f context="Review gate" -f description="probe $ACTION" > /dev/null
