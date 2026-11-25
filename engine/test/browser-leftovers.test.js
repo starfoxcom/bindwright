@@ -131,10 +131,11 @@ test("--clean deletes the folders left behind and keeps the ones in use", { skip
   });
 });
 
-// Puts the lock Chromium keeps in a running browser's profile into each folder, as the row
-// says, ages it, and runs the hook's own selection. On Windows a held lock is a `lockfile`
+// Puts into each folder what a running program leaves in a profile, as the row says, ages
+// every entry, and runs the hook's own selection. On Windows a held lock is a `lockfile`
 // opened the way Chromium opens it (others may read it but not write it); elsewhere a lock is
-// a `SingletonLock` link to <host>-<pid>.
+// a `SingletonLock` link to <host>-<pid>. "open" holds a file inside the profile open, as a
+// headless shell does, which keeps no lock.
 const LOCK_DRIVER = `
 import ctypes, importlib.util, json, os, socket, sys, time
 spec = importlib.util.spec_from_file_location("hook", sys.argv[1])
@@ -147,21 +148,22 @@ for folder, lock in cases:
     owners = {"live": socket.gethostname(), "dead": socket.gethostname(), "elsewhere": "another-host"}
     if lock in owners:
         os.symlink("%s-%d" % (owners[lock], dead_pid if lock == "dead" else os.getpid()), link)
-        os.utime(link, (old, old), follow_symlinks=False)
     elif lock == "plain":
         open(link, "w").close()
-        os.utime(link, (old, old))
-    elif lock in ("held", "released"):
-        path = os.path.join(folder, "lockfile")
-        if lock == "held":
-            kernel = ctypes.WinDLL("kernel32")
-            kernel.CreateFileW.restype = ctypes.c_void_p
-            handles.append(kernel.CreateFileW(path, 0x40000000, 1, None, 2, 0x80, None))
-        else:
-            open(path, "w").close()
-        os.utime(path, (old, old))
+    elif lock == "held":
+        kernel = ctypes.WinDLL("kernel32")
+        kernel.CreateFileW.restype = ctypes.c_void_p
+        handles.append(kernel.CreateFileW(os.path.join(folder, "lockfile"), 0x40000000, 1, None, 2, 0x80, None))
+    elif lock == "released":
+        open(os.path.join(folder, "lockfile"), "w").close()
+    elif lock == "open":
+        handles.append(open(os.path.join(folder, "Default", "Cookies"), "w"))
+    default = os.path.join(folder, "Default")
+    for path in [os.path.join(place, name) for place in (folder, default) for name in os.listdir(place)]:
+        os.utime(path, (old, old), follow_symlinks=not os.path.islink(path))
+    os.utime(default, (old, old))
     os.utime(folder, (old, old))
-print(json.dumps(hook.left_behind([folder for folder, _ in cases], time.time())))
+print(json.dumps(hook.left_behind([folder for folder, _ in cases], time.time(), hook.open_paths())))
 `;
 
 function leftBehind(cases) {
@@ -173,15 +175,16 @@ function leftBehind(cases) {
   return JSON.parse(r.stdout);
 }
 
-test("an old profile is picked only when no running browser holds its lock", { skip }, () => {
+test("an old profile is picked only when no running program uses it", { skip }, () => {
   withLayout((layout) => {
+    const open = ["a file inside held open, with no lock", "open", false];
     const rows = process.platform === "win32"
       ? [["no lock", "none", true], ["a lockfile a running browser holds", "held", false],
-        ["a lockfile nothing holds", "released", true]]
+        ["a lockfile nothing holds", "released", true], open]
       : [["no lock", "none", true], ["a lock naming a running process", "live", false],
         ["a lock naming a process that ended", "dead", true],
         ["a lock naming another computer's process", "elsewhere", false],
-        ["a lock that is not a link", "plain", false]];
+        ["a lock that is not a link", "plain", false], open];
     const cases = rows.map(([, lock], i) => [profile(layout, { name: `p${i}` }), lock]);
     const picked = leftBehind(cases);
     rows.forEach(([name, , isPicked], i) => assert.equal(picked.includes(cases[i][0]), isPicked, name));

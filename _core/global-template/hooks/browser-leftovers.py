@@ -9,13 +9,15 @@ session's transcript, weeks later.
 The hook deletes nothing. It looks at most once a day, at the start of a new session. On the
 user's yes, the assistant runs this file with `--clean <session id>`, which picks the same
 folders again and deletes them. A folder is picked only when nothing in it changed for an hour
-and no running browser holds its lock, the one Chromium keeps in every profile it has open.
+and no running program uses it: no browser holds Chromium's profile lock in it, and no program
+holds a file inside it open.
 """
 import json
 import os
 import shutil
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -26,8 +28,9 @@ IN_USE_SECONDS = 60 * 60
 # How deep below the temp folder a profile is looked for: <project>/<session>/scratchpad/ and
 # a few folders more.
 MAX_DEPTH = 7
-# Claude Code stops the hook at 30 s; these two steps together stay well inside that.
+# Claude Code stops the hook at 30 s; these three steps together stay well inside that.
 WALK_SECONDS = 5
+LIST_SECONDS = 15
 SIZE_SECONDS = 5
 GIGABYTE = 1024 ** 3
 REPARSE_POINT = 0x400  # a Windows junction or link, which a walk must not follow
@@ -42,34 +45,47 @@ def temp_roots():
 
 
 def is_own_folder(path):
-    """Whether `path` is a real folder, not a link or junction, that only this user can change
-    where the system has user ids: a shared temp folder lets anyone else create a `claude`
-    there, and a folder others can write to lets them swap a link in while it is deleted."""
     try:
         info = os.lstat(path)
     except OSError:
         return False
+    return is_safe_folder(info)
+
+
+def is_plain_folder(entry):
+    try:
+        info = entry.stat(follow_symlinks=False)
+    except OSError:
+        return False
+    return is_safe_folder(info)
+
+
+def is_safe_folder(info):
+    """Whether `info`, read without following links, is a real folder, not a link or junction,
+    that only this user can change where the system has user ids: a shared temp folder lets
+    anyone else create a `claude` there, and a folder others can write in lets them swap a
+    link in while the folders below it are deleted."""
     is_link = stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & REPARSE_POINT
     is_mine = not hasattr(os, "getuid") or only_mine(info)
     return stat.S_ISDIR(info.st_mode) and not is_link and is_mine
 
 
 def only_mine(info):
-    """Whether a folder is this user's and no one else can write in it. A group's write access
-    counts only when the group is not the user's own, as Linux gives each user a group."""
-    is_group_shared = info.st_mode & stat.S_IWGRP and info.st_gid != os.getgid()
-    is_shared = info.st_mode & stat.S_IWOTH or is_group_shared
-    return info.st_uid == os.getuid() and not is_shared
-
-
-def is_plain_folder(entry):
-    """Whether a scandir entry is a folder of its own, not a link or junction to another."""
-    try:
-        info = entry.stat(follow_symlinks=False)
-    except OSError:
+    """Whether a folder is this user's and no one else can write in it. Write access for its
+    group is the user's alone only when the group is theirs: named after them, no members."""
+    if info.st_uid != os.getuid() or info.st_mode & stat.S_IWOTH:
         return False
-    is_link = entry.is_symlink() or getattr(info, "st_file_attributes", 0) & REPARSE_POINT
-    return entry.is_dir(follow_symlinks=False) and not is_link
+    return not info.st_mode & stat.S_IWGRP or is_own_group(info.st_gid)
+
+
+def is_own_group(gid):
+    import grp  # POSIX only, as is every caller
+    import pwd
+    try:
+        group = grp.getgrgid(gid)
+        return group.gr_name == pwd.getpwuid(os.getuid()).pw_name and not group.gr_mem
+    except KeyError:
+        return False
 
 
 def subfolders(folder):
@@ -116,13 +132,66 @@ def last_written(folder):
     return max(times, default=0)
 
 
-def is_locked(folder):
-    """Whether a running browser holds the profile, by the lock Chromium keeps in it while it
-    runs: on Windows a `lockfile` the browser holds open for writing, elsewhere a
-    `SingletonLock` link that names `<host>-<pid>`. A lock that cannot be read counts as held."""
+def is_in_use(folder, open_paths):
+    """Whether a running program may still use the profile. Chromium's own lock covers a full
+    browser: on Windows a `lockfile` it holds open for writing, elsewhere a `SingletonLock`
+    link that names `<host>-<pid>`. A headless shell keeps no lock, so a file held open inside
+    the folder counts too: Windows refuses to rename a folder then, and elsewhere `open_paths`
+    lists every file this user's programs hold open. A lock that cannot be read counts as held."""
     if os.name == "nt":
-        return is_held_open(os.path.join(folder, "lockfile"))
-    return names_live_browser(os.path.join(folder, "SingletonLock"))
+        return is_held_open(os.path.join(folder, "lockfile")) or not can_rename(folder)
+    real = os.path.realpath(folder)
+    return (names_live_browser(os.path.join(folder, "SingletonLock"))
+            or any(path == real or path.startswith(real + os.sep) for path in open_paths))
+
+
+def can_rename(folder):
+    """Whether `folder` can be renamed and put back, which Windows refuses while any program
+    holds a file inside it open."""
+    aside = folder + ".in-use-check"
+    try:
+        os.rename(folder, aside)
+    except OSError:
+        return False
+    try:
+        os.rename(aside, folder)
+    except OSError:
+        return False
+    return True
+
+
+def open_paths():
+    """The real paths of the files and folders this user's programs hold open, from /proc on
+    Linux and from lsof elsewhere, or None when they cannot be listed. Windows needs none."""
+    if os.name == "nt":
+        return []
+    if os.path.isdir("/proc/self/fd"):
+        return proc_open_paths()
+    try:
+        listed = subprocess.run(["lsof", "-n", "-P", "-w", "-F", "n", "-u", str(os.getuid())],
+                                capture_output=True, timeout=LIST_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    lines = listed.stdout.decode("utf-8", "replace").splitlines()
+    names = [line[1:] for line in lines if line.startswith("n/")]
+    return names if listed.returncode == 0 and names else None
+
+
+def proc_open_paths():
+    """Every working folder and open file of the processes /proc lets this user read."""
+    paths = []
+    for pid in (name for name in os.listdir("/proc") if name.isdigit()):
+        base = os.path.join("/proc", pid)
+        try:
+            links = ["cwd"] + [os.path.join("fd", fd) for fd in os.listdir(os.path.join(base, "fd"))]
+        except OSError:
+            continue  # another user's process, or one that just ended
+        for link in links:
+            try:
+                paths.append(os.readlink(os.path.join(base, link)))
+            except OSError:
+                pass
+    return paths
 
 
 def is_held_open(path):
@@ -159,10 +228,13 @@ def names_live_browser(path):
     return True
 
 
-def left_behind(folders, now):
-    """The folders nothing changed for IN_USE_SECONDS that no running browser holds."""
+def left_behind(folders, now, held):
+    """The folders nothing changed for IN_USE_SECONDS that no running program uses, given the
+    open paths `held`; when those could not be listed, none."""
+    if held is None:
+        return []
     return [folder for folder in folders
-            if now - last_written(folder) > IN_USE_SECONDS and not is_locked(folder)]
+            if now - last_written(folder) > IN_USE_SECONDS and not is_in_use(folder, held)]
 
 
 def total_size(folders, deadline):
@@ -216,7 +288,7 @@ def leftovers(session):
         own = next((os.path.join(project, session) for project in subfolders(root)
                     if session and os.path.isdir(os.path.join(project, session))), None)
         folders += profile_folders(root, own, deadline)
-    return roots, left_behind(folders, time.time())
+    return roots, left_behind(folders, time.time(), open_paths() if folders else [])
 
 
 def stamp_path():
@@ -252,7 +324,7 @@ def report(roots, picked, session):
         lines.append("They came from sessions of: {}.".format(", ".join(projects)))
     lines.append("Nothing was deleted. Tell the user this in a line or two and offer to clean them up."
                  " On a yes, run `\"{}\" \"{}\" --clean {}`, which deletes the folders no running"
-                 " browser holds.".format(sys.executable, os.path.abspath(__file__), session))
+                 " program uses.".format(sys.executable, os.path.abspath(__file__), session))
     return " ".join(lines)
 
 
@@ -262,8 +334,19 @@ def clean(session):
     _, picked = leftovers(session)
     removed, kept = [], []
     for folder in picked:
-        shutil.rmtree(folder, ignore_errors=True)
-        (kept if os.path.exists(folder) else removed).append(folder)
+        # Renamed aside first, so a script that starts a browser on the folder meanwhile gets a
+        # new one; on Windows the rename also fails while a program still holds a file inside.
+        doomed = folder + ".deleting"
+        try:
+            os.rename(folder, doomed)
+        except OSError:
+            kept.append(folder)
+            continue
+        shutil.rmtree(doomed, ignore_errors=True)
+        if os.path.exists(doomed):
+            kept.append(doomed)
+        else:
+            removed.append(folder)
     print(json.dumps({"removed": removed, "kept": kept}))
 
 
