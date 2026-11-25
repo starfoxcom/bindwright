@@ -67,6 +67,15 @@ function save(cacheFile, cache, today) {
 `);
 }
 
+// The line a check gives, or null when the check throws, so it never costs the rest of the notice.
+function lineOrNull(check) {
+  try {
+    return check();
+  } catch {
+    return null;
+  }
+}
+
 // The notice text, or null. `fetchLatest()` gives the released version or
 // null; `driftFor(repo)` the extras the repo's setup expects that this machine
 // lacks; `helperVersion` is the helper's own version; `cacheFile` remembers
@@ -116,12 +125,8 @@ export async function notice({
       + "the next session start or merge tries again. If this keeps showing, check that gh is signed in "
       + "and the network is up.");
   }
-  try {
-    const scratch = scratchFor();
-    if (scratch) lines.push(scratch);
-  } catch {
-    // A folder that cannot be measured never costs the rest of the notice.
-  }
+  const scratch = lineOrNull(scratchFor);
+  if (scratch) lines.push(scratch);
   if (lines.length) {
     cache.shown[key] = today;
     dirty = true;
