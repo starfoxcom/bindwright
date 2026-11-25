@@ -6,10 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.19.1] — 2026-11-25
+
 ### Fixed
 
 - **The review gate's setup checks `main` too when `develop` is the default branch.** With no `--branch` names it took only the default branch then, so the session start's plain `--check` never looked at `main`'s ruleset or merge methods. It now adds `main` when it exists, the way it adds `develop` when `main` is the default.
-
 - **`/bindwright:update` notices a saved default branch GitHub no longer uses.** A gitflow project that changed its GitHub default branch after setup kept the old answer, so every update wrote the wrong branch into its rules (where workflow changes land, which branch the first setup PR targets) and clashed with the project's own fixes. The update now compares the saved answer with GitHub's default branch before it runs and offers to save the one GitHub uses.
 - **`/bindwright:update` says to land the helper pin in its own PR first.** The review's check that sends findings in Bindwright's own text upstream trusts only the pin on the PR's base, so on an update PR it recognised none of the new release's files, and a finding in one of them blocked the project's merge. The update now says to merge `.bindwright/helper.json` first, then the rest.
 
