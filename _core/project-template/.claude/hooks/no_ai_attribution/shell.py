@@ -54,15 +54,19 @@ def is_within(folder, top):
 
 
 def repo_folder(cwd):
-    """The top folder of the repo holding `cwd`, where a repo could ship its own programs; None
-    outside a repo, or for a repo at the home folder or above it, which holds the user's own installs."""
-    folder = real_path(cwd)
-    while not os.path.exists(os.path.join(folder, ".git")):
+    """The top folder of the outermost repo holding `cwd`, where a repo, or the one a submodule
+    sits in, could ship its own programs; None outside a repo. A repo at the home folder or above
+    it holds the user's own installs and does not count, unless the home folder is unknown."""
+    home = os.path.expanduser("~")
+    home = real_path(home) if os.path.isabs(home) else None
+    folder, top = real_path(cwd), None
+    while True:
+        if os.path.exists(os.path.join(folder, ".git")) and not (home and is_within(home, folder)):
+            top = folder
         parent = os.path.dirname(folder)
         if parent == folder:
-            return None
+            return top
         folder = parent
-    return None if is_within(real_path(os.path.expanduser("~")), folder) else folder
 
 
 def node_program(cwd):

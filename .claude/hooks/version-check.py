@@ -129,15 +129,19 @@ def trusted_program(name, project):
 
 
 def repo_folder(path):
-    """The top folder of the repo holding `path`, where a repo could ship its own programs; None
-    outside a repo, or for a repo at the home folder or above it, which holds the user's own installs."""
-    folder = real_path(path)
-    while not os.path.exists(os.path.join(folder, ".git")):
+    """The top folder of the outermost repo holding `path`, where a repo, or the one a submodule
+    sits in, could ship its own programs; None outside a repo. A repo at the home folder or above
+    it holds the user's own installs and does not count, unless the home folder is unknown."""
+    home = os.path.expanduser("~")
+    home = real_path(home) if os.path.isabs(home) else None
+    folder, top = real_path(path), None
+    while True:
+        if os.path.exists(os.path.join(folder, ".git")) and not (home and is_within(home, folder)):
+            top = folder
         parent = os.path.dirname(folder)
         if parent == folder:
-            return None
+            return top
         folder = parent
-    return None if is_within(real_path(os.path.expanduser("~")), folder) else folder
 
 
 def real_path(path):

@@ -586,14 +586,16 @@ class TrustedProgram(unittest.TestCase):
         for (name, folder, cwd), (finder, find) in itertools.product((
                 ("the top folder", "", ""),
                 ("a subfolder on PATH, as direnv adds", "bin", ""),
-                ("a subfolder on PATH, from a session in another subfolder", "bin", "src")), finders.items()):
+                ("a subfolder on PATH, from a session in another subfolder", "bin", "src"),
+                ("the outer repo's subfolder on PATH, from a session in a submodule", "bin", "lib")),
+                finders.items()):
             with self.subTest(f"{finder}: {name}"), tempfile.TemporaryDirectory() as repo, \
                     tempfile.TemporaryDirectory() as elsewhere, mock.patch.dict(os.environ):
                 os.makedirs(os.path.join(repo, ".git"))
                 tools, project = os.path.join(repo, folder), os.path.join(repo, cwd)
                 plant_git(tools)
                 own = plant_git(elsewhere)
-                os.makedirs(project, exist_ok=True)
+                os.makedirs(os.path.join(project, ".git") if cwd == "lib" else project, exist_ok=True)
                 os.environ["PATH"] = os.pathsep.join([tools, elsewhere, os.environ["PATH"]])
                 os.chdir(project)
                 try:
