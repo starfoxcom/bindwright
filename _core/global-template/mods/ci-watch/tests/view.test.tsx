@@ -47,6 +47,12 @@ const SUMMARY_CASES: { name: string; watch: Partial<Watch>; text: string; color:
     color: 'gray',
   },
   {
+    name: 'settled early: the owed deep review never started',
+    watch: { checks: { a: 'pass', 'Review gate': 'pending' }, outcome: 'timeout', deepNeverStarted: true },
+    text: '⚠️ PR 7 · deep review never started',
+    color: 'yellow',
+  },
+  {
     name: 'all passed, not yet settled',
     watch: { checks: { a: 'pass', b: 'skipping' } },
     text: '⏳ PR 7 · all 2 passed, confirming',

@@ -45,6 +45,7 @@ export function summary(watch: Watch): { text: string; color: Tone } {
     return { text: `⏳ ${pr} · ${done}/${states.length} done · failed so far: ${failed.join(', ')}`, color: 'red' }
   }
   if (failed.length > 0) return { text: `❌ ${pr} · failed: ${failed.join(', ')}`, color: 'red' }
+  if (watch.deepNeverStarted) return { text: `⚠️ ${pr} · deep review never started`, color: 'yellow' }
   if (isNoCi(watch)) return { text: `➖ ${pr} · no CI in this repo`, color: 'gray' }
   if (watch.outcome === 'timeout') return { text: `⏰ ${pr} · stuck pending`, color: 'yellow' }
   // Every check passed, and the watch waits out its quiet polls (a late workflow can still show up)

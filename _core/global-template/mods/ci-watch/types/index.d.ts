@@ -46,6 +46,13 @@ export type Watch = {
    * (`routine error, deep none`). Such a round is not counted, and its wake says why.
    */
   noVerdict?: string
+  /**
+   * When this head's watch first saw the review gate owe a deep review, and whether that review was found
+   * started, so it is looked up no more.
+   */
+  deep?: { owedSince: number; isStarted?: boolean }
+  /** Settled early: the review gate owes a deep review, and none started in the time it takes to ask. */
+  deepNeverStarted?: boolean
   /** Only on the copies the band and `/ci-watch` show, never saved: which round of its PR this head is. */
   round?: number
 }
