@@ -7,6 +7,7 @@ script or the hook on it the way a session does.
 """
 
 import importlib.util
+import itertools
 import json
 import os
 import pathlib
@@ -557,26 +558,52 @@ class Hook(unittest.TestCase):
             self.assertEqual(run_hook(repo, "git tag 2026.10.2")[0], 2)
 
 
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    # No __pycache__ beside the template, which the template file list would then hold.
+    with mock.patch.object(sys, "dont_write_bytecode", True):
+        spec.loader.exec_module(module)
+    return module
+
+
+def plant_git(folder):
+    os.makedirs(folder, exist_ok=True)
+    planted = os.path.join(folder, "git.bat" if os.name == "nt" else "git")
+    pathlib.Path(planted).write_text("exit 0\n")
+    os.chmod(planted, 0o755)
+    return planted
+
+
 class TrustedProgram(unittest.TestCase):
-    # A repo can ship its own git (or node) beside its code; the hook must never run that one.
-    def test_a_program_in_the_project_folder_is_never_picked(self):
-        spec = importlib.util.spec_from_file_location("version_check_hook", HOOK)
-        hook = importlib.util.module_from_spec(spec)
-        # No __pycache__ beside the template, which the template file list would then hold.
-        with mock.patch.object(sys, "dont_write_bytecode", True):
-            spec.loader.exec_module(hook)
+    # A repo can ship its own git beside its code, first on PATH; the hook and the check script it
+    # starts skip it and run the next git on PATH, the user's own.
+    def test_a_program_anywhere_in_the_project_is_skipped_for_the_next_on_path(self):
+        hook, script = load("version_check_hook", HOOK), load("version_check_script", SCRIPT)
+        finders = {"the hook": lambda project: hook.trusted_program("git", project),
+                   "the check script": lambda project: script.git_program.__wrapped__()}
         here = os.getcwd()
-        with tempfile.TemporaryDirectory() as project, mock.patch.dict(os.environ):
-            planted = os.path.join(project, "git.bat" if os.name == "nt" else "git")
-            pathlib.Path(planted).write_text("exit 0\n")
-            os.chmod(planted, 0o755)
-            os.environ["PATH"] = project + os.pathsep + os.environ["PATH"]
-            os.chdir(project)
-            try:
-                found = hook.trusted_program("git", project)
-            finally:
-                os.chdir(here)
-            self.assertIsNone(found)
+        for (name, folder, cwd), (finder, find) in itertools.product((
+                ("the top folder", "", ""),
+                ("a subfolder on PATH, as direnv adds", "bin", ""),
+                ("a subfolder on PATH, from a session in another subfolder", "bin", "src"),
+                ("the outer repo's subfolder on PATH, from a session in a submodule", "bin", "lib")),
+                finders.items()):
+            with self.subTest(f"{finder}: {name}"), tempfile.TemporaryDirectory() as repo, \
+                    tempfile.TemporaryDirectory() as elsewhere, mock.patch.dict(os.environ):
+                os.makedirs(os.path.join(repo, ".git"))
+                tools, project = os.path.join(repo, folder), os.path.join(repo, cwd)
+                plant_git(tools)
+                own = plant_git(elsewhere)
+                os.makedirs(os.path.join(project, ".git") if cwd == "lib" else project, exist_ok=True)
+                os.environ["PATH"] = os.pathsep.join([tools, elsewhere, os.environ["PATH"]])
+                os.chdir(project)
+                try:
+                    found = find(project)
+                finally:
+                    os.chdir(here)
+                same = os.path.normcase(os.path.realpath(found or "")) == os.path.normcase(os.path.realpath(own))
+                self.assertTrue(same, found)
 
 
 if __name__ == "__main__":
