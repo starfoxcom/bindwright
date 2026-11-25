@@ -26,6 +26,7 @@ Mistakes this repo has made more than once. Each item names a trigger the diff s
 | A test or script compares a file's text line by line, or replays a saved file | It drops `\r` before comparing, since a Windows checkout turns line endings into CRLF | #382, #938 |
 | Rule, README or CHANGELOG text states how many of something there are (checks, counts, rows, tests) | The number matches the code after this diff | #940 |
 | A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says it does with input it cannot read, whether that is to block with what to fix or to let the call through | #350, #740 |
+| A new kind of write to an outside service (a POST, PUT, PATCH or DELETE call, or an SDK call that creates or changes something) | Its tests run against a fake that refuses what the service refuses, and the PR's Notes carry a `Live check:` line from one real call | #1411, #1415 |
 
 ## Bindwright template text
 
