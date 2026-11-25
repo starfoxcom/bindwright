@@ -4,7 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -92,6 +92,23 @@ test("a shared temp folder's claude-<user id> folder is looked in too", {
   });
 });
 
+test("a temp root that is a link is never walked", {
+  skip: skip || (process.platform === "win32" && "a link needs extra rights on Windows"),
+}, () => {
+  withLayout((layout) => {
+    // The link points at a folder that holds a real-looking profile, as a home folder would.
+    const target = join(layout.base, "elsewhere");
+    mkdirSync(join(target, "c0ffee", "old-session", "scratchpad", "profile", "Default"), { recursive: true });
+    const state = join(target, "c0ffee", "old-session", "scratchpad", "profile", "Local State");
+    writeFileSync(state, "{}");
+    const seconds = Date.now() / 1000 - 2 * HOUR_S;
+    utimesSync(state, seconds, seconds);
+    mkdirSync(layout.temp, { recursive: true });
+    symlinkSync(target, join(layout.temp, "claude"), "dir");
+    assert.equal(start(layout), "");
+  });
+});
+
 test("the check runs once a day, and only when a session starts fresh", { skip }, () => {
   withLayout((layout) => {
     profile(layout);
@@ -146,6 +163,7 @@ test("a profile is picked only after an hour unwritten, with no live script's br
       ["a browser on a longer path that starts with the old one's", [script, [20, 10, flag(`${old}2`)]],
         { [old]: [] }],
       ["a process list that could not be read", null, {}],
+      ["a browser whose profile path is relative", [script, [30, 10, "chrome --user-data-dir=profile"]], {}],
     ];
     for (const [name, processes, expected] of rows) {
       assert.deepEqual(leftBehind([old, fresh], processes), expected, name);

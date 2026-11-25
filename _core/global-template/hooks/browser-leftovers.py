@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -42,7 +43,19 @@ def temp_roots():
     Spelled as the sessions spell them, so the paths scripts pass their browsers compare equal."""
     base = os.path.abspath(os.environ.get("CLAUDE_CODE_TMPDIR") or tempfile.gettempdir())
     names = ["claude"] + (["claude-{}".format(os.getuid())] if hasattr(os, "getuid") else [])
-    return [os.path.join(base, name) for name in names if os.path.isdir(os.path.join(base, name))]
+    return [os.path.join(base, name) for name in names if is_own_folder(os.path.join(base, name))]
+
+
+def is_own_folder(path):
+    """Whether `path` is a real folder, not a link or junction, owned by this user where the
+    system has user ids: a shared temp folder lets anyone else create a `claude` there."""
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    is_link = stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & REPARSE_POINT
+    is_mine = not hasattr(os, "getuid") or info.st_uid == os.getuid()
+    return stat.S_ISDIR(info.st_mode) and not is_link and is_mine
 
 
 def is_plain_folder(entry):
@@ -103,7 +116,8 @@ def running_processes():
                    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process"
                    " | ForEach-Object { \"$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.CommandLine)\" }"]
     else:
-        command = ["ps", "-axo", "pid=,ppid=,args="]
+        # `ww`: every command line in full, never cut at the terminal's width.
+        command = ["ps", "-axww", "-o", "pid=,ppid=,args="]
     try:
         listed = subprocess.run(command, capture_output=True, timeout=LIST_SECONDS)
     except (OSError, subprocess.TimeoutExpired):
@@ -142,15 +156,23 @@ def uses_profile(line, flags):
     return False
 
 
+def has_relative_profile(line):
+    """Whether the comparable command line `line` passes a profile path that is not absolute."""
+    values = [part.split(" ", 1)[0] for part in line.split("--user-data-dir=")[1:]]
+    return any(not os.path.isabs(value) for value in values)
+
+
 def left_behind(folders, processes, now):
     """{folder: [pids of the browsers using it]} for each folder nothing wrote for
     IN_USE_SECONDS that no browser with a running parent uses. On Linux and macOS a process
     whose parent exits is handed to process 1, so that parent counts as gone."""
-    if processes is None:
-        return {}
-    running = {pid for pid, _, _ in processes} - ({1} if os.name != "nt" else set())
-    browsers = [(pid, parent, comparable(line)) for pid, parent, line in processes
+    running = {pid for pid, _, _ in (processes or [])} - ({1} if os.name != "nt" else set())
+    browsers = [(pid, parent, comparable(line)) for pid, parent, line in (processes or [])
                 if "--user-data-dir=" in line]
+    # A browser whose profile path is relative, or a list that cannot be read, could be using
+    # any of the folders, so none is picked.
+    if processes is None or any(has_relative_profile(line) for _, _, line in browsers):
+        return {}
     picked = {}
     for folder in folders:
         if now - last_written(folder) <= IN_USE_SECONDS:
