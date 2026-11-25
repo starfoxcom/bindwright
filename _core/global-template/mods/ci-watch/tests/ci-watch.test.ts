@@ -5,7 +5,7 @@ import { isPushOrPr, mergedNumber, targetFolder } from '../hooks/command'
 import { plainPush } from '../hooks/plain'
 import { claimWake, HELP, wakeText } from '../hooks/register'
 import { settle } from '../hooks/settle'
-import { moment, type Seen, world } from './world'
+import { LONG, moment, type Seen, world } from './world'
 
 const BASE: Watch = { repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: {}, stablePolls: 0 }
 const HOUR = 60 * 60_000
@@ -250,7 +250,7 @@ test('a push starts a watch and the session is woken once when it passes', async
   expect(seen.prompts.length).toBe(1)
 })
 
-test('a PR with no check in a repo with no workflows wakes once after the grace time: no CI', async ($, on) => {
+test('a PR with no check in a repo with no workflows wakes once after the grace time: no CI', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { workflows: 0, isCheckless: true, isReadable: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -291,7 +291,7 @@ test('failed reads after the grace time never drop a watch whose checks came fro
   expect(seen.prompts[0]).toContain('o/r#7: all 1 checks settled')
 })
 
-test('a PR still with no check where workflows exist keeps its watch until the time limit', async ($, on) => {
+test('a PR still with no check where workflows exist keeps its watch until the time limit', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isCheckless = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -613,7 +613,7 @@ test('one command that merges a PR and pushes the next branch forgets the one an
 
 // An open PR is unfinished work: its settled watch stays on the row, however long ago it settled, until
 // the PR is merged or closed.
-test('a settled watch stays until its PR is merged or closed, not for a set time', async ($, on) => {
+test('a settled watch stays until its PR is merged or closed, not for a set time', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -632,7 +632,7 @@ test('a settled watch stays until its PR is merged or closed, not for a set time
 })
 
 // Past the hour after this session's push, a new head is someone else's: the row follows it, no wake.
-test("a head pushed long after the session's own push updates the row and wakes no one", async ($, on) => {
+test("a head pushed long after the session's own push updates the row and wakes no one", LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -650,7 +650,7 @@ test("a head pushed long after the session's own push updates the row and wakes 
 })
 
 // The session's own push hours later still wakes it, even when GitHub names the new commit only later.
-test('an own push hours later wakes the session for its new head', async ($, on) => {
+test('an own push hours later wakes the session for its new head', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
@@ -666,7 +666,7 @@ test('an own push hours later wakes the session for its new head', async ($, on)
 })
 
 // A silent watch still running when the session pushes becomes the session's own again.
-test('an own push onto a silent watch still running wakes the session', async ($, on) => {
+test('an own push onto a silent watch still running wakes the session', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
@@ -720,7 +720,7 @@ test("a watch saved with no push stamp keeps its push time across a head move", 
 // that watch's checks: the push makes the watch the session's own, so its settlement wakes the session.
 // (The push finds the watch only after its last wait, so no poll can swap the object between its lookup
 // and its stamp; the test kit cannot pause inside the clock read to show the old window.)
-test("a same-head push made while a poll reads a silent watch's checks makes it the session's own", async (
+test("a same-head push made while a poll reads a silent watch's checks makes it the session's own", LONG, async (
   $,
   on,
 ) => {
@@ -754,7 +754,7 @@ test("a same-head push made while a poll reads a silent watch's checks makes it 
 })
 
 // A push made while a poll reads the saved file stays the session's own: the poll does not undo its mark.
-test('an own push made mid-poll keeps the session its wake', async ($, on) => {
+test('an own push made mid-poll keeps the session its wake', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -818,7 +818,7 @@ test('a same-head push made while the settling poll checks the file before wakin
   expect(seen.prompts).toHaveLength(1)
 })
 
-test('a watch settled long ago asks GitHub about its PR every ten minutes, not every poll', async ($, on) => {
+test('a watch settled long ago asks GitHub about its PR every ten minutes, not every poll', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'

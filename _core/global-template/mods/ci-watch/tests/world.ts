@@ -4,6 +4,9 @@ import { mock } from 'claude-code/testing'
 import { STATUS_SCRIPT } from '../hooks/incident'
 import { MKDIR_SCRIPT, SWEEP_SCRIPT } from '../hooks/register'
 
+// For a test of dozens of fake-clock polls: a slow runner can take past the default 5 s.
+export const LONG = { timeoutMs: 15_000 }
+
 // The engine beneath ci-watch in its tests: gh, the state files, the clock and the session's prompts.
 export type Seen = {
   prompts: string[]

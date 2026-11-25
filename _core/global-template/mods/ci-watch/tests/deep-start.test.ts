@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { PR_TITLE, type Seen, world } from './world'
+import { LONG, PR_TITLE, type Seen, world } from './world'
 
 const POLL_MS = 30_000
 const MINUTE = 60_000
@@ -38,7 +38,7 @@ const ROWS: Row[] = [
 ]
 
 for (const { name, seen: given, isEarly } of ROWS) {
-  test(`deep start: ${name}`, async ($, on) => {
+  test(`deep start: ${name}`, LONG, async ($, on) => {
     const { seen, clock } = world(on)
     Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true }, given)
     await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -48,7 +48,7 @@ for (const { name, seen: given, isEarly } of ROWS) {
   })
 }
 
-test('the wake for a deep review that never started says to tell the user, and comes once', async ($, on) => {
+test('the wake for a deep review that never started says to tell the user, and comes once', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -60,7 +60,7 @@ test('the wake for a deep review that never started says to tell the user, and c
   expect(seen.prompts[0]).not.toContain('Checks finished')
 })
 
-test('a deep run created just after the gate turned owed is found, not missed', async ($, on) => {
+test('a deep run created just after the gate turned owed is found, not missed', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -71,7 +71,7 @@ test('a deep run created just after the gate turned owed is found, not missed', 
   expect(seen.prompts.filter(text => text.includes('deep review')).length).toBe(0)
 })
 
-test('a routine review that blocked is named in the wake', async ($, on) => {
+test('a routine review that blocked is named in the wake', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   const rows = [{ name: 'Review gate', bucket: 'pending' }, { name: 'Evaluate review outcome', bucket: 'fail' }]
   const gateState = 'triage=reviewable;routine=block;escalated=yes;deep=none'
@@ -83,7 +83,7 @@ test('a routine review that blocked is named in the wake', async ($, on) => {
   expect(seen.prompts[0]).toContain('Meanwhile Evaluate review outcome failed')
 })
 
-test('during an Actions incident the incident wake keeps its place', async ($, on) => {
+test('during an Actions incident the incident wake keeps its place', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   const incident = { name: 'Incident with Actions', status: 'investigating', components: [{ name: 'Actions' }] }
   const status = JSON.stringify({ incidents: [incident] })
@@ -95,7 +95,7 @@ test('during an Actions incident the incident wake keeps its place', async ($, o
   expect(seen.prompts.some(text => text.includes('waits for a deep review'))).toBe(false)
 })
 
-test('a deep run found on one head is looked for again on the next', async ($, on) => {
+test('a deep run found on one head is looked for again on the next', LONG, async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true, deepRuns: [PR_TITLE] })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -107,7 +107,7 @@ test('a deep run found on one head is looked for again on the next', async ($, o
   expect(seen.prompts[0]).toContain('the review gate waits for a deep review')
 })
 
-test("a deep run found started is not looked up again", async ($, on) => {
+test("a deep run found started is not looked up again", LONG, async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true, deepRuns: [PR_TITLE] })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
