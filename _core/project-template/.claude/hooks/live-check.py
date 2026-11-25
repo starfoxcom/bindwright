@@ -2,17 +2,17 @@ r"""PreToolUse hook, observe mode: notes a pull request that adds a write to an 
 service without a `Live check:` line in its body.
 
 testing.md asks for one real send of each new kind of write before the work is done, and the
-pull request's body records it. This hook reads a plain `gh pr create` or `gh pr edit` that
-passes a body file, takes the lines the branch adds from `git diff` (outside test files and the
-bind's record under .bindwright/), and when one of them makes a write (an API call with a write
-method, or an HTTP client's post, put, patch or delete) and the body has no `Live check:` line,
-it appends the match to
-`<BINDWRIGHT_HOME>/live-check/observed.jsonl` and prints one line to stderr.
+pull request's body records it. This hook reads a plain `gh pr create` that passes a body file,
+takes the lines the branch adds from `git diff` (outside test files and the bind's record under
+.bindwright/), and when one of them makes a write (an API call with a write method, or an HTTP
+client's post, put, patch or delete) and the body has no `Live check:` line, it appends the match
+to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and hands the session one line of context.
 
 It never blocks: every outcome exits 0, so the log shows how often the note fires before any
 version refuses. A command is read only when it is plain: outside its quotes it holds letters,
 digits and the characters in PLAIN_CHARACTERS. Anything else (chains, pipes, expansions, a
-multi-line command) goes unread and makes no note.
+multi-line command) goes unread and makes no note, and so does a create for another branch or
+repo (--head, --repo) or one whose base branch git cannot find.
 """
 
 import datetime
@@ -29,8 +29,12 @@ LOG_PARTS = ("live-check", "observed.jsonl")
 GIT_SECONDS = 6
 MAX_MATCHES = 5
 MAX_MATCH_CHARS = 200
+# Past this a line is generated (a minified bundle, a source map), not code someone wrote, and
+# the patterns' cost on it could outrun the hook's timeout.
+MAX_LINE_CHARS = 500
 BODY_FILE_OPTIONS = ("--body-file", "-F")
 BASE_OPTIONS = ("--base", "-B")
+OTHER_TARGET_OPTIONS = ("--head", "-H", "--repo", "-R")
 QUOTES = ('"', "'")
 # Outside quotes a word may hold letters, digits and these; `\` is a path separator for PowerShell only.
 PLAIN_CHARACTERS = {
@@ -40,14 +44,17 @@ PLAIN_CHARACTERS = {
 SHELLS = {"Bash": "bash", "PowerShell": "powershell"}
 WRITE_METHOD = r"(?:POST|PUT|PATCH|DELETE)"
 WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
-    r"\bgh\b.*\bapi\b.*(?:-X|--method)[\s=,\"']+" + WRITE_METHOD + r"\b",
+    r"\bgh\s+api\b.*(?:-X|--method)[\s=,\"']+" + WRITE_METHOD + r"\b",
     r"\b_gh\(.*[\"']" + WRITE_METHOD + r"[\"']",
     r"\b(?:requests|httpx|axios)\.(?:post|put|patch|delete)\(",
     r"\bfetch\((?=.*\bmethod\s*:\s*[\"']?" + WRITE_METHOD + r"\b)",
 )]
-RECORD_FOLDER = ".bindwright"
-TEST_FOLDERS = {"test", "tests", "__tests__", "spec"}
-TEST_NAME_MARKERS = ("_test.", ".test.", ".spec.")
+# Files that never send anything to a real service: the bind's record, which stores whole files
+# as strings, and test files. Git leaves them out of the diff, so no diff line is parsed for paths.
+SENDS_NOTHING = [":(top,exclude).bindwright"] + [":(top,exclude,glob,icase)" + pattern for pattern in (
+    "**/test_*", "**/*_test.*", "**/*.test.*", "**/*.spec.*",
+    "**/test/**", "**/tests/**", "**/__tests__/**", "**/spec/**",
+)]
 LIVE_CHECK_LINE = re.compile(r"(?:[-*] )?live check:", re.IGNORECASE)
 
 
@@ -97,41 +104,26 @@ def option_value(words, names):
         if has_equals:
             value = rest
         else:
-            value = words[index + 1] if index + 1 < len(words) else None
+            value = words[index + 1] if index + 1 < len(words) else ""
     return value
 
 
 def pr_request(command, shell):
-    """(the command's kind, the body file, the base option) for a plain `gh pr create` or
-    `gh pr edit` that passes a body file; None for any other command."""
+    """(the body file, the base option) for a plain `gh pr create` of the checked-out branch that
+    passes a body file; None for any other command."""
     words = read_words(command, shell) or []
-    if words[:2] != ["gh", "pr"] or words[2:3] not in (["create"], ["edit"]):
+    if words[:3] != ["gh", "pr", "create"] or option_value(words, OTHER_TARGET_OPTIONS) is not None:
         return None
     body_file = option_value(words, BODY_FILE_OPTIONS)
-    if body_file is None:
+    if not body_file:
         return None
-    return "gh pr " + words[2], body_file, option_value(words, BASE_OPTIONS)
-
-
-def sends_nothing(path):
-    """Whether a repo path holds text that never reaches a real service: a test file, or the
-    bind's record under .bindwright/, which stores whole files as strings."""
-    parts = path.lower().split("/")
-    name = parts[-1]
-    return (parts[0] == RECORD_FOLDER or any(part in TEST_FOLDERS for part in parts[:-1])
-            or name.startswith("test_") or any(marker in name for marker in TEST_NAME_MARKERS))
+    return body_file, option_value(words, BASE_OPTIONS)
 
 
 def write_lines(diff):
-    """The added lines of a diff that make a write to an outside service, without their `+`,
-    leaving out files that send nothing."""
-    added, skipped = [], False
-    for line in diff.splitlines():
-        if line.startswith("+++"):
-            path = line[4:].strip()
-            skipped = sends_nothing(path[2:] if path.startswith("b/") else path)
-        elif line.startswith("+") and not skipped:
-            added.append(line[1:].strip())
+    """The added lines of a diff that make a write to an outside service, without their `+`."""
+    added = [line[1:].strip() for line in diff.splitlines()
+             if line.startswith("+") and not line.startswith("+++ ") and len(line) <= MAX_LINE_CHARS]
     return [line for line in added if any(pattern.search(line) for pattern in WRITE_PATTERNS)]
 
 
@@ -160,17 +152,19 @@ def git(cwd, *args):
 
 
 def base_ref(cwd, base):
-    """The ref a PR's diff starts from: `origin/<base>` (or `<base>`) for --base, else the
-    remote's default branch, falling back to origin/main."""
+    """The ref the PR's diff starts from, or None when git cannot find it: `origin/<base>` (or a
+    local `<base>`) for --base, else the remote's default branch, which gh targets without one."""
     if base is None:
-        return git(cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD") or "origin/main"
-    remote = "origin/" + base
-    if git(cwd, "rev-parse", "--verify", "--quiet", remote + "^{commit}"):
-        return remote
-    return base
+        candidates = [git(cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")]
+    else:
+        candidates = ["origin/" + base, base]
+    for ref in candidates:
+        if ref and git(cwd, "rev-parse", "--verify", "--quiet", ref + "^{commit}"):
+            return ref
+    return None
 
 
-def record(repo, kind, matches):
+def record(repo, matches):
     """Appends one JSON line describing the note to the log."""
     home = os.environ.get(HOME_VARIABLE) or os.path.join(os.path.expanduser("~"), ".bindwright")
     folder = os.path.join(home, LOG_PARTS[0])
@@ -178,7 +172,7 @@ def record(repo, kind, matches):
     entry = {
         "time": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "repo": repo,
-        "command": kind,
+        "command": "gh pr create",
         "matches": [line[:MAX_MATCH_CHARS] for line in matches[:MAX_MATCHES]],
     }
     with open(os.path.join(folder, LOG_PARTS[1]), "a", encoding="utf-8") as handle:
@@ -197,19 +191,20 @@ def observe(event):
     request = pr_request(command, SHELLS[event["tool_name"]])
     if request is None:
         return False
-    kind, body_file, base = request
+    body_file, base = request
     body = read_body(os.path.join(cwd, body_file))
     repo = git(cwd, "rev-parse", "--show-toplevel")
-    if body is None or not repo:
+    start = base_ref(cwd, base) if body is not None and repo else None
+    if start is None:
         return False
-    diff = git(cwd, "diff", "--no-color", "--no-ext-diff", "--no-textconv",
-               base_ref(cwd, base) + "...HEAD")
+    diff = git(cwd, "diff", "--no-color", "--no-ext-diff", "--no-textconv", start + "...HEAD",
+               "--", ":/", *SENDS_NOTHING)
     if diff is None:
         return False
     matches = write_lines(diff)
     if not matches or has_live_check(body):
         return False
-    record(repo, kind, matches)
+    record(repo, matches)
     return True
 
 
@@ -221,7 +216,8 @@ def main():
     except Exception:  # observe mode: no failure of this hook may block the tool call
         return 0
     if noted:
-        print(NOTE, file=sys.stderr)
+        # Claude Code shows the session a PreToolUse hook's additionalContext; stderr on exit 0 it drops.
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": NOTE}}))
     return 0
 
 
