@@ -608,21 +608,38 @@ def is_within(folder, top):
         return False
 
 
+def repo_folder(root):
+    """The top folder of the outermost repo holding `root`, where a repo, or the one a submodule sits
+    in, could ship its own programs. A repo at the home folder or above it holds the user's own
+    installs and does not count, unless the home folder is unknown."""
+    home = os.path.expanduser("~")
+    home = real_path(home) if os.path.isabs(home) else None
+    folder, top = real_path(root), real_path(root)
+    while True:
+        if os.path.exists(os.path.join(folder, ".git")) and not (home and is_within(home, folder)):
+            top = folder
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return top
+        folder = parent
+
+
 def trusted_git(root):
-    """git on PATH as an absolute path, or None when the first one found is the repo's own.
-    Windows looks a bare name up in the current folder first, so a repo could ship its own `git.exe`:
-    that search is switched off, and a relative match, one anywhere in the repo or one in the current
-    folder is refused."""
+    """git as an absolute path, from the first PATH folder a repo cannot have shipped it in, or None
+    when no such folder holds one. A PATH folder that is relative (a `.`), is the session folder or the
+    current folder, or sits anywhere in the outermost repo holding `root` is skipped, so a repo's own
+    `git` never runs; Windows's search of the current folder first is switched off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    found = shutil.which("git")
-    if not found or not os.path.isabs(found):
-        return None
     try:
-        here = real_path(os.getcwd())
+        here = {real_path(place) for place in (CWD, os.getcwd())}
     except OSError:  # the hook's own folder was deleted
         return None
-    folder = real_path(os.path.dirname(found))
-    return None if is_within(folder, real_path(root)) or folder == here else found
+    repo = repo_folder(root)
+    trusted = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if os.path.isabs(entry) and real_path(entry) not in here
+               and not is_within(real_path(entry), repo)]
+    found = shutil.which("git", path=os.pathsep.join(trusted))
+    return found if found and os.path.isabs(found) else None
 
 
 def git_output(git, root, deadline, *args):
