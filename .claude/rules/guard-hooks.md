@@ -1,7 +1,9 @@
 ---
 paths:
-  - "_core/global-template/hooks/*.py"
-  - "_core/project-template/.claude/hooks/*.py"
+  - "_core/global-template/hooks/**/*.py"
+  - "_core/project-template/.claude/hooks/**/*.py"
+  - ".claude/hooks/**/*.py"
+  - "helper/hooks/shell-words.mjs"
   - "tools/test_guard_*.py"
 ---
 
