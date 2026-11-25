@@ -481,8 +481,9 @@ class Upsert(unittest.TestCase):
         # A fake check store. `wipes` stands for another workflow whose stale
         # write lands right after each of the next N PATCHes, putting back the
         # start state.
-        # `status_error` stands for a status write that GitHub refuses.
-        self.calls, self.existing, self.wipes, self.status_error = [], [], 0, None
+        # `status_error` stands for a status write that GitHub refuses, and
+        # `overwrite` for a newer run's write landing right after the next PATCH.
+        self.calls, self.existing, self.wipes, self.status_error, self.overwrite = [], [], 0, None, None
         real, settle = gate._gh, gate.SETTLE_SECONDS
 
         def fake(path, method="GET", body=None):
@@ -498,6 +499,8 @@ class Upsert(unittest.TestCase):
                 return {}
             run = next(r for r in self.existing if path.endswith("/%d" % r["id"]))
             run["external_id"] = body["external_id"]
+            if self.overwrite:
+                run["external_id"], self.overwrite = self.overwrite, None
             if self.wipes:
                 self.wipes -= 1
                 run["external_id"] = ""
@@ -562,6 +565,13 @@ class Upsert(unittest.TestCase):
                                              {"state": state, "context": "Review gate",
                                               "description": out["title"]}))
                 self.assertEqual(writes[1][0], "repos/o/r/check-runs")
+
+    def test_the_last_status_follows_the_check_a_newer_run_left(self):
+        self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
+        self.overwrite = "triage=reviewable;routine=block;escalated=no;deep=none;routine_by=9.1.1;deep_by=0.0.0"
+        gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        states = [body["state"] for _, path, body in self.calls if "/statuses/" in path]
+        self.assertEqual((states[0], states[-1]), ("success", "failure"))
 
     def test_a_job_without_the_status_permission_still_writes_the_check(self):
         self.status_error = "gh api POST failed: Resource not accessible by integration (HTTP 403)"

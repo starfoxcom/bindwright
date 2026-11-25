@@ -46,7 +46,8 @@ that harmless:
     writes again when its own facts are gone.
 
 Every write also sets a commit status named "Review gate" to the same result,
-before the check, so a failed status write leaves the check as it was. A
+before the check, so a failed status write leaves the check as it was, and
+once the read-back settles it sets the status again from the check it read. A
 second run on one head commit (a reopened PR) can leave the check in a check
 suite the merge no longer counts, while the newest status for a name always
 counts; a failing check of that name still blocks beside a passing status.
@@ -497,6 +498,9 @@ def upsert(repo, sha, note="", **facts):
             if not _holds(current, facts):
                 break
         else:
+            # Another writer's check can land between this one's status and
+            # check, so the status is set once more from the check as it settled.
+            _set_status(repo, sha, gate(current.get("external_id") or ""))
             return check
         if round_ < WRITE_ROUNDS - 1:
             check = _write(repo, sha, current, note, facts)
