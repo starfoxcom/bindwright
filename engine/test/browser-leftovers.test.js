@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,7 @@ const hook = join(repo, "_core", "global-template", "hooks", "browser-leftovers.
 const skip = !python && "needs Python 3.8+";
 const SESSION = "this-session";
 const HOUR_S = 60 * 60;
+const IDLE_HOURS = 4 * 24; // past the three days a profile must sit unchanged
 
 function makeLayout() {
   const base = mkdtempSync(join(tmpdir(), "bw-leftovers-"));
@@ -34,7 +35,7 @@ function withLayout(fn) {
 
 // A browser profile in <temp>/<root>/<project>/<session>/scratchpad/<name>, last written
 // `hoursAgo` hours ago, with the session's transcript under the project `slug`.
-function profile(layout, { session = "old-session", name = "profile", hoursAgo = 2, slug = "P--demo",
+function profile(layout, { session = "old-session", name = "profile", hoursAgo = IDLE_HOURS, slug = "P--demo",
   root = "claude" } = {}) {
   const folder = join(layout.temp, root, "c0ffee", session, "scratchpad", name);
   mkdirSync(join(folder, "Default"), { recursive: true });
@@ -65,8 +66,16 @@ function start(layout, source = "startup") {
 
 test("session start reports only the profiles earlier sessions left behind", { skip }, () => {
   const rows = [
-    ["a profile last written two hours ago, with its project", (l) => profile(l), /1 browser profile.*P--demo/],
-    ["a profile written in the last hour", (l) => profile(l, { hoursAgo: 0 }), null],
+    ["a profile last written four days ago, with its project", (l) => profile(l), /1 browser profile.*P--demo/],
+    ["a profile written today", (l) => profile(l, { hoursAgo: 0 }), null],
+    ["a profile with only one file three folders down written today", (l) => {
+      const folder = profile(l);
+      const deep = join(folder, "Default", "Cache", "Cache_Data");
+      mkdirSync(deep, { recursive: true });
+      writeFileSync(join(deep, "data_0"), "");
+      const seconds = Date.now() / 1000 - IDLE_HOURS * HOUR_S;
+      for (const path of [deep, dirname(deep), join(folder, "Default")]) utimesSync(path, seconds, seconds);
+    }, null],
     ["this session's own profile", (l) => profile(l, { session: SESSION }), null],
     ["a folder with a Default folder but no browser files", (l) => {
       mkdirSync(join(l.temp, "claude", "c0ffee", "old-session", "scratchpad", "x", "Default"), { recursive: true });
@@ -101,7 +110,7 @@ test("a temp root that is a link is never walked", {
     mkdirSync(join(target, "c0ffee", "old-session", "scratchpad", "profile", "Default"), { recursive: true });
     const state = join(target, "c0ffee", "old-session", "scratchpad", "profile", "Local State");
     writeFileSync(state, "{}");
-    const seconds = Date.now() / 1000 - 2 * HOUR_S;
+    const seconds = Date.now() / 1000 - IDLE_HOURS * HOUR_S;
     utimesSync(state, seconds, seconds);
     mkdirSync(layout.temp, { recursive: true });
     symlinkSync(target, join(layout.temp, "claude"), "dir");
@@ -131,18 +140,36 @@ test("--clean deletes the folders left behind and keeps the ones in use", { skip
   });
 });
 
-// Puts into each folder what a running program leaves in a profile, as the row says, ages
-// every entry, and runs the hook's own selection. On Windows a held lock is a `lockfile`
+test("--clean keeps a folder a program holds a file of open", {
+  skip: skip || (process.platform !== "win32" && "only Windows refuses to rename such a folder"),
+}, async () => {
+  const layout = makeLayout();
+  const folder = profile(layout);
+  const hold = "import sys, time\nheld = open(sys.argv[1], 'a')\nprint('ready', flush=True)\ntime.sleep(60)\n";
+  const holder = spawn(python, ["-I", "-c", hold, join(folder, "Local State")]);
+  try {
+    await new Promise((ready) => holder.stdout.once("data", ready));
+    const r = spawnSync(python, ["-I", hook, "--clean", SESSION], { encoding: "utf8", env: env(layout) });
+    assert.deepEqual(JSON.parse(r.stdout), { removed: [], kept: [folder] });
+    assert.equal(existsSync(folder), true);
+  } finally {
+    holder.kill();
+    await new Promise((gone) => holder.once("exit", gone));
+    rmSync(layout.base, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
+// Puts into each folder the lock a running browser keeps in its profile, as the row says,
+// ages every entry, and runs the hook's own selection. On Windows a held lock is a `lockfile`
 // opened the way Chromium opens it (others may read it but not write it); elsewhere a lock is
-// a `SingletonLock` link to <host>-<pid>. "open" holds a file inside the profile open, as a
-// headless shell does, which keeps no lock.
+// a `SingletonLock` link to <host>-<pid>.
 const LOCK_DRIVER = `
 import ctypes, importlib.util, json, os, socket, sys, time
 spec = importlib.util.spec_from_file_location("hook", sys.argv[1])
 hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook)
 cases, dead_pid = json.load(sys.stdin)
-old, handles = time.time() - 7200, []
+old, handles = time.time() - 4 * 86400, []
 for folder, lock in cases:
     link = os.path.join(folder, "SingletonLock")
     owners = {"live": socket.gethostname(), "dead": socket.gethostname(), "elsewhere": "another-host"}
@@ -156,14 +183,13 @@ for folder, lock in cases:
         handles.append(kernel.CreateFileW(os.path.join(folder, "lockfile"), 0x40000000, 1, None, 2, 0x80, None))
     elif lock == "released":
         open(os.path.join(folder, "lockfile"), "w").close()
-    elif lock == "open":
-        handles.append(open(os.path.join(folder, "Default", "Cookies"), "w"))
     default = os.path.join(folder, "Default")
     for path in [os.path.join(place, name) for place in (folder, default) for name in os.listdir(place)]:
         os.utime(path, (old, old), follow_symlinks=not os.path.islink(path))
     os.utime(default, (old, old))
     os.utime(folder, (old, old))
-print(json.dumps(hook.left_behind([folder for folder, _ in cases], time.time(), hook.open_paths())))
+picked = hook.left_behind([folder for folder, _ in cases], time.time(), time.monotonic() + 10)
+print(json.dumps(sorted(picked)))
 `;
 
 function leftBehind(cases) {
@@ -175,16 +201,15 @@ function leftBehind(cases) {
   return JSON.parse(r.stdout);
 }
 
-test("an old profile is picked only when no running program uses it", { skip }, () => {
+test("an old profile is picked only when no running browser holds its lock", { skip }, () => {
   withLayout((layout) => {
-    const open = ["a file inside held open, with no lock", "open", false];
     const rows = process.platform === "win32"
       ? [["no lock", "none", true], ["a lockfile a running browser holds", "held", false],
-        ["a lockfile nothing holds", "released", true], open]
+        ["a lockfile nothing holds", "released", true]]
       : [["no lock", "none", true], ["a lock naming a running process", "live", false],
         ["a lock naming a process that ended", "dead", true],
         ["a lock naming another computer's process", "elsewhere", false],
-        ["a lock that is not a link", "plain", false], open];
+        ["a lock that is not a link", "plain", false]];
     const cases = rows.map(([, lock], i) => [profile(layout, { name: `p${i}` }), lock]);
     const picked = leftBehind(cases);
     rows.forEach(([name, , isPicked], i) => assert.equal(picked.includes(cases[i][0]), isPicked, name));

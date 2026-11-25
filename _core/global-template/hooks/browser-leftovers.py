@@ -8,30 +8,33 @@ session's transcript, weeks later.
 
 The hook deletes nothing. It looks at most once a day, at the start of a new session. On the
 user's yes, the assistant runs this file with `--clean <session id>`, which picks the same
-folders again and deletes them. A folder is picked only when nothing in it changed for an hour
-and no running program uses it: no browser holds Chromium's profile lock in it, and no program
-holds a file inside it open.
+folders again and deletes them. A folder is picked by age, as the system temp cleaners pick
+files: nothing anywhere inside it changed for IDLE_SECONDS, and no browser holds the profile
+lock Chromium keeps in it. Like those cleaners, it cannot see a program that keeps no lock and
+has written nothing in that time.
 """
 import json
 import os
 import shutil
 import socket
 import stat
-import subprocess
 import sys
 import tempfile
 import time
 
 CHECK_EVERY_SECONDS = 24 * 60 * 60
-# A profile written this recently may belong to a run still in progress in another session.
-IN_USE_SECONDS = 60 * 60
+# How long nothing in a profile may have changed before it counts as left behind: the three
+# days macOS gives its own temp files.
+IDLE_SECONDS = 3 * 24 * 60 * 60
 # How deep below the temp folder a profile is looked for: <project>/<session>/scratchpad/ and
 # a few folders more.
 MAX_DEPTH = 7
-# Claude Code stops the hook at 30 s; these three steps together stay well inside that.
+# Claude Code stops the hook at 30 s; the walk and the reading of the profiles stay inside that.
+# A profile not read in full in time is left out.
 WALK_SECONDS = 5
-LIST_SECONDS = 15
-SIZE_SECONDS = 5
+READ_SECONDS = 15
+# `--clean` runs outside the hook's limit, as a command the assistant starts.
+CLEAN_READ_SECONDS = 60
 GIGABYTE = 1024 ** 3
 REPARSE_POINT = 0x400  # a Windows junction or link, which a walk must not follow
 
@@ -62,30 +65,14 @@ def is_plain_folder(entry):
 
 def is_safe_folder(info):
     """Whether `info`, read without following links, is a real folder, not a link or junction,
-    that only this user can change where the system has user ids: a shared temp folder lets
-    anyone else create a `claude` there, and a folder others can write in lets them swap a
-    link in while the folders below it are deleted."""
+    that only this user can change where the system has user ids: this user's, with no write
+    access for its group or others. A shared temp folder lets anyone create a `claude` there,
+    and a folder others can write in lets them swap a link in while the folders below it are
+    deleted."""
     is_link = stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & REPARSE_POINT
-    is_mine = not hasattr(os, "getuid") or only_mine(info)
+    is_mine = not hasattr(os, "getuid") or (
+        info.st_uid == os.getuid() and not info.st_mode & (stat.S_IWGRP | stat.S_IWOTH))
     return stat.S_ISDIR(info.st_mode) and not is_link and is_mine
-
-
-def only_mine(info):
-    """Whether a folder is this user's and no one else can write in it. Write access for its
-    group is the user's alone only when the group is theirs: named after them, no members."""
-    if info.st_uid != os.getuid() or info.st_mode & stat.S_IWOTH:
-        return False
-    return not info.st_mode & stat.S_IWGRP or is_own_group(info.st_gid)
-
-
-def is_own_group(gid):
-    import grp  # POSIX only, as is every caller
-    import pwd
-    try:
-        group = grp.getgrgid(gid)
-        return group.gr_name == pwd.getpwuid(os.getuid()).pw_name and not group.gr_mem
-    except KeyError:
-        return False
 
 
 def subfolders(folder):
@@ -117,81 +104,35 @@ def profile_folders(root, skip, deadline):
     return sorted(found)
 
 
-def last_written(folder):
-    """When anything in the profile or its Default folder last changed, as seconds since the
-    epoch; a profile that cannot be read counts as changed now."""
-    times = []
-    for place in (folder, os.path.join(folder, "Default")):
-        if not os.path.isdir(place):
-            continue
+def read_profile(folder, deadline):
+    """(bytes, newest change) of everything inside `folder`, as seconds since the epoch, or None
+    when it could not all be read before `deadline`. The folder's own time is left out, since
+    renaming it aside changes that."""
+    size, newest, stack = 0, 0.0, [folder]
+    while stack:
+        if time.monotonic() > deadline:
+            return None
         try:
-            times.append(os.stat(place).st_mtime)
-            times += [entry.stat(follow_symlinks=False).st_mtime for entry in os.scandir(place)]
+            entries = list(os.scandir(stack.pop()))
+            for entry in entries:
+                info = entry.stat(follow_symlinks=False)
+                newest = max(newest, info.st_mtime)
+                if is_plain_folder(entry):
+                    stack.append(entry.path)
+                elif stat.S_ISREG(info.st_mode):
+                    size += info.st_size
         except OSError:
-            return time.time()
-    return max(times, default=0)
+            return None
+    return size, newest
 
 
-def is_in_use(folder, open_paths):
-    """Whether a running program may still use the profile. Chromium's own lock covers a full
-    browser: on Windows a `lockfile` it holds open for writing, elsewhere a `SingletonLock`
-    link that names `<host>-<pid>`. A headless shell keeps no lock, so a file held open inside
-    the folder counts too: Windows refuses to rename a folder then, and elsewhere `open_paths`
-    lists every file this user's programs hold open. A lock that cannot be read counts as held."""
+def is_locked(folder):
+    """Whether a running browser holds the profile, by the lock Chromium keeps in it while it
+    runs: on Windows a `lockfile` it holds open for writing, elsewhere a `SingletonLock` link
+    that names `<host>-<pid>`. A lock that cannot be read counts as held."""
     if os.name == "nt":
-        return is_held_open(os.path.join(folder, "lockfile")) or not can_rename(folder)
-    real = os.path.realpath(folder)
-    return (names_live_browser(os.path.join(folder, "SingletonLock"))
-            or any(path == real or path.startswith(real + os.sep) for path in open_paths))
-
-
-def can_rename(folder):
-    """Whether `folder` can be renamed and put back, which Windows refuses while any program
-    holds a file inside it open."""
-    aside = folder + ".in-use-check"
-    try:
-        os.rename(folder, aside)
-    except OSError:
-        return False
-    try:
-        os.rename(aside, folder)
-    except OSError:
-        return False
-    return True
-
-
-def open_paths():
-    """The real paths of the files and folders this user's programs hold open, from /proc on
-    Linux and from lsof elsewhere, or None when they cannot be listed. Windows needs none."""
-    if os.name == "nt":
-        return []
-    if os.path.isdir("/proc/self/fd"):
-        return proc_open_paths()
-    try:
-        listed = subprocess.run(["lsof", "-n", "-P", "-w", "-F", "n", "-u", str(os.getuid())],
-                                capture_output=True, timeout=LIST_SECONDS)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    lines = listed.stdout.decode("utf-8", "replace").splitlines()
-    names = [line[1:] for line in lines if line.startswith("n/")]
-    return names if listed.returncode == 0 and names else None
-
-
-def proc_open_paths():
-    """Every working folder and open file of the processes /proc lets this user read."""
-    paths = []
-    for pid in (name for name in os.listdir("/proc") if name.isdigit()):
-        base = os.path.join("/proc", pid)
-        try:
-            links = ["cwd"] + [os.path.join("fd", fd) for fd in os.listdir(os.path.join(base, "fd"))]
-        except OSError:
-            continue  # another user's process, or one that just ended
-        for link in links:
-            try:
-                paths.append(os.readlink(os.path.join(base, link)))
-            except OSError:
-                pass
-    return paths
+        return is_held_open(os.path.join(folder, "lockfile"))
+    return names_live_browser(os.path.join(folder, "SingletonLock"))
 
 
 def is_held_open(path):
@@ -228,34 +169,15 @@ def names_live_browser(path):
     return True
 
 
-def left_behind(folders, now, held):
-    """The folders nothing changed for IN_USE_SECONDS that no running program uses, given the
-    open paths `held`; when those could not be listed, none."""
-    if held is None:
-        return []
-    return [folder for folder in folders
-            if now - last_written(folder) > IN_USE_SECONDS and not is_in_use(folder, held)]
-
-
-def total_size(folders, deadline):
-    """(bytes held by `folders`, whether all of them were counted before `deadline`)."""
-    size, stack = 0, list(folders)
-    while stack:
-        if time.monotonic() > deadline:
-            return size, False
-        try:
-            entries = list(os.scandir(stack.pop()))
-        except OSError:
-            continue
-        for entry in entries:
-            try:
-                if is_plain_folder(entry):
-                    stack.append(entry.path)
-                elif entry.is_file(follow_symlinks=False):
-                    size += entry.stat(follow_symlinks=False).st_size
-            except OSError:
-                pass
-    return size, True
+def left_behind(folders, now, deadline):
+    """{folder: bytes} for the folders nothing inside changed for IDLE_SECONDS that no browser
+    holds, of those read in full before `deadline`."""
+    picked = {}
+    for folder in folders:
+        read = read_profile(folder, deadline)
+        if read and now - read[1] > IDLE_SECONDS and not is_locked(folder):
+            picked[folder] = read[0]
+    return picked
 
 
 def session_of(folder, roots):
@@ -280,15 +202,15 @@ def projects_of(folders, roots):
                    if os.path.isfile(os.path.join(projects_dir, slug, session + ".jsonl"))})
 
 
-def leftovers(session):
-    """(temp folders, [folders]) for the profiles earlier sessions left behind; the session
-    `session` itself is left out."""
+def leftovers(session, read_seconds):
+    """(temp folders, {folder: bytes}) for the profiles earlier sessions left behind; the
+    session `session` itself is left out."""
     roots, deadline, folders = temp_roots(), time.monotonic() + WALK_SECONDS, []
     for root in roots:
         own = next((os.path.join(project, session) for project in subfolders(root)
                     if session and os.path.isdir(os.path.join(project, session))), None)
         folders += profile_folders(root, own, deadline)
-    return roots, left_behind(folders, time.time(), open_paths() if folders else [])
+    return roots, left_behind(folders, time.time(), time.monotonic() + read_seconds)
 
 
 def stamp_path():
@@ -315,32 +237,47 @@ def mark_checked(now):
 
 def report(roots, picked, session):
     """The note the assistant reads at session start."""
-    size, is_complete = total_size(picked, time.monotonic() + SIZE_SECONDS)
-    held = "{} {:.1f} GB".format("about" if is_complete else "at least", size / GIGABYTE)
     lines = ["Earlier sessions left {} browser profile folder(s) in Claude Code's temp folder ({}),"
-             " holding {}.".format(len(picked), ", ".join(roots), held)]
+             " unchanged for three days and holding {:.1f} GB.".format(
+                 len(picked), ", ".join(roots), sum(picked.values()) / GIGABYTE)]
     projects = projects_of(picked, roots)
     if projects:
         lines.append("They came from sessions of: {}.".format(", ".join(projects)))
     lines.append("Nothing was deleted. Tell the user this in a line or two and offer to clean them up."
-                 " On a yes, run `\"{}\" \"{}\" --clean {}`, which deletes the folders no running"
-                 " program uses.".format(sys.executable, os.path.abspath(__file__), session))
+                 " On a yes, run `\"{}\" \"{}\" --clean {}`, which deletes them.".format(
+                     sys.executable, os.path.abspath(__file__), session))
     return " ".join(lines)
 
 
-def clean(session):
-    """Deletes the profiles left behind and prints which were removed and which are still there
-    (a file another program holds open)."""
-    _, picked = leftovers(session)
-    removed, kept = [], []
+def set_aside(picked):
+    """Renames each picked folder aside, so a script that starts a browser on its path from now
+    on gets a new folder. {original: aside} for each renamed; Windows refuses the rename while a
+    program holds a file inside open."""
+    aside = {}
     for folder in picked:
-        # Renamed aside first, so a script that starts a browser on the folder meanwhile gets a
-        # new one; on Windows the rename also fails while a program still holds a file inside.
-        doomed = folder + ".deleting"
         try:
-            os.rename(folder, doomed)
+            os.rename(folder, folder + ".deleting")
+            aside[folder] = folder + ".deleting"
         except OSError:
-            kept.append(folder)
+            pass
+    return aside
+
+
+def clean(session):
+    """Deletes the profiles left behind and prints which were removed and which are still there.
+    Every folder is set aside first and read again after, so one a browser started using since
+    it was picked is put back."""
+    _, picked = leftovers(session, CLEAN_READ_SECONDS)
+    aside = set_aside(picked)
+    still = left_behind(list(aside.values()), time.time(), time.monotonic() + CLEAN_READ_SECONDS)
+    removed, kept = [], [folder for folder in picked if folder not in aside]
+    for folder, doomed in aside.items():
+        if doomed not in still:
+            try:
+                os.rename(doomed, folder)
+                kept.append(folder)
+            except OSError:
+                kept.append(doomed)
             continue
         shutil.rmtree(doomed, ignore_errors=True)
         if os.path.exists(doomed):
@@ -362,7 +299,7 @@ def main():
     if event.get("source") not in ("startup", "clear") or not is_due(now):
         return
     session = str(event.get("session_id") or "")
-    roots, picked = leftovers(session)
+    roots, picked = leftovers(session, READ_SECONDS)
     if picked:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
                                                  "additionalContext": report(roots, picked, session)}}))
