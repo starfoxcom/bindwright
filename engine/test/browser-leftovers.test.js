@@ -32,10 +32,11 @@ function withLayout(fn) {
   }
 }
 
-// A browser profile in <temp>/claude/<project>/<session>/scratchpad/<name>, last written
+// A browser profile in <temp>/<root>/<project>/<session>/scratchpad/<name>, last written
 // `hoursAgo` hours ago, with the session's transcript under the project `slug`.
-function profile(layout, { session = "old-session", name = "profile", hoursAgo = 2, slug = "P--demo" } = {}) {
-  const folder = join(layout.temp, "claude", "c0ffee", session, "scratchpad", name);
+function profile(layout, { session = "old-session", name = "profile", hoursAgo = 2, slug = "P--demo",
+  root = "claude" } = {}) {
+  const folder = join(layout.temp, root, "c0ffee", session, "scratchpad", name);
   mkdirSync(join(folder, "Default"), { recursive: true });
   writeFileSync(join(folder, "Local State"), "{}");
   const transcript = join(layout.home, ".claude", "projects", slug, `${session}.jsonl`);
@@ -82,6 +83,15 @@ test("session start reports only the profiles earlier sessions left behind", { s
   }
 });
 
+test("a shared temp folder's claude-<user id> folder is looked in too", {
+  skip: skip || (!process.getuid && "Windows has no user ids"),
+}, () => {
+  withLayout((layout) => {
+    profile(layout, { root: `claude-${process.getuid()}` });
+    assert.match(start(layout), /1 browser profile/);
+  });
+});
+
 test("the check runs once a day, and only when a session starts fresh", { skip }, () => {
   withLayout((layout) => {
     profile(layout);
@@ -111,7 +121,8 @@ function leftBehind(folders, processes) {
     + "hook = importlib.util.module_from_spec(spec)\n"
     + "spec.loader.exec_module(hook)\n"
     + "folders, processes = json.load(sys.stdin)\n"
-    + "print(json.dumps(hook.left_behind(folders, [tuple(p) for p in processes], time.time())))\n";
+    + "processes = None if processes is None else [tuple(p) for p in processes]\n"
+    + "print(json.dumps(hook.left_behind(folders, processes, time.time())))\n";
   const r = spawnSync(python, ["-I", "-c", driver, hook], {
     input: JSON.stringify([folders, processes]), encoding: "utf8",
   });
@@ -119,16 +130,22 @@ function leftBehind(folders, processes) {
   return JSON.parse(r.stdout);
 }
 
-test("a browser counts as left behind only once the script that started it is gone", { skip }, () => {
+test("a profile is picked only after an hour unwritten, with no live script's browser on it", { skip }, () => {
   withLayout((layout) => {
     const old = profile(layout, { name: "old" });
     const fresh = profile(layout, { name: "fresh", hoursAgo: 0 });
     const flag = (folder) => `msedge --headless --user-data-dir="${folder}"`;
+    const script = [10, 9, "node drive.mjs"];
     const rows = [
-      ["a running script's browser on an old profile", [[10, 9, ""], [20, 10, flag(old)], [21, 20, flag(old)]], {}],
-      ["a browser whose script is gone, on a fresh profile", [[20, 9, flag(fresh)], [21, 20, flag(fresh)]],
-        { [old]: [], [fresh]: [20, 21] }],
-      ["a browser on a longer path that starts with the profile's", [[20, 9, flag(`${fresh}2`)]], { [old]: [] }],
+      ["no browser", [script], { [old]: [] }],
+      ["a running script's browser on the old profile", [script, [20, 10, flag(old)], [21, 20, flag(old)]], {}],
+      ["the same, its path written with a closing slash", [script, [20, 10, `${flag(old)}/`]], {}],
+      ["a browser whose script is gone, on the old profile", [script, [20, 9, flag(old)], [21, 20, flag(old)]],
+        { [old]: [20, 21] }],
+      ["a browser whose script is gone, on the fresh profile", [script, [20, 9, flag(fresh)]], { [old]: [] }],
+      ["a browser on a longer path that starts with the old one's", [script, [20, 10, flag(`${old}2`)]],
+        { [old]: [] }],
+      ["a process list that could not be read", null, {}],
     ];
     for (const [name, processes, expected] of rows) {
       assert.deepEqual(leftBehind([old, fresh], processes), expected, name);

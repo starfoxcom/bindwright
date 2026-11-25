@@ -1,6 +1,6 @@
-"""SessionStart hook: find the browser profile folders, and the headless browsers still using
-them, that earlier sessions left in Claude Code's temp folder, and ask the assistant to offer
-their cleanup.
+"""SessionStart hook: find the browser profile folders that earlier sessions left in Claude Code's
+temp folder, and the headless browsers still using them, and ask the assistant to offer their
+cleanup.
 
 A script that drives a browser often gives it a profile folder of its own (`--user-data-dir`)
 in the session's scratchpad. When the script dies, or forgets to clean up, each run leaves a
@@ -9,7 +9,9 @@ Code frees a scratchpad only together with its session's transcript, weeks later
 
 The hook deletes nothing. It looks at most once a day, at the start of a new session. On the
 user's yes, the assistant runs this file with `--clean <session id>`, which picks the same
-folders again, stops every browser using one, then deletes it.
+folders again, stops every browser using one, then deletes them. A folder is picked only when
+nothing wrote it for an hour and no browser whose script still runs uses it; when the running
+processes cannot be listed, nothing is picked.
 """
 import json
 import os
@@ -26,18 +28,21 @@ IN_USE_SECONDS = 60 * 60
 # How deep below the temp folder a profile is looked for: <project>/<session>/scratchpad/ and
 # a few folders more.
 MAX_DEPTH = 7
+# Claude Code stops the hook at 30 s; these three steps together stay well inside that.
+WALK_SECONDS = 5
+LIST_SECONDS = 15
 SIZE_SECONDS = 5
-# The Windows process query can pass 15 s on a busy machine.
-LIST_SECONDS = 60
 GIGABYTE = 1024 ** 3
 REPARSE_POINT = 0x400  # a Windows junction or link, which a walk must not follow
 
 
-def temp_root():
-    """Claude Code's temp folder, which holds each session's scratchpad, spelled as the
-    sessions spell it, so the paths scripts pass their browsers compare equal."""
-    base = os.environ.get("CLAUDE_CODE_TMPDIR") or tempfile.gettempdir()
-    return os.path.abspath(os.path.join(base, "claude"))
+def temp_roots():
+    """Claude Code's temp folders, which hold each session's scratchpad: `claude` in its temp
+    folder, or `claude-<user id>` where the system's temp folder is shared between users.
+    Spelled as the sessions spell them, so the paths scripts pass their browsers compare equal."""
+    base = os.path.abspath(os.environ.get("CLAUDE_CODE_TMPDIR") or tempfile.gettempdir())
+    names = ["claude"] + (["claude-{}".format(os.getuid())] if hasattr(os, "getuid") else [])
+    return [os.path.join(base, name) for name in names if os.path.isdir(os.path.join(base, name))]
 
 
 def is_plain_folder(entry):
@@ -63,10 +68,11 @@ def is_profile(folder):
             or os.path.isfile(os.path.join(folder, "Default", "Preferences")))
 
 
-def profile_folders(root, skip):
-    """Every profile folder below `root`, never looking inside one or inside `skip`."""
+def profile_folders(root, skip, deadline):
+    """Every profile folder below `root` found before `deadline`, never looking inside one or
+    inside `skip`."""
     found, stack = [], [(root, 0)]
-    while stack:
+    while stack and time.monotonic() < deadline:
         folder, depth = stack.pop()
         for path in subfolders(folder):
             if path == skip:
@@ -90,7 +96,8 @@ def last_written(folder):
 
 
 def running_processes():
-    """(pid, parent pid, command line) of every running process; [] when unreadable."""
+    """(pid, parent pid, command line) of every running process, or None when they cannot be
+    listed, which then picks no folder: a browser that cannot be seen may still be in use."""
     if os.name == "nt":
         command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
                    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process"
@@ -100,13 +107,13 @@ def running_processes():
     try:
         listed = subprocess.run(command, capture_output=True, timeout=LIST_SECONDS)
     except (OSError, subprocess.TimeoutExpired):
-        return []
+        return None
     processes = []
     for line in listed.stdout.decode("utf-8", "replace").splitlines():
         parts = line.split("\t", 2) if os.name == "nt" else line.split(None, 2)
         if len(parts) >= 2 and parts[0].strip().isdigit() and parts[1].strip().isdigit():
             processes.append((int(parts[0]), int(parts[1]), parts[2] if len(parts) == 3 else ""))
-    return processes
+    return processes if listed.returncode == 0 and processes else None
 
 
 def comparable(text):
@@ -115,30 +122,44 @@ def comparable(text):
     return text.replace("\\", "/").lower() if os.name == "nt" else text
 
 
-def uses_profile(command_line, folder):
-    """Whether `command_line` passes `folder` as the browser profile, not a longer path."""
-    line, flag = comparable(command_line), "--user-data-dir=" + comparable(folder)
-    at = line.find(flag)
-    while at != -1:
-        if line[at + len(flag):at + len(flag) + 1] in ("", " "):
-            return True
-        at = line.find(flag, at + 1)
+def profile_flags(folder):
+    """The `--user-data-dir=` texts that pass `folder`: its own spelling and its resolved one."""
+    return {"--user-data-dir=" + comparable(spelling).rstrip("/")
+            for spelling in (folder, os.path.realpath(folder))}
+
+
+def uses_profile(line, flags):
+    """Whether the comparable command line `line` holds one of `flags` as the whole path, with
+    or without a closing slash, not as the start of a longer one."""
+    for flag in flags:
+        at = line.find(flag)
+        while at != -1:
+            rest = line[at + len(flag):]
+            rest = rest[1:] if rest.startswith("/") else rest
+            if rest[:1] in ("", " "):
+                return True
+            at = line.find(flag, at + 1)
     return False
 
 
 def left_behind(folders, processes, now):
-    """{folder: [pids]} for the profiles no live script runs: each one no browser uses that
-    went unwritten for IN_USE_SECONDS, and each one whose browser's own parent is gone. On Linux
-    and macOS a process whose parent exits is handed to process 1, so that parent counts as gone."""
+    """{folder: [pids of the browsers using it]} for each folder nothing wrote for
+    IN_USE_SECONDS that no browser with a running parent uses. On Linux and macOS a process
+    whose parent exits is handed to process 1, so that parent counts as gone."""
+    if processes is None:
+        return {}
     running = {pid for pid, _, _ in processes} - ({1} if os.name != "nt" else set())
+    browsers = [(pid, parent, comparable(line)) for pid, parent, line in processes
+                if "--user-data-dir=" in line]
     picked = {}
     for folder in folders:
-        users = [(pid, parent) for pid, parent, line in processes if uses_profile(line, folder)]
+        if now - last_written(folder) <= IN_USE_SECONDS:
+            continue
+        flags = profile_flags(folder)
+        users = [(pid, parent) for pid, parent, line in browsers if uses_profile(line, flags)]
         own = {pid for pid, _ in users}
         # The browser's main process is the one whose parent is not one of its own processes.
-        if any(parent in running for _, parent in users if parent not in own):
-            continue
-        if users or now - last_written(folder) > IN_USE_SECONDS:
+        if not any(parent in running for _, parent in users if parent not in own):
             picked[folder] = sorted(own)
     return picked
 
@@ -164,19 +185,20 @@ def total_size(folders, deadline):
     return size, True
 
 
-def session_folder(root, session):
-    """The temp folder of the session `session`: <root>/<project>/<session>."""
-    if not session:
-        return None
-    return next((path for path in subfolders(root) if os.path.isdir(os.path.join(path, session))), None)
+def session_of(folder, roots):
+    """The id of the session whose temp folder holds `folder`: <root>/<project>/<session>/..."""
+    for root in roots:
+        parts = os.path.relpath(folder, root).split(os.sep)
+        if len(parts) > 2 and parts[0] != os.pardir:
+            return parts[1]
+    return None
 
 
-def projects_of(folders, root):
+def projects_of(folders, roots):
     """The Claude Code projects whose sessions made `folders`, by each session's transcript."""
     config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
     projects_dir = os.path.join(config, "projects")
-    parts = [os.path.relpath(folder, root).split(os.sep) for folder in folders]
-    sessions = {each[1] for each in parts if len(each) > 2}
+    sessions = {session_of(folder, roots) for folder in folders} - {None}
     try:
         slugs = os.listdir(projects_dir)
     except OSError:
@@ -186,12 +208,14 @@ def projects_of(folders, root):
 
 
 def leftovers(session):
-    """(temp folder, {folder: [pids]}) for the profiles earlier sessions left behind; the
+    """(temp folders, {folder: [pids]}) for the profiles earlier sessions left behind; the
     session `session` itself is left out."""
-    root = temp_root()
-    own = session_folder(root, session)
-    folders = profile_folders(root, own and os.path.join(own, session))
-    return root, left_behind(folders, running_processes() if folders else [], time.time())
+    roots, deadline, folders = temp_roots(), time.monotonic() + WALK_SECONDS, []
+    for root in roots:
+        own = next((os.path.join(project, session) for project in subfolders(root)
+                    if session and os.path.isdir(os.path.join(project, session))), None)
+        folders += profile_folders(root, own, deadline)
+    return roots, left_behind(folders, running_processes() if folders else [], time.time())
 
 
 def stamp_path():
@@ -199,30 +223,30 @@ def stamp_path():
 
 
 def is_due(now):
-    """Whether a day has passed since the last look, recording this one when it has."""
-    path = stamp_path()
+    """Whether a day has passed since the last finished look."""
     try:
-        with open(path, encoding="utf-8") as stamp:
-            if now - float(stamp.read().strip() or 0) < CHECK_EVERY_SECONDS:
-                return False
+        with open(stamp_path(), encoding="utf-8") as stamp:
+            return now - float(stamp.read().strip() or 0) >= CHECK_EVERY_SECONDS
     except (OSError, ValueError):
-        pass
+        return True
+
+
+def mark_checked(now):
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as stamp:
+        os.makedirs(os.path.dirname(stamp_path()), exist_ok=True)
+        with open(stamp_path(), "w", encoding="utf-8") as stamp:
             stamp.write(str(now))
     except OSError:
         pass
-    return True
 
 
-def report(root, picked, session):
+def report(roots, picked, session):
     """The note the assistant reads at session start."""
     size, is_complete = total_size(picked, time.monotonic() + SIZE_SECONDS)
     held = "{} {:.1f} GB".format("about" if is_complete else "at least", size / GIGABYTE)
     lines = ["Earlier sessions left {} browser profile folder(s) in Claude Code's temp folder ({}),"
-             " holding {}.".format(len(picked), root, held)]
-    projects = projects_of(picked, root)
+             " holding {}.".format(len(picked), ", ".join(roots), held)]
+    projects = projects_of(picked, roots)
     if projects:
         lines.append("They came from sessions of: {}.".format(", ".join(projects)))
     running = sum(1 for pids in picked.values() if pids)
@@ -247,12 +271,13 @@ def stop(pids):
 
 
 def clean(session):
-    """Stops the browsers of the profiles left behind, deletes the folders and prints which
-    were removed and which are still there (a file another program holds open)."""
+    """Stops the browsers of the profiles left behind, all before any folder is deleted, so no
+    process id is reused in between, then deletes the folders and prints which were removed and
+    which are still there (a file another program holds open)."""
     _, picked = leftovers(session)
+    stop(sorted({pid for pids in picked.values() for pid in pids}))
     removed, kept = [], []
-    for folder, pids in picked.items():
-        stop(pids)
+    for folder in picked:
         shutil.rmtree(folder, ignore_errors=True)
         (kept if os.path.exists(folder) else removed).append(folder)
     print(json.dumps({"removed": removed, "kept": kept}))
@@ -266,13 +291,15 @@ def main():
         event = json.load(sys.stdin)
     except ValueError:
         return
-    if event.get("source") not in ("startup", "clear") or not is_due(time.time()):
+    now = time.time()
+    if event.get("source") not in ("startup", "clear") or not is_due(now):
         return
     session = str(event.get("session_id") or "")
-    root, picked = leftovers(session)
+    roots, picked = leftovers(session)
     if picked:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
-                                                 "additionalContext": report(root, picked, session)}}))
+                                                 "additionalContext": report(roots, picked, session)}}))
+    mark_checked(now)
 
 
 if __name__ == "__main__":
