@@ -533,11 +533,15 @@ def squash_merges():
     return merge_style() == "squash"
 
 
+# What may follow a flag the rows below count: a space, an operator that ends its command, a closing
+# parenthesis or the input's end. Anything else, a value written onto it (`--failed=false`) included, is
+# left unread.
+FLAG_END = r"(?=[\s|;&)]|$)"
+
 MERGE_STYLES = ("merge", "squash", "rebase")
 # The flags that rewrite a PR's commits. `--merge` is left out: gitflow merges release and cascade PRs
-# with it whatever the work PRs use, and a merge commit keeps every branch's history. A flag counts only
-# when a space or the command's end follows it: a value written onto it (`--squash=false`) is left unread.
-MERGE_FLAGS = {style: Followed(r"\bgh\s+pr\s+merge\b", r"\n|;&", r"\s(?:--%s|-%s)(?=\s|$)" % (style, style[0]),
+# with it whatever the work PRs use, and a merge commit keeps every branch's history.
+MERGE_FLAGS = {style: Followed(r"\bgh\s+pr\s+merge\b", r"\n|;&", r"\s(?:--%s|-%s)" % (style, style[0]) + FLAG_END,
                                flags=0)
                for style in ("squash", "rebase")}
 
@@ -602,7 +606,7 @@ RULES = [
      lambda text, shell: GIT_BASH and shell == "bash" and REV_DOT_PATH.search(bare(text, shell)),
      "Git Bash rewrites it, so the file looks missing. Write `<rev>:./<path>` from the repo root.", ENFORCE),
     ("`gh run rerun --failed` or `--job`",
-     both(Followed(r"\bgh\s+run\s+rerun\b", r"\n|;&", r"\s(?:--failed|--job|-j)\b")),
+     both(Followed(r"\bgh\s+run\s+rerun\b", r"\n|;&", r"\s(?:--failed|--job|-j)" + FLAG_END)),
      "a re-run of only some jobs can leave a required check stuck. Re-run the whole run, or push again.", OBSERVE),
     ("an interactive git command (`-i`, `-p`)",
      # `git stash show -p` only prints, and a rebase given a scripted editor never waits for keys.
