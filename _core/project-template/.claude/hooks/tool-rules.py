@@ -43,6 +43,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -576,8 +577,10 @@ DATED_HEADING = re.compile(r"^## .*\b\d{4}-\d{2}-\d{2}\b")
 # A link reference line (`[1.0.0]: https://...`), which Keep a Changelog keeps at the file's end: a release
 # cut edits these, so they belong to no section.
 LINK_REFERENCE = re.compile(r"^\[[^\]]+\]:\s")
-# Seconds the changelog row's one git call may take, well inside the hook's 10 s limit in a project.
+# Seconds the changelog row's two git calls share, well inside the hook's 10 s limit in a project.
 GIT_SECONDS = 4
+# The largest changelog the row reads, in bytes, either copy: a long-lived project's runs to a few hundred KB.
+CHANGELOG_LIMIT = 4 * 1024 * 1024
 
 
 def repo_root():
@@ -619,17 +622,45 @@ def trusted_git(root):
     return None if is_within(folder, real_path(root)) or folder == real_path(os.getcwd()) else found
 
 
-def committed_changelog(root):
-    """CHANGELOG.md as the last commit holds it, or None when there is none or git cannot read it."""
-    git = trusted_git(root)
-    if git is None:
+def disk_text(path):
+    """A regular file's text, at most CHANGELOG_LIMIT bytes, line endings untouched; None for anything else.
+
+    The file is opened without following a link or waiting on a pipe, and checked once open, so a link,
+    pipe, device or folder in its place is never read."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    try:
+        with os.fdopen(os.open(path, flags), "rb") as file:
+            if not stat.S_ISREG(os.fstat(file.fileno()).st_mode):
+                return None
+            data = file.read(CHANGELOG_LIMIT + 1)
+    except OSError:
+        return None
+    return data.decode("utf-8", "replace") if len(data) <= CHANGELOG_LIMIT else None
+
+
+def git_output(git, root, deadline, *args):
+    """What a git command run in the repo prints, or None when it fails or the monotonic `deadline` passes."""
+    left = deadline - time.monotonic()
+    if left <= 0:
         return None
     try:
-        done = subprocess.run([git, "-C", root, "cat-file", "blob", "HEAD:CHANGELOG.md"], capture_output=True,
-                              timeout=GIT_SECONDS, check=False)
+        done = subprocess.run([git, "-C", root, *args], capture_output=True, timeout=left, check=False)
     except (OSError, subprocess.SubprocessError):
         return None
     return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
+
+
+def committed_changelog(root):
+    """CHANGELOG.md as the last commit holds it, or None when there is none, it passes CHANGELOG_LIMIT
+    or git cannot read it."""
+    git = trusted_git(root)
+    if git is None:
+        return None
+    deadline = time.monotonic() + GIT_SECONDS
+    size = git_output(git, root, deadline, "cat-file", "-s", "HEAD:CHANGELOG.md")
+    if size is None or not size.strip().isdigit() or int(size) > CHANGELOG_LIMIT:
+        return None
+    return git_output(git, root, deadline, "cat-file", "blob", "HEAD:CHANGELOG.md")
 
 
 def dated_sections(changelog):
@@ -652,16 +683,14 @@ def edits_dated_changelog(text, shell):
     if not GIT_COMMIT(text, shell):
         return False
     root = repo_root()
-    old = root and committed_changelog(root)
+    if root is None:
+        return False
+    new = disk_text(os.path.join(root, "CHANGELOG.md"))
+    old = None if new is None else committed_changelog(root)
     if not old:
         return False
-    try:
-        # Read as git stores it, line endings untouched, so both copies split the same way.
-        with open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8", errors="replace", newline="") as changelog:
-            new = dated_sections(changelog.read())
-    except OSError:
-        return False
-    return any(new.get(heading) != section for heading, section in dated_sections(old).items())
+    current = dated_sections(new)
+    return any(current.get(heading) != section for heading, section in dated_sections(old).items())
 
 
 # `origin/develop:.claude/x`: a git object path that starts with a dot.

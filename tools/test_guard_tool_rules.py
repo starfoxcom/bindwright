@@ -311,6 +311,18 @@ class LengthRowsTest(unittest.TestCase):
         with unittest.mock.patch.dict(os.environ, {"PATH": tools + os.pathsep + os.environ.get("PATH", "")}):
             self.assertEqual(self.logged("git commit -am x", "bash"), [])
         self.assertFalse(os.path.exists(os.path.join(tools, marker)))
+        # A changelog past the size limit is not read, and a pipe in its place is never waited on: no edit.
+        write(released_only.replace("- b", "- B").replace("- a\n", "- a\n" + "- x\n" * 500))
+        with unittest.mock.patch.object(self.hook, "CHANGELOG_LIMIT", len(released_only) + 10):
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        if hasattr(os, "mkfifo"):
+            os.remove(path)
+            os.mkfifo(path)
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        if os.path.exists("/dev/zero"):
+            os.remove(path)
+            os.symlink("/dev/zero", path)
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
         # Outside a repo, git fails, and the row reads it as no edit.
         self.hook.CWD = tempfile.gettempdir()
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
