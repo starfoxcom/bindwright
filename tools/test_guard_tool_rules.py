@@ -221,7 +221,8 @@ class LengthRowsTest(unittest.TestCase):
         for name, style, command, shell, want in (
                 ("--squash where PRs merge", "merge", "gh pr merge 5 --squash --delete-branch", "bash", True),
                 ("-r where PRs merge", "merge", "gh pr merge 5 -r", "powershell", True),
-                ("--merge where PRs squash", "squash", "gh pr merge 5 --merge", "bash", True),
+                ("--rebase where PRs squash", "squash", "gh pr merge 5 --rebase", "bash", True),
+                ("--merge where PRs squash, as gitflow releases do", "squash", "gh pr merge 5 --merge", "bash", False),
                 ("the saved style", "merge", "gh pr merge 5 --merge --delete-branch --match-head-commit ab12",
                  "bash", False),
                 ("-m where PRs merge", "merge", "gh pr merge 5 -m", "bash", False),

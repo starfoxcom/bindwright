@@ -533,9 +533,11 @@ def squash_merges():
     return merge_style() == "squash"
 
 
-# Each merge style `gh pr merge` takes, and its flag.
+MERGE_STYLES = ("merge", "squash", "rebase")
+# The flags that rewrite a PR's commits. `--merge` is left out: gitflow merges release and cascade PRs
+# with it whatever the work PRs use, and a merge commit keeps every branch's history.
 MERGE_FLAGS = {style: Followed(r"\bgh\s+pr\s+merge\b", r"\n|;&", r"\s(?:--%s|-%s)\b" % (style, style[0]), flags=0)
-               for style in ("merge", "squash", "rebase")}
+               for style in ("squash", "rebase")}
 
 
 def other_merge_style(text, shell):
@@ -545,7 +547,7 @@ def other_merge_style(text, shell):
     if not asked:
         return False
     saved = merge_style()
-    return saved in MERGE_FLAGS and bool(asked - {saved})
+    return saved in MERGE_STYLES and bool(asked - {saved})
 
 
 def long_subject(text, shell):
