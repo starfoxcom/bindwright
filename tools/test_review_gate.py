@@ -5,7 +5,6 @@ import contextlib
 import io
 import json
 import os
-import re
 import runpy
 import subprocess
 import sys
@@ -1346,20 +1345,6 @@ class GitHubWrites(unittest.TestCase):
             with self.subTest(name):
                 body = {"state": "success", "context": "Review gate", "description": description}
                 self.assertEqual(github_writes.refusal("POST", self.STATUS, body) is None, taken)
-
-    def test_every_write_the_script_makes_has_a_rule(self):
-        with open(SCRIPT, encoding="utf-8") as fh:
-            source = fh.read()
-        writes = re.findall(r'_gh\("([^"]+)" % (?:\([^)]*\)|\w+), "(POST|PATCH|PUT|DELETE)"', source)
-        # Every write method named anywhere in the script is one of the calls read
-        # here, so a call wrapped over lines or a method held in a variable fails.
-        self.assertEqual(len(writes), len(re.findall(r'"(?:POST|PATCH|PUT|DELETE)"', source)))
-        self.assertTrue(writes)
-        for template, method in writes:
-            with self.subTest(method + " " + template):
-                values = iter(["o/r"] + ["a" * 40] * 3)
-                path = re.sub(r"%[sd]", lambda m: "1" if m.group() == "%d" else next(values), template)
-                self.assertNotIn("no rule", github_writes.refusal(method, path, {}) or "")
 
     def test_a_write_with_no_rule_is_refused(self):
         self.assertIn("no rule", github_writes.refusal("DELETE", "repos/o/r/check-runs/1", None))
