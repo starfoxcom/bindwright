@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -17,6 +18,8 @@ def load_tool_rules():
     spec = importlib.util.spec_from_file_location("tool_rules", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Outside any repo, so a row that reads the repo never reads the checkout the tests run from.
+    module.CWD = tempfile.gettempdir()
     return module
 
 
@@ -254,9 +257,6 @@ class LengthRowsTest(unittest.TestCase):
         git = ["git", "-C", self.folder, "-c", "user.name=t", "-c", "user.email=t@example.com",
                "-c", "commit.gpgsign=false"]
         subprocess.run(git[:3] + ["init", "-q"], check=True)
-        # Settings that would hide the changes outside the session's folder, or merge distant hunks into one.
-        subprocess.run(git[:3] + ["config", "diff.relative", "true"], check=True)
-        subprocess.run(git[:3] + ["config", "diff.interHunkContext", "50"], check=True)
         path = os.path.join(self.folder, "CHANGELOG.md")
 
         def write(text):
@@ -300,6 +300,16 @@ class LengthRowsTest(unittest.TestCase):
         write(released_only.replace("## [Unreleased]\n\n### Fixed\n- a\n\n", "## [Unreleased]\n\n" + released)
               .replace("[1.1.0]: ", "[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: ", 1))
         self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        # A `git` the repo ships, first on PATH, never runs: the row reads that as no edit.
+        write(released_only.replace("- b", "- B"))
+        planted, marker = os.path.join(self.folder, "git.bat" if os.name == "nt" else "git"), "ran.txt"
+        leaves_marker = f'@echo x> "%~dp0{marker}"\n' if os.name == "nt" else f'#!/bin/sh\ntouch "${{0%/*}}/{marker}"\n'
+        with open(planted, "w", encoding="utf-8", newline="\n") as script:
+            script.write(leaves_marker)
+        os.chmod(planted, 0o755)
+        with unittest.mock.patch.dict(os.environ, {"PATH": self.folder + os.pathsep + os.environ.get("PATH", "")}):
+            self.assertEqual(self.logged("git commit -am x", "bash"), [])
+        self.assertFalse(os.path.exists(os.path.join(self.folder, marker)))
         # Outside a repo, git fails, and the row reads it as no edit.
         self.hook.CWD = tempfile.gettempdir()
         self.assertEqual(self.logged("git commit -am x", "bash"), [])

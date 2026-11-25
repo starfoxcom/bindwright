@@ -42,6 +42,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -575,63 +576,78 @@ DATED_HEADING = re.compile(r"^## .*\b\d{4}-\d{2}-\d{2}\b")
 # A link reference line (`[1.0.0]: https://...`), which Keep a Changelog keeps at the file's end: a release
 # cut edits these, so they belong to no section.
 LINK_REFERENCE = re.compile(r"^\[[^\]]+\]:\s")
-# A hunk of `git diff -U0`: the first line it touches in the old file, and how many (1 when left out).
-HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+", re.MULTILINE)
-# Seconds both git calls of the changelog row share, well inside the hook's 10 s limit in a project.
-GIT_BUDGET = 4.0
+# Seconds the changelog row's one git call may take, well inside the hook's 10 s limit in a project.
+GIT_SECONDS = 4
 
 
-def git_output(deadline, *args):
-    """What a git command run in CWD prints, or None when it fails or `deadline` (monotonic) passes."""
-    left = deadline - time.monotonic()
-    if left <= 0:
+def repo_root():
+    """The folder holding CWD's `.git` (a folder, or a worktree's file), or None outside a repo."""
+    try:
+        folder = os.path.abspath(CWD)
+    except OSError:  # a "." whose folder was deleted
+        return None
+    while not os.path.exists(os.path.join(folder, ".git")):
+        parent = os.path.dirname(folder)
+        if parent == folder:
+            return None
+        folder = parent
+    return folder
+
+
+def trusted_git(root):
+    """git on PATH as an absolute path, or None when the first one found is the repo's own.
+    Windows looks a bare name up in the current folder first, so a repo could ship its own `git.exe`:
+    that search is switched off, and a relative match or one in the repo or the current folder is refused."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    found = shutil.which("git")
+    if not found or not os.path.isabs(found):
+        return None
+    here = {os.path.normcase(os.path.realpath(folder)) for folder in (root, os.getcwd())}
+    return None if os.path.normcase(os.path.realpath(os.path.dirname(found))) in here else found
+
+
+def committed_changelog(root):
+    """CHANGELOG.md as the last commit holds it, or None when there is none or git cannot read it."""
+    git = trusted_git(root)
+    if git is None:
         return None
     try:
-        done = subprocess.run(["git", "-C", CWD, *args], capture_output=True, timeout=left, check=False)
+        done = subprocess.run([git, "-C", root, "cat-file", "blob", "HEAD:CHANGELOG.md"], capture_output=True,
+                              timeout=GIT_SECONDS, check=False)
     except (OSError, subprocess.SubprocessError):
         return None
     return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
 
 
-def dated_lines(changelog):
-    """The numbers, from 1, of the changelog lines inside a dated section, its heading included.
-
-    Lines split on `\\n` alone, as git counts them in a hunk."""
-    dated, is_inside = set(), False
-    for number, line in enumerate(changelog.split("\n"), 1):
+def dated_sections(changelog):
+    """Each dated section's text by its heading line, without link lines or trailing blank lines."""
+    sections, heading = {}, None
+    for line in changelog.split("\n"):
+        line = line.rstrip("\r")
         if line.startswith("## "):
-            is_inside = bool(DATED_HEADING.match(line))
-        if is_inside and not LINK_REFERENCE.match(line):
-            dated.add(number)
-    return dated
+            heading = line if DATED_HEADING.match(line) else None
+            if heading is not None:
+                sections[heading] = []
+        elif heading is not None and not LINK_REFERENCE.match(line):
+            sections[heading].append(line)
+    return {heading: "\n".join(lines).rstrip() for heading, lines in sections.items()}
 
 
 def edits_dated_changelog(text, shell):
-    """Whether a `git commit` runs while the repo's CHANGELOG.md differs from HEAD's inside a dated section.
-
-    The working tree is compared, not the index, so a commit chained after its `git add` is read too.
-    A hunk that only adds lines counts when it adds them after a dated section's line, unless a link line
-    comes right after them: a release cut adds its link above the older ones."""
+    """Whether a `git commit` runs while a dated section of the last commit's CHANGELOG.md is changed or gone
+    in the copy on disk. The disk is read, not the index, so a commit chained after its `git add` is read too."""
     if not GIT_COMMIT(text, shell):
         return False
-    deadline = time.monotonic() + GIT_BUDGET
-    old = git_output(deadline, "cat-file", "blob", "HEAD:CHANGELOG.md")
-    # No external diff tool, text conversion, folder-relative diff or merged hunks: each would drop the
-    # hunks or change the line ranges they name.
-    diff = old is not None and git_output(deadline, "-c", "diff.relative=false", "-c", "diff.interHunkContext=0",
-                                          "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff", "--no-textconv",
-                                          "--", ":(top)CHANGELOG.md")
-    if not diff:
+    root = repo_root()
+    old = root and committed_changelog(root)
+    if not old:
         return False
-    lines, dated = old.split("\n"), dated_lines(old)
-    for start, count in HUNK.findall(diff):
-        first, size = int(start), int(count or 1)
-        if size:
-            if any(number in dated for number in range(first, first + size)):
-                return True
-        elif first in dated and not (first < len(lines) and LINK_REFERENCE.match(lines[first])):
-            return True
-    return False
+    try:
+        with open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8", errors="replace") as changelog:
+            new = dated_sections(changelog.read())
+    except OSError:
+        return False
+    return any(new.get(heading) != section for heading, section in dated_sections(old).items())
 
 
 # `origin/develop:.claude/x`: a git object path that starts with a dot.
