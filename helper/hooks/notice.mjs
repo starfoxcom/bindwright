@@ -18,6 +18,7 @@ import { follow, hookSources } from "./follow.mjs";
 import { writeFileAtomic } from "./write-file.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readState, repoKey, stateFileIn } from "./counts.mjs";
+import { scratchLine, scratchUsage } from "./scratch-size.mjs";
 
 // The released version: main moves only on a release, and the plugin packs this file.
 export const LATEST_URL = "https://raw.githubusercontent.com/starfoxcom/bindwright/main/VERSION";
@@ -71,9 +72,10 @@ function save(cacheFile, cache, today) {
 // lacks; `helperVersion` is the helper's own version; `cacheFile` remembers
 // the day of the last check, what it found, and the day each repo last saw a notice.
 // `countsFailedAt` is when this repo's last review counts send failed (ms), or null.
+// `scratchFor()` gives the line about Claude Code's scratch folders grown huge, or null.
 export async function notice({
   cwd, today, cacheFile, pluginVersion, helperVersion = null, fetchLatest, driftFor = async () => [],
-  countsFailedAt = null,
+  countsFailedAt = null, scratchFor = () => null,
 }) {
   const cache = { checked: null, latest: null, ...readJson(cacheFile) };
   cache.shown = Object.fromEntries(todays(cache.shown, today));
@@ -113,6 +115,12 @@ export async function notice({
     lines.push(`This computer shares the review counts, but this repo's last send failed (${day}): `
       + "the next session start or merge tries again. If this keeps showing, check that gh is signed in "
       + "and the network is up.");
+  }
+  try {
+    const scratch = scratchFor();
+    if (scratch) lines.push(scratch);
+  } catch {
+    // A folder that cannot be measured never costs the rest of the notice.
   }
   if (lines.length) {
     cache.shown[key] = today;
@@ -235,6 +243,8 @@ async function main() {
     fetchLatest: () => fetchVersion(url),
     driftFor: (repo) => driftOf(root, repo, config),
     countsFailedAt,
+    // A short budget keeps the start quick; past the limit, the doctor walks the rest.
+    scratchFor: () => scratchLine(scratchUsage({ budgetMs: 300 })),
   });
   if (text) process.stdout.write(`${text}\n`);
 }
