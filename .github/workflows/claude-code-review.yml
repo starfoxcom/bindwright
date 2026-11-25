@@ -67,6 +67,8 @@ jobs:
     permissions:
       contents: read
       checks: write
+      # Lets the gate script set the Review gate's commit status.
+      statuses: write
       pull-requests: read
     outputs:
       # The commit every job below reads the gate's files from: the base
@@ -2513,6 +2515,8 @@ jobs:
       # PATCH of Claude On-Demand to skipped (otherwise it would stay at
       # in_progress on docs-only PRs and block the merge).
       checks: write
+      # Lets the gate script set the Review gate's commit status.
+      statuses: write
     # As in Diff triage: the light checkout gets a folder of its own.
     defaults:
       run:
@@ -2547,6 +2551,16 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           echo "::error::The review gate's own files could not be checked out, so the routine verdict cannot be read or written: failing closed. Re-run the workflow."
+          # A commit status of the gate's name, once the gate script has set one
+          # on this commit, still counts beside the failed check, so it fails
+          # too; with none there, the failed check blocks on its own. A failed
+          # lookup prints no count, so the status is set then too.
+          count=$(gh api "repos/$REPO/commits/$HEAD_SHA/status?per_page=100" \
+            --jq '[.statuses[] | select(.context == "Review gate")] | length' 2> /dev/null || true)
+          if [ "$count" != 0 ] && ! gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
+            -f context="Review gate" -f "description=The review gate's files could not be checked out" > /dev/null; then
+            echo "::warning::Could not mark the Review gate status as failed"
+          fi
           id=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=Review%20gate&per_page=100" \
             --jq '[.check_runs[] | select(.name == "Review gate") | .id] | max // empty' 2> /dev/null || true)
           # A failed lookup can print an error body instead of an id.
