@@ -51,13 +51,14 @@ once the read-back settles it sets the status again from the check it read. A
 second run on one head commit (a reopened PR) can leave the check in a check
 suite the merge no longer counts, while the newest status for a name always
 counts; a failing check of that name still blocks beside a passing status.
-Both review workflows must grant statuses: write before this script reaches
-a base branch: a job without it cannot replace a status another job set, so
-a reopen would let an older passing status stand.
+The status is written only once both review workflows on the default branch
+grant statuses: write: a job without it cannot replace a status another job
+set, so until then the check alone carries the result.
 
 Every command prints one line; a bad argument prints {"error": ...} and exits 1.
 """
 
+import base64
 import fnmatch
 import json
 import re
@@ -442,10 +443,30 @@ def _newest(repo, sha):
 STATUS_STATE = {"success": "success", "failure": "failure", None: "pending"}
 
 
+WORKFLOWS = (".github/workflows/claude-code-review.yml", ".github/workflows/claude.yml")
+_READY = {}
+
+
+def _statuses_ready(repo):
+    """Whether both review workflows on the default branch grant statuses: write.
+    A failed lookup counts as not, which leaves the check alone, as before."""
+    if repo not in _READY:
+        try:
+            branch = _gh("repos/%s" % repo)["default_branch"]
+            texts = [base64.b64decode(_gh("repos/%s/contents/%s?ref=%s" % (repo, path, branch))["content"])
+                     .decode("utf-8") for path in WORKFLOWS]
+            _READY[repo] = all(re.search(r"^\s*statuses:\s*write\s*$", text, re.M) for text in texts)
+        except (GateError, KeyError, TypeError, ValueError):
+            _READY[repo] = False
+    return _READY[repo]
+
+
 def _set_status(repo, sha, check):
-    """Sets the commit status of the gate's name to the check's result. A job
-    without statuses: write (a project whose workflows predate it) gets a
-    warning instead of a failed gate, and leaves any status already there."""
+    """Sets the commit status of the gate's name to the check's result, once
+    both review workflows may. A job without statuses: write all the same gets a
+    warning instead of a failed gate."""
+    if not _statuses_ready(repo):
+        return
     body = {"state": STATUS_STATE[check["conclusion"]], "context": GATE, "description": check["title"][:140]}
     try:
         _gh("repos/%s/statuses/%s" % (repo, sha), "POST", body)
