@@ -3,9 +3,9 @@
 // read and aged, and that the start-session notice carries its line without letting a failure
 // cost the rest.
 
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -13,9 +13,16 @@ import {
 } from "../../helper/hooks/scratch-size.mjs";
 import { notice } from "../../helper/hooks/notice.mjs";
 
+// Every temp folder a test made, removed once the file's tests end.
+const made = [];
+after(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true });
+});
+
 // A temp folder holding the given files, each path relative to it.
 function folder(layout) {
   const root = mkdtempSync(join(tmpdir(), "bw-scratch-"));
+  made.push(root);
   for (const [path, bytes] of Object.entries(layout)) {
     const file = join(root, path);
     mkdirSync(join(file, ".."), { recursive: true });
@@ -37,12 +44,16 @@ test("each session folder is sized with everything under it, biggest first", () 
   assert.deepEqual(relative(root, usage), [["p1/s2", 30], ["p1/s1", 15], ["p2/s3", 1]]);
 });
 
-test("Claude Code's folder is found under both of its names, and nothing else", () => {
+test("this user's Claude Code folder is found under both of its names, and nobody else's", () => {
   const base = folder({
-    "claude/p/s/a.bin": 3, "claude-1000/p/s/b.bin": 4, "claude-x/p/s/c.bin": 50, "other/p/s/d.bin": 50,
+    "claude/p/s/a.bin": 3, "claude-1000/p/s/b.bin": 4, "claude-1001/p/s/e.bin": 50, "claude-x/p/s/c.bin": 50,
+    "other/p/s/d.bin": 50,
   });
-  const usage = scratchUsage({ roots: scratchRoots({ CLAUDE_CODE_TMPDIR: base }) });
+  const env = { CLAUDE_CODE_TMPDIR: base };
+  const usage = scratchUsage({ roots: scratchRoots(env, 1000) });
   assert.deepEqual(relative(base, usage), [["claude-1000/p/s", 4], ["claude/p/s", 3]]);
+  // A system with no user ids (Windows) has only the one name.
+  assert.deepEqual(relative(base, scratchUsage({ roots: scratchRoots(env, undefined) })), [["claude/p/s", 3]]);
 });
 
 test("the line comes at the limit and not one byte under it", () => {
@@ -82,7 +93,7 @@ test("a saved measurement is read back, and a day later it is due again", () => 
 });
 
 test("the start-session notice carries the line, and a failing check costs nothing else", async () => {
-  const cwd = mkdtempSync(join(tmpdir(), "bw-scratch-cwd-"));
+  const cwd = folder({});
   let n = 0;
   const ask = (scratchFor) => notice({
     cwd, today: "2026-11-24", cacheFile: join(cwd, "cache", `${(n += 1)}.json`), pluginVersion: "1.4.0",

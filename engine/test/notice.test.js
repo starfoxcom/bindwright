@@ -265,11 +265,15 @@ test("the notice, run from the helper as /start-session runs it, tells the user 
     writeFileSync(join(checkout, "VERSION"), `v${version}\n`);
     const cases = [["helper", helper, plugin], ["linked", linked, plugin], ["checkout", helper, checkout]];
     for (const [name, root, pluginFolder] of cases) {
+      const config = join(s.root, `config-${name}`);
       const env = {
-        // An empty temp folder, so the scratch walk the notice starts ends at once.
-        ...process.env, CLAUDE_CONFIG_DIR: join(s.root, `config-${name}`), CLAUDE_CODE_TMPDIR: join(s.root, "tmp"),
+        ...process.env, CLAUDE_CONFIG_DIR: config, CLAUDE_CODE_TMPDIR: join(s.root, "tmp"),
         BINDWRIGHT_LATEST_URL: "http://127.0.0.1:9/VERSION", // nothing listens there: offline
       };
+      // A fresh scratch measurement, so the notice starts no background walk that could outlive the test.
+      mkdirSync(join(config, "bindwright"), { recursive: true });
+      const measured = { roots: [], total: 0, limit: 1, isOver: false, isPartial: false, sessions: [] };
+      writeFileSync(join(config, "bindwright", "scratch-size.json"), JSON.stringify(measured));
       const setup = { schema: 1, extras: { tasks: "recommended" } };
       const project = { team: true, client: false, project: {}, advanced: { tracker: "github" }, setup };
       writeFileSync(join(s.repo, ".bindwright", "project.json"), JSON.stringify(project));
