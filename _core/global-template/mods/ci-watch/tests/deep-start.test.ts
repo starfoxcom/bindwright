@@ -18,6 +18,9 @@ const ROWS: Row[] = [
   { name: "another PR's deep run", seen: { deepRuns: ['docs: something else'] }, isEarly: true },
   { name: "this PR's deep run, still working", seen: { deepRuns: [PR_TITLE] }, isEarly: false },
   { name: 'a check besides the review still running', seen: { bucket: 'pending' }, isEarly: false },
+  { name: 'a check besides the review failed', seen: { bucket: 'fail' }, isEarly: false },
+  { name: 'a PR renamed since the gate first ran', seen: { renamedAt: ['1970-01-01T00:05:00Z'] }, isEarly: false },
+  { name: 'a PR renamed before the gate first ran', seen: { renamedAt: ['1969-12-31T00:00:00Z'] }, isEarly: true },
   {
     name: 'no deep review owed',
     seen: { gateState: 'triage=reviewable;routine=pending;escalated=no;deep=none' },
@@ -36,7 +39,7 @@ for (const { name, seen: given, isEarly } of ROWS) {
   })
 }
 
-test('the wake for a deep review that never started says what to re-run, and comes once', async ($, on) => {
+test('the wake for a deep review that never started says to tell the user, and comes once', async ($, on) => {
   const { seen, clock } = world(on)
   Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
@@ -44,8 +47,20 @@ test('the wake for a deep review that never started says what to re-run, and com
   for (let poll = 0; poll < (90 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
   expect(seen.prompts.length).toBe(1)
   expect(seen.prompts[0]).toContain('o/r#7: the review gate waits for a deep review')
-  expect(seen.prompts[0]).toContain('gh run rerun')
+  expect(seen.prompts[0]).toContain('Tell the user, and start no review yourself')
   expect(seen.prompts[0]).not.toContain('Checks finished')
+})
+
+test('a deep run found on one head is looked for again on the next', async ($, on) => {
+  const { seen, clock } = world(on)
+  Object.assign(seen, { bucket: 'pass', rows: REVIEW_PENDING, gateState: OWED, isReadable: true, deepRuns: [PR_TITLE] })
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
+  for (let poll = 0; poll < (20 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  Object.assign(seen, { head: 'b2', deepRuns: [] })
+  for (let poll = 0; poll < (20 * MINUTE) / POLL_MS; poll++) await clock.advance(POLL_MS)
+  expect(seen.prompts.length).toBe(1)
+  expect(seen.prompts[0]).toContain('the review gate waits for a deep review')
 })
 
 test("a deep run found started is not looked up again", async ($, on) => {

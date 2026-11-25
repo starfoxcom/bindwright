@@ -61,8 +61,8 @@ function outcomeText(watch: Watch, now: number | undefined, red: number): string
   if (watch.deepNeverStarted) {
     return (
       `[ci-watch] ${pr}: the review gate waits for a deep review (needs-deep-review is on), but none ` +
-      `started for this PR since the gate's first run, so the gate would stay pending. Re-run the routine ` +
-      `review's run on this head (gh run rerun <its id>) so it asks again, then call the watch tool on this PR.`
+      `started for this PR since the gate's first run, so the gate stays pending. Tell the user, and start ` +
+      `no review yourself: the project's review rules leave starting one to them.`
     )
   }
   if (watch.outcome === 'timeout') {

@@ -6,7 +6,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Watch } from '../types'
-import { PENDING } from './settle'
+import { FAILED, PENDING } from './settle'
 import { GATE, readGate, REVIEW_JOBS, withVerdict } from './verdict'
 
 /** How long after the push a deep review the gate owes must have started: the routine review asks within minutes. */
@@ -17,25 +17,37 @@ const DEEP_WORKFLOW = 'claude.yml'
 
 const isOwedDeep = (state: string) => /(?:^|;)escalated=yes(?:;|$)/.test(state) && /(?:^|;)deep=none(?:;|$)/.test(state)
 
-// Only the review is left: the gate still pending, and every other pending check one of its own jobs.
+// Only the review is left: the gate still pending, every other pending check one of its own jobs, and no
+// other check failed, since a failure wakes the session to fix it anyway.
 function isWaitingOnReview(watch: Watch): boolean {
-  const pending = Object.entries(watch.checks).filter(([, bucket]) => PENDING.has(bucket)).map(([name]) => name)
-  return pending.includes(GATE) && pending.every(name => REVIEW_JOBS.has(name))
+  const states = Object.entries(watch.checks)
+  const pending = states.filter(([, bucket]) => PENDING.has(bucket)).map(([name]) => name)
+  const isOtherFailed = states.some(([name, bucket]) => FAILED.has(bucket) && !REVIEW_JOBS.has(name))
+  return !isOtherFailed && pending.includes(GATE) && pending.every(name => REVIEW_JOBS.has(name))
+}
+
+// The lines a gh call prints, or `undefined` when it fails.
+async function lines($: EngineInterface, argv: string[]): Promise<string[] | undefined> {
+  const { stdout, exitCode } = await $.process.run(argv, { timeoutMs: 30_000 })
+  return exitCode === 0 ? stdout.split('\n').map(line => line.trim()).filter(Boolean) : undefined
 }
 
 // How many deep runs for this PR started since `since`; a run for a comment that asked for none is skipped.
-// The deep workflow runs on the comment, so its run carries the PR's title, not its head.
+// The deep workflow runs on the comment, so its run carries the PR's title as it was then, not its head:
+// a PR renamed since cannot be told apart, so it reads as `undefined`.
 async function deepRunsSince($: EngineInterface, watch: Watch, since: string): Promise<number | undefined> {
   try {
+    const events = `repos/${watch.repo}/issues/${watch.number}/events?per_page=100`
+    const renames = '.[] | select(.event == "renamed") | .created_at'
+    const renamed = await lines($, ['gh', 'api', '--paginate', events, '--jq', renames])
+    if (!renamed || renamed.some(at => Date.parse(at) >= Date.parse(since))) return undefined
     const view = ['gh', 'pr', 'view', String(watch.number), '--repo', watch.repo, '--json', 'title', '--jq', '.title']
-    const title = await $.process.run(view, { timeoutMs: 30_000 })
-    if (title.exitCode !== 0) return undefined
+    const [title] = (await lines($, view)) ?? []
+    if (title === undefined) return undefined
     const path = `repos/${watch.repo}/actions/workflows/${DEEP_WORKFLOW}/runs?per_page=100&created=%3E%3D${since}`
-    const runs = '[.workflow_runs[] | select(.conclusion != "skipped") | .display_title]'
-    const listed = await $.process.run(['gh', 'api', path, '--jq', runs], { timeoutMs: 30_000 })
-    if (listed.exitCode !== 0) return undefined
-    const titles = JSON.parse(listed.stdout) as string[]
-    return titles.filter(name => name === title.stdout.trim()).length
+    const runs = '.workflow_runs[] | select(.conclusion != "skipped") | .display_title'
+    const titles = await lines($, ['gh', 'api', '--paginate', path, '--jq', runs])
+    return titles?.filter(name => name === title).length
   } catch {
     return undefined
   }

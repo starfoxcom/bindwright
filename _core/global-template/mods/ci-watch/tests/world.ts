@@ -25,6 +25,8 @@ export type Seen = {
   comments?: { at?: string; body: string }[]
   /** The titles of the deep workflow's runs that did not skip, since the gate's first run (none by default). */
   deepRuns?: string[]
+  /** When the PR was renamed, each time (none by default). */
+  renamedAt?: string[]
   /** The repo's deep workflow file (one that marks its reviews by default). */
   deepWorkflow?: string
   /** `gh pr checks` fails (network, auth) with nothing on stdout. */
@@ -100,7 +102,8 @@ function reviewAnswer(seen: Seen, args: string): string | undefined {
     return rows.map(row => `${JSON.stringify(row)}\n`).join('')
   }
   if (args.includes('/contents/')) return seen.deepWorkflow ?? MARKING_DEEP_WORKFLOW
-  if (args.includes('/runs?')) return JSON.stringify(seen.deepRuns ?? [])
+  if (args.includes('/runs?')) return (seen.deepRuns ?? []).map(title => `${title}\n`).join('')
+  if (args.includes('/events?')) return (seen.renamedAt ?? []).map(at => `${at}\n`).join('')
   if (args.includes('--json title')) return `${PR_TITLE}\n`
   return undefined
 }
