@@ -35,7 +35,12 @@ A test calls the production function. It never re-implements the logic in the te
 
 A fake of an outside service (an API, a database, a payment provider) refuses what that service refuses: its documented limits and anything it has been seen to refuse, and any call the fake has no rule for. A fake that takes every request passes a test the real service would fail, so the first sign of the bug is production.
 
+<!-- TOGGLE:code_host_local START -->
+A change that adds a new kind of write to an outside service sends it once to the real service before the work is called done, to a test account or a throwaway resource, with the values the code really sends. The save point's commit message carries a `Live check:` line saying what was sent and what came back.
+<!-- TOGGLE:code_host_local END -->
+<!-- TOGGLE:code_host_local:off START -->
 A change that adds a new kind of write to an outside service sends it once to the real service before it merges, to a test account or a throwaway resource, with the values the code really sends. The pull request's Notes carry a `Live check:` line saying what was sent and what came back.
+<!-- TOGGLE:code_host_local:off END -->
 
 ## Cover the edges on purpose
 
