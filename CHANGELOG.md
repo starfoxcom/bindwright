@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/bindwright:update` notices a saved default branch GitHub no longer uses.** A gitflow project that changed its GitHub default branch after setup kept the old answer, so every update wrote the wrong branch into its rules (where workflow changes land, which branch the first setup PR targets) and clashed with the project's own fixes. The update now compares the saved answer with GitHub's default branch before it runs and offers to save the one GitHub uses.
+
 ## [v7.19.0] — 2026-11-25
 
 ### Fixed
