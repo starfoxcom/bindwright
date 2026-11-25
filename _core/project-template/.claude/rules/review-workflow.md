@@ -30,7 +30,7 @@ The PR that first adds the review workflows has no gate on its base branch to pa
 The default branch is `{{MAIN_BRANCH}}`, so the PR never targets `{{DEV_BRANCH}}`. Once it merges, cascade it into `{{DEV_BRANCH}}` (push `{{DEV_BRANCH}}` first if it exists only on this computer, so the script finds it on GitHub), then run `.github/scripts/setup-review-gate.sh` to protect both branches, and the same command with `--check` to confirm.
 <!-- TOGGLE:default_branch_is_dev:off END -->
 <!-- TOGGLE:default_branch_is_dev START -->
-The default branch is `{{DEV_BRANCH}}`, so the PR targets it. Once it merges, run `.github/scripts/setup-review-gate.sh --branch {{DEV_BRANCH}} --branch {{MAIN_BRANCH}}` to protect both branches (push `{{MAIN_BRANCH}}` first if it exists only on this computer), and the same command with `--check` to confirm; without the two `--branch` names the script protects only the default branch.
+The default branch is `{{DEV_BRANCH}}`, so the PR targets it. Once it merges, run `.github/scripts/setup-review-gate.sh --branch {{DEV_BRANCH}} --branch {{MAIN_BRANCH}}` to protect both branches (push `{{MAIN_BRANCH}}` first if it exists only on this computer), and the same command with `--check` to confirm; without `--branch` names the script takes `{{MAIN_BRANCH}}` beside `{{DEV_BRANCH}}` only when `{{MAIN_BRANCH}}` exists on GitHub.
 <!-- TOGGLE:default_branch_is_dev END -->
 <!-- TOGGLE:branching_model_gitflow END -->
 <!-- TOGGLE:branching_model_trunk START -->

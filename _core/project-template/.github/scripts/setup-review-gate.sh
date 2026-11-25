@@ -51,7 +51,8 @@ Usage: setup-review-gate.sh [--check] [options]
                        when anything is missing.
   --repo OWNER/NAME    The repository (default: the one in this folder).
   --branch NAME        A branch to protect; repeat for more (default: the
-                       default branch, plus develop when it exists).
+                       default branch, plus develop when it exists, or main
+                       when develop is the default).
   --require NAME       Another check the branches require besides
                        "Review gate"; repeat for more.
   --merge-style STYLE  merge, squash or rebase: how work PRs merge (default:
@@ -156,6 +157,8 @@ preflight() {
     BRANCHES=("$DEFAULT_BRANCH")
     if [ "$DEFAULT_BRANCH" != develop ] && [ "$has_develop" = true ]; then
       BRANCHES+=(develop)
+    elif [ "$DEFAULT_BRANCH" = develop ] && branch_exists main; then
+      BRANCHES+=(main)
     fi
   fi
 }
