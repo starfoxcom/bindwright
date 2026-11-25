@@ -51,6 +51,9 @@ once the read-back settles it sets the status again from the check it read. A
 second run on one head commit (a reopened PR) can leave the check in a check
 suite the merge no longer counts, while the newest status for a name always
 counts; a failing check of that name still blocks beside a passing status.
+Both review workflows must grant statuses: write before this script reaches
+a base branch: a job without it cannot replace a status another job set, so
+a reopen would let an older passing status stand.
 
 Every command prints one line; a bad argument prints {"error": ...} and exits 1.
 """
@@ -442,7 +445,7 @@ STATUS_STATE = {"success": "success", "failure": "failure", None: "pending"}
 def _set_status(repo, sha, check):
     """Sets the commit status of the gate's name to the check's result. A job
     without statuses: write (a project whose workflows predate it) gets a
-    warning instead of a failed gate, and the check alone carries the result."""
+    warning instead of a failed gate, and leaves any status already there."""
     body = {"state": STATUS_STATE[check["conclusion"]], "context": GATE, "description": check["title"][:140]}
     try:
         _gh("repos/%s/statuses/%s" % (repo, sha), "POST", body)
