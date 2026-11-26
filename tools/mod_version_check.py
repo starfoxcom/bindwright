@@ -3,10 +3,10 @@
     python tools/mod_version_check.py <base ref>
 
 A mod is a folder under _core/global-template/mods/. Its code is every file in it except its tests
-(anything in a tests/, test-helper/ or __tests__/ folder, and any *.test.* or *.spec.* file) and
-Markdown. For each mod whose code differs between the
-merge base of <base ref> and HEAD, .claude-plugin/plugin.json at HEAD must name an x.y.z version
-higher than the base's. A mod the base does not have passes, and so does one the change deletes.
+(anything in a tests/ or test-helper/ folder, and any *.test.* or *.spec.* file) and Markdown.
+For each mod whose code differs between the merge base of <base ref> and HEAD,
+.claude-plugin/plugin.json at HEAD must name an x.y.z version higher than the base's. A mod the
+base does not have passes, and so does one the change deletes.
 Standard library, Python 3.8+.
 """
 
@@ -17,12 +17,13 @@ import sys
 
 MODS = "_core/global-template/mods"
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
-TEST_FOLDERS = {"tests", "test-helper", "__tests__"}
+TEST_FOLDERS = {"tests", "test-helper"}
 TEST_FILE = re.compile(r"\.(test|spec)\.[^.]+$")
 
 
 def _git(*args):
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["git", *args], capture_output=True, check=True,
+                          encoding="utf-8", errors="surrogateescape").stdout
 
 
 def _is_code(rel):
@@ -35,8 +36,9 @@ def _is_code(rel):
 def changed_mods(base):
     """The mods whose code differs between the merge base of `base` and HEAD, sorted."""
     # Without --no-renames a file moved out of a mod lists only its new path, so the mod it left
-    # would go unchecked.
-    names = _git("diff", "--name-only", "--no-renames", "%s...HEAD" % base, "--", MODS + "/").splitlines()
+    # would go unchecked. Without -z git quotes an unusual name, and the quote hides its mod.
+    diff = _git("diff", "--name-only", "-z", "--no-renames", "%s...HEAD" % base, "--", MODS + "/")
+    names = diff.split("\0")
     mods = set()
     for name in names:
         mod, _, rel = name[len(MODS) + 1:].partition("/")

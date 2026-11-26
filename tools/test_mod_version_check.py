@@ -13,6 +13,7 @@ _spec.loader.exec_module(check)
 
 MOD = "_core/global-template/mods/tasks"
 MANIFEST = MOD + "/.claude-plugin/plugin.json"
+ODD = "_core/global-template/mods/odd"
 
 
 def manifest(version):
@@ -28,6 +29,9 @@ ROWS = [
     ("a version that is not x.y.z fails", {MOD + "/hooks/register.ts": "b", MANIFEST: manifest("next")}, ["tasks"]),
     ("tests alone need no new version", {MOD + "/tests/rules.test.ts": "b", MOD + "/hooks/a.test.ts": "b"}, []),
     ("helper script tests alone need no new version", {MOD + "/test-helper/sweep.spec.cjs": "b"}, []),
+    ("a spec file outside a test folder needs no new version", {MOD + "/hooks/sweep.spec.cjs": "b"}, []),
+    ("a changed file whose name git quotes still counts", {MOD + "/hooks/café.ts": "b"}, ["tasks"]),
+    ("a mod whose base manifest names no version passes", {ODD + "/hooks/register.ts": "b"}, []),
     ("a file named like a test word is still code", {MOD + "/hooks/latest.ts": "b"}, ["tasks"]),
     ("Markdown alone needs no new version", {MOD + "/README.md": "b"}, []),
     ("a mod new since the base passes", {"_core/global-template/mods/fresh/hooks/register.ts": "a"}, []),
@@ -57,7 +61,9 @@ class ModVersionCheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as repo:
             self._git(repo, "init", "-q", "-b", "base")
             self._write(repo, {MANIFEST: manifest("1.5.0"), MOD + "/hooks/register.ts": "a",
-                               MOD + "/README.md": "a", "engine/home.py": "a"})
+                               MOD + "/README.md": "a", "engine/home.py": "a",
+                               ODD + "/.claude-plugin/plugin.json": '{"name": "odd"}\n',
+                               ODD + "/hooks/register.ts": "a"})
             self._git(repo, "add", "-A")
             self._git(repo, "commit", "-q", "-m", "base")
             cwd = os.getcwd()
