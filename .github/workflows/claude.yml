@@ -954,12 +954,6 @@ jobs:
           PYEOF
           ANSWER_FROM="$out" bash "$RUNNER_TEMP/deep-answer.sh"
 
-      # The review action, run with a prompt, reviews the checkout as it finds
-      # it and checks nothing out itself. On a comment event this checkout is
-      # the default branch's tip and on a review event the PR's merge ref, so
-      # the PR's head commit goes in first (the gate step fetched it when it
-      # was not local yet). The action then puts the base branch's config
-      # files over it. A failure here skips every attempt, which fails closed.
       # The account the first attempt and its retry run on, picked as the
       # routine workflow's "Pick the review's account" picks it, on the deep
       # model: the first account, counting from the first, that answers a
@@ -991,6 +985,12 @@ jobs:
           fi
           python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
 
+      # The review action, run with a prompt, reviews the checkout as it finds
+      # it and checks nothing out itself. On a comment event this checkout is
+      # the default branch's tip and on a review event the PR's merge ref, so
+      # the PR's head commit goes in first (the gate step fetched it when it
+      # was not local yet). The action then puts the base branch's config
+      # files over it. A failure here skips every attempt, which fails closed.
       - name: Check out the PR head for the review action
         id: pr-checkout
         if: steps.brief.outcome == 'success' && steps.claude_credits.outcome != 'success'
@@ -1045,8 +1045,9 @@ jobs:
           # The Bun from "Bring a Bun for the review action". Empty off Linux
           # or when that step failed, and then the action sets up its own.
           path_to_bun_executable: ${{ steps.bun.outputs.path }}
-          # The first account whose token is set, unless the key pays for this
-          # attempt ("Pick who pays").
+          # The account "Pick the review's account" picked, or the first account
+          # whose token is set when it left no index, unless the key pays for
+          # this attempt ("Pick who pays").
           claude_code_oauth_token: ${{ steps.payer.outputs.main_on_key != 'yes' && ((steps.main-account.outputs.index || steps.payer.outputs.first_index) == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || (steps.main-account.outputs.index || steps.payer.outputs.first_index) == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || (steps.main-account.outputs.index || steps.payer.outputs.first_index) == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || (steps.main-account.outputs.index || steps.payer.outputs.first_index) == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5) || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Empty unless no first account token is set ("Pick who pays").
           anthropic_api_key: ${{ steps.payer.outputs.main_on_key == 'yes' && secrets.ANTHROPIC_API_KEY || '' }}
@@ -1144,8 +1145,9 @@ jobs:
           # The Bun from "Bring a Bun for the review action". Empty off Linux
           # or when that step failed, and then the action sets up its own.
           path_to_bun_executable: ${{ steps.bun.outputs.path }}
-          # The first account whose token is set, unless the key pays for this
-          # attempt ("Pick who pays").
+          # The account "Pick the review's account" picked, or the first account
+          # whose token is set when it left no index, unless the key pays for
+          # this attempt ("Pick who pays").
           claude_code_oauth_token: ${{ steps.payer.outputs.main_on_key != 'yes' && ((steps.main-account.outputs.index || steps.payer.outputs.first_index) == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || (steps.main-account.outputs.index || steps.payer.outputs.first_index) == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || (steps.main-account.outputs.index || steps.payer.outputs.first_index) == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || (steps.main-account.outputs.index || steps.payer.outputs.first_index) == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5) || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Empty unless no first account token is set ("Pick who pays").
           anthropic_api_key: ${{ steps.payer.outputs.main_on_key == 'yes' && secrets.ANTHROPIC_API_KEY || '' }}
@@ -1312,8 +1314,9 @@ jobs:
         env:
           # The account the step above picked; an index from 2 up is set only
           # for an account whose token is set, so its secret is never empty.
-          # Without an index (that step failed), the first account that has a
-          # token, as "Pick who pays" names it.
+          # Without an index from it, the first attempt's account, and without
+          # that either, the first account that has a token, as "Pick who pays"
+          # names it.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) == '2' && secrets.CLAUDE_CODE_OAUTH_TOKEN_2 || (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) == '3' && secrets.CLAUDE_CODE_OAUTH_TOKEN_3 || (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) == '4' && secrets.CLAUDE_CODE_OAUTH_TOKEN_4 || (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) == '5' && secrets.CLAUDE_CODE_OAUTH_TOKEN_5 || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # The action puts the base branch's config in the checkout before the
           # reviewer starts; this tells it where the PR's own copies are.
