@@ -71,12 +71,18 @@ def _resolved_path(root, file, span, known=lambda path: False):
 
 
 def _disk_text(root, path):
-    """A repo file's text as it is on disk now, or None when it is gone or is no file."""
+    """A repo file's text as it is on disk now, or None when it is gone, is no file or cannot be
+    read. The reports run after the update's writes, so a read that fails counts as no copy, and
+    bytes that are not UTF-8 read as U+FFFD, as the JS engine reads them.
+    """
     target = os.path.join(root, *path.split("/"))
-    if not os.path.isfile(target):
+    try:
+        if not os.path.isfile(target):
+            return None
+        with open(target, encoding="utf-8", errors="replace", newline="") as fh:
+            return fh.read()
+    except OSError:
         return None
-    with open(target, encoding="utf-8", newline="") as fh:
-        return fh.read()
 
 
 def _headings_of(text):
@@ -184,8 +190,10 @@ def _links_to(root, owner, file, templates, base_files):
     """True when the owner's template points at `file` while neither its base text nor its copy in
     the repo does.
     """
+    if not _points_at(templates[owner], owner, file):
+        return False
     copy = _disk_text(root, owner)
-    if copy is None or not _points_at(templates[owner], owner, file):
+    if copy is None:
         return False
     base_points = _points_at(_base_of(base_files, owner), owner, file)
     return not base_points and not _points_at(copy, owner, file)
@@ -205,10 +213,23 @@ def unlinked_report(root, added, templates, base_files):
     return report
 
 
-def _stale_names(root, file, gone, resolve, headings_for):
+def _is_section_gone(root, ref, gone, templates):
+    """True when the update took a section out: its target was removed or renamed away, or today's
+    template of the target lacks the heading and so does the repo's copy.
+    """
+    target = ref["target"]
+    if target in gone:
+        return True
+    if target not in templates or ref["heading"] in _headings_of(templates[target]):
+        return False
+    copy = _disk_text(root, target)
+    return copy is None or ref["heading"] not in _headings_of(copy)
+
+
+def _stale_names(root, file, gone, templates, resolve, headings_for):
     """The names one kept file still gives that the update removed: a span that names a removed or
     renamed-away path, and a section ref whose heading the base text of its target held and the
-    repo's copy no longer does (or the target is gone).
+    update took out.
     """
     names = []
     for match in SPAN.finditer(_disk_text(root, file) or ""):
@@ -216,18 +237,15 @@ def _stale_names(root, file, gone, resolve, headings_for):
         if any(path in gone for path in _candidates_of(file, span)):
             _add_name(names, span)
         ref = _section_ref(file, span, section, resolve, headings_for)
-        if ref is None:
-            continue
-        copy = _disk_text(root, ref["target"])
-        if copy is None or ref["heading"] not in _headings_of(copy):
+        if ref is not None and _is_section_gone(root, ref, gone, templates):
             _add_name(names, ref["name"])
     return names
 
 
-def stale_report(root, plan, base_files):
+def stale_report(root, plan, templates, base_files):
     """The `stale` report: for each edited file the update kept, the names it gives that the update
-    dropped, sorted by file. `plan` is the outcome lists of plan_update; `base_files` is the
-    record's files before the update.
+    dropped, sorted by file. `plan` is the outcome lists of plan_update; `templates` maps each repo
+    path to its rendered text; `base_files` is the record's files before the update.
     """
     gone = set(plan["removed"]) | {old for old, _new in plan["renamed"]}
 
@@ -239,7 +257,7 @@ def stale_report(root, plan, base_files):
 
     report = []
     for file in sorted(plan["removed_edited"], key=_code_units):
-        names = _stale_names(root, file, gone, resolve, headings_for)
+        names = _stale_names(root, file, gone, templates, resolve, headings_for)
         if names:
             report.append({"file": file, "names": names})
     return report

@@ -367,7 +367,7 @@ def run_update(root, bind_with, version, state_json):
     out.update(renamed=plan["renamed"], owned_changed=plan["owned_changed"], skipped=skipped,
                missing=missing_report(root, _written_files(plan), repo_files(rendered)),
                unlinked=unlinked_report(root, plan["added"], repo_files(rendered), pristine["files"]),
-               stale=stale_report(root, plan, pristine["files"]))
+               stale=stale_report(root, plan, repo_files(rendered), pristine["files"]))
     return out
 
 

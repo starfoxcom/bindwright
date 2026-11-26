@@ -401,7 +401,7 @@ export async function runUpdate(root, { bindWith, version }) {
     skipped,
     missing: missingReport(root, writtenFiles(plan), repoFiles(rendered)),
     unlinked: unlinkedReport(root, plan.added, repoFiles(rendered), pristine.files),
-    stale: staleReport(root, plan, pristine.files),
+    stale: staleReport(root, plan, repoFiles(rendered), pristine.files),
   };
 }
 

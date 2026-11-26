@@ -61,10 +61,15 @@ function resolvedPath(root, file, span, known = () => false) {
   );
 }
 
-// A repo file's text as it is on disk now, or undefined when it is gone or is no file.
+// A repo file's text as it is on disk now, or undefined when it is gone, is no file or cannot be
+// read. The reports run after the update's writes, so a read that fails counts as no copy.
 function diskText(root, path) {
   const target = join(root, ...path.split("/"));
-  return statSync(target, { throwIfNoEntry: false })?.isFile() ? readFileSync(target, "utf8") : undefined;
+  try {
+    return statSync(target, { throwIfNoEntry: false })?.isFile() ? readFileSync(target, "utf8") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // The headings of a Markdown text, without their marks and trailing #s.
@@ -154,8 +159,9 @@ function pointsAt(text, owner, file) {
 // True when the owner's template points at `file` while neither its base text nor its copy in
 // the repo does.
 function linksTo(root, owner, file, templates, baseFiles) {
+  if (!pointsAt(templates.get(owner), owner, file)) return false;
   const copy = diskText(root, owner);
-  if (copy === undefined || !pointsAt(templates.get(owner), owner, file)) return false;
+  if (copy === undefined) return false;
   const basePoints = pointsAt(baseOf(baseFiles, owner), owner, file);
   return !basePoints && !pointsAt(copy, owner, file);
 }
@@ -172,27 +178,36 @@ export function unlinkedReport(root, added, templates, baseFiles) {
   });
 }
 
+// True when the update took a section out: its target was removed or renamed away, or today's
+// template of the target lacks the heading and so does the repo's copy.
+function isSectionGone(root, ref, gone, templates) {
+  if (gone.has(ref.target)) return true;
+  if (!templates.has(ref.target) || headingsOf(templates.get(ref.target)).includes(ref.heading)) {
+    return false;
+  }
+  const copy = diskText(root, ref.target);
+  return copy === undefined || !headingsOf(copy).includes(ref.heading);
+}
+
 // The names one kept file still gives that the update removed: a span that names a removed or
 // renamed-away path, and a section ref whose heading the base text of its target held and the
-// repo's copy no longer does (or the target is gone).
-function staleNames(root, file, gone, options) {
+// update took out.
+function staleNames(root, file, gone, templates, options) {
   const names = [];
   for (const [, span, section] of (diskText(root, file) ?? "").matchAll(SPAN)) {
     if (candidatesOf(file, span).some((path) => gone.has(path))) {
       addName(names, span);
     }
     const ref = sectionRef(file, span, section, options);
-    if (ref === undefined) continue;
-    const copy = diskText(root, ref.target);
-    if (copy === undefined || !headingsOf(copy).includes(ref.heading)) addName(names, ref.name);
+    if (ref !== undefined && isSectionGone(root, ref, gone, templates)) addName(names, ref.name);
   }
   return names;
 }
 
 // The `stale` report: for each edited file the update kept, the names it gives that the update
-// dropped, sorted by file. `plan` is the outcome lists of planUpdate; `baseFiles` is the
-// record's files before the update.
-export function staleReport(root, plan, baseFiles) {
+// dropped, sorted by file. `plan` is the outcome lists of planUpdate; `templates` maps each repo
+// path to its rendered text; `baseFiles` is the record's files before the update.
+export function staleReport(root, plan, templates, baseFiles) {
   const gone = new Set([...plan.removed, ...plan.renamed.map(([from]) => from)]);
   const inBase = (path) => Object.hasOwn(baseFiles, path);
   const options = {
@@ -200,7 +215,7 @@ export function staleReport(root, plan, baseFiles) {
     headingsFor: (target) => (inBase(target) ? headingsOf(baseFiles[target]) : []),
   };
   return [...plan.removed_edited].sort().flatMap((file) => {
-    const names = staleNames(root, file, gone, options);
+    const names = staleNames(root, file, gone, templates, options);
     return names.length ? [{ file, names }] : [];
   });
 }

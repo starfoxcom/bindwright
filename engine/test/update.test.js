@@ -464,19 +464,48 @@ const UNLINKED_ROWS = [
     kit: POINTER_KIT,
     expect: [],
   },
+  {
+    name: "an owned file holding bytes that are not UTF-8 is read like any other",
+    kit: POINTER_KIT,
+    repo: (r) => {
+      ownRule(r);
+      writeFileSync(r.at(RULE), Buffer.from("# Caf\xe9\n", "latin1"));
+    },
+    expect: [{ file: NEW_DOC, from: [RULE] }],
+    updated: [],
+  },
 ];
 for (const row of UNLINKED_ROWS) {
   test(`unlinked: ${row.name}`, needsPython, () => checkRow({ ...row, key: "unlinked" }));
 }
 
 // Each row drops templates from the kit, then edits the testing rule's copy in the repo.
+const STALE_SECTION = `See \`${RULE}\` § Task tracking.`;
+// A row whose target keeps its heading in today's template, while the repo's copy lacks it.
+const keptHeading = (name, target) => ({
+  name,
+  kit: { [OTHER]: null },
+  repo: (r) => {
+    editTesting(STALE_SECTION)(r);
+    target(r);
+  },
+  expect: [],
+  updated: [],
+});
 const STALE_ROWS = [
   {
     name: "a kept edited file naming a section the update dropped is reported",
     kit: { [OTHER]: null, [RULE]: (text) => text.replace("# Task tracking", "# Work queue") },
-    repo: editTesting(`See \`${RULE}\` § Task tracking.`),
+    repo: editTesting(STALE_SECTION),
     expect: [{ file: OTHER, names: [`${RULE} § Task tracking`] }],
   },
+  keptHeading("a section an owned target lacks, but its template keeps, gives no entry", (r) => {
+    ownRule(r);
+    r.write(RULE, "# Other\n");
+  }),
+  keptHeading("a section the repo edited out of an unchanged template gives no entry", (r) =>
+    r.write(RULE, r.read(RULE).replace("# Task tracking", "# Work queue"))),
+  keptHeading("a section of a target the repo deleted earlier gives no entry", (r) => drop(r, RULE)),
   {
     name: "a kept edited file naming a removed file is reported",
     kit: { [OTHER]: null, [THIRD]: null },
