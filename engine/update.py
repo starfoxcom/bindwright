@@ -365,7 +365,7 @@ def run_update(root, bind_with, version, state_json):
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
     out.update(renamed=plan["renamed"], owned_changed=plan["owned_changed"], skipped=skipped,
-               missing=missing_report(root, _written_files(plan)))
+               missing=missing_report(root, _written_files(plan), repo_files(rendered)))
     return out
 
 

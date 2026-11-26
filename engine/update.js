@@ -399,7 +399,7 @@ export async function runUpdate(root, { bindWith, version }) {
     renamed: plan.renamed,
     owned_changed: plan.owned_changed,
     skipped,
-    missing: missingReport(root, writtenFiles(plan)),
+    missing: missingReport(root, writtenFiles(plan), repoFiles(rendered).keys()),
   };
 }
 
