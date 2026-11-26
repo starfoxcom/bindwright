@@ -212,9 +212,10 @@ export default {
   "evidence.skipped.label": "no necesitaron revisión, casi todos solo de documentación, sin código que revisar",
   "evidence.firstTry.label": "pasaron a la primera, incluida la revisión a fondo, sin nada que corregir",
   "evidence.fixed.label": "se detuvieron 1 o 2 rondas hasta corregir el problema",
-  "evidence.stalled.label": "tomaron 3 rondas o más, donde la sesión se detiene a buscar una corrección más simple",
-  "evidence.rebuilt.label": "se reconstruyeron desde cero tras 10 rondas en rojo y pasaron sin otra investigación",
-  "evidence.rebuiltStalled.label": "se reconstruyeron, necesitaron investigar de nuevo y aun así se integraron",
+  "evidence.stalled.label": "tomaron 3 rondas o más, con investigación antes de cada corrección",
+  "evidence.rebuilt.label": "se reconstruyeron desde cero tras 10 rondas en rojo y se integraron "
+    + "con 2 rondas en rojo o menos",
+  "evidence.rebuiltStalled.label": "se reconstruyeron, volvieron a tomar 3 rondas o más y aun así se integraron",
   "evidence.dropped.label": "se descartaron porque no se encontró arreglo",
   "evidence.retired.label": "se descartaron porque ya no hacían falta",
   "evidence.chart": "Por proyecto: pull requests integrados, los que no necesitaron revisión "
@@ -227,9 +228,9 @@ export default {
   "evidence.part.skipped": "sin revisión",
   "evidence.part.passed": "a la primera",
   "evidence.part.fixed": "corregidos en 1 o 2 rondas",
-  "evidence.part.stalled": "corregidos tras investigar más a fondo",
+  "evidence.part.stalled": "corregidos en 3 rondas o más",
   "evidence.part.rebuilt": "reconstruidos",
-  "evidence.part.rebuiltStalled": "reconstruidos, otra investigación",
+  "evidence.part.rebuiltStalled": "reconstruidos, otra vez 3 rondas o más",
   "evidence.part.dropped": "descartados",
   "evidence.part.retired": "ya no hacían falta",
   "evidence.legend.skipped": "no necesitaron revisión",
@@ -237,7 +238,7 @@ export default {
   "evidence.legend.fixed": "corregidos en 1 o 2 rondas",
   "evidence.legend.stalled": "tomaron 3 rondas o más",
   "evidence.legend.rebuilt": "reconstruidos tras 10 rondas en rojo",
-  "evidence.legend.rebuiltStalled": "reconstruidos, con otra investigación",
+  "evidence.legend.rebuiltStalled": "reconstruidos, luego 3 rondas o más",
   "evidence.legend.dropped": "descartados, sin arreglo",
   "evidence.legend.retired": "descartados, ya no hacían falta",
   "evidence.detail": "La IA revisó {checked} de ellos. Los {held} detenidos al menos una vez tomaron "
@@ -446,8 +447,9 @@ export default {
   "mods.all.text": "Cada mod encendido a la vez: la configuración con la que se construye este proyecto.",
   "mods.all.value": "Los 10 activados",
   "mods.ci-watch.title": "<code>ci-watch</code>",
-  "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan. Tras varias "
-    + "rondas en rojo, frena los cambios hasta que la sesión investigue una mejor solución.",
+  "mods.ci-watch.text": "Vigila las revisiones del pull request y despierta la sesión cuando terminan. "
+    + "Antes de abrir un pull request y tras cada ronda en rojo, frena los cambios hasta que la sesión "
+    + "investigue una mejor solución.",
   "mods.ci-watch.value": "Activado",
   "mods.compact-handoff.title": "<code>compact-handoff</code>",
   "mods.compact-handoff.text": "Lleva tus palabras y un traspaso a través de cada compactación.",
