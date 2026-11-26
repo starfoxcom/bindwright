@@ -86,6 +86,7 @@ function included(path, a, flags) {
     ".github/workflows/claude-code-review.yml.template": flags.github_actions_routine_review,
     ".github/workflows/claude.yml.template": flags.github_actions_deep_review,
     ".github/scripts/review_gate.py": gate,
+    ".github/scripts/pick_account.py": gate,
     ".github/scripts/setup-review-gate.sh": gate,
     ".github/scripts/set-review-tokens.sh": gate,
     ".github/scripts/pin_check.py": gate,
