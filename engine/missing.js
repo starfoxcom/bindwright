@@ -26,22 +26,27 @@ function isPathLike(span) {
   return hasShape && !PLACEHOLDER.test(span) && !WHITESPACE.test(span) && !span.startsWith("/");
 }
 
-// True when the repo holds the span, counted from its root or from the naming file's folder.
-// Only plain relative segments are looked up: a path that climbs out of the repo, or holds a
-// backslash, drive or control character, is never found.
+// The folder the templates name a rule from by its bare file name, wherever they point at it.
+const RULES = ".claude/rules";
+
+// True when the repo holds the span, counted from its root, from the naming file's folder or,
+// for a bare file name, from the rules folder. Only plain relative segments are looked up: a
+// path that climbs out of the repo, or holds a backslash, drive or control character, is never
+// found.
 function resolves(root, file, span) {
-  const folder = posix.dirname(file);
-  return [span, posix.join(folder, span)].some((candidate) => {
+  const tries = [span, posix.join(posix.dirname(file), span)];
+  if (!span.includes("/")) tries.push(posix.join(RULES, span));
+  return tries.some((candidate) => {
     const path = posix.normalize(candidate).replace(/\/$/, "");
     return path === "." || (safe(path) && existsSync(join(root, ...path.split("/"))));
   });
 }
 
 // The names one written file gives that the repo lacks, in first-seen order without repeats.
-// `base` is the file's text before this update, or undefined for a new file; the spans it
-// already named are not new.
-function unresolvedNames(root, { path, text, base }) {
-  const known = new Set(base === undefined ? [] : spansOf(base));
+// `priors` are the texts the file had before this update (its base and the repo's own copy);
+// the spans they already named are not new.
+function unresolvedNames(root, { path, text, priors }) {
+  const known = new Set(priors.flatMap(spansOf));
   const names = [];
   for (const span of spansOf(text)) {
     if (names.includes(span) || known.has(span) || !isPathLike(span)) continue;

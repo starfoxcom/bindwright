@@ -16,6 +16,8 @@ PLACEHOLDER = re.compile(r"[<{*$~\\:]")
 # A file extension starts with a letter, so a version such as 7.19.1 is no path.
 EXTENSION = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,4}\Z")
 BACKTICKED = re.compile(r"`([^`\n]+)`")
+# The folder the templates name a rule from by its bare file name, wherever they point at it.
+RULES = ".claude/rules"
 
 
 def _spans_of(text):
@@ -34,25 +36,29 @@ def _is_path_like(span):
 
 
 def _resolves(root, file, span):
-    """True when the repo holds the span, counted from its root or from the naming file's folder.
+    """True when the repo holds the span, counted from its root, from the naming file's folder or,
+    for a bare file name, from the rules folder.
 
     Only plain relative segments are looked up: a path that climbs out of the repo, or holds a
     backslash, drive or control character, is never found.
     """
-    folder = posixpath.dirname(file)
-    for candidate in (span, posixpath.join(folder, span)):
+    tries = [span, posixpath.join(posixpath.dirname(file), span)]
+    if "/" not in span:
+        tries.append(posixpath.join(RULES, span))
+    for candidate in tries:
         path = posixpath.normpath(candidate)
         if path == "." or (_safe(path) and os.path.exists(os.path.join(root, *path.split("/")))):
             return True
     return False
 
 
-def _unresolved_names(root, path, text, base):
+def _unresolved_names(root, path, text, priors):
     """The names one written file gives that the repo lacks, in first-seen order without repeats.
 
-    `base` is the file's text before this update, or None for a new file; the spans it already named are not new.
+    `priors` are the texts the file had before this update (its base and the repo's own copy);
+    the spans they already named are not new.
     """
-    known = set(_spans_of(base)) if base is not None else set()
+    known = {span for prior in priors for span in _spans_of(prior)}
     names = []
     for span in _spans_of(text):
         if span in names or span in known or not _is_path_like(span):
@@ -63,13 +69,14 @@ def _unresolved_names(root, path, text, base):
 
 
 def missing_report(root, files):
-    """The `missing` report for the files an update wrote: `files` holds (path, new text, base) triples.
+    """The `missing` report for the files an update wrote: `files` holds (path, new text, priors)
+    triples, the priors being the texts the file had before the update.
 
     One entry per file with unresolved names, sorted by path.
     """
     named = {}
-    for path, text, base in files:
-        names = _unresolved_names(root, path, text, base)
+    for path, text, priors in files:
+        names = _unresolved_names(root, path, text, priors)
         if names:
             named[path] = names
     return [{"file": path, "names": named[path]} for path in sorted(named, key=_code_units)]

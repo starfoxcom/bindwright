@@ -397,6 +397,26 @@ test("named paths: a moved file is compared with its base under the old path", n
   assert.deepEqual(out.missing, []);
 });
 
+test("named paths: a bare rule name outside the rules folder is found there", needsPython, async () => {
+  const guide = ".github/review-guide.md";
+  const { out } = await update((r) => {
+    const base = r.read(guide).split("\n").filter((l) => !l.includes("`testing.md`")).join("\n");
+    assert.notEqual(base, r.read(guide), "the review guide names the testing rule by its bare name");
+    r.pristine.files[guide] = base;
+    r.write(guide, base);
+  });
+  assert.ok(out.updated.includes(guide));
+  assert.deepEqual(out.missing, []);
+});
+
+test("named paths: a merged file reports only what the template added", needsPython, async () => {
+  const { out } = await update((r) => {
+    r.write(RULE, `Our own \`hooks/own-never.py\`.\n${r.read(RULE)}`);
+  }, { template: (text) => `${text}\nSee \`docs/never-written.md\`.\n` });
+  assert.deepEqual(out.merged, [RULE]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: ["docs/never-written.md"] }]);
+});
+
 test("named paths: a held base is what a name is compared with", needsPython, async () => {
   const line = "See `docs/held-never.md`.";
   const { out } = await update((r) => {
