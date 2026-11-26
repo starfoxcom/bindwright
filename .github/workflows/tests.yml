@@ -106,6 +106,15 @@ jobs:
           grep -qE "^OK" version-tests.txt || { echo "::error::Version check tests failed"; exit 1; }
           grep -qE "^Ran [1-9][0-9]* tests? in" version-tests.txt || { echo "::error::No version check tests ran"; exit 1; }
 
+      # The mod version check, which the Mod tests job runs on every PR. The step runs once
+      # the check is on the branch.
+      - name: Mod version check tests
+        if: hashFiles('tools/test_mod_version_check.py') != ''
+        run: |
+          python3 -m unittest -v tools/test_mod_version_check.py 2>&1 | tee mod-version-tests.txt
+          grep -qE "^OK" mod-version-tests.txt || { echo "::error::Mod version check tests failed"; exit 1; }
+          grep -qE "^Ran [1-9][0-9]* tests? in" mod-version-tests.txt || { echo "::error::No mod version check tests ran"; exit 1; }
+
       # The helper's bash parser ships built from Go source. Rebuilding it with
       # the one Go release that gives the same bytes proves the shipped file is
       # that source. Go comes from go.dev, checked against its SHA-256; the
@@ -185,6 +194,15 @@ jobs:
           python -m unittest -v tools/test_version_check.py 2>&1 | tee version-tests.txt
           grep -qE "^OK" version-tests.txt || { echo "::error::Version check tests failed"; exit 1; }
           grep -qE "^Ran [1-9][0-9]* tests? in" version-tests.txt || { echo "::error::No version check tests ran"; exit 1; }
+
+      # The mod version check again on Windows, where git paths and the tests' temporary
+      # folders behave differently.
+      - name: Mod version check tests
+        if: hashFiles('tools/test_mod_version_check.py') != ''
+        run: |
+          python -m unittest -v tools/test_mod_version_check.py 2>&1 | tee mod-version-tests.txt
+          grep -qE "^OK" mod-version-tests.txt || { echo "::error::Mod version check tests failed"; exit 1; }
+          grep -qE "^Ran [1-9][0-9]* tests? in" mod-version-tests.txt || { echo "::error::No mod version check tests ran"; exit 1; }
 
   # The required check: it passes only when both jobs above pass. A job that
   # needs a failed one would be skipped, and a skipped check counts as passed.
