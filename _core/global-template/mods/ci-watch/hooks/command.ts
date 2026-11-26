@@ -12,11 +12,18 @@ const GH_OPTS = String.raw`(?:\s+(?:-R\s+\S+|--repo[=\s]\S+))*`
 const AT_START = String.raw`(?:^|[\s;&|({])`
 const PUSH = `${AT_START}git${GIT_OPTS}\\s+push\\b`
 const COMMIT_OR_PUSH = new RegExp(`${AT_START}git${GIT_OPTS}\\s+(?:commit|push)(?![\\w-])`)
-const PUSH_OR_PR = new RegExp(`${PUSH}|${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+create\\b`)
+const PR_CREATE = `${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+create\\b`
+const PUSH_OR_PR = new RegExp(`${PUSH}|${PR_CREATE}`)
+const PR_CREATE_ONLY = new RegExp(PR_CREATE)
 const PR_MERGE = new RegExp(`${AT_START}gh${GH_OPTS}\\s+pr${GH_OPTS}\\s+merge\\b([^|;&\\n]*)`)
 
 export function isPushOrPr(command: string, isPowerShell = false): boolean {
   return PUSH_OR_PR.test(maskCommand(command, isPowerShell))
+}
+
+// A new PR waits for its first round's research.
+export function isPrCreate(command: string, isPowerShell = false): boolean {
+  return PR_CREATE_ONLY.test(maskCommand(command, isPowerShell))
 }
 
 // A step back holds these until it is done: the fix waits for the research.
