@@ -368,30 +368,34 @@ def list_hooks(home):
 def hook_status(home, folder):
     """Each hook `folder` ships that ~/.claude/settings.json runs and ~/.claude/hooks holds: whether
     ~/.bindwright/hooks.json records it, which is what lets the helper keep it current, whether its installed
-    files match the shipped ones, and whether any of them is a link. A hook with no copy there is left out."""
+    files match the shipped ones, whether any of them is a link, and the events whose entries run it. A hook
+    with no copy there is left out."""
     if not os.path.isdir(folder):
         raise HomeError("Not a hooks folder: " + folder)
     recorded = _hook_record(home)
     installed = os.path.normpath(os.path.join(_claude(home), "hooks"))
-    run_here = _names_run_from(home, installed)
+    run_here = _events_run_from(home, installed)
     found = {}
     for name in list_hooks(home)["hooks"]:
         here = name in run_here and os.path.lexists(os.path.join(installed, name))
         if here and os.path.isfile(os.path.join(folder, name)):
             found[name] = {"recorded": name in recorded, "matches": _hook_matches(folder, installed, name),
-                           "linked": _hook_linked(folder, installed, name)}
+                           "linked": _hook_linked(folder, installed, name), "events": sorted(run_here[name])}
     return {"hooks": found}
 
 
-def _names_run_from(home, installed):
-    """The hook file names some settings entry runs from the folder `installed`."""
+def _events_run_from(home, installed):
+    """Each hook file name some settings entry runs from the folder `installed`, with the events that run it."""
     path, data = _load(home)
-    names = set()
-    for entries in _event_lists(data, path):
-        for entry in entries:
+    _event_lists(data, path)  # refuses an event that is not a list
+    events = {}
+    for event, entries in (data.get("hooks") or {}).items():
+        for entry in entries or []:
             for hook in (entry.get("hooks") or []) if isinstance(entry, dict) else []:
-                names.update(n for n in _hook_files(hook) if _runs_from(hook, os.path.join(installed, n), home))
-    return names
+                for name in _hook_files(hook):
+                    if _runs_from(hook, os.path.join(installed, name), home):
+                        events.setdefault(name, set()).add(event)
+    return events
 
 
 def _runs_from(hook, path, home):

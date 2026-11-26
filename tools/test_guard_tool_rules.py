@@ -172,7 +172,7 @@ class LengthRowsTest(unittest.TestCase):
         for name, subject, command, want in (
                 ("over 72", self.LONG, "git commit -m x", True),
                 ("exactly 72", "x" * 72, "git commit -F msg.txt", False),
-                ("git's own options first", self.LONG, "git -C sub commit --amend", True),
+                ("git's own options first", self.LONG, "git -c core.editor=true commit --amend", True),
                 ("a PowerShell call", self.LONG, "git commit -m $msg; git log -1", True),
                 ("no commit in the command", self.LONG, "git status", False)):
             with self.subTest(name):
@@ -187,20 +187,38 @@ class LengthRowsTest(unittest.TestCase):
         self.assertEqual(self.hook.length_notes("git commit -m x"), [])
 
     def test_a_long_title_gets_a_note_only_where_prs_squash_merge(self):
-        for name, style, command, title, want in (
-                ("squash", "squash", "gh pr create --base develop --body-file b.md", self.TITLE_LONG, True),
-                ("an edit", "squash", "gh pr edit 5 --title x", self.TITLE_LONG, True),
-                ("exactly 64", "squash", "gh pr create", self.TITLE_LONG[:64], False),
-                ("merge commits", "merge", "gh pr create", self.TITLE_LONG, False),
-                ("no saved style", None, "gh pr create", self.TITLE_LONG, False),
-                ("no PR command", "squash", "gh pr view 5", self.TITLE_LONG, False)):
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        old = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 600))
+        for name, style, command, line, want in (
+                ("squash", "squash", "gh pr create --base develop --body-file b.md", f"{now}\t{self.TITLE_LONG}",
+                 True),
+                ("an edit", "squash", "gh pr edit --title x", f"{now}\t{self.TITLE_LONG}", True),
+                ("a PR the command did not change", "squash", "gh pr edit 5 --title x", f"{old}\t{self.TITLE_LONG}",
+                 False),
+                ("exactly 64", "squash", "gh pr create", f"{now}\t{self.TITLE_LONG[:64]}", False),
+                ("merge commits", "merge", "gh pr create", f"{now}\t{self.TITLE_LONG}", False),
+                ("no saved style", None, "gh pr create", f"{now}\t{self.TITLE_LONG}", False),
+                ("no PR command", "squash", "gh pr view 5", f"{now}\t{self.TITLE_LONG}", False)):
             with self.subTest(name):
                 self.project(style)
-                with unittest.mock.patch.object(self.hook, "landed", return_value=title) as landed:
+                with unittest.mock.patch.object(self.hook, "landed", return_value=line) as landed:
                     notes = self.hook.length_notes(command)
                 self.assertEqual(bool(notes), want)
                 if want:
-                    landed.assert_called_once_with("gh", "pr", "view", "--json", "title", "-q", ".title")
+                    landed.assert_called_once_with("gh", "pr", "view", "--json", "title,updatedAt", "-q",
+                                                   '.updatedAt + "\\t" + .title')
+
+    def test_only_a_commit_written_just_now_and_not_a_merge_counts(self):
+        now = int(time.time())
+        for name, line, want in (
+                ("one parent, just written", f"{now} ab12\t{self.LONG}", self.LONG),
+                ("a first commit", f"{now} \t{self.LONG}", self.LONG),
+                ("a commit from ten minutes ago", f"{now - 600} ab12\t{self.LONG}", None),
+                ("a merge commit, whose subject git writes", f"{now} ab12 cd34\t{self.LONG}", None),
+                ("nothing read", None, None)):
+            with self.subTest(name):
+                with unittest.mock.patch.object(self.hook, "landed", return_value=line):
+                    self.assertEqual(self.hook.fresh_subject(), want)
 
     def test_a_merge_flag_other_than_the_saved_style_is_logged(self):
         other = "a `gh pr merge` style other than the repo's"

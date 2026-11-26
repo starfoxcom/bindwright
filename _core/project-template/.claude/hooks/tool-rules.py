@@ -40,6 +40,7 @@ after one, JSON additionalContext with the length notes, exit 0. Silent exit 0
 otherwise, and for any input it cannot read.
 """
 import bisect
+import datetime
 import json
 import os
 import re
@@ -485,12 +486,11 @@ def repo_folder(root):
         folder = parent
 
 
-def trusted_program(root, name):
-    """The program `name` (git, gh) as an absolute path, from the first PATH folder a repo cannot have
-    shipped it in, or None
-    when no such folder holds one. A PATH folder that is relative (a `.`), is the session folder or the
-    current folder, or sits anywhere in the outermost repo holding `root` is skipped, so a repo's own
-    copy never runs; Windows's search of the current folder first is switched off."""
+def trusted_folders(root):
+    """The PATH folders a repo cannot have shipped a program in, or None when the hook's own folder is gone.
+    A PATH folder that is relative (a `.`), is the session folder or the current folder, or sits anywhere in
+    the outermost repo holding `root` is skipped; Windows's search of the current folder first is switched
+    off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     try:
         here = {real_path(place) for place in (CWD, os.getcwd())}
@@ -499,9 +499,14 @@ def trusted_program(root, name):
     repo = repo_folder(root)
     folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
                if os.path.isabs(entry)}
-    trusted = [entry for entry, real in folders.items()
-               if real and real not in here and not is_within(real, repo)]
-    found = shutil.which(name, path=os.pathsep.join(trusted))
+    return [entry for entry, real in folders.items() if real and real not in here and not is_within(real, repo)]
+
+
+def trusted_program(root, name):
+    """The program `name` (git, gh) as an absolute path from the trusted folders, so a repo's own copy never
+    runs, or None when none of them holds one."""
+    folders = trusted_folders(root)
+    found = folders and shutil.which(name, path=os.pathsep.join(folders))
     return found if found and os.path.isabs(found) else None
 
 
@@ -650,33 +655,69 @@ TITLE_LIMIT = 64
 MENTIONS_COMMIT = re.compile(r"\bgit\b[^\n;&|]*\bcommit\b")
 MENTIONS_PR = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
 LANDED_SECONDS = 10
+# A commit or PR counts as this command's only when it was written this recently: a command that only
+# mentions a commit or a PR (a log search, a dry run, a commit that failed) leaves an older one in place.
+FRESH_SECONDS = 120
 
 
 def landed(program, *args):
-    """The first line `program` prints in the session's repo, or None outside one or when it fails."""
+    """The first line `program` prints in the session's repo, or None outside one, when it fails or when
+    LANDED_SECONDS pass."""
     root = repo_root()
-    found = root and trusted_program(root, program)
-    if not found:
+    folders = root and trusted_folders(root)
+    found = folders and shutil.which(program, path=os.pathsep.join(folders))
+    if not found or not os.path.isabs(found):
         return None
-    prefix = [found, "-C", root] if program == "git" else [found]
+    command = [found, "-C", root, *args] if program == "git" else [found, *args]
+    # gh starts git itself, so its PATH holds only the trusted folders.
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", PATH=os.pathsep.join(folders))
     try:
-        done = subprocess.run(prefix + list(args), cwd=root, stdin=subprocess.DEVNULL, capture_output=True,
-                              timeout=LANDED_SECONDS, env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
-    except (OSError, subprocess.SubprocessError):
+        process = subprocess.Popen(command, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, env=env)
+    except OSError:
         return None
-    out = done.stdout.decode("utf-8", "replace") if done.returncode == 0 else ""
+    try:
+        out, _ = process.communicate(timeout=LANDED_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()  # no second wait, as in git_output
+        return None
+    out = out.decode("utf-8", "replace") if process.returncode == 0 else ""
     return out.split("\n", 1)[0].strip() or None
 
 
+def is_fresh(seconds_since_epoch):
+    return 0 <= time.time() - seconds_since_epoch <= FRESH_SECONDS
+
+
+def fresh_subject():
+    """The subject of the commit at HEAD when it was written in the last FRESH_SECONDS and is not a merge,
+    whose subject git writes."""
+    line = landed("git", "log", "-1", "--format=%ct %P%x09%s")
+    stamp, _, subject = (line or "").partition("\t")
+    when, *parents = stamp.split(" ")
+    return subject if when.isdigit() and len(parents) <= 1 and is_fresh(int(when)) else None
+
+
+def fresh_title():
+    """The title of the current branch's PR when it changed in the last FRESH_SECONDS."""
+    line = landed("gh", "pr", "view", "--json", "title,updatedAt", "-q", '.updatedAt + "\\t" + .title')
+    stamp, _, title = (line or "").partition("\t")
+    try:
+        when = datetime.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return None
+    return title if is_fresh(when.timestamp()) else None
+
+
 def length_notes(text):
-    """A note for each commit subject or PR title the command left over its limit."""
+    """A note for each commit subject or PR title the command wrote over its limit."""
     notes = []
-    subject = landed("git", "log", "-1", "--format=%s") if MENTIONS_COMMIT.search(text) else None
+    subject = fresh_subject() if MENTIONS_COMMIT.search(text) else None
     if subject and len(subject) > SUBJECT_LIMIT:
         notes.append(f"The commit subject that landed is {len(subject)} characters, over the {SUBJECT_LIMIT} the"
                      " commit format allows. Shorten it with `git commit --amend` before pushing.")
     if MENTIONS_PR.search(text) and squash_merges():
-        title = landed("gh", "pr", "view", "--json", "title", "-q", ".title")
+        title = fresh_title()
         if title and len(title) > TITLE_LIMIT:
             notes.append(f"The PR title is {len(title)} characters, over {TITLE_LIMIT}: it becomes the commit"
                          " subject when the PR squash-merges. Shorten it with `gh pr edit --title`.")

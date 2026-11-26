@@ -615,15 +615,15 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     const entries = [...settings(dir).hooks.PreToolUse, old, elsewhere];
     writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: entries } });
     const status = () => home(dir, "hook-status", shipped).out.hooks;
-    const both = { recorded: true, matches: true, linked: false };
+    const both = { recorded: true, matches: true, linked: false, events: ["PreToolUse"] };
     const all = { "no-ai-attribution.py": both, "push-guard.py": both };
     assert.deepEqual(status(), all, "a hook not shipped, or with no copy in the hooks folder, is left out");
     rmSync(join(dir, ".bindwright", "hooks.json"));
     rmSync(join(dir, ".claude", "hooks", "no_ai_attribution"), { recursive: true });
     writeFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "push\r\n");
     assert.deepEqual(status(), {
-      "no-ai-attribution.py": { recorded: false, matches: false, linked: false },
-      "push-guard.py": { recorded: false, matches: true, linked: false },
+      "no-ai-attribution.py": { recorded: false, matches: false, linked: false, events: ["PreToolUse"] },
+      "push-guard.py": { recorded: false, matches: true, linked: false, events: ["PreToolUse"] },
     });
     // A matching copy is only recorded: its settings entry stays, and a differing one is refused.
     const before = settings(dir);
@@ -669,7 +669,20 @@ test("hook-status finds a hook installed under a home given with a .. in its pat
     const file = hookFile(dir, "push-guard.py", "push\n");
     assert.equal(home(roundabout, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
     const status = home(roundabout, "hook-status", join(dir, "src")).out.hooks;
-    assert.deepEqual(status, { "push-guard.py": { recorded: true, matches: true, linked: false } });
+    const found = { recorded: true, matches: true, linked: false, events: ["PreToolUse"] };
+    assert.deepEqual(status, { "push-guard.py": found });
+  });
+});
+
+test("hook-status names every event whose entry runs the hook, so an update can add a missing one", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "tool-rules.py", "rules\n");
+    const events = () => home(dir, "hook-status", join(dir, "src")).out.hooks["tool-rules.py"].events;
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    assert.deepEqual(events(), ["PreToolUse"]);
+    const both = ["--matcher", "Bash", "--events", "PreToolUse,PostToolUse"];
+    assert.equal(home(dir, "install-hook", file, "--python", python, ...both).status, 0);
+    assert.deepEqual(events(), ["PostToolUse", "PreToolUse"]);
   });
 });
 
