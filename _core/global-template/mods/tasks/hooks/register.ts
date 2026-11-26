@@ -495,7 +495,7 @@ function shellCommand(e: { tool: string }): string {
 // Why a main-session commit waits, if it does. It waits only where a task tool can release it, since
 // without one it would wait for good.
 async function commitHold($: EngineInterface): Promise<string | undefined> {
-  return (await hasListTool($)) ? commitRefusal(await mirrorOf($)) : undefined
+  return (await hasListTool($)) ? commitRefusal(await mirrorOf($), await $.clock.now()) : undefined
 }
 
 // Registers the task tools' answers, the tool-call checks and the hold description.
