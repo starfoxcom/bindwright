@@ -31,13 +31,18 @@ function isPathLike(span) {
   return hasShape && !PLACEHOLDER.test(span) && !WHITESPACE.test(span) && !span.startsWith("/");
 }
 
-// The repo paths a span can name, counted from the root and then from the naming file's folder.
-// Only plain relative segments are kept, or "." for the root: a path that climbs out of the
-// repo, or holds a backslash, drive or control character, is left out, and so is an absolute span.
+// The folder the templates name a rule from by its bare file name, wherever they point at it.
+const RULES = ".claude/rules";
+
+// The repo paths a span can name, counted from the root, from the naming file's folder and, for
+// a bare file name, from the rules folder. Only plain relative segments are kept, or "." for the
+// root: a path that climbs out of the repo, or holds a backslash, drive or control character, is
+// left out, and so is an absolute span.
 function candidatesOf(file, span) {
   if (span.startsWith("/")) return [];
-  const folder = posix.dirname(file);
-  return [span, posix.join(folder, span)]
+  const tries = [span, posix.join(posix.dirname(file), span)];
+  if (!span.includes("/")) tries.push(posix.join(RULES, span));
+  return tries
     .map((candidate) => posix.normalize(candidate).replace(/\/$/, ""))
     .filter((path) => path === "." || safe(path));
 }
@@ -94,16 +99,17 @@ function addName(names, name) {
 }
 
 // The names one written file gives that the repo lacks, in first-seen order without repeats.
-// `base` is the file's text before this update, or undefined for a new file; the spans and
-// section refs it already named are not new. A section ref counts when the repo's copy of its
-// file lacks the heading.
-function unresolvedNames(root, { path, text, base = "" }, templates) {
+// `priors` are the texts the file had before this update (its base and the repo's own copy);
+// the spans and section refs they already named are not new. A section ref counts when the
+// repo's copy of its file lacks the heading.
+function unresolvedNames(root, { path, text, priors }, templates) {
   const options = {
     resolve: (file, span) => resolvedPath(root, file, span),
     headingsFor: (target) => (templates.has(target) ? headingsOf(templates.get(target)) : []),
   };
-  const known = new Set(spansOf(base));
-  const knownRefs = new Set(sectionRefsOf(path, base, options).map((ref) => ref.name));
+  const known = new Set(priors.flatMap(spansOf));
+  const priorRefs = priors.flatMap((prior) => sectionRefsOf(path, prior, options));
+  const knownRefs = new Set(priorRefs.map((ref) => ref.name));
   const names = [];
   for (const [, span, section] of text.matchAll(SPAN)) {
     if (isPathLike(span) && !known.has(span) && resolvedPath(root, path, span) === undefined) {

@@ -119,7 +119,7 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
   const theirsAll = repoFiles(rendered);
   const paths = [...new Set([...Object.keys(pristine.files), ...theirsAll.keys()])].sort();
   const result = {
-    write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [], bases: new Map(),
+    write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [], priors: new Map(),
   };
   for (const outcome of OUTCOMES) result[outcome] = [];
   const moves = movesFor(theirsAll, pristine, { readRepo, owned });
@@ -150,7 +150,7 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
     result[outcome].push(path);
     if (outcome === "updated" || outcome === "merged" || outcome === "added") {
       result.write.push([path, text]);
-      result.bases.set(path, base);
+      result.priors.set(path, [base, ours].filter((t) => typeof t === "string"));
     }
     if (outcome === "staged" || outcome === "conflict") result.stage.push([STAGING + path, text]);
     // A moved file the merge leaves as it was, or stages, still lands at its new path.
@@ -406,11 +406,11 @@ export async function runUpdate(root, { bindWith, version }) {
 }
 
 // The files this update wrote with a new text (added, merged or updated), each with that text
-// and the base the update decided it against.
+// and its priors: the base the update decided it against and the repo's copy before it.
 function writtenFiles(plan) {
   const written = new Map(plan.write);
   return [...plan.added, ...plan.merged, ...plan.updated].map((path) => ({
-    path, text: written.get(path), base: plan.bases.get(path),
+    path, text: written.get(path), priors: plan.priors.get(path),
   }));
 }
 

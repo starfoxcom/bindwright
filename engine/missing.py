@@ -21,6 +21,8 @@ EXTENSION = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,4}\Z")
 SPAN = re.compile(r'`([^`\n]+)`(?: *§ *"?([^`\n]*))?')
 # A Markdown heading, without its marks and trailing #s.
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
+# The folder the templates name a rule from by its bare file name, wherever they point at it.
+RULES = ".claude/rules"
 
 
 def _spans_of(text):
@@ -39,15 +41,18 @@ def _is_path_like(span):
 
 
 def _candidates_of(file, span):
-    """The repo paths a span can name, counted from the root and then from the naming file's folder.
+    """The repo paths a span can name, counted from the root, from the naming file's folder and,
+    for a bare file name, from the rules folder.
 
     Only plain relative segments are kept, or "." for the root: a path that climbs out of the
     repo, or holds a backslash, drive or control character, is left out, and so is an absolute span.
     """
     if span.startswith("/"):
         return []
-    folder = posixpath.dirname(file)
-    candidates = [posixpath.normpath(span), posixpath.normpath(posixpath.join(folder, span))]
+    tries = [span, posixpath.join(posixpath.dirname(file), span)]
+    if "/" not in span:
+        tries.append(posixpath.join(RULES, span))
+    candidates = [posixpath.normpath(candidate) for candidate in tries]
     paths = [path[:-1] if path.endswith("/") else path for path in candidates]
     return [path for path in paths if path == "." or _safe(path)]
 
@@ -113,14 +118,13 @@ def _add_name(names, name):
         names.append(name)
 
 
-def _unresolved_names(root, path, text, base, templates):
+def _unresolved_names(root, path, text, priors, templates):
     """The names one written file gives that the repo lacks, in first-seen order without repeats.
 
-    `base` is the file's text before this update, or None for a new file; the spans and section
-    refs it already named are not new. A section ref counts when the repo's copy of its file lacks
-    the heading.
+    `priors` are the texts the file had before this update (its base and the repo's own copy);
+    the spans and section refs they already named are not new. A section ref counts when the
+    repo's copy of its file lacks the heading.
     """
-    base = "" if base is None else base
 
     def resolve(file, span):
         return _resolved_path(root, file, span)
@@ -128,8 +132,9 @@ def _unresolved_names(root, path, text, base, templates):
     def headings_for(target):
         return _headings_of(templates[target]) if target in templates else []
 
-    known = set(_spans_of(base))
-    known_refs = {ref["name"] for ref in _section_refs_of(path, base, resolve, headings_for)}
+    known = {span for prior in priors for span in _spans_of(prior)}
+    known_refs = {ref["name"] for prior in priors
+                  for ref in _section_refs_of(path, prior, resolve, headings_for)}
     names = []
     for match in SPAN.finditer(text):
         span, section = match.group(1), match.group(2)
@@ -145,14 +150,15 @@ def _unresolved_names(root, path, text, base, templates):
 
 
 def missing_report(root, files, templates):
-    """The `missing` report for the files an update wrote, as (path, new text, base) triples,
-    and `templates` maps each repo path to its rendered text.
+    """The `missing` report for the files an update wrote, as (path, new text, priors) triples,
+    the priors being the texts the file had before the update, and `templates` maps each repo
+    path to its rendered text.
 
     One entry per file with unresolved names, sorted by path.
     """
     named = {}
-    for path, text, base in files:
-        names = _unresolved_names(root, path, text, base, templates)
+    for path, text, priors in files:
+        names = _unresolved_names(root, path, text, priors, templates)
         if names:
             named[path] = names
     return [{"file": path, "names": named[path]} for path in sorted(named, key=_code_units)]
