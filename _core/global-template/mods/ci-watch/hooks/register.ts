@@ -633,7 +633,6 @@ async function readSettings($: EngineInterface): Promise<void> {
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))
 }
 
-// The settings come from the mod's own file over the loaded options, read again as it changes.
 // Why a shell command waits, or undefined: a commit or push owed a step back or a rebuild, or a new PR
 // owed its first round's research.
 async function shellRefusal($: EngineInterface, agentId: unknown, command: string, isPowerShell: boolean) {
@@ -643,6 +642,7 @@ async function shellRefusal($: EngineInterface, agentId: unknown, command: strin
   return held ?? openingRefusal(agentId, command, isPowerShell)
 }
 
+// The settings come from the mod's own file over the loaded options, read again as it changes.
 export const register: Register = (on, options) => {
   registerView(on)
   registerRuns(on)
@@ -734,7 +734,7 @@ export const register: Register = (on, options) => {
     const isPlain = 'deny' in answered || notes.length === 0
     const result = isPlain ? answered : { ...answered, context: [...(answered.context ?? []), ...notes] }
     if (result.deny !== undefined || result.isError) return result
-    noteOpened(e.agentId, command, isPowerShell)
+    noteOpened(e.agentId, command, isPowerShell, PR_URL.test(JSON.stringify(result.result ?? '')))
     await noteRun($, e, result)
     // One command can merge a PR and push or open the next: forget the one, then watch the other.
     const merged = mergedNumber(command, isPowerShell)

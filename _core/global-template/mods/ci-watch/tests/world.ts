@@ -210,11 +210,12 @@ export function world(on: On) {
     seen.prompts.push(e.text)
     return { text: e.text }
   })
-  // `gh pr create` prints the new PR's URL.
+  // `gh pr create` prints the new PR's URL; a dry run or its help opens none and prints none.
   const answer = (_: unknown, e: object) => {
     if (seen.toolAnswer !== undefined) return seen.toolAnswer as never
-    const command = (e as { command?: string }).command
-    const stdout = command?.includes('pr create') ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
+    const command = (e as { command?: string }).command ?? ''
+    const opens = command.includes('pr create') && !/--dry-run|--help/.test(command)
+    const stdout = opens ? `https://github.com/o/r/pull/${seen.branchPr ?? 7}\n` : ''
     return { result: { stdout, stderr: '', interrupted: false } as never }
   }
   on('tool.call', { tool: ['Bash', 'PowerShell', 'Agent', 'TaskStop'] }, answer)

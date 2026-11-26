@@ -20,7 +20,10 @@ export function openingRefusal(agentId: unknown, command: string, isPowerShell: 
   return isEarly ? prCreateRefusal(counted.topics) : undefined
 }
 
-/** A main-session `gh pr create` went through: the next PR waits for research of its own. */
-export function noteOpened(agentId: unknown, command: string, isPowerShell: boolean): void {
-  if (isOpening(agentId, command, isPowerShell)) counted.topics = []
+/**
+ * A main-session `gh pr create` printed the new PR's address, so a PR opened: the next one waits for
+ * research of its own. `--help`, `--dry-run` and other runs that open none print no address.
+ */
+export function noteOpened(agentId: unknown, command: string, isPowerShell: boolean, hasPrUrl: boolean): void {
+  if (hasPrUrl && isOpening(agentId, command, isPowerShell)) counted.topics = []
 }

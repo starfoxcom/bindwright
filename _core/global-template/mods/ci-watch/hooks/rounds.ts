@@ -155,7 +155,8 @@ export function researchRefusal(
 ): string {
   const owed = needed - topics.length
   return (
-    `${pr} has had ${red} red rounds in a row, so edits, commits and pushes wait for a step back. Look up ` +
+    `${pr} has had ${red} red round${red === 1 ? '' : 's'} in a row, so edits, commits and pushes wait for ` +
+    'a step back. Look up ' +
     `at least ${needed} different ways others solved this class of problem (${owed} more to go; ` +
     'each WebSearch, WebFetch or web-fetch agent call on a new topic counts once), compare them against ' +
     'each other, pick the one that removes the whole class most simply, tell the user which one won and ' +

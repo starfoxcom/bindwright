@@ -385,7 +385,7 @@ test('the wake of the first red round asks for the research step', async ($, on)
   expect(seen.prompts[0]).toContain('has had 1 round in a row')
 })
 
-test('/ci-watch rounds tells the count and when the next step back is due', async ($, on) => {
+test('/ci-watch rounds tells the count and the hard stop', async ($, on) => {
   const { seen } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seed(seen, reds(7))
@@ -583,6 +583,9 @@ test('opening a PR waits for five distinct lookups since the last PR opened', as
   for (const query of ['a', 'A ', 'b', 'c', 'd']) await search(query)
   expect(String(((await open()) as { deny?: string }).deny)).toContain('1 more to go')
   await search('e')
+  // A dry run opens no PR, so the lookups stay for the real one.
+  const dryRun = { tool: 'Bash', command: `${command} --dry-run` }
+  expect(await $.tool.call(dryRun as never)).not.toHaveProperty('deny')
   expect(await open()).not.toHaveProperty('deny')
   // The lookups went to that PR: the next one waits for its own.
   expect(await open()).toHaveProperty('deny')
