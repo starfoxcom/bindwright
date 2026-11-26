@@ -13,8 +13,10 @@ const PLACEHOLDER = /[<{*$~\\:]/;
 // A backticked span, then the section text of a `§` reference: the text runs to the line's end
 // or to the next backtick.
 const SPAN = /`([^`\n]+)`(?: *§ *"?([^`\n]*))?/g;
-// A Markdown heading, without its marks and trailing #s.
-const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/;
+// A Markdown heading, without its marks and trailing #s. Only spaces and tabs separate them, as
+// CommonMark has it, so both engines read the same heading; a line read with Windows endings keeps
+// its \r, which the end takes off.
+const HEADING = /^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*\r?$/;
 
 // The backtick-quoted spans of a text, in order.
 function spansOf(text) {
@@ -79,10 +81,12 @@ function headingsOf(text) {
 }
 
 // The longest of `headings` that a section text opens with. The next character must not
-// continue a word, so a heading "Use" does not match "Users".
+// continue a word, so a heading "Use" does not match "Users". It is read as a whole code point,
+// as Python reads it, so a letter outside the Basic Multilingual Plane continues the word too.
 function sectionHeading(section, headings) {
   const opened = headings.filter((heading) => {
-    const next = section.charAt(heading.length);
+    const code = section.codePointAt(heading.length);
+    const next = code === undefined ? "" : String.fromCodePoint(code);
     return section.startsWith(heading) && !/[\p{L}\p{N}]/u.test(next);
   });
   return opened.sort((a, b) => b.length - a.length)[0];

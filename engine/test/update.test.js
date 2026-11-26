@@ -435,6 +435,21 @@ const SECTION_ROWS = [
     expect: [],
   },
   {
+    name: "a heading ending in a character that is not a space or tab keeps it, in both engines",
+    kit: { [RULE]: addLine(SECTION_LINE) },
+    repo: (r) => {
+      r.write(".bindwright/owned", `${OTHER}\n`);
+      r.write(OTHER, "# Testing﻿\n");
+    },
+    expect: [{ file: RULE, names: [`${OTHER} § Testing`] }],
+  },
+  {
+    name: "a letter outside the BMP after the heading continues the word, in both engines",
+    kit: { [RULE]: addLine(`See \`${OTHER}\` § Testing\u{1D400}.`) },
+    repo: ownTesting,
+    expect: [],
+  },
+  {
     name: "a section ref the base text already holds is not reported",
     kit: { [RULE]: addLine(`New \`${OTHER}\` § Testing.`) },
     repo: (r) => {

@@ -17,8 +17,10 @@ PLACEHOLDER = re.compile(r"[<{*$~\\:]")
 # A backticked span, then the section text of a `§` reference: the text runs to the line's end
 # or to the next backtick.
 SPAN = re.compile(r'`([^`\n]+)`(?: *§ *"?([^`\n]*))?')
-# A Markdown heading, without its marks and trailing #s.
-HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
+# A Markdown heading, without its marks and trailing #s. Only spaces and tabs separate them, as
+# CommonMark has it, so both engines read the same heading; a line read with Windows endings keeps
+# its \r, which the end takes off.
+HEADING = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*\r?$")
 # The folder the templates name a rule from by its bare file name, wherever they point at it.
 RULES = ".claude/rules"
 
