@@ -19,7 +19,8 @@ def manifest(version):
     return '{"name": "tasks", "version": "%s"}\n' % version
 
 
-# Each row: the files the change writes (path inside the repo -> text) and the mods it reports.
+# Each row: the paths the change writes (path inside the repo -> text, or None to delete the file or
+# folder) and the mods it reports.
 ROWS = [
     ("code changed with a higher version passes", {MOD + "/hooks/register.ts": "b", MANIFEST: manifest("1.5.1")}, []),
     ("code changed with the version kept fails", {MOD + "/hooks/register.ts": "b"}, ["tasks"]),
@@ -28,6 +29,9 @@ ROWS = [
     ("tests alone need no new version", {MOD + "/tests/rules.test.ts": "b", MOD + "/hooks/a.test.ts": "b"}, []),
     ("Markdown alone needs no new version", {MOD + "/README.md": "b"}, []),
     ("a mod new since the base passes", {"_core/global-template/mods/fresh/hooks/register.ts": "a"}, []),
+    ("a mod deleted since the base passes", {MOD: None}, []),
+    ("a file moved to another mod checks the mod it left",
+     {MOD + "/hooks/register.ts": None, "_core/global-template/mods/fresh/hooks/register.ts": "a"}, ["tasks"]),
     ("a file outside the mods is not checked", {"engine/home.py": "b"}, []),
 ]
 
@@ -39,6 +43,9 @@ class ModVersionCheckTest(unittest.TestCase):
 
     def _write(self, repo, files):
         for rel, text in files.items():
+            if text is None:
+                self._git(repo, "rm", "-r", "-q", rel)
+                continue
             path = os.path.join(repo, *rel.split("/"))
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as fh:

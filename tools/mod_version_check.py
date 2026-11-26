@@ -5,7 +5,8 @@
 A mod is a folder under _core/global-template/mods/. Its code is every file in it except its tests
 (a tests/ folder, *.test.ts, *.test.tsx) and Markdown. For each mod whose code differs between the
 merge base of <base ref> and HEAD, .claude-plugin/plugin.json at HEAD must name an x.y.z version
-higher than the base's. A mod the base does not have passes. Standard library, Python 3.8+.
+higher than the base's. A mod the base does not have passes, and so does one the change deletes.
+Standard library, Python 3.8+.
 """
 
 import json
@@ -29,7 +30,9 @@ def _is_code(rel):
 
 def changed_mods(base):
     """The mods whose code differs between the merge base of `base` and HEAD, sorted."""
-    names = _git("diff", "--name-only", "%s...HEAD" % base, "--", MODS + "/").splitlines()
+    # Without --no-renames a file moved out of a mod lists only its new path, so the mod it left
+    # would go unchecked.
+    names = _git("diff", "--name-only", "--no-renames", "%s...HEAD" % base, "--", MODS + "/").splitlines()
     mods = set()
     for name in names:
         mod, _, rel = name[len(MODS) + 1:].partition("/")
@@ -53,13 +56,20 @@ def version_at(rev, mod):
     return tuple(int(part) for part in match.groups()) if match else "unreadable"
 
 
+def _exists_at_head(mod):
+    return bool(_git("ls-tree", "-d", "HEAD", "--", "%s/%s" % (MODS, mod)).strip())
+
+
 def problems(base):
-    """One line per mod whose code changed without its version moving up."""
+    """One line per mod whose code changed without its version moving up. A mod the change
+    deletes whole passes, since nothing of it ships."""
     merge_base = _git("merge-base", base, "HEAD").strip()
     found = []
     for mod in changed_mods(base):
         before, after = version_at(merge_base, mod), version_at("HEAD", mod)
         if before is None or before == "unreadable":
+            continue
+        if after is None and not _exists_at_head(mod):
             continue
         if after is None or after == "unreadable":
             found.append("%s: its manifest names no x.y.z version" % mod)
