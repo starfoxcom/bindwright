@@ -49,10 +49,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # package.json, which tells Node the .js files are ES modules.
 ENGINE_FILES = [
     "package.json", "core-files.json", "cli.js",
-    "bind.js", "model.js", "render.js", "setupcode.js", "apply.js", "keep.js", "update.js",
+    "bind.js", "model.js", "render.js", "setupcode.js", "apply.js", "keep.js", "update.js", "missing.js",
     "layers.js", "share.js", "doctor.js", "report.js", "audit.js", "remove.js", "staging.js", "releases.js",
     "exclude.js", "propose.js",
-    "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py",
+    "bind.py", "model.py", "render.py", "setupcode.py", "apply.py", "keep.py", "update.py", "missing.py",
     "layers.py", "share.py", "doctor.py", "report.py", "audit.py", "remove.py", "staging.py", "releases.py",
     "exclude.py", "propose.py",
     "home.py", "home_files.py", "mod_update.py", "helper_install.py", "authored.py", "skill_contracts.py",

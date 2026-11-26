@@ -10,7 +10,7 @@ After a change in `_core/`, re-bind with `node engine/cli.js --update .` (the sa
 
 - **Live page:** `page/`, deployed at https://starfoxcom.github.io/bindwright/ (the root `index.html` redirects there). Hand-authored, no build step.
 - **Templates:** `_core/`. **Bind engine:** `engine/`, run by the plugin (`plugin/`) and by the page's file preview.
-- **Versioning:** SemVer, in `VERSION` and `CHANGELOG.md`; `.claude/rules/releases.md` holds the release flow.
+- **Versioning:** SemVer, in `VERSION` and `CHANGELOG.md`; `.claude/rules/releases.md` holds the release flow. Each mod under `_core/global-template/mods/` also carries its own SemVer in `.claude-plugin/plugin.json`, raised in the PR that changes its code and sized the same way (`tools/mod_version_check.py` fails a PR that forgets); the plugin's skills ship inside the plugin and take its version.
 
 ## Review discipline: strict, because the bundle ships to every user
 

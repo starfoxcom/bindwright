@@ -26,6 +26,12 @@ Mistakes this repo has made more than once. Each item names a trigger the diff s
 | A test or script compares a file's text line by line, or replays a saved file | It drops `\r` before comparing, since a Windows checkout turns line endings into CRLF | #382, #938 |
 | Rule, README or CHANGELOG text states how many of something there are (checks, counts, rows, tests) | The number matches the code after this diff | #940 |
 | A hook gains a path for input it cannot read (an exception, a missing program, a parse that fails) | The path does what the hook's own header says it does with input it cannot read, whether that is to block with what to fix or to let the call through | #350, #740 |
+| A new kind of write to an outside service (a POST, PUT, PATCH or DELETE call, or an SDK call that creates or changes something) | Its tests run against a fake that refuses what the service refuses, and the PR's Notes carry a `Live check:` line from one real call | #1411, #1415 |
+| A work PR (any but a release, hotfix or cascade PR, which cut or carry a dated section by design) adds a `CHANGELOG.md` line | Every line it adds sits under `## [Unreleased]`, never in a section whose heading carries a date: a merge of the base after a release can move the PR's lines into the released section | #1439, #1440 |
+
+## Deep review lenses
+
+For the deep tier only; the routine review skips this section. Read the diff through four lenses, each over the whole diff: every changed line inside the function or block around it, not the hunk alone; what the change removes or stops doing, and what relied on it; the callers of every function, signature, default or format it changes, found by searching the repo, and whether each still works; and this project's rules in `CLAUDE.md` and `.claude/rules/`, checked against each changed file they cover.
 
 ## Bindwright template text
 

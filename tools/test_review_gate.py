@@ -1,5 +1,8 @@
 """Tests for .github/scripts/review_gate.py, the review gate's shared logic."""
 
+import base64
+import contextlib
+import io
 import json
 import os
 import runpy
@@ -12,6 +15,12 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, ".github", "scripts"))
 import review_gate as gate  # noqa: E402
+
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import github_writes  # noqa: E402
+
+# The real workflow check, kept before the upsert tests stand in for it.
+READY_CHECK = gate._statuses_ready
 
 SCRIPT = os.path.join(ROOT, ".github", "scripts", "review_gate.py")
 MARK = r"Code Review[^a-zA-Z]+claude-code-templates"
@@ -479,11 +488,24 @@ class Upsert(unittest.TestCase):
         # A fake check store. `wipes` stands for another workflow whose stale
         # write lands right after each of the next N PATCHes, putting back the
         # start state.
-        self.calls, self.existing, self.wipes = [], [], 0
+        # `status_error` stands for a status write that GitHub refuses, and
+        # `overwrite` for a newer run's write landing right after the next PATCH.
+        # `refuse_description` stands for GitHub refusing any status that carries one.
+        self.calls, self.existing, self.wipes, self.status_error, self.overwrite = [], [], 0, None, None
+        self.refuse_description = False
         real, settle = gate._gh, gate.SETTLE_SECONDS
 
         def fake(path, method="GET", body=None):
             self.calls.append((method, path, body))
+            refused = method != "GET" and github_writes.refusal(method, path, body)
+            if refused:
+                raise gate.GateError("gh api %s %s failed: gh: Validation failed: %s" % (method, path, refused))
+            if "/statuses/" in path:
+                if self.status_error:
+                    raise gate.GateError(self.status_error)
+                if self.refuse_description and "description" in body:
+                    raise gate.GateError("gh api POST %s failed: gh: Validation failed (HTTP 422)" % path)
+                return {}
             if method == "GET":
                 return {"check_runs": self.existing}
             if method == "POST":
@@ -491,11 +513,15 @@ class Upsert(unittest.TestCase):
                 return {}
             run = next(r for r in self.existing if path.endswith("/%d" % r["id"]))
             run["external_id"] = body["external_id"]
+            if self.overwrite:
+                run["external_id"], self.overwrite = self.overwrite, None
             if self.wipes:
                 self.wipes -= 1
                 run["external_id"] = ""
             return {}
-        gate._gh, gate.SETTLE_SECONDS = fake, (0, 0)
+        self.ready, ready = True, gate._statuses_ready
+        gate._gh, gate.SETTLE_SECONDS, gate._statuses_ready = fake, (0, 0), lambda repo: self.ready
+        self.addCleanup(setattr, gate, "_statuses_ready", ready)
         self.addCleanup(setattr, gate, "_gh", real)
         self.addCleanup(setattr, gate, "SETTLE_SECONDS", settle)
 
@@ -505,7 +531,7 @@ class Upsert(unittest.TestCase):
     def test_first_call_creates_the_check_with_the_start_state(self):
         out = gate.upsert("o/r", self.SHA, "Set up by the routine workflow.")
         self.assertEqual(out["status"], "in_progress")
-        [(method, path, body)] = [c for c in self.calls if c[0] != "GET"]
+        [(method, path, body)] = [c for c in self.calls if c[0] != "GET" and "/check-runs" in c[1]]
         self.assertEqual((method, path), ("POST", "repos/o/r/check-runs"))
         self.assertEqual((body["name"], body["head_sha"], body["status"]), ("Review gate", self.SHA, "in_progress"))
         self.assertNotIn("conclusion", body)
@@ -539,6 +565,88 @@ class Upsert(unittest.TestCase):
         with self.assertRaises(gate.GateError):
             gate.upsert("o/r", self.SHA, deep="pass", order="5.1.1")
         self.assertEqual(len(self.patches()), gate.WRITE_ROUNDS)
+
+    def test_each_write_sets_the_commit_status_first(self):
+        # GitHub refuses a description holding a character above U+FFFF, such as
+        # the verdict emoji in a passing title.
+        rows = [
+            ("in progress reads pending", {}, "pending", "Routine review in progress"),
+            ("a pass reads success, without its emoji",
+             {"triage": "reviewable", "routine": "pass", "order": "5.1.1"}, "success", "Routine review"),
+            ("a block reads failure",
+             {"triage": "reviewable", "routine": "block", "order": "5.1.1"}, "failure",
+             "Blocked by the routine review"),
+        ]
+        for name, facts, state, description in rows:
+            with self.subTest(name):
+                self.calls, self.existing = [], []
+                gate.upsert("o/r", self.SHA, **facts)
+                writes = [(path, body) for method, path, body in self.calls if method != "GET"]
+                self.assertEqual(writes[0], ("repos/o/r/statuses/" + self.SHA,
+                                             {"state": state, "context": "Review gate",
+                                              "description": description}))
+                self.assertEqual(writes[1][0], "repos/o/r/check-runs")
+
+    def test_the_last_status_follows_the_check_a_newer_run_left(self):
+        self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
+        self.overwrite = "triage=reviewable;routine=block;escalated=no;deep=none;routine_by=9.1.1;deep_by=0.0.0"
+        gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        states = [body["state"] for _, path, body in self.calls if "/statuses/" in path]
+        self.assertEqual((states[0], states[-1]), ("success", "failure"))
+
+    def test_no_status_until_both_workflows_may_write_one(self):
+        self.ready = False
+        out = gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        self.assertEqual([path for _, path, _ in self.calls if "/statuses/" in path], [])
+        self.assertEqual((out["conclusion"], self.existing[0]["conclusion"]), ("success", "success"))
+
+    def test_the_workflows_read_decides_whether_statuses_are_written(self):
+        granted, missing = "    permissions:\n      statuses: write\n", "      # statuses: write\n"
+        rows = [
+            ("both workflows grant it", {"review": granted, "claude": granted}, True),
+            ("one workflow lacks it", {"review": granted, "claude": missing}, False),
+            ("a lookup fails", {"review": granted, "claude": None}, False),
+        ]
+        self.addCleanup(setattr, gate, "_READY", {})
+        for name, texts, expected in rows:
+            with self.subTest(name):
+                def fake(path, method="GET", body=None):
+                    if path == "repos/o/r":
+                        return {"default_branch": "main"}
+                    text = texts["review" if "claude-code-review" in path else "claude"]
+                    if text is None:
+                        raise gate.GateError("gh api GET failed: Not Found (HTTP 404)")
+                    return {"content": base64.b64encode(text.encode("utf-8")).decode("ascii")}
+                gate._gh, gate._READY = fake, {}
+                self.assertIs(READY_CHECK("o/r"), expected)
+
+    def test_a_job_without_the_status_permission_still_writes_the_check(self):
+        self.status_error = "gh api POST failed: Resource not accessible by integration (HTTP 403)"
+        warning = io.StringIO()
+        with contextlib.redirect_stderr(warning):
+            out = gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        self.assertEqual((out["conclusion"], self.existing[0]["conclusion"]), ("success", "success"))
+        self.assertIn("lacks statuses: write", warning.getvalue())
+
+    def test_a_refused_description_still_moves_the_status_with_the_verdict(self):
+        # The pending status took, the passing one is refused: without the
+        # retry, the newest status would stay pending and the merge blocked.
+        gate.upsert("o/r", self.SHA, "Set up.")
+        self.refuse_description = True
+        with contextlib.redirect_stderr(io.StringIO()):
+            out = gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        statuses = [body for method, path, body in self.calls if "/statuses/" in path]
+        self.assertEqual((out["conclusion"], statuses[-1]), ("success", {"state": "success", "context": "Review gate"}))
+
+    def test_any_other_status_failure_still_writes_the_check_then_fails(self):
+        # A refused status must not keep the verdict off the check, or a gate
+        # whose status writes fail could never pass, its own repair included.
+        self.status_error = "gh api POST failed: API rate limit exceeded (HTTP 403)"
+        self.existing = [{"id": 7, "name": "Review gate", "external_id": ""}]
+        with self.assertRaises(gate.GateError), contextlib.redirect_stderr(io.StringIO()):
+            gate.upsert("o/r", self.SHA, triage="reviewable", routine="pass", order="5.1.1")
+        [patch] = self.patches()
+        self.assertEqual(patch["conclusion"], "success")
 
     def test_a_newer_runs_facts_count_as_held(self):
         self.existing = [{"id": 7, "name": "Review gate", "external_id": "routine=block;routine_by=9.1.1"}]
@@ -722,146 +830,12 @@ class Command(unittest.TestCase):
                 self.assertIn("error", json.loads(out))
 
 
-# A stand-in for the gh CLI that keeps a pretend repository in a JSON file,
-# logs every call, and runs --jq filters through the real jq.
-FAKE_GH = r'''
-import json, os, subprocess, sys
-
-STATE, LOG = os.environ["FAKE_GH_STATE"], os.environ["FAKE_GH_LOG"]
-VALUED = {"-X", "--jq", "--input", "-F", "-f", "-H", "-R", "--json", "--color",
-          "--description", "--body", "--limit"}
-
-
-def parse(argv):
-    pos, opts = [], {}
-    it = iter(argv)
-    for arg in it:
-        if arg in VALUED:
-            opts.setdefault(arg, []).append(next(it))
-        elif arg.startswith("-"):
-            opts[arg] = [True]
-        else:
-            pos.append(arg)
-    return pos, opts
-
-
-def out(data, opts):
-    if "--silent" in opts:
-        return 0
-    if isinstance(data, str) and "--jq" not in opts:
-        sys.stdout.write(data)
-        return 0
-    if "--jq" in opts:
-        run = subprocess.run(["jq", "-r", "-c", opts["--jq"][0]], input=json.dumps(data),
-                             capture_output=True, text=True)
-        sys.stdout.write(run.stdout)
-        sys.stderr.write(run.stderr)
-        return run.returncode
-    sys.stdout.write(json.dumps(data))
-    return 0
-
-
-def not_found():
-    sys.stderr.write("gh: Not Found (HTTP 404)\n")
-    return 1
-
-
-def api(path, opts, st):
-    method = opts.get("-X", ["GET"])[0]
-    path = path.split("?")[0]
-    repo = "repos/" + st["name"]
-    sets = st["rulesets"]
-    if path.endswith("/contents/.github/workflows/claude-code-review.yml"):
-        return {} if "/".join(path.split("/")[1:3]) in st.get("with_workflow", []) else KeyError
-    if method == "PATCH" and path == repo:
-        for field in opts.get("-F", []):
-            key, value = field.split("=", 1)
-            st["repo"][key] = {"true": True, "false": False}.get(value, value)
-        return None
-    if method == "POST" and path == repo + "/rulesets":
-        body = json.load(sys.stdin)
-        body["id"] = 100 + len(sets)
-        body["source_type"] = "Repository"
-        sets.append(body)
-        return None
-    if method == "PUT" and path.startswith(repo + "/rulesets/"):
-        rid = int(path.rsplit("/", 1)[1])
-        body = json.load(sys.stdin)
-        body.update(id=rid, source_type="Repository")
-        sets[:] = [body if r["id"] == rid else r for r in sets]
-        return None
-    if path == repo:
-        return dict(st["repo"], full_name=st["name"])
-    if path == repo + "/rulesets":
-        return [{k: r[k] for k in ("id", "name", "target", "source_type")} for r in sets]
-    if path.startswith(repo + "/rulesets/"):
-        return next((r for r in sets if str(r["id"]) == path.rsplit("/", 1)[1]), KeyError)
-    if path.startswith(repo + "/labels/"):
-        name = path.rsplit("/", 1)[1]
-        return {"name": name} if name in st["labels"] else KeyError
-    if path.startswith(repo + "/branches/"):
-        name = path.split("/branches/", 1)[1]
-        return {"name": name} if name in st["branches"] else KeyError
-    if path == repo + "/issues/comments":
-        return st.get("comments", [])
-    if path == repo + "/contents/.github/review-gate.yml":
-        return st["gate_yml"] if "gate_yml" in st else KeyError
-    if path == repo + "/contents/.github/scripts/review_gate.py":
-        return {"forbidden": PermissionError, "absent": KeyError}.get(st.get("gate_script"), {})
-    if path.startswith("orgs/"):
-        return {"installations": st.get("installations", [])}
-    if path == "user/memberships/orgs":
-        memberships = st.get("memberships", [])
-        return PermissionError if memberships == "forbidden" else memberships
-    return KeyError
-
-
-def main():
-    sys.stdout.reconfigure(newline="\n")  # Windows would end lines with CRLF
-    pos, opts = parse(sys.argv[1:])
-    with open(STATE) as f:
-        st = json.load(f)
-    before = json.dumps(st)
-    with open(LOG, "a") as f:
-        f.write(json.dumps(sys.argv[1:]) + "\n")
-    cmd = pos[:2]
-    data = None
-    if pos[0] == "api":
-        data = api(pos[1], opts, st)
-    elif cmd == ["repo", "view"]:
-        data = {"nameWithOwner": st["name"]}
-    elif cmd == ["label", "create"]:
-        st["labels"].append(pos[2])
-    elif cmd == ["secret", "list"]:
-        data = [{"name": n} for n in st["secrets"]]
-    elif cmd == ["repo", "list"]:
-        names = st.get("org_repos", {}).get(pos[2], []) if len(pos) > 2 else st.get("owned", [])
-        data = [{"nameWithOwner": n} for n in names]
-    elif cmd == ["secret", "set"]:
-        st["secrets"].append(pos[2])
-        value = "" if sys.stdin.isatty() else sys.stdin.read()
-        st.setdefault("written", []).append([opts.get("-R", [""])[0], pos[2], value])
-    if data is KeyError:
-        return not_found()
-    if data is PermissionError:
-        sys.stderr.write("gh: Resource not accessible by integration (HTTP 403)\n")
-        return 1
-    # The script pipes one call into another (read a ruleset, write it back),
-    # so two fakes run at once: only a call that changed the state writes it,
-    # and the file is swapped whole, never seen half written.
-    if json.dumps(st) != before:
-        with open(STATE + ".new", "w") as f:
-            json.dump(st, f)
-        os.replace(STATE + ".new", STATE)
-    return out(data, opts) if data is not None else 0
-
-
-sys.exit(main())
-'''
+# A stand-in for the gh CLI, run as a script.
+FAKE_GH = os.path.join(ROOT, "tools", "fake_gh.py")
 
 SETUP = os.path.join(ROOT, ".github", "scripts", "setup-review-gate.sh")
 SWEEP = os.path.join(ROOT, ".github", "scripts", "set-review-tokens.sh")
-WRITES = (["label", "create"], ["secret", "set"])
+WRITES = (["label", "create"], ["secret", "set"], ["variable", "set"])
 
 
 def fresh_repo(**changes):
@@ -893,6 +867,14 @@ def old_ruleset(rid=7, include="refs/heads/main"):
     }
 
 
+def pull_request_rule(methods):
+    """A pull_request rule as GitHub returns it: it never stores one without every required parameter."""
+    return {"type": "pull_request", "parameters": {
+        "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": False,
+        "require_code_owner_review": False, "require_last_push_approval": False,
+        "required_review_thread_resolution": False, "allowed_merge_methods": methods}}
+
+
 def tool(name):
     from shutil import which
     return which(name)
@@ -904,21 +886,32 @@ class SetupScript(unittest.TestCase):
         self.dir = tempfile.mkdtemp()
         self.state = os.path.join(self.dir, "state.json")
         self.log = os.path.join(self.dir, "log.jsonl")
-        stub = os.path.join(self.dir, "fake_gh.py")
-        with open(stub, "w") as f:
-            f.write(FAKE_GH)
+        stub = FAKE_GH
         gh = os.path.join(self.dir, "gh")
         with open(gh, "w", newline="\n") as f:
             f.write('#!/usr/bin/env bash\nexec "%s" "%s" "$@"\n'
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False):
+    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False, guard_settings=None,
+                  guard_mode=None):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
+        # A Claude config folder of the test's own, so this computer's usage guard settings stay out of the runs.
+        config = os.path.join(self.dir, "config")
+        settings = os.path.join(config, "mods-data", "usage-guard", "settings.json")
+        if guard_settings is None and os.path.exists(settings):
+            os.remove(settings)
+        if guard_settings is not None:
+            os.makedirs(os.path.dirname(settings), exist_ok=True)
+            with open(settings, "w", newline="") as f:
+                f.write(guard_settings)
+            if guard_mode is not None:
+                os.chmod(settings, guard_mode)
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
-                   PATH=self.dir + os.pathsep + os.environ["PATH"])
+                   CLAUDE_CONFIG_DIR=config.replace("\\", "/"),
+                   FAKE_GH_TOOLS=os.path.join(ROOT, "tools"), PATH=self.dir + os.pathsep + os.environ["PATH"])
         # These tests may run inside a Claude Code session, which the token script refuses.
         env.pop("CLAUDECODE", None)
         if in_claude_code:
@@ -1038,8 +1031,7 @@ class SetupScript(unittest.TestCase):
         ruleset["bypass_actors"] = []
         ruleset["rules"][1]["parameters"]["required_status_checks"] = [
             {"context": "Review gate", "integration_id": 15368}]
-        ruleset["rules"] += [{"type": "deletion"}, {"type": "pull_request", "parameters": {
-            "required_approving_review_count": 0, "allowed_merge_methods": ["squash"]}}]
+        ruleset["rules"] += [{"type": "deletion"}, pull_request_rule(["squash"])]
         state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset],
                            branches=["main"])
         run, _, _ = self.run_setup(state, "--check")
@@ -1048,14 +1040,12 @@ class SetupScript(unittest.TestCase):
         run, after, _ = self.run_setup(state)
         self.assertIn("set up   ruleset on main", run.stdout)
         rule = next(r for r in after["rulesets"][0]["rules"] if r["type"] == "pull_request")
-        self.assertEqual(rule["parameters"], {"required_approving_review_count": 0,
-                                              "allowed_merge_methods": ["merge"]})
+        self.assertEqual(rule, pull_request_rule(["merge"]))
 
     def test_a_ruleset_covering_both_branches_settles_on_their_combined_methods(self):
         ruleset = old_ruleset()
         ruleset["conditions"]["ref_name"]["include"] = ["refs/heads/main", "refs/heads/develop"]
-        ruleset["rules"] += [{"type": "pull_request", "parameters": {
-            "allowed_merge_methods": ["squash"]}}]
+        ruleset["rules"] += [pull_request_rule(["squash"])]
         state = fresh_repo(secrets=["CLAUDE_CODE_OAUTH_TOKEN"], rulesets=[ruleset])
         # A run for main alone must not narrow develop's PRs through the shared rule.
         for branches in ([], ["--branch", "main"]):
@@ -1073,8 +1063,7 @@ class SetupScript(unittest.TestCase):
         ruleset = old_ruleset()
         ruleset["rules"][1]["parameters"]["required_status_checks"].append(
             {"context": "Review gate", "integration_id": 15368})
-        ruleset["rules"] += [{"type": "deletion"}, {"type": "pull_request", "parameters": {
-            "allowed_merge_methods": ["merge"]}}]
+        ruleset["rules"] += [{"type": "deletion"}, pull_request_rule(["merge"])]
         ruleset["bypass_actors"] = []
         state = fresh_repo(rulesets=[ruleset], branches=["main"], gate_yml="checks: two\n")
         run, _, _ = self.run_setup(state, "--check")
@@ -1205,6 +1194,55 @@ class SetupScript(unittest.TestCase):
             self.assertEqual(run.returncode, 2, name)
             self.assertNotIn("written", after, name)
 
+    def test_the_ceiling_alone_is_set_without_asking_for_a_token(self):
+        state = fresh_repo(owned=["acme/game", "acme/site", "acme/notes"],
+                           with_workflow=["acme/game", "acme/site"])
+        run, after, _ = self.run_setup(state, "--ceiling", "98", script=SWEEP, guard_settings='{"wrapUpAt": 90}')
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(sorted(after["variables"]), [["acme/game", "REVIEW_ACCOUNT_CEILING", "98"],
+                                                      ["acme/site", "REVIEW_ACCOUNT_CEILING", "98"]])
+        self.assertNotIn("written", after)
+        self.assertNotIn("token", run.stderr)
+
+    def test_without_a_ceiling_the_sweep_copies_the_usage_guards_percent(self):
+        token = "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n"
+        for name, settings, expected in (
+                ("a whole percent", '{\n  "wrapUpAt": 98\n}\n', "98"),
+                ("the last key, with no comma after it", '{"compactAbovePercent": 35, "wrapUpAt": 100}', "100"),
+                ("no settings file", None, None),
+                ("no pause percent saved", '{"compactAbovePercent": 35}', None),
+                ("CRLF line endings", '{\r\n  "wrapUpAt": 98\r\n}\r\n', "98"),
+                ("a fraction", '{"wrapUpAt": 98.5}', None),
+                ("an exponent JSON.stringify writes", '{"wrapUpAt": 1e+21}', None),
+                ("a hand-written exponent", '{"wrapUpAt": 9e1}', None),
+                ("a negative", '{"wrapUpAt": -98}', None),
+                ("a string", '{"wrapUpAt": "98"}', None),
+                ("zero", '{"wrapUpAt": 0}', None),
+                ("past 100", '{"wrapUpAt": 150}', None)):
+            run, after, _ = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
+                                           stdin=token, guard_settings=settings)
+            self.assertEqual(run.returncode, 0, name + run.stderr)
+            self.assertEqual(len(after["written"]), 1, name)
+            want = [["acme/game", "REVIEW_ACCOUNT_CEILING", expected]] if expected else None
+            self.assertEqual(after.get("variables"), want, name)
+
+    def test_an_unreadable_guard_settings_file_leaves_the_variable_and_the_run_goes_on(self):
+        run, after, _ = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
+                                       stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n",
+                                       guard_settings='{"wrapUpAt": 98}', guard_mode=0)
+        if os.access(os.path.join(self.dir, "config", "mods-data", "usage-guard", "settings.json"), os.R_OK):
+            self.skipTest("this user or file system reads a file with no permissions")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(len(after["written"]), 1)
+        self.assertNotIn("variables", after)
+
+    def test_a_ceiling_outside_1_to_100_is_refused_before_any_call(self):
+        for ceiling in ("0", "101", "9x", "-5", "050"):
+            run, after, calls = self.run_setup(fresh_repo(), "--ceiling", ceiling, "--repo", "acme/game",
+                                               script=SWEEP)
+            self.assertEqual(run.returncode, 2, ceiling)
+            self.assertEqual(calls, [], ceiling)
+
     def test_an_api_key_or_a_later_token_stands_in_for_the_first_token(self):
         run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY"]), "--check")
         self.assertIn("ok       secret ANTHROPIC_API_KEY, with no account token", run.stdout)
@@ -1233,6 +1271,109 @@ class SetupScript(unittest.TestCase):
         self.assertIn("ok       Claude GitHub App", run.stdout)
         run, _, _ = self.run_setup(fresh_repo(), "--check")
         self.assertIn("note     Claude GitHub App not confirmed", run.stdout)
+
+
+class GitHubWrites(unittest.TestCase):
+    """The test fake refuses what GitHub refuses, so no write passes here that fails there."""
+
+    STATUS = "repos/o/r/statuses/" + "a" * 40
+
+    def test_status_descriptions_as_github_takes_them(self):
+        # Each row was sent to GitHub's real statuses API, which took or refused it.
+        rows = [
+            ("plain text", "Routine review", True),
+            ("a 4-byte emoji", "Routine review \U0001f7e2", False),
+            ("3-byte characters", "Routine review ✓ ·", True),
+            ("140 characters", "x" * 140, True),
+            ("141 characters", "x" * 141, False),
+            ("empty", "", True),
+        ]
+        for name, description, taken in rows:
+            with self.subTest(name):
+                body = {"state": "success", "context": "Review gate", "description": description}
+                self.assertEqual(github_writes.refusal("POST", self.STATUS, body) is None, taken)
+
+    def test_check_runs_as_github_takes_them(self):
+        create = "repos/o/r/check-runs"
+        done = {"name": "Review gate", "head_sha": "a" * 40, "status": "completed", "conclusion": "success",
+                "output": {"title": "Routine review", "summary": "Passed."}}
+        rows = [
+            ("a completed run", done, True),
+            ("completed with no conclusion", dict(done, conclusion=None), False),
+            ("an unknown conclusion", dict(done, conclusion="passed"), False),
+            ("output with no summary", dict(done, output={"title": "Routine review"}), False),
+            ("a summary at the limit", dict(done, output={"title": "t", "summary": "x" * 65535}), True),
+            ("a summary past the limit", dict(done, output={"title": "t", "summary": "x" * 65536}), False),
+            ("no head_sha", {k: v for k, v in done.items() if k != "head_sha"}, False),
+        ]
+        for name, body, taken in rows:
+            with self.subTest(name):
+                self.assertEqual(github_writes.refusal("POST", create, body) is None, taken)
+
+    def test_every_title_becomes_a_description_github_takes(self):
+        rows = [
+            ("the verdict emoji goes", "Routine review \U0001f7e2", "Routine review"),
+            ("a run of spaces closes up", "Routine  and\tdeep reviews", "Routine and deep reviews"),
+            ("a long title is cut at 140", "y" * 150, "y" * 140),
+        ]
+        for name, title, description in rows:
+            with self.subTest(name):
+                self.assertEqual(gate._status_description(title), description)
+                body = {"state": "success", "context": "Review gate", "description": description}
+                self.assertIsNone(github_writes.refusal("POST", self.STATUS, body))
+
+    def test_setup_writes_as_github_takes_them(self):
+        # Limits from GitHub's REST reference for each endpoint the setup script writes to.
+        pull_request = {"type": "pull_request", "parameters": {
+            "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": True,
+            "require_code_owner_review": False, "require_last_push_approval": False,
+            "required_review_thread_resolution": False, "allowed_merge_methods": ["merge"]}}
+        checks = {"type": "required_status_checks", "parameters": {
+            "strict_required_status_checks_policy": False, "required_status_checks": [{"context": "Review gate"}]}}
+        ruleset = {"name": "main-protection", "target": "branch", "enforcement": "active",
+                   "bypass_actors": [], "rules": [{"type": "deletion"}, pull_request, checks]}
+
+        def with_rule(rule):
+            return dict(ruleset, rules=[rule])
+
+        rows = [
+            ("a full ruleset", "POST", "repos/o/r/rulesets", ruleset, True),
+            ("a ruleset with no enforcement", "POST", "repos/o/r/rulesets",
+             {k: v for k, v in ruleset.items() if k != "enforcement"}, False),
+            ("a replaced ruleset may leave out its name", "PUT", "repos/o/r/rulesets/7",
+             {k: v for k, v in ruleset.items() if k != "name"}, True),
+            ("an unknown enforcement", "PUT", "repos/o/r/rulesets/7", dict(ruleset, enforcement="on"), False),
+            ("an unknown rule type", "PUT", "repos/o/r/rulesets/7", with_rule({"type": "review_gate"}), False),
+            ("a pull_request rule missing a parameter", "PUT", "repos/o/r/rulesets/7",
+             with_rule({"type": "pull_request", "parameters": {"required_approving_review_count": 0}}), False),
+            ("no merge method allowed", "PUT", "repos/o/r/rulesets/7", with_rule(
+                {"type": "pull_request", "parameters": dict(pull_request["parameters"], allowed_merge_methods=[])}),
+             False),
+            ("a status check with no context", "PUT", "repos/o/r/rulesets/7", with_rule(
+                {"type": "required_status_checks", "parameters": dict(
+                    checks["parameters"], required_status_checks=[{"integration_id": 1}])}), False),
+            ("an unknown bypass actor", "PUT", "repos/o/r/rulesets/7",
+             dict(ruleset, bypass_actors=[{"actor_id": 5, "actor_type": "Admin"}]), False),
+            ("merge settings as booleans", "PATCH", "repos/o/r", {"allow_merge_commit": True}, True),
+            ("a merge setting as text", "PATCH", "repos/o/r", {"allow_merge_commit": "yes"}, False),
+            ("a label", "POST", "repos/o/r/labels", {"name": "x", "color": "B60205", "description": "d"}, True),
+            ("a label color with a #", "POST", "repos/o/r/labels", {"name": "x", "color": "#B60205"}, False),
+            ("a label description at 100", "POST", "repos/o/r/labels", {"name": "x", "description": "d" * 100}, True),
+            ("a label description at 101", "POST", "repos/o/r/labels", {"name": "x", "description": "d" * 101},
+             False),
+            ("a secret", "PUT", "repos/o/r/actions/secrets/CLAUDE_CODE_OAUTH_TOKEN_2", {"value": "t"}, True),
+            ("a secret named GITHUB_", "PUT", "repos/o/r/actions/secrets/GITHUB_TOKEN", {"value": "t"}, False),
+            ("a secret name starting with a digit", "PUT", "repos/o/r/actions/secrets/2TOKEN", {"value": "t"},
+             False),
+            ("a secret at 48 KB", "PUT", "repos/o/r/actions/secrets/T", {"value": "x" * 49152}, True),
+            ("a secret past 48 KB", "PUT", "repos/o/r/actions/secrets/T", {"value": "x" * 49153}, False),
+        ]
+        for name, method, path, body, taken in rows:
+            with self.subTest(name):
+                self.assertEqual(github_writes.refusal(method, path, body) is None, taken)
+
+    def test_a_write_with_no_rule_is_refused(self):
+        self.assertIn("no rule", github_writes.refusal("DELETE", "repos/o/r/check-runs/1", None))
 
 
 if __name__ == "__main__":

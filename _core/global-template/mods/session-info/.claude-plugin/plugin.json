@@ -1,6 +1,6 @@
 {
   "name": "session-info",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "A row above the prompt naming the model and effort, the project, and the git branch with its unsaved changes and its distance from the upstream.",
   "types": "./types/index.d.ts",
   "userConfig": {

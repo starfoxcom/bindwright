@@ -652,11 +652,14 @@ test("a head pushed long after the session's own push updates the row and wakes 
 // The session's own push hours later still wakes it, even when GitHub names the new commit only later.
 test('an own push hours later wakes the session for its new head', LONG, async ($, on) => {
   const { seen, clock } = world(on)
+  on('tool.call', { tool: 'WebSearch' }, async () => ({ result: 'done' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
   await clock.advance(2 * HOUR)
+  // The red round asks for a step back: the fix is pushed after the research.
+  for (const query of ['a', 'b', 'c', 'd', 'e']) await $.tool.call({ tool: 'WebSearch', query } as never)
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   seen.head = 'b2'
   seen.bucket = 'pass'
@@ -668,11 +671,14 @@ test('an own push hours later wakes the session for its new head', LONG, async (
 // A silent watch still running when the session pushes becomes the session's own again.
 test('an own push onto a silent watch still running wakes the session', LONG, async ($, on) => {
   const { seen, clock } = world(on)
+  on('tool.call', { tool: 'WebSearch' }, async () => ({ result: 'done' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
   await clock.advance(2 * HOUR)
+  // The red round asks for a step back: the fix is pushed after the research.
+  for (const query of ['a', 'b', 'c', 'd', 'e']) await $.tool.call({ tool: 'WebSearch', query } as never)
   seen.head = 'b2'
   seen.bucket = 'pending'
   await clock.advance(10 * 60_000 + 2 * POLL_MS)
@@ -756,12 +762,15 @@ test("a same-head push made while a poll reads a silent watch's checks makes it 
 // A push made while a poll reads the saved file stays the session's own: the poll does not undo its mark.
 test('an own push made mid-poll keeps the session its wake', LONG, async ($, on) => {
   const { seen, clock } = world(on)
+  on('tool.call', { tool: 'WebSearch' }, async () => ({ result: 'done' }))
   seen.isReadable = true
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let poll = 0; poll < 3; poll++) await clock.advance(POLL_MS)
   await clock.advance(2 * HOUR)
+  // The red round asks for a step back: the fix is pushed after the research.
+  for (const query of ['a', 'b', 'c', 'd', 'e']) await $.tool.call({ tool: 'WebSearch', query } as never)
   // Wait for a poll that asks GitHub about the PR, so the next such poll is ten minutes on.
   seen.ghCalls = []
   while (!seen.ghCalls.some(call => call.includes('state,headRefOid'))) await clock.advance(POLL_MS)

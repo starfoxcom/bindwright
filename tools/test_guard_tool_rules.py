@@ -137,43 +137,12 @@ class SecretWriteRowTest(unittest.TestCase):
 
 
 class LengthRowsTest(unittest.TestCase):
-    """A commit subject over 72 characters, and a PR title over 64 where PRs squash-merge, are logged when
-    they are the first message or title of a plain Bash command; anything else, or a command Bash would
-    change, is not."""
+    """After a commit or PR command, a commit subject over 72 characters, and a PR title over 64 where PRs
+    squash-merge, get a note from what git and gh hold; the rows that read the repo's saved answers and
+    its changelog are logged before the command runs."""
 
-    SUBJECT = "a commit subject over 72 characters"
-    TITLE = "a PR title over 64 characters where PRs squash-merge"
     LONG = "docs(changelog): say the four file types are now measured wherever their row stays"  # 82
-    AT_LIMIT = "x" * 72
     TITLE_LONG = "fix(size-check): measure .mts, .cts, .hxx and .inl with their language"  # 70
-    SUBJECT_ROWS = (
-        ("-m, double quotes", f'git commit -m "{LONG}"', "bash", True),
-        ("a cluster ending in m", f"git commit -am '{LONG}'", "bash", True),
-        ("git's own options first", f'git -C sub commit -m "{LONG}"', "bash", True),
-        ("--message=", f'git commit --message="{LONG}"', "bash", True),
-        ("a value stuck to -m", f'git commit -m"{LONG}"', "bash", True),
-        ("a flag before -m", f'git commit --amend -m "{LONG}"', "bash", True),
-        ("the second command of a line", f'git add . && git commit -m "{LONG}"', "bash", True),
-        ("a body under a long subject", f'git commit -m "{LONG}\n\nWhy it changed."', "bash", True),
-        ("a bare -S before -m", f'git commit -S -m "{LONG}"', "bash", True),
-        ("a bare -u before -m", f'git commit -u -m "{LONG}"', "bash", True),
-        ("an attached -S key holding an m", f'git commit -Sabcm "{LONG}"', "bash", False),
-        ("a long body under a short subject", f'git commit -m "{LONG[:40]}\n\n{LONG}"', "bash", False),
-        ("an example command in a quoted body", f"git commit -m \"short\n\ngit commit -m '{LONG}'\"", "bash", False),
-        ("PowerShell, whose word splitting changes by version", f"git commit -m '{LONG}'", "powershell", False),
-        ("a glob", f'git commit -m "{LONG}" src/*.py', "bash", False),
-        ("a dash-led value of a long option", f'git commit --author "-m{LONG}" -m "short"', "bash", False),
-        ("exactly 72", f'git commit -m "{AT_LIMIT}"', "bash", False),
-        ("a second -m", f'git commit -m "short" -m "{LONG}"', "bash", False),
-        ("a bare first value", f'git commit -m wip -m "{LONG}"', "bash", False),
-        ("a bare value stuck to -m", f'git commit -mwip -m "{LONG}"', "bash", False),
-        ("a long path after the message", f'git commit -m "short" "{LONG}"', "bash", False),
-        ("ANSI-C quoting", f"git commit -m $'fix: x' \"{LONG}\"", "bash", False),
-        ("an escape", f'git commit -m \\a "{LONG}"', "bash", False),
-        ("a mention", f'echo "git commit -m {LONG}"', "bash", False),
-        ("a substitution", f'git commit -m "$(cat msg.txt) {LONG}"', "bash", False),
-        ("a comment", f"git commit -F msg.txt  # -m '{LONG}'", "bash", False),
-    )
 
     def setUp(self):
         self.hook = load_tool_rules()
@@ -193,36 +162,65 @@ class LengthRowsTest(unittest.TestCase):
         self.assertIsNone(self.hook.refusal(command, shell))
         return [entry["rule"] for entry in observed(self.hook)[before:]]
 
-    def test_a_long_subject_is_logged_and_the_rest_are_not(self):
-        for name, command, shell, want in self.SUBJECT_ROWS:
-            with self.subTest(name):
-                self.assertEqual(self.logged(command, shell), [self.SUBJECT] if want else [])
+    def git(self, *args):
+        subprocess.run(["git", "-C", self.folder, "-c", "user.name=t", "-c", "user.email=t@example.com",
+                        "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
 
-    def test_a_long_title_is_logged_only_where_prs_squash_merge(self):
-        create = f'gh pr create --base develop --title "{self.TITLE_LONG}" --body-file b.md'
-        for name, style, shell, command, want in (
-                ("--title", "squash", "bash", create, True),
-                ("-t", "squash", "bash", f"gh pr edit 5 -t '{self.TITLE_LONG}'", True),
-                ("a bare -t=, whose value is =", "squash", "bash", f'gh pr edit -t= "{self.TITLE_LONG}"', False),
-                ("a short title", "squash", "bash", 'gh pr create --title "fix(x): short"', False),
-                ("a line break quoted before the title", "squash", "bash",
-                 f'gh pr create --label "a\nb" --title "{self.TITLE_LONG}"', True),
-                ("-t= at exactly 64", "squash", "bash", f'gh pr create -t="{self.TITLE_LONG[:64]}"', False),
-                ("a dash-led body before the title", "squash", "bash",
-                 f'gh pr create --body-file b.md --label "-t{self.TITLE_LONG}" --title "short"', False),
-                ("a later title wins, as in gh", "squash", "bash", f'gh pr create -tshort --title "{self.TITLE_LONG}"',
+    def test_a_subject_that_landed_over_72_gets_a_note(self):
+        self.git("init", "-q")
+        self.hook.CWD = self.folder
+        for name, subject, command, want in (
+                ("over 72", self.LONG, "git commit -m x", True),
+                ("exactly 72", "x" * 72, "git commit -F msg.txt", False),
+                ("git's own options first", self.LONG, "git -c core.editor=true commit --amend", True),
+                ("a PowerShell call", self.LONG, "git commit -m $msg; git log -1", True),
+                ("no commit in the command", self.LONG, "git status", False)):
+            with self.subTest(name):
+                self.git("commit", "-q", "--allow-empty", "-m", subject)
+                notes = self.hook.length_notes(command)
+                self.assertEqual(bool(notes), want)
+                if want:
+                    self.assertIn(f"is {len(subject)} characters", notes[0])
+
+    def test_no_repo_gives_no_note(self):
+        self.hook.CWD = self.folder
+        self.assertEqual(self.hook.length_notes("git commit -m x"), [])
+
+    def test_a_long_title_gets_a_note_only_where_prs_squash_merge(self):
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        old = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 600))
+        ahead = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 30))
+        for name, style, command, line, want in (
+                ("squash", "squash", "gh pr create --base develop --body-file b.md", f"{now}\t{self.TITLE_LONG}",
                  True),
-                ("a short title after a long one", "squash", "bash",
-                 f'gh pr edit 5 --title "{self.TITLE_LONG}" --title "fix(x): short"', False),
-                ("ANSI-C quoting", "squash", "bash", f"gh pr create --title $'x' \"{self.TITLE_LONG}\"", False),
-                ("merge commits", "merge", "bash", create, False)):
+                ("an edit", "squash", "gh pr edit --title x", f"{now}\t{self.TITLE_LONG}", True),
+                ("GitHub's clock ahead of this one", "squash", "gh pr create", f"{ahead}\t{self.TITLE_LONG}", True),
+                ("a PR the command did not change", "squash", "gh pr edit 5 --title x", f"{old}\t{self.TITLE_LONG}",
+                 False),
+                ("exactly 64", "squash", "gh pr create", f"{now}\t{self.TITLE_LONG[:64]}", False),
+                ("merge commits", "merge", "gh pr create", f"{now}\t{self.TITLE_LONG}", False),
+                ("no saved style", None, "gh pr create", f"{now}\t{self.TITLE_LONG}", False),
+                ("no PR command", "squash", "gh pr view 5", f"{now}\t{self.TITLE_LONG}", False)):
             with self.subTest(name):
                 self.project(style)
-                self.assertEqual(self.logged(command, shell), [self.TITLE] if want else [])
-        # Answers nested deeper than the JSON reader goes read as no squash, never as a crash.
-        with open(os.path.join(self.folder, ".bindwright", "project.json"), "w", encoding="utf-8") as answers:
-            answers.write("[" * 100000)
-        self.assertEqual(self.logged(create, "bash"), [])
+                with unittest.mock.patch.object(self.hook, "landed", return_value=line) as landed:
+                    notes = self.hook.length_notes(command)
+                self.assertEqual(bool(notes), want)
+                if want:
+                    landed.assert_called_once_with("gh", "pr", "view", "--json", "title,updatedAt", "-q",
+                                                   '.updatedAt + "\\t" + .title')
+
+    def test_only_a_commit_written_just_now_and_not_a_merge_counts(self):
+        now = int(time.time())
+        for name, line, want in (
+                ("one parent, just written", f"{now} ab12\t{self.LONG}", self.LONG),
+                ("a first commit", f"{now} \t{self.LONG}", self.LONG),
+                ("a commit from ten minutes ago", f"{now - 600} ab12\t{self.LONG}", None),
+                ("a merge commit, whose subject git writes", f"{now} ab12 cd34\t{self.LONG}", None),
+                ("nothing read", None, None)):
+            with self.subTest(name):
+                with unittest.mock.patch.object(self.hook, "landed", return_value=line):
+                    self.assertEqual(self.hook.fresh_subject(), want)
 
     def test_a_merge_flag_other_than_the_saved_style_is_logged(self):
         other = "a `gh pr merge` style other than the repo's"
@@ -367,7 +365,7 @@ class TrustedGitTest(unittest.TestCase):
 
         with unittest.mock.patch.dict(os.environ, {"PATH": share + os.pathsep + os.environ.get("PATH", "")}), \
                 unittest.mock.patch.object(hook, "real_path", refusing):
-            self.assertIsNotNone(hook.trusted_git(REPO))
+            self.assertIsNotNone(hook.trusted_program(REPO, "git"))
 
 
 class ToolRulesSweepTest(unittest.TestCase):

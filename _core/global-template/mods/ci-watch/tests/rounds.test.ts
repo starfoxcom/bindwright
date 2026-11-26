@@ -2,11 +2,7 @@ import { type Engine, expect, test } from 'claude-code/testing'
 
 import { followId, type Memory } from '../hooks/owner'
 import { wakeText } from '../hooks/register'
-import {
-  crossedResearch, isResearchDue, mayBeRound, type PrRounds, recordRound, redStreak, roundOf, roundsText,
-  roundsToResearch,
-  withTopic,
-} from '../hooks/rounds'
+import { mayBeRound, type PrRounds, recordRound, redStreak, roundOf, roundsText, withTopic } from '../hooks/rounds'
 import type { Watch } from '../types'
 import { LONG, type Seen, world } from './world'
 
@@ -69,25 +65,6 @@ for (const { name, watch, counts } of MAY_BE_ROUND) {
   })
 }
 
-// Red, red, passed, red: the streak jumps from 0 to 4 and steps over the 3rd, which still owes its step back.
-test('a streak that jumps past a research step still asks for it', () => {
-  const step = (results: boolean[]) =>
-    crossedResearch(of(results.slice(0, -1)), `c${results.length - 1}`, of(results))
-  expect(step([true, true, false, true])).toBe(true)
-  expect(step([true, true, true])).toBe(true)
-  expect(step([true, true, true, true])).toBe(false)
-  expect(step([true, true])).toBe(false)
-  // The same head recorded again, by a second session or after a restart, still owes the step it crossed.
-  const three = of([true, true, true])
-  expect(crossedResearch(three, 'c2', recordRound(three, 'c2', true))).toBe(true)
-  const jumped = of([true, true, false, true])
-  expect(crossedResearch(jumped, 'c3', recordRound(jumped, 'c3', true))).toBe(true)
-  // Past the fifty rounds kept, every red round is still due.
-  let full: PrRounds = { rounds: [] }
-  for (let i = 0; i < 50; i++) full = recordRound(full, `r${i}`, true)
-  expect(crossedResearch(full, 'next', recordRound(full, 'next', true))).toBe(true)
-})
-
 // Red, red, passed, then a red push: the count jumps to 4, and the wake both asks for the research and holds edits.
 test('a jumped streak latches the step back and its wake asks for the research', async ($, on) => {
   const { seen, clock } = world(on)
@@ -111,9 +88,9 @@ test('the rounds answer forecasts a red round after a passed one', () => {
   )
   expect(roundsText('o/r#7', of([true, true, true, false]))).toContain('makes 5 round(s)')
   expect(roundsText('o/r#7', of([...Array(8).fill(true), false]))).toContain('that is the hard stop')
-  expect(roundsText('o/r#7', of([false]))).toContain('no step back is due then')
+  expect(roundsText('o/r#7', of([false]))).toContain('makes 2 round(s) in a row that did not merge; that red round')
   expect(roundsText('o/r#7', undefined)).toBe(
-    'o/r#7: 0 round(s) in a row that did not merge; the next step back is due in 3.',
+    'o/r#7: 0 round(s) in a row that did not merge; every red round asks for a step back.',
   )
 })
 
@@ -128,22 +105,15 @@ test('a re-run replaces its round, and the list stays bounded', () => {
   expect(redStreak({ rounds: 'x' } as never)).toBe(0)
 })
 
-// Each step back that leaves the PR red leaves one round fewer before the next: 3, then 2, then 1.
-test('the research step is due at 3, 5 and every red round from 6', () => {
-  const due = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(isResearchDue)
-  expect(due).toEqual([3, 5, 6, 7, 8, 9])
-  expect([0, 2, 3, 4, 5, 6, 9].map(roundsToResearch)).toEqual([3, 1, 2, 1, 1, 1, 1])
-})
-
 const failed = (outcome: Watch['outcome']): Watch =>
   ({ repo: 'o/r', number: 7, headSha: 'a1', startedAt: 0, checks: { build: 'fail' }, stablePolls: 2, outcome }) as Watch
 
-test('only a red wake at a due count carries the research step', () => {
-  expect(wakeText(failed('failed'), undefined, 3)).toContain('look up at least five different ways the community')
-  expect(wakeText(failed('failed'), undefined, 3)).toContain('o/r#7 has had 3 rounds in a row')
+test('every red wake carries the research step, from the first', () => {
+  for (const red of [1, 2, 4, 9]) {
+    expect(wakeText(failed('failed'), undefined, red)).toContain('look up at least five different ways the community')
+  }
+  expect(wakeText(failed('failed'), undefined, 1)).toContain('o/r#7 has had 1 round in a row')
   expect(wakeText(failed('failed'), undefined, 6)).toContain('has had 6 rounds')
-  expect(wakeText(failed('failed'), undefined, 5)).toContain('has had 5 rounds')
-  for (const red of [0, 2, 4]) expect(wakeText(failed('failed'), undefined, red)).not.toContain('research')
   expect(wakeText(failed('passed'), undefined, 3)).not.toContain('research')
   expect(wakeText(failed('timeout'), undefined, 3)).not.toContain('research')
 })
@@ -152,7 +122,6 @@ test('only a red wake at a due count carries the research step', () => {
 test('the wake from the 10th red round on asks to close and rebuild the PR', () => {
   for (const red of [10, 12]) expect(wakeText(failed('failed'), undefined, red)).toContain('That is the hard stop')
   expect(wakeText(failed('failed'), undefined, 9)).not.toContain('hard stop')
-  expect(wakeText(failed('failed'), undefined, 9)).toContain('The next step back comes after 1 more')
 })
 
 // At the hard stop commits and pushes wait until the PR is closed; edits do not, and closing it lifts it.
@@ -177,7 +146,7 @@ test('a step back counts each topic once and ends at five', () => {
   expect(withTopic(['a'], '  ')).toEqual(['a'])
   expect(withTopic(['a', 'b'], 'c')).toEqual(['a', 'b', 'c'])
   expect(withTopic(['a', 'b', 'c', 'd'], 'e')).toBeUndefined()
-  for (const red of [3, 8]) {
+  for (const red of [1, 8]) {
     expect(wakeText(failed('failed'), undefined, red)).toContain('look up at least five different ways')
   }
 })
@@ -355,15 +324,15 @@ test("a step back holds only work on the red PR's branch", async ($, on) => {
   expect(await bash('git commit -m "fix the other PR"')).toHaveProperty('deny')
 })
 
-// A red wake at a count that is not due latches nothing; a new watch of the PR keeps a latched step back,
-// and only a green round or the user's /ci-watch stop lifts it without lookups.
-test('only a due red wake latches a step back, and only lookups, green or a stop lift it', async ($, on) => {
+// The first red wake latches a step back; a new watch of the PR keeps it, and only a green round or the
+// user's /ci-watch stop lifts it without lookups.
+test('every red wake latches a step back, and only lookups, green or a stop lift it', async ($, on) => {
   const w = world(on)
   on('tool.call', { tool: 'Edit' }, async () => ({ result: 'done' }))
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   const edit = () => $.tool.call(editInput as never)
-  await redRound($, w, 3)
-  expect(await edit()).not.toHaveProperty('deny')
+  await redRound($, w, 0)
+  expect(await edit()).toHaveProperty('deny')
   w.seen.head = 'b2'
   await redRound($, w, 5)
   expect(await edit()).toHaveProperty('deny')
@@ -403,20 +372,20 @@ test('a resume keeps a latched step back unless the saved copy went green', asyn
   }
 })
 
-// The third red round in a row: its own settled watch makes the count three, and the wake asks for research.
-test('the wake of the third red round in a row asks for the research step', async ($, on) => {
+// The first red round: its own settled watch makes the count one, and the wake asks for research.
+test('the wake of the first red round asks for the research step', async ($, on) => {
   const { seen, clock } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
-  seed(seen, reds(2))
+  seed(seen, reds(0))
   seen.bucket = 'fail'
   await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)
   for (let i = 0; i < 6; i++) await clock.advance(30_000)
   expect(seen.prompts).toHaveLength(1)
   expect(seen.prompts[0]).toContain('all checks settled; failed')
-  expect(seen.prompts[0]).toContain('has had 3 rounds in a row')
+  expect(seen.prompts[0]).toContain('has had 1 round in a row')
 })
 
-test('/ci-watch rounds tells the count and when the next step back is due', async ($, on) => {
+test('/ci-watch rounds tells the count and the hard stop', async ($, on) => {
   const { seen } = world(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
   seed(seen, reds(7))
@@ -424,7 +393,7 @@ test('/ci-watch rounds tells the count and when the next step back is due', asyn
     ((await $.command.run({ command: 'ci-watch', args, origin: { kind: 'composer' } } as never)) as { text: string })
       .text
   expect(await ask('rounds')).toBe(
-    'o/r#7: 7 round(s) in a row that did not merge; the next step back is due in 1.',
+    'o/r#7: 7 round(s) in a row that did not merge; every red round asks for a step back.',
   )
   seed(seen, reds(10))
   expect(await ask('rounds')).toContain('that is the hard stop')
@@ -601,3 +570,27 @@ for (const row of VERDICT_ROWS) {
     expect(seen.prompts[0]?.includes('the count stays at 2')).toBe(!row.counted)
   })
 }
+
+// A PR opens only after its first round's research: five distinct lookups since the session last opened one.
+test('opening a PR waits for five distinct lookups since the last PR opened', async ($, on) => {
+  world(on)
+  on('tool.call', { tool: 'WebSearch' }, async () => ({ result: 'done' }))
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  const command = 'gh pr create --base develop --title t --body-file b.md'
+  const open = () => $.tool.call({ tool: 'Bash', command } as never)
+  const search = (query: string) => $.tool.call({ tool: 'WebSearch', query } as never)
+  expect(String(((await open()) as { deny?: string }).deny)).toContain('5 more to go')
+  for (const query of ['a', 'A ', 'b', 'c', 'd']) await search(query)
+  expect(String(((await open()) as { deny?: string }).deny)).toContain('1 more to go')
+  await search('e')
+  // A dry run opens no PR, so the lookups stay for the real one.
+  const dryRun = { tool: 'Bash', command: `${command} --dry-run` }
+  expect(await $.tool.call(dryRun as never)).not.toHaveProperty('deny')
+  expect(await open()).not.toHaveProperty('deny')
+  // The lookups went to that PR: the next one waits for its own.
+  expect(await open()).toHaveProperty('deny')
+  // A subagent's PR is the main session's call to make, and a push is not an opening.
+  const helper = { tool: 'Bash', command: 'gh pr create -t t -b b', agentId: 'helper' }
+  expect(await $.tool.call(helper as never)).not.toHaveProperty('deny')
+  expect(await $.tool.call({ tool: 'Bash', command: 'git push origin feature/x' } as never)).not.toHaveProperty('deny')
+})

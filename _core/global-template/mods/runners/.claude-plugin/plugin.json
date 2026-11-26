@@ -1,6 +1,6 @@
 {
   "name": "runners",
-  "version": "0.1.0",
+  "version": "1.3.2",
   "description": "Shows the machine's local CI runners above the prompt: on or off, queued runs and the next scheduled run, with Start and Stop buttons.",
   "types": "./types/index.d.ts",
   "userConfig": {

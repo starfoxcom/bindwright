@@ -1,14 +1,18 @@
 // Runs both engines' --update on identical bound repos; shared by the update tests.
 
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import {
+  cpSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PRISTINE, STAGING, makeRepo } from "./bound-repo.js";
 import { python } from "./python.js";
 
-const engine =join(dirname(fileURLToPath(import.meta.url)), "..");
+const engine = join(dirname(fileURLToPath(import.meta.url)), "..");
+const project = join(engine, "..");
 export const RULE = ".claude/rules/task-tracking.md";
 export const OTHER = ".claude/rules/testing.md";
 export const THIRD = ".claude/rules/git.md";
@@ -16,12 +20,46 @@ export const LICENSE = "LICENSE";
 export const SETTINGS = ".claude/settings.json";
 
 export const needsPython = { skip: !python && "needs Python 3.8+" };
-export const engines = [[process.execPath, [join(engine, "cli.js")]], [python, [join(engine, "bind.py")]]];
+// The two engines run from the kit at `root`: a folder holding engine/, _core/ and VERSION.
+const enginesIn = (root) => [
+  [process.execPath, [join(root, "engine", "cli.js")]],
+  [python, [join(root, "engine", "bind.py")]],
+];
+export const engines = enginesIn(project);
 
-// Both engines on identical copies; returns the JS repo and its report.
-export async function update(change) {
+// A throwaway kit whose templates change as `edits` says, keyed by template path: a function
+// edits that template's text, a string adds a new template with that text, and null drops it.
+// The kit's list of core files follows the change, since the bind reads templates from it.
+function kitWith(edits) {
+  const kit = mkdtempSync(join(tmpdir(), "update-kit-"));
+  const skipTests = (src) => !/[\\/](test|__pycache__)$/.test(src);
+  cpSync(join(project, "engine"), join(kit, "engine"), { recursive: true, filter: skipTests });
+  cpSync(join(project, "_core"), join(kit, "_core"), { recursive: true });
+  copyFileSync(join(project, "VERSION"), join(kit, "VERSION"));
+  const core = join(kit, "_core", "project-template");
+  const manifest = join(kit, "engine", "core-files.json");
+  let files = JSON.parse(readFileSync(manifest, "utf8"));
+  for (const [path, edit] of Object.entries(edits)) {
+    const target = join(core, ...path.split("/"));
+    if (edit === null) {
+      rmSync(target);
+      files = files.filter((file) => file !== path);
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, typeof edit === "string" ? edit : edit(readFileSync(target, "utf8")));
+    if (!files.includes(path)) files.push(path);
+  }
+  writeFileSync(manifest, `${JSON.stringify(files.sort(), null, 2)}\n`);
+  return kit;
+}
+
+// Both engines on identical copies; returns the JS repo and its report. With `edits`, the
+// engines bind from a kit whose templates change as `kitWith` says.
+export async function update(change, { edits } = {}) {
+  const kit = edits ? kitWith(edits) : project;
   const runs = [];
-  for (const [cmd, args] of python ? engines : engines.slice(0, 1)) {
+  for (const [cmd, args] of python ? enginesIn(kit) : enginesIn(kit).slice(0, 1)) {
     const repo = await makeRepo(change);
     const out = spawnSync(cmd, [...args, "--update", repo.at("")], { encoding: "utf8" });
     runs.push({ repo, out: JSON.parse(out.stdout), status: out.status });
@@ -33,6 +71,7 @@ export async function update(change) {
     }
   }
   for (const r of runs.slice(1)) rmSync(r.repo.at(""), { recursive: true, force: true });
+  if (edits) rmSync(kit, { recursive: true, force: true });
   return runs[0];
 }
 

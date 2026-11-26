@@ -14,6 +14,7 @@ import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
 import { parsePlainObject } from "./propose.js";
+import { missingReport, staleReport, unlinkedReport } from "./missing.js";
 
 // The file in git's folder that holds the pristine record the last update replaced.
 const BEFORE = "bindwright-pristine-before.json";
@@ -117,7 +118,9 @@ function baseFor(pristine, path, ours) {
 export function planUpdate(rendered, pristine, { readRepo, owned, merge, version }) {
   const theirsAll = repoFiles(rendered);
   const paths = [...new Set([...Object.keys(pristine.files), ...theirsAll.keys()])].sort();
-  const result = { write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [] };
+  const result = {
+    write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [], priors: new Map(),
+  };
   for (const outcome of OUTCOMES) result[outcome] = [];
   const moves = movesFor(theirsAll, pristine, { readRepo, owned });
   const movedFrom = new Set(moves.values());
@@ -145,7 +148,10 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
     const base = baseFor(pristine, from ?? path, ours);
     const [outcome, text] = decide(path, { ours, base, theirs }, merge);
     result[outcome].push(path);
-    if (outcome === "updated" || outcome === "merged" || outcome === "added") result.write.push([path, text]);
+    if (outcome === "updated" || outcome === "merged" || outcome === "added") {
+      result.write.push([path, text]);
+      result.priors.set(path, [base, ours].filter((t) => typeof t === "string"));
+    }
     if (outcome === "staged" || outcome === "conflict") result.stage.push([STAGING + path, text]);
     // A moved file the merge leaves as it was, or stages, still lands at its new path.
     if (from && (outcome === "unchanged" || outcome === "conflict")) result.write.push([path, ours]);
@@ -352,7 +358,8 @@ function entry(root, path) {
 // what merged cleanly, stages new files the repo already has and conflicts,
 // and records the new pristine render. `bindWith(answers, { year, version })`
 // returns a bind. Returns every outcome list plus `skipped`: staged copies
-// left from before, which stay as they were.
+// left from before, which stay as they were; and `missing`, `unlinked` and `stale`: the broken
+// pointers the update leaves behind (missing.js).
 export async function runUpdate(root, { bindWith, version }) {
   const read = reader(root);
   const [answers, saved] = [ANSWERS, PRISTINE].map(read);
@@ -392,7 +399,19 @@ export async function runUpdate(root, { bindWith, version }) {
     renamed: plan.renamed,
     owned_changed: plan.owned_changed,
     skipped,
+    missing: missingReport(root, writtenFiles(plan), repoFiles(rendered)),
+    unlinked: unlinkedReport(root, plan.added, repoFiles(rendered), pristine.files),
+    stale: staleReport(root, plan, repoFiles(rendered), pristine.files),
   };
+}
+
+// The files this update wrote with a new text (added, merged or updated), each with that text
+// and its priors: the base the update decided it against and the repo's copy before it.
+function writtenFiles(plan) {
+  const written = new Map(plan.write);
+  return [...plan.added, ...plan.merged, ...plan.updated].map((path) => ({
+    path, text: written.get(path), priors: plan.priors.get(path),
+  }));
 }
 
 // A pristine record parsed from its JSON text, with a files object; anything else is refused,

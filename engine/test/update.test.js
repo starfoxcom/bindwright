@@ -330,3 +330,277 @@ test("a merge that drops a kept section counts as a conflict", () => {
   assert.deepEqual(plan.write, []);
   assert.deepEqual(plan.stage, [[`${STAGING}x.py`, "b\n"]]);
 });
+
+// Docs the bind ships, which a row deletes from the repo so its name has nothing to resolve to.
+const GUIDE = "docs/ci-watching.md";
+const AUDIT = "docs/test-audit.md";
+// Deletes repo files the bind wrote; the record keeps them, so the update leaves them deleted.
+const drop = (r, ...paths) => {
+  for (const path of paths) rmSync(r.at(path), { recursive: true, force: true });
+};
+
+// Each row adds one line to the rule's template and checks the report's `missing` key.
+// `base` is a line the saved record and the repo already hold before the update; `gone` lists
+// shipped paths the repo deleted.
+const NAMED_ROWS = [
+  { name: "a path at the repo root is found", line: "See `.claude/settings.json`.", missing: [] },
+  {
+    name: "a shipped file the repo lacks is reported",
+    gone: [GUIDE],
+    line: `See \`${GUIDE}\`.`,
+    missing: [{ file: RULE, names: [GUIDE] }],
+  },
+  {
+    name: "a name repeated in the new text is reported once",
+    gone: [GUIDE],
+    line: `See \`${GUIDE}\` and \`${GUIDE}\`.`,
+    missing: [{ file: RULE, names: [GUIDE] }],
+  },
+  {
+    name: "a span the base text already names is not reported",
+    gone: [GUIDE],
+    base: `Old \`${GUIDE}\` wording.`,
+    line: `New \`${GUIDE}\` wording.`,
+    missing: [],
+  },
+  {
+    name: "a shipped folder the repo lacks is reported",
+    gone: ["docs"],
+    line: "See `docs/`.",
+    missing: [{ file: RULE, names: ["docs/"] }],
+  },
+  {
+    name: "names the bind does not ship are never reported",
+    line: "Set `content.type` and `gorm.DB`; lay out `cart/index.ts` and `auth/`; create " +
+      "`docs/never-written.md`; skip `<path>/x.md`, `https://example.com/a.md`, " +
+      "`feature/user-auth-flow`, `7.19.1`, `..\\..\\x.md`, `\\\\host\\share\\x.md` and `C:x.md`.",
+    missing: [],
+  },
+];
+
+// The task-tracking template with `line` added at its end.
+const addLine = (line) => (text) => `${text}\n${line}\n`;
+// Makes `line` a line that the saved record and the repo both hold.
+const withBase = (line) => (r) => {
+  const base = `${r.read(RULE)}\n${line}\n`;
+  r.pristine.files[RULE] = base;
+  r.write(RULE, base);
+};
+// Owns the testing rule in the repo, with a copy that lacks its "Testing" heading.
+const ownTesting = (r) => {
+  r.write(".bindwright/owned", `${OTHER}\n`);
+  r.write(OTHER, "# Other\n");
+};
+// Owns the task-tracking rule, so its new template text waits in the staging folder.
+const ownRule = (r) => r.write(".bindwright/owned", `${RULE}\n`);
+// Appends `line` to the testing rule's copy in the repo, so the copy differs from its base.
+const editTesting = (line) => (r) => r.write(OTHER, `${r.read(OTHER)}${line}\n`);
+// Runs one row's change and checks one report key. `updated` defaults to the task-tracking rule.
+async function checkRow(row) {
+  const { out } = await update(row.repo ?? (() => {}), { edits: row.kit });
+  assert.deepEqual(out.updated, row.updated ?? [RULE]);
+  assert.deepEqual(out[row.key ?? "missing"], row.expect);
+}
+
+const namedRow = (row) => ({
+  kit: { [RULE]: addLine(row.line) },
+  repo: (r) => {
+    drop(r, ...(row.gone ?? []));
+    if (row.base !== undefined) withBase(row.base)(r);
+  },
+  expect: row.missing,
+});
+for (const row of NAMED_ROWS) {
+  test(`named paths: ${row.name}`, needsPython, () => checkRow(namedRow(row)));
+}
+
+// Each row adds a line naming a section of the testing rule to the task-tracking template.
+const SECTION_LINE = `See \`${OTHER}\` § Testing.`;
+const SECTION_ROWS = [
+  {
+    name: "a section the repo's owned copy lacks is reported",
+    kit: { [RULE]: addLine(SECTION_LINE) },
+    repo: ownTesting,
+    expect: [{ file: RULE, names: [`${OTHER} § Testing`] }],
+  },
+  {
+    name: "a section the repo's copy has is not reported",
+    kit: { [RULE]: addLine(SECTION_LINE) },
+    expect: [],
+  },
+  {
+    name: "section text matching no template heading is not reported",
+    kit: { [RULE]: addLine(`See \`${OTHER}\` § Nothing here.`) },
+    repo: ownTesting,
+    expect: [],
+  },
+  {
+    name: "a heading ending in a character that is not a space or tab keeps it, in both engines",
+    kit: { [RULE]: addLine(SECTION_LINE) },
+    repo: (r) => {
+      r.write(".bindwright/owned", `${OTHER}\n`);
+      r.write(OTHER, "# Testing﻿\n");
+    },
+    expect: [{ file: RULE, names: [`${OTHER} § Testing`] }],
+  },
+  {
+    name: "a letter outside the BMP after the heading continues the word, in both engines",
+    kit: { [RULE]: addLine(`See \`${OTHER}\` § Testing\u{1D400}.`) },
+    repo: ownTesting,
+    expect: [],
+  },
+  {
+    name: "a section ref the base text already holds is not reported",
+    kit: { [RULE]: addLine(`New \`${OTHER}\` § Testing.`) },
+    repo: (r) => {
+      ownTesting(r);
+      withBase(`Old \`${OTHER}\` § Testing.`)(r);
+    },
+    expect: [],
+  },
+];
+for (const row of SECTION_ROWS) {
+  test(`section names: ${row.name}`, needsPython, () => checkRow(row));
+}
+
+// An added doc that the task-tracking template points at, so its pointer can land in a file.
+const NEW_DOC = "docs/new-guide.md";
+const POINTER_KIT = { [NEW_DOC]: "# New guide\n", [RULE]: addLine(`See \`${NEW_DOC}\`.`) };
+const UNLINKED_ROWS = [
+  {
+    name: "an added file whose pointer lands in an owned file is listed",
+    kit: POINTER_KIT,
+    repo: ownRule,
+    expect: [{ file: NEW_DOC, from: [RULE] }],
+    updated: [],
+  },
+  {
+    name: "the same file not owned, so updated, gives no entry",
+    kit: POINTER_KIT,
+    expect: [],
+  },
+  {
+    name: "an owned file holding bytes that are not UTF-8 is read like any other",
+    kit: POINTER_KIT,
+    repo: (r) => {
+      ownRule(r);
+      writeFileSync(r.at(RULE), Buffer.from("# Caf\xe9\n", "latin1"));
+    },
+    expect: [{ file: NEW_DOC, from: [RULE] }],
+    updated: [],
+  },
+];
+for (const row of UNLINKED_ROWS) {
+  test(`unlinked: ${row.name}`, needsPython, () => checkRow({ ...row, key: "unlinked" }));
+}
+
+// Each row drops templates from the kit, then edits the testing rule's copy in the repo.
+const STALE_SECTION = `See \`${RULE}\` § Task tracking.`;
+// A row whose target keeps its heading in today's template, while the repo's copy lacks it.
+const keptHeading = (name, target) => ({
+  name,
+  kit: { [OTHER]: null },
+  repo: (r) => {
+    editTesting(STALE_SECTION)(r);
+    target(r);
+  },
+  expect: [],
+  updated: [],
+});
+const STALE_ROWS = [
+  {
+    name: "a kept edited file naming a section the update dropped is reported",
+    kit: { [OTHER]: null, [RULE]: (text) => text.replace("# Task tracking", "# Work queue") },
+    repo: editTesting(STALE_SECTION),
+    expect: [{ file: OTHER, names: [`${RULE} § Task tracking`] }],
+  },
+  keptHeading("a section an owned target lacks, but its template keeps, gives no entry", (r) => {
+    ownRule(r);
+    r.write(RULE, "# Other\n");
+  }),
+  keptHeading("a section the repo edited out of an unchanged template gives no entry", (r) =>
+    r.write(RULE, r.read(RULE).replace("# Task tracking", "# Work queue"))),
+  keptHeading("a section of a target the repo deleted earlier gives no entry", (r) => drop(r, RULE)),
+  {
+    name: "a kept edited file naming a removed file is reported",
+    kit: { [OTHER]: null, [THIRD]: null },
+    repo: editTesting(`See \`${THIRD}\`.`),
+    expect: [{ file: OTHER, names: [THIRD] }],
+    updated: [],
+  },
+  {
+    name: "a kept edited file naming only what still exists gives no entry",
+    kit: { [OTHER]: null },
+    repo: editTesting("See `.claude/settings.json`."),
+    expect: [],
+    updated: [],
+  },
+];
+for (const row of STALE_ROWS) {
+  test(`stale: ${row.name}`, needsPython, () => checkRow({ ...row, key: "stale" }));
+}
+
+const SKILL = ".claude/skills/close-session/SKILL.md";
+const OLD_SKILL = ".claude/skills/session-close/SKILL.md";
+
+// Only the old path's base names the dropped guide, so priors taken from the new path report it.
+test("named paths: a moved file is compared with its base under the old path", needsPython, async () => {
+  const { out } = await update((r) => {
+    drop(r, GUIDE);
+    const base = `${r.read(SKILL)}\nOld \`${GUIDE}\` wording.\n`;
+    delete r.pristine.files[SKILL];
+    r.pristine.files[OLD_SKILL] = base;
+    rmSync(r.at(SKILL));
+    r.write(OLD_SKILL, base);
+  }, { edits: { [SKILL]: (text) => `${text}\nNew \`${GUIDE}\` wording.\n` } });
+  assert.deepEqual(out.renamed, [[OLD_SKILL, SKILL]]);
+  assert.deepEqual(out.updated, [SKILL]);
+  assert.deepEqual(out.missing, []);
+});
+
+const REVIEW_GUIDE = ".github/review-guide.md";
+
+// Only the rules-folder candidate resolves `testing.md` named from the review guide: neither
+// `testing.md` nor `.github/testing.md` ships.
+test("named paths: a bare rule name the repo left out is reported from elsewhere", needsPython, async () => {
+  const { out } = await update((r) => {
+    const named = r.read(REVIEW_GUIDE);
+    const base = named.split("\n").filter((l) => !l.includes("`testing.md`")).join("\n");
+    assert.notEqual(base, named, "the review guide names the testing rule by its bare name");
+    r.pristine.files[REVIEW_GUIDE] = base;
+    r.write(REVIEW_GUIDE, base);
+    drop(r, OTHER);
+  });
+  assert.ok(out.updated.includes(REVIEW_GUIDE));
+  assert.deepEqual(out.missing, [{ file: REVIEW_GUIDE, names: ["testing.md"] }]);
+});
+
+// Only the beside-the-file candidate resolves `review-gate.yml` named from the review guide.
+test("named paths: a bare sibling the repo left out is reported", needsPython, async () => {
+  const { out } = await update((r) => drop(r, ".github/review-gate.yml"), {
+    edits: { [`${REVIEW_GUIDE}.template`]: (text) => `${text}\nSee \`review-gate.yml\`.\n` },
+  });
+  assert.deepEqual(out.updated, [REVIEW_GUIDE]);
+  assert.deepEqual(out.missing, [{ file: REVIEW_GUIDE, names: ["review-gate.yml"] }]);
+});
+
+test("named paths: a merged file reports only what the template added", needsPython, async () => {
+  const { out } = await update((r) => {
+    drop(r, GUIDE, AUDIT);
+    r.write(RULE, `Our own \`${GUIDE}\`.\n${r.read(RULE)}`);
+  }, { edits: { [RULE]: (text) => `${text}\nSee \`${AUDIT}\`.\n` } });
+  assert.deepEqual(out.merged, [RULE]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: [AUDIT] }]);
+});
+
+test("named paths: a held base is what a name is compared with", needsPython, async () => {
+  const line = `See \`${GUIDE}\`.`;
+  const { out } = await update((r) => {
+    drop(r, GUIDE);
+    const held = r.read(RULE);
+    r.pristine.held = { [RULE]: held };
+    r.pristine.files[RULE] = `${held}\nOld ${line}\n`;
+  }, { edits: { [RULE]: (text) => `${text}\n${line}\n` } });
+  assert.deepEqual(out.updated, [RULE]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: [GUIDE] }]);
+});

@@ -1,10 +1,9 @@
 // The fix-round count: how many pushed rounds in a row a PR has had that did not merge: their checks did
 // not all pass (both reviews included), or they passed and another push followed instead of the merge.
-// At the 3rd, the 5th and every one from the 6th on, the red wake asks for a step back:
-// research how others solve the problem, simplify, then go on. Each step back that leaves the PR red
-// leaves one round fewer before the next; there is no last one. The red wake that asks for a step back
-// also latches it on the watch: the session's edits, commits and pushes wait until five distinct web
-// lookups ran (`withTopic`), so the fix comes after the research. The
+// Every red round's wake asks for a step back: research how others solve the problem, simplify, then go
+// on. It also latches the step back on the watch: the session's edits, commits and pushes wait until five
+// distinct web lookups ran (`withTopic`), so the fix comes after the research. The first round gets the
+// same research before the PR opens (`prCreateRefusal`). The
 // 10th red round is the hard stop: the PR is closed without merging and rebuilt from its base branch in a
 // new PR, and the session's commits and pushes wait until it is closed. A round is a watch of
 // a pushed head that settled (the session's own push, or a PR it asked to watch; never a head someone
@@ -62,27 +61,6 @@ export function mayBeRound(w: Watch): boolean {
  * spared by the sweep (it is named by no session). */
 export const ROUNDS_FILE = 'rounds.json'
 
-/** Whether a red streak this long calls for the research step: at 3, 5, then every round from 6. */
-export const isResearchDue = (red: number) => red === 3 || red >= 5
-
-/** Whether recording the round of head `sha` crossed a research step. A round that passed turns red once
- * another head follows it, so the streak can jump (0 to 4) and step over the 3rd without landing on it.
- * The rounds before are read without `sha`, and every round is stored as its checks ended, so a head
- * recorded again (a re-read, a second session) crosses the same step again. From the 5th on every red
- * round is due. */
-export function crossedResearch(before: PrRounds | undefined, sha: string, after: PrRounds): boolean {
-  const others = (Array.isArray(before?.rounds) ? before.rounds : []).filter(r => r.sha !== sha)
-  const streak = redStreak(after)
-  if (streak >= 5) return true
-  for (let red = redStreak({ rounds: others }) + 1; red <= streak; red++) {
-    if (isResearchDue(red)) return true
-  }
-  return false
-}
-
-/** How many more red rounds until the next research step: to 3, then to 5, then the next one. */
-export const roundsToResearch = (red: number) => (red < 3 ? 3 : red < 5 ? 5 : red + 1) - red
-
 /** The red streak that ends a PR: it is closed without merging and rebuilt in a new PR. */
 export const HARD_STOP = 10
 
@@ -94,17 +72,16 @@ export function roundsText(pr: string, stored: PrRounds | undefined): string {
   const red = redStreak(stored)
   const rounds = Array.isArray(stored?.rounds) ? stored.rounds : []
   if (red === 0 && rounds.length > 0) {
-    const next = recordRound(stored, '', true)
-    const count = redStreak(next)
+    const count = redStreak(recordRound(stored, '', true))
     const then = isHardStop(count)
       ? 'that is the hard stop: close it and rebuild it in a new PR.'
-      : crossedResearch(stored, '', next) ? 'that red round asks for a step back.' : 'no step back is due then.'
+      : 'that red round asks for a step back.'
     return `${pr}: the newest round passed and waits for its merge. If the next round is red instead, that ` +
       `makes ${count} round(s) in a row that did not merge; ${then}`
   }
   const count = `${pr}: ${red} round(s) in a row that did not merge`
   if (isHardStop(red)) return `${count}; that is the hard stop: close it and rebuild it in a new PR.`
-  return `${count}; the next step back is due in ${roundsToResearch(red)}.`
+  return `${count}; every red round asks for a step back.`
 }
 
 const REBUILD =
@@ -114,15 +91,15 @@ const REBUILD =
 
 export function researchText(pr: string, red: number): string {
   const after = isHardStop(red)
-    ? `That is the hard stop: ${REBUILD} Commits and pushes wait until ${pr} is closed.`
-    : `The next step back comes after ${roundsToResearch(red)} more red round(s).`
+    ? ` That is the hard stop: ${REBUILD} Commits and pushes wait until ${pr} is closed.`
+    : ''
   return (
-    ` ${pr} has had ${red} rounds in a row that did not merge: a check failed, both reviews included, or ` +
-    'they all passed and another push followed instead of the merge. Before ' +
+    ` ${pr} has had ${red} round${red === 1 ? '' : 's'} in a row that did not merge: a check failed, both ` +
+    'reviews included, or they all passed and another push followed instead of the merge. Before ' +
     'the next fix, step back: look up at least five different ways the community solves this problem ' +
     '(web search), compare them against each other, pick the simplest design that removes the whole class ' +
     'of findings rather than the next one, tell the user in plain words which option won and why, then ' +
-    `apply it and keep going. ${after}`
+    `apply it and keep going.${after}`
   )
 }
 
@@ -161,12 +138,25 @@ export function withTopic(topics: readonly string[], topic: string, needed = SOU
   return next.length >= needed ? undefined : next
 }
 
+/** The refusal for opening a PR before its first round's research: `topics`, the distinct lookups since
+ * the session last opened one. */
+export function prCreateRefusal(topics: readonly string[]): string {
+  return (
+    `Opening a PR waits for its first round's research. Look up at least ${SOURCES_NEEDED} different ways ` +
+    `others solved this problem (${SOURCES_NEEDED - topics.length} more to go; each WebSearch, WebFetch or ` +
+    'web-fetch agent call on a new topic since the last PR opened counts once), compare them, build the ' +
+    'change on the simplest one that removes the whole class, tell the user which one won and why, then ' +
+    'open the PR. Where web tools cannot run in this session, the user opens it.'
+  )
+}
+
 export function researchRefusal(
   pr: string, red: number, needed = SOURCES_NEEDED, topics: readonly string[] = [],
 ): string {
   const owed = needed - topics.length
   return (
-    `${pr} has had ${red} red rounds in a row, so edits, commits and pushes wait for a step back. Look up ` +
+    `${pr} has had ${red} red round${red === 1 ? '' : 's'} in a row, so edits, commits and pushes wait for ` +
+    'a step back. Look up ' +
     `at least ${needed} different ways others solved this class of problem (${owed} more to go; ` +
     'each WebSearch, WebFetch or web-fetch agent call on a new topic counts once), compare them against ' +
     'each other, pick the one that removes the whole class most simply, tell the user which one won and ' +

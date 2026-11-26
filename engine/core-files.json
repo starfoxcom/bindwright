@@ -1,5 +1,6 @@
 [
   ".bindwright/session-steps.md",
+  ".claude/hooks/live-check.py",
   ".claude/hooks/no-ai-attribution.py",
   ".claude/hooks/no_ai_attribution/__init__.py",
   ".claude/hooks/no_ai_attribution/files.py",
@@ -53,6 +54,7 @@
   ".github/review-checks/bindwright_templates.py",
   ".github/review-gate.yml.template",
   ".github/review-guide.md.template",
+  ".github/scripts/pick_account.py",
   ".github/scripts/pin_check.py",
   ".github/scripts/public_roadmap.py",
   ".github/scripts/review_gate.py",

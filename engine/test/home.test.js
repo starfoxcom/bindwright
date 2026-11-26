@@ -237,7 +237,24 @@ test("an installed mod reads back as current, and a mod never installed as missi
     const installed = home(dir, "add-mod", mod).out.installed;
     const record = JSON.parse(readFileSync(recordPath(installed), "utf8"));
     assert.deepEqual(Object.keys(record.sha256), [".claude-plugin/plugin.json", "hooks/rules.ts", "user-files.json"]);
-    assert.deepEqual(modStatus(dir, mod), { installed, state: "current", files: {} });
+    assert.deepEqual(modStatus(dir, mod),
+      { installed, state: "current", files: {}, version: null, shipped_version: null });
+  });
+});
+
+test("mod-status names the installed version and the shipped one", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { ".claude-plugin/plugin.json": '{"version": "1.2.0"}', "hooks/rules.ts": "v1" });
+    assert.equal(modStatus(dir, mod).version, null, "nothing installed yet");
+    const installed = home(dir, "add-mod", mod).out.installed;
+    writeFileSync(join(mod, ".claude-plugin", "plugin.json"), '{"version": "1.3.0"}');
+    const status = modStatus(dir, mod);
+    assert.equal(status.version, "1.2.0");
+    assert.equal(status.shipped_version, "1.3.0");
+    assert.equal(updateMod(dir, mod).out.version, "1.2.0", "update-mod reports the version it replaced");
+    assert.equal(modStatus(dir, mod).version, "1.3.0");
+    writeFileSync(join(installed, ".claude-plugin", "plugin.json"), "not json");
+    assert.equal(modStatus(dir, mod).version, null, "an unreadable manifest names no version");
   });
 });
 
@@ -303,7 +320,8 @@ test("an update stopped between writing a file and recording it is finished by t
     writeFileSync(rules, "v2");
     writeFileSync(join(mod, "hooks", "extra.ts"), "x");
     writeFileSync(join(installed, "hooks", "extra.ts"), "x");
-    assert.deepEqual(modStatus(dir, mod), { installed, state: "older", files: {} });
+    assert.deepEqual(modStatus(dir, mod),
+      { installed, state: "older", files: {}, version: null, shipped_version: null });
     const r = updateMod(dir, mod);
     assert.equal(r.status, 0, r.stderr);
     assert.deepEqual(r.out.updated, []);
@@ -368,7 +386,8 @@ test("an unrecorded copy is left alone until --adopt, which replaces it and writ
     const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
     const installed = home(dir, "add-mod", mod).out.installed;
     rmSync(recordPath(installed));
-    assert.deepEqual(modStatus(dir, mod), { installed, state: "unrecorded", files: {} });
+    assert.deepEqual(modStatus(dir, mod),
+      { installed, state: "unrecorded", files: {}, version: null, shipped_version: null });
     writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
     assert.equal(modStatus(dir, mod).state, "unrecorded");
     assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "replace" });
@@ -615,15 +634,15 @@ test("hook-status names the shipped hooks the record lacks and whether each matc
     const entries = [...settings(dir).hooks.PreToolUse, old, elsewhere];
     writeSettings(dir, { ...settings(dir), hooks: { PreToolUse: entries } });
     const status = () => home(dir, "hook-status", shipped).out.hooks;
-    const both = { recorded: true, matches: true, linked: false };
+    const both = { recorded: true, matches: true, linked: false, events: ["PreToolUse"] };
     const all = { "no-ai-attribution.py": both, "push-guard.py": both };
     assert.deepEqual(status(), all, "a hook not shipped, or with no copy in the hooks folder, is left out");
     rmSync(join(dir, ".bindwright", "hooks.json"));
     rmSync(join(dir, ".claude", "hooks", "no_ai_attribution"), { recursive: true });
     writeFileSync(join(dir, ".claude", "hooks", "push-guard.py"), "push\r\n");
     assert.deepEqual(status(), {
-      "no-ai-attribution.py": { recorded: false, matches: false, linked: false },
-      "push-guard.py": { recorded: false, matches: true, linked: false },
+      "no-ai-attribution.py": { recorded: false, matches: false, linked: false, events: ["PreToolUse"] },
+      "push-guard.py": { recorded: false, matches: true, linked: false, events: ["PreToolUse"] },
     });
     // A matching copy is only recorded: its settings entry stays, and a differing one is refused.
     const before = settings(dir);
@@ -669,7 +688,20 @@ test("hook-status finds a hook installed under a home given with a .. in its pat
     const file = hookFile(dir, "push-guard.py", "push\n");
     assert.equal(home(roundabout, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
     const status = home(roundabout, "hook-status", join(dir, "src")).out.hooks;
-    assert.deepEqual(status, { "push-guard.py": { recorded: true, matches: true, linked: false } });
+    const found = { recorded: true, matches: true, linked: false, events: ["PreToolUse"] };
+    assert.deepEqual(status, { "push-guard.py": found });
+  });
+});
+
+test("hook-status names every event whose entry runs the hook, so an update can add a missing one", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "tool-rules.py", "rules\n");
+    const events = () => home(dir, "hook-status", join(dir, "src")).out.hooks["tool-rules.py"].events;
+    assert.equal(home(dir, "install-hook", file, "--python", python, "--matcher", "Bash").status, 0);
+    assert.deepEqual(events(), ["PreToolUse"]);
+    const both = ["--matcher", "Bash", "--events", "PreToolUse,PostToolUse"];
+    assert.equal(home(dir, "install-hook", file, "--python", python, ...both).status, 0);
+    assert.deepEqual(events(), ["PostToolUse", "PreToolUse"]);
   });
 });
 
@@ -973,15 +1005,26 @@ test("remove-hook and list-hooks cover every event under hooks, not only PreTool
   });
 });
 
-test("install-hook refuses both or neither of --matcher and --events, and writes nothing", { skip }, () => {
+test("install-hook puts --matcher on each --events entry, and only PreToolUse blocks", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "tool-rules.py");
+    const both = home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash|PowerShell",
+      "--events", "PreToolUse,PostToolUse", "--block-on-failure");
+    assert.equal(both.status, 0);
+    const { hooks } = settings(dir);
+    const matchers = [hooks.PreToolUse[0].matcher, hooks.PostToolUse[0].matcher];
+    assert.deepEqual(matchers, ["Bash|PowerShell", "Bash|PowerShell"]);
+    assert.equal(hooks.PreToolUse[0].hooks[0].onFailure, "block");
+    assert.ok(!("onFailure" in hooks.PostToolUse[0].hooks[0]));
+  });
+});
+
+test("install-hook refuses neither --matcher nor --events, and writes nothing", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "session-title.py");
-    const both = home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash", "--events", "SessionStart");
-    assert.equal(both.status, 1);
-    assert.match(both.out.error, /exactly one of --matcher or --events/);
     const neither = home(dir, "install-hook", file, "--python", "/usr/bin/python3");
     assert.equal(neither.status, 1);
-    assert.match(neither.out.error, /exactly one of --matcher or --events/);
+    assert.match(neither.out.error, /takes --matcher, --events, or both/);
     const empty = home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--events", "SessionStart,,");
     assert.equal(empty.status, 1);
     assert.match(empty.out.error, /Not a list of event names/);
