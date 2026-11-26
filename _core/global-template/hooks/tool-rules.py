@@ -652,7 +652,7 @@ RULES = [
 # to the title it makes the commit subject.
 SUBJECT_LIMIT = 72
 TITLE_LIMIT = 64
-MENTIONS_COMMIT = re.compile(r"\bgit\b[^\n;&|]*\bcommit\b")
+MENTIONS_COMMIT = Followed(r"\bgit\b", r"\n;&|", r"\bcommit\b", flags=0)
 MENTIONS_PR = re.compile(r"\bgh\s+pr\s+(?:create|edit)\b")
 LANDED_SECONDS = 10
 # A commit or PR counts as this command's only when it was written this recently: a command that only
