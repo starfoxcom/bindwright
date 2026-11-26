@@ -7,12 +7,12 @@ import os
 import posixpath
 import re
 
-from apply import _code_units
+from apply import _code_units, _safe
 
 # The characters JavaScript's \s matches: a span with one of them is not a single path.
 WHITESPACE = re.compile(r"[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]")
-# Placeholders and URLs.
-PLACEHOLDER = re.compile(r"[<{*$~]|://")
+# Placeholders, URLs and Windows paths (a backslash, a drive or a share).
+PLACEHOLDER = re.compile(r"[<{*$~\\:]")
 # A file extension starts with a letter, so a version such as 7.19.1 is no path.
 EXTENSION = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,4}\Z")
 BACKTICKED = re.compile(r"`([^`\n]+)`")
@@ -36,12 +36,13 @@ def _is_path_like(span):
 def _resolves(root, file, span):
     """True when the repo holds the span, counted from its root or from the naming file's folder.
 
-    A path that climbs out of the repo is never found.
+    Only plain relative segments are looked up: a path that climbs out of the repo, or holds a
+    backslash, drive or control character, is never found.
     """
     folder = posixpath.dirname(file)
     for candidate in (span, posixpath.join(folder, span)):
         path = posixpath.normpath(candidate)
-        if path != ".." and not path.startswith("../") and os.path.exists(os.path.join(root, *path.split("/"))):
+        if path == "." or (_safe(path) and os.path.exists(os.path.join(root, *path.split("/")))):
             return True
     return False
 

@@ -118,7 +118,9 @@ function baseFor(pristine, path, ours) {
 export function planUpdate(rendered, pristine, { readRepo, owned, merge, version }) {
   const theirsAll = repoFiles(rendered);
   const paths = [...new Set([...Object.keys(pristine.files), ...theirsAll.keys()])].sort();
-  const result = { write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [] };
+  const result = {
+    write: [], stage: [], pristine: {}, renamed: [], remove: [], owned_changed: [], bases: new Map(),
+  };
   for (const outcome of OUTCOMES) result[outcome] = [];
   const moves = movesFor(theirsAll, pristine, { readRepo, owned });
   const movedFrom = new Set(moves.values());
@@ -146,7 +148,10 @@ export function planUpdate(rendered, pristine, { readRepo, owned, merge, version
     const base = baseFor(pristine, from ?? path, ours);
     const [outcome, text] = decide(path, { ours, base, theirs }, merge);
     result[outcome].push(path);
-    if (outcome === "updated" || outcome === "merged" || outcome === "added") result.write.push([path, text]);
+    if (outcome === "updated" || outcome === "merged" || outcome === "added") {
+      result.write.push([path, text]);
+      result.bases.set(path, base);
+    }
     if (outcome === "staged" || outcome === "conflict") result.stage.push([STAGING + path, text]);
     // A moved file the merge leaves as it was, or stages, still lands at its new path.
     if (from && (outcome === "unchanged" || outcome === "conflict")) result.write.push([path, ours]);
@@ -394,16 +399,16 @@ export async function runUpdate(root, { bindWith, version }) {
     renamed: plan.renamed,
     owned_changed: plan.owned_changed,
     skipped,
-    missing: missingReport(root, writtenFiles(plan, pristine)),
+    missing: missingReport(root, writtenFiles(plan)),
   };
 }
 
 // The files this update wrote with a new text (added, merged or updated), each with that text
-// and the base it had in the record before the update.
-function writtenFiles(plan, pristine) {
+// and the base the update decided it against.
+function writtenFiles(plan) {
   const written = new Map(plan.write);
   return [...plan.added, ...plan.merged, ...plan.updated].map((path) => ({
-    path, text: written.get(path), base: pristine.files[path],
+    path, text: written.get(path), base: plan.bases.get(path),
   }));
 }
 

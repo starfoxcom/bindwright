@@ -3,11 +3,12 @@
 
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
+import { safe } from "./apply.js";
 
 // The characters JavaScript's \s matches: a span with one of them is not a single path.
 const WHITESPACE = /[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/;
-// Placeholders and URLs.
-const PLACEHOLDER = /[<{*$~]|:\/\//;
+// Placeholders, URLs and Windows paths (a backslash, a drive or a share).
+const PLACEHOLDER = /[<{*$~\\:]/;
 // A file extension starts with a letter, so a version such as 7.19.1 is no path.
 const EXTENSION = /\.[A-Za-z][A-Za-z0-9]{0,4}$/;
 const BACKTICKED = /`([^`\n]+)`/g;
@@ -26,12 +27,13 @@ function isPathLike(span) {
 }
 
 // True when the repo holds the span, counted from its root or from the naming file's folder.
-// A path that climbs out of the repo is never found.
+// Only plain relative segments are looked up: a path that climbs out of the repo, or holds a
+// backslash, drive or control character, is never found.
 function resolves(root, file, span) {
   const folder = posix.dirname(file);
   return [span, posix.join(folder, span)].some((candidate) => {
-    const path = posix.normalize(candidate);
-    return path !== ".." && !path.startsWith("../") && existsSync(join(root, ...path.split("/")));
+    const path = posix.normalize(candidate).replace(/\/$/, "");
+    return path === "." || (safe(path) && existsSync(join(root, ...path.split("/"))));
   });
 }
 

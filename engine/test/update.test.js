@@ -361,6 +361,11 @@ const NAMED_ROWS = [
     line: "See `docs/never/`.",
     missing: [{ file: RULE, names: ["docs/never/"] }],
   },
+  {
+    name: "a Windows path is never looked up or reported",
+    line: "See `..\\..\\x.md`, `\\\\host\\share\\x.md`, `C:x.md` and `C:\\x.md`.",
+    missing: [],
+  },
 ];
 
 for (const row of NAMED_ROWS) {
@@ -375,3 +380,30 @@ for (const row of NAMED_ROWS) {
     assert.deepEqual(out.missing, row.missing);
   });
 }
+
+const SKILL = ".claude/skills/close-session/SKILL.md";
+const OLD_SKILL = ".claude/skills/session-close/SKILL.md";
+
+test("named paths: a moved file is compared with its base under the old path", needsPython, async () => {
+  const { out } = await update((r) => {
+    const base = older(r.read(SKILL));
+    delete r.pristine.files[SKILL];
+    r.pristine.files[OLD_SKILL] = base;
+    rmSync(r.at(SKILL));
+    r.write(OLD_SKILL, base);
+  });
+  assert.deepEqual(out.renamed, [[OLD_SKILL, SKILL]]);
+  assert.deepEqual(out.updated, [SKILL]);
+  assert.deepEqual(out.missing, []);
+});
+
+test("named paths: a held base is what a name is compared with", needsPython, async () => {
+  const line = "See `docs/held-never.md`.";
+  const { out } = await update((r) => {
+    const held = r.read(RULE);
+    r.pristine.held = { [RULE]: held };
+    r.pristine.files[RULE] = `${held}\nOld ${line}\n`;
+  }, { template: (text) => `${text}\n${line}\n` });
+  assert.deepEqual(out.updated, [RULE]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: ["docs/held-never.md"] }]);
+});
