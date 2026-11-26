@@ -499,14 +499,16 @@ for (const row of STALE_ROWS) {
 const SKILL = ".claude/skills/close-session/SKILL.md";
 const OLD_SKILL = ".claude/skills/session-close/SKILL.md";
 
+// Only the old path's base names the dropped guide, so priors taken from the new path report it.
 test("named paths: a moved file is compared with its base under the old path", needsPython, async () => {
   const { out } = await update((r) => {
-    const base = older(r.read(SKILL));
+    drop(r, GUIDE);
+    const base = `${r.read(SKILL)}\nOld \`${GUIDE}\` wording.\n`;
     delete r.pristine.files[SKILL];
     r.pristine.files[OLD_SKILL] = base;
     rmSync(r.at(SKILL));
     r.write(OLD_SKILL, base);
-  });
+  }, { edits: { [SKILL]: (text) => `${text}\nNew \`${GUIDE}\` wording.\n` } });
   assert.deepEqual(out.renamed, [[OLD_SKILL, SKILL]]);
   assert.deepEqual(out.updated, [SKILL]);
   assert.deepEqual(out.missing, []);
