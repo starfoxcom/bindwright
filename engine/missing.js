@@ -2,13 +2,14 @@
 // names and links that go stale, for the `missing`, `unlinked` and `stale` keys of --update.
 // missing.py is the Python twin; a test runs both.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, posix } from "node:path";
+import { safe } from "./apply.js";
 
 // The characters JavaScript's \s matches: a span with one of them is not a single path.
 const WHITESPACE = /[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/;
-// Placeholders and URLs.
-const PLACEHOLDER = /[<{*$~]|:\/\//;
+// Placeholders, URLs and Windows paths (a backslash, a drive or a share).
+const PLACEHOLDER = /[<{*$~\\:]/;
 // A file extension starts with a letter, so a version such as 7.19.1 is no path.
 const EXTENSION = /\.[A-Za-z][A-Za-z0-9]{0,4}$/;
 // A backticked span, then the section text of a `§` reference: the text runs to the line's end
@@ -31,13 +32,14 @@ function isPathLike(span) {
 }
 
 // The repo paths a span can name, counted from the root and then from the naming file's folder.
-// A path that climbs out of the repo is left out, and so is an absolute span.
+// Only plain relative segments are kept, or "." for the root: a path that climbs out of the
+// repo, or holds a backslash, drive or control character, is left out, and so is an absolute span.
 function candidatesOf(file, span) {
   if (span.startsWith("/")) return [];
   const folder = posix.dirname(file);
   return [span, posix.join(folder, span)]
     .map((candidate) => posix.normalize(candidate).replace(/\/$/, ""))
-    .filter((path) => path !== ".." && !path.startsWith("../"));
+    .filter((path) => path === "." || safe(path));
 }
 
 // The first candidate path that the repo holds or that `known` accepts, or undefined.
@@ -47,10 +49,10 @@ function resolvedPath(root, file, span, known = () => false) {
   );
 }
 
-// A repo file's text as it is on disk now, or undefined when it is gone.
+// A repo file's text as it is on disk now, or undefined when it is gone or is no file.
 function diskText(root, path) {
   const target = join(root, ...path.split("/"));
-  return existsSync(target) ? readFileSync(target, "utf8") : undefined;
+  return statSync(target, { throwIfNoEntry: false })?.isFile() ? readFileSync(target, "utf8") : undefined;
 }
 
 // The headings of a Markdown text, without their marks and trailing #s.

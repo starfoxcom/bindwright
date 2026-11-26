@@ -102,7 +102,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
     theirs_all = repo_files(rendered)
     paths = sorted(set(pristine["files"]) | set(theirs_all), key=_code_units)
     result = {o: [] for o in OUTCOMES}
-    result.update({"write": [], "stage": [], "renamed": [], "remove": [], "owned_changed": []})
+    result.update({"write": [], "stage": [], "renamed": [], "remove": [], "owned_changed": [], "bases": {}})
     files = {}
     moves = _moves_for(theirs_all, pristine, read_repo, owned)
     moved_from = set(moves.values())
@@ -132,6 +132,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
         result[outcome].append(path)
         if outcome in ("updated", "merged", "added"):
             result["write"].append((path, decided[1]))
+            result["bases"][path] = base
         if outcome in ("staged", "conflict"):
             result["stage"].append((STAGING + path, decided[1]))
         # A moved file the merge leaves as it was, or stages, still lands at its new path.
@@ -364,19 +365,19 @@ def run_update(root, bind_with, version, state_json):
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
     out.update(renamed=plan["renamed"], owned_changed=plan["owned_changed"], skipped=skipped,
-               missing=missing_report(root, _written_files(plan, pristine), repo_files(rendered)),
+               missing=missing_report(root, _written_files(plan), repo_files(rendered)),
                unlinked=unlinked_report(root, plan["added"], repo_files(rendered), pristine["files"]),
                stale=stale_report(root, plan, pristine["files"]))
     return out
 
 
-def _written_files(plan, pristine):
+def _written_files(plan):
     """The files this update wrote with a new text, as (path, new text, base) triples; the base is
-    the file's text in the record before the update.
+    the one the update decided the file against.
     """
     written = dict(plan["write"])
     paths = [path for outcome in ("added", "merged", "updated") for path in plan[outcome]]
-    return [(path, written[path], pristine["files"].get(path)) for path in paths]
+    return [(path, written[path], plan["bases"].get(path)) for path in paths]
 
 
 def _record_of(text, what):

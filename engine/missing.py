@@ -8,12 +8,12 @@ import os
 import posixpath
 import re
 
-from apply import _code_units
+from apply import _code_units, _safe
 
 # The characters JavaScript's \s matches: a span with one of them is not a single path.
 WHITESPACE = re.compile(r"[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]")
-# Placeholders and URLs.
-PLACEHOLDER = re.compile(r"[<{*$~]|://")
+# Placeholders, URLs and Windows paths (a backslash, a drive or a share).
+PLACEHOLDER = re.compile(r"[<{*$~\\:]")
 # A file extension starts with a letter, so a version such as 7.19.1 is no path.
 EXTENSION = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,4}\Z")
 # A backticked span, then the section text of a `§` reference: the text runs to the line's end
@@ -41,14 +41,15 @@ def _is_path_like(span):
 def _candidates_of(file, span):
     """The repo paths a span can name, counted from the root and then from the naming file's folder.
 
-    A path that climbs out of the repo is left out, and so is an absolute span.
+    Only plain relative segments are kept, or "." for the root: a path that climbs out of the
+    repo, or holds a backslash, drive or control character, is left out, and so is an absolute span.
     """
     if span.startswith("/"):
         return []
     folder = posixpath.dirname(file)
     candidates = [posixpath.normpath(span), posixpath.normpath(posixpath.join(folder, span))]
     paths = [path[:-1] if path.endswith("/") else path for path in candidates]
-    return [path for path in paths if path != ".." and not path.startswith("../")]
+    return [path for path in paths if path == "." or _safe(path)]
 
 
 def _resolved_path(root, file, span, known=lambda path: False):
@@ -60,9 +61,9 @@ def _resolved_path(root, file, span, known=lambda path: False):
 
 
 def _disk_text(root, path):
-    """A repo file's text as it is on disk now, or None when it is gone."""
+    """A repo file's text as it is on disk now, or None when it is gone or is no file."""
     target = os.path.join(root, *path.split("/"))
-    if not os.path.exists(target):
+    if not os.path.isfile(target):
         return None
     with open(target, encoding="utf-8", newline="") as fh:
         return fh.read()
