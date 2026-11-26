@@ -24,12 +24,15 @@ A PR body carries only its `Resolves #N` or `Part of #N` line (`Resolves <owner>
 
 ## Issue status
 
-GitHub issues can carry a status beyond open and closed: Backlog, Todo, In progress, In review, Done, Not planned and Duplicate. The feature is in preview and reaches repos one at a time, so list the repo's statuses first; when the list is empty or the query fails, the repo does not have them yet, and this section does not apply.
+GitHub issues can carry a status beyond open and closed: Backlog, Todo, In progress, In review, Done, Not planned and Duplicate. Not every repo has them, so list the repo's statuses first. An empty list means this section does not apply. A query that fails says nothing about the statuses: say what failed, as when the tracker is offline, and leave them as they are.
 
 - When work on an issue starts, set it to In progress.
-- GitHub moves an issue to Todo when someone is assigned, to In review when an open PR links it (`Resolves #N`), and to Done when that PR closes it. Set nothing for those.
+- GitHub moves an issue to Todo when someone is assigned. A PR into the default branch that links it (`Resolves #N`) moves it to In review while open and to Done when it merges; set nothing for those.
+- A PR into any other branch links nothing, since GitHub reads closing keywords only on the default branch. So set In review when that PR opens, and Done when it merges, closing the issue if it is still open.
 - An item that will not be done gets Not planned, and one that repeats another gets Duplicate with the other issue's id. Either status closes the issue with the matching reason, so no separate close is needed.
 - The board's Status field follows the issue's status, and the other way round, wherever the field has an option of the same name. Set the issue's status, not the board field.
+
+In both commands, `<owner>` and `<repo>` name the repo the issues live in: `advanced.trackerRepo` when it names one, otherwise this one.
 
 | Job | Command |
 |---|---|
