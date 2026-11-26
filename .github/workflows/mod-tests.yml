@@ -83,6 +83,17 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # A PR that changes a mod's code raises that mod's version in the same PR
+      # (tools/mod_version_check.py). The step runs once the check is on the
+      # branch. The checkout holds one commit, so the base's history comes first.
+      - name: Mod version check
+        if: github.event_name == 'pull_request' && steps.mods.outputs.present == 'true' && hashFiles('tools/mod_version_check.py') != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --quiet --no-tags --unshallow origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          python tools/mod_version_check.py "origin/$BASE_REF"
+
       - name: Install the CLI
         if: steps.mods.outputs.present == 'true'
         env:
