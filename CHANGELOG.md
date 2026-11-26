@@ -12,6 +12,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 - **`/bindwright:update` lists the Bindwright files the new template text points at that the repo does not have.** The update's output gains a `missing` list, one entry per written file, so a rule that now names a file the project left out is named before it reaches a review. The same list names a section the new text points into that the repo's copy lacks, an `unlinked` list names each new file whose pointer from an owned or unsettled file never landed, and a `stale` list names each kept file that still points at something the update removed.
 - **The tasks mod holds a commit while the task list says something that may no longer be true.** Besides waiting for the list to change since the last commit, a commit now waits while more than one task is in progress, and while a hold has gone more than 6 hours without being set again, listing each one to fix. Setting a hold again is how a session confirms it still holds, so a hold whose wait ended (an answer the user gave, a count that passed) no longer sits unchecked. `task-tracking.md` says so.
 
+### Changed
+
+- **Research comes before every round of review, the first one included.** `review-tiers.md` and `local-review.md` now ask for five compared lookups before a PR opens and before the fix of every red round, in place of a step back after the 3rd, the 5th and every red round from the 6th. The ci-watch mod holds `gh pr create` until five distinct lookups have run since the session last opened a PR, and every red round now holds edits, commits and pushes until five more have run. The 10th red round in a row is still the hard stop.
+
 ### Fixed
 
 - **The usage-guard card's buttons wrap to a new line when the card is narrow.** With a pause armed, the card shows Dismiss and both Cancel resume buttons in one row, and on a narrow window the last one ran off the card's edge, cut mid-word. The row now wraps, so each button stays whole.
