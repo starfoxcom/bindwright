@@ -347,8 +347,8 @@ export const FIXED = [
 export const MODS_ROWS = [
   {
     id: "ci-watch",
-    text: "Watches pull request checks and wakes the session when they finish. After repeated red rounds, "
-      + "it holds changes until the session researches a better fix.",
+    text: "Watches pull request checks and wakes the session when they finish. Before a pull request "
+      + "opens and after every red round, it holds changes until the session researches a better fix.",
     value: "On",
   },
   { id: "compact-handoff", text: "Carries your words and a hand-off across compactions.", value: "On" },
