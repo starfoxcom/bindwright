@@ -269,6 +269,14 @@ test('the slim line gives way to the pause card, which already says when work re
   expect(await ui.find({ key: 'usage-arm-line' })).toBeUndefined()
 })
 
+test("the pause card's buttons wrap, so none runs off a narrow card", async ($, on) => {
+  const seen = world(on)
+  await crossAndWrapUp($, seen)
+  const ui = await mountCard($)
+  const row = (await ui.find({ key: 'usage-card-buttons' })) as never as { props: Record<string, unknown> } | undefined
+  expect(row?.props.flexWrap).toBe('wrap')
+})
+
 test('an arm with nothing pending in a session that never made a list still asks', async ($, on) => {
   const seen = world(on)
   seen.hasTasksMod = true
