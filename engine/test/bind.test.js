@@ -1052,7 +1052,7 @@ test("guard hooks and settings follow the hook location and the attribution guar
         const hookName = (c) => c.match(/exec sh "\$0" ([\w-]+)'/)[1];
         assert.deepEqual(names("PreToolUse").map(hookName),
           attributionGuard ? ["no-ai-attribution", "push-guard", "tool-rules"] : ["push-guard", "tool-rules"], label);
-        assert.deepEqual(names("PostToolUse").map(hookName), ["live-check"], label);
+        assert.deepEqual(names("PostToolUse").map(hookName), ["live-check", "tool-rules"], label);
         for (const c of [...names("PreToolUse"), ...names("PostToolUse")]) {
           assert.ok(c.includes("${CLAUDE_PROJECT_DIR}/.claude/hooks/run-hook.sh"), label);
         }

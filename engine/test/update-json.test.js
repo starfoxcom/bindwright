@@ -6,8 +6,12 @@ import assert from "node:assert/strict";
 import { gitMerge } from "../update.js";
 import { SETTINGS, needsPython, update } from "./update-run.js";
 
-// The settings with the first hook's timeout at a value the templates no longer have.
-const olderTimeout = (text) => text.replace(/"timeout": \d+/, '"timeout": 5');
+// The settings with the first hook's timeout and the schema at values the templates no longer
+// have. One change sits in the hooks block and one after it, so git's line merge clashes with the
+// moved hooks key whichever block its diff takes as the one that moved.
+const olderTimeout = (text) => text
+  .replace(/"timeout": \d+/, '"timeout": 5')
+  .replace(/"\$schema": "[^"]+"/, '"$schema": "https://example.com/older-settings.json"');
 const firstTimeout = (text) => JSON.parse(text).hooks.PreToolUse[0].hooks[0].timeout;
 
 // The same settings with the hooks key moved to the end, and nothing else changed.
