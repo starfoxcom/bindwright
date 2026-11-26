@@ -958,8 +958,10 @@ jobs:
       # routine workflow's "Pick the review's account" picks it, on the deep
       # model: the first account, counting from the first, that answers a
       # one-line request with its plan use under REVIEW_ACCOUNT_CEILING.
-      # pick_account.py at the gate's commit decides; a gate's commit without
-      # it, or a failed pick, leaves the first account whose token is set.
+      # pick_account.py decides, read from the gate's commit, or from the
+      # default branch's tip when that commit predates it (a PR can change
+      # neither). Neither holding it, or a failed pick, leaves the first
+      # account whose token is set.
       - name: Pick the review's account
         id: main-account
         if: steps.brief.outcome == 'success' && steps.claude_credits.outcome != 'success' && steps.payer.outputs.main_on_key != 'yes' && steps.claude-cli.outcome == 'success'
@@ -971,6 +973,7 @@ jobs:
           MODEL: ${{ steps.gate.outputs.deep_model }}
           CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
           GATE_SHA: ${{ steps.gate.outputs.gate_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
           TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
@@ -979,8 +982,9 @@ jobs:
         run: |
           set -euo pipefail
           script="$RUNNER_TEMP/pick_account_main.py"
-          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
-            echo "::notice::The gate's commit has no account picker: the review runs on the first account whose token is set"
+          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
+            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
+            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the review runs on the first account whose token is set"
             exit 0
           fi
           python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
@@ -1271,9 +1275,9 @@ jobs:
           echo "version=$installed" >> "$GITHUB_OUTPUT"
 
       # The fallback's account, picked as "Pick the review's account" picks
-      # one, on the fallback model and the stable CLI copy. A gate's commit
-      # without the script, or a failed pick, leaves the first attempt's
-      # account.
+      # one, on the fallback model and the stable CLI copy, with the script
+      # from the same place. Neither the gate's commit nor the default branch
+      # holding it, or a failed pick, leaves the first attempt's account.
       - name: Pick the fallback's account
         id: account
         if: steps.claude-cli-stable.outcome == 'success'
@@ -1285,6 +1289,7 @@ jobs:
           MODEL: ${{ steps.gate.outputs.deep_fallback_model }}
           CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
           GATE_SHA: ${{ steps.gate.outputs.gate_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
           TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
@@ -1293,8 +1298,9 @@ jobs:
         run: |
           set -euo pipefail
           script="$RUNNER_TEMP/pick_account_fallback.py"
-          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
-            echo "::notice::The gate's commit has no account picker: the fallback runs on the first attempt's account"
+          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
+            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
+            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the fallback runs on the first attempt's account"
             exit 0
           fi
           python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
