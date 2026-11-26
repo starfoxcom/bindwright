@@ -169,11 +169,13 @@ read_key() {
 
 # Without --ceiling, the percent the usage guard pauses at, when its settings
 # file names a whole one from 1 to 100; otherwise the variable is left alone.
+# The pattern takes the whole JSON number (sign, fraction and exponent), so
+# only a number written as a plain percent passes.
 guard_ceiling() {
   local file="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/mods-data/usage-guard/settings.json" text
-  local pattern='"wrapUpAt"[[:space:]]*:[[:space:]]*([0-9]+)([^0-9.]|$)'
-  [ -z "$CEILING" ] && [ -f "$file" ] || return 0
-  text=$(< "$file")
+  local pattern='"wrapUpAt"[[:space:]]*:[[:space:]]*(-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)[[:space:]]*([,}]|$)'
+  [ -z "$CEILING" ] && [ -f "$file" ] && [ -r "$file" ] || return 0
+  text=$(cat -- "$file" 2> /dev/null) || return 0
   [[ $text =~ $pattern ]] && [[ ${BASH_REMATCH[1]} =~ $PERCENT_RE ]] || return 0
   CEILING=${BASH_REMATCH[1]}
   echo "Ceiling: $CEILING%, the percent the usage guard pauses at" >&2

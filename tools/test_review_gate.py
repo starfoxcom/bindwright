@@ -893,7 +893,8 @@ class SetupScript(unittest.TestCase):
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False, guard_settings=None):
+    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False, guard_settings=None,
+                  guard_mode=None):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
@@ -904,8 +905,10 @@ class SetupScript(unittest.TestCase):
             os.remove(settings)
         if guard_settings is not None:
             os.makedirs(os.path.dirname(settings), exist_ok=True)
-            with open(settings, "w") as f:
+            with open(settings, "w", newline="") as f:
                 f.write(guard_settings)
+            if guard_mode is not None:
+                os.chmod(settings, guard_mode)
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
                    CLAUDE_CONFIG_DIR=config.replace("\\", "/"),
                    FAKE_GH_TOOLS=os.path.join(ROOT, "tools"), PATH=self.dir + os.pathsep + os.environ["PATH"])
@@ -1208,7 +1211,12 @@ class SetupScript(unittest.TestCase):
                 ("the last key, with no comma after it", '{"compactAbovePercent": 35, "wrapUpAt": 100}', "100"),
                 ("no settings file", None, None),
                 ("no pause percent saved", '{"compactAbovePercent": 35}', None),
+                ("CRLF line endings", '{\r\n  "wrapUpAt": 98\r\n}\r\n', "98"),
                 ("a fraction", '{"wrapUpAt": 98.5}', None),
+                ("an exponent JSON.stringify writes", '{"wrapUpAt": 1e+21}', None),
+                ("a hand-written exponent", '{"wrapUpAt": 9e1}', None),
+                ("a negative", '{"wrapUpAt": -98}', None),
+                ("a string", '{"wrapUpAt": "98"}', None),
                 ("zero", '{"wrapUpAt": 0}', None),
                 ("past 100", '{"wrapUpAt": 150}', None)):
             run, after, _ = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
@@ -1217,6 +1225,16 @@ class SetupScript(unittest.TestCase):
             self.assertEqual(len(after["written"]), 1, name)
             want = [["acme/game", "REVIEW_ACCOUNT_CEILING", expected]] if expected else None
             self.assertEqual(after.get("variables"), want, name)
+
+    def test_an_unreadable_guard_settings_file_leaves_the_variable_and_the_run_goes_on(self):
+        run, after, _ = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
+                                       stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n",
+                                       guard_settings='{"wrapUpAt": 98}', guard_mode=0)
+        if os.access(os.path.join(self.dir, "config", "mods-data", "usage-guard", "settings.json"), os.R_OK):
+            self.skipTest("this user or file system reads a file with no permissions")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(len(after["written"]), 1)
+        self.assertNotIn("variables", after)
 
     def test_a_ceiling_outside_1_to_100_is_refused_before_any_call(self):
         for ceiling in ("0", "101", "9x", "-5", "050"):
