@@ -344,7 +344,6 @@ const drop = (r, ...paths) => {
 // shipped paths the repo deleted.
 const NAMED_ROWS = [
   { name: "a path at the repo root is found", line: "See `.claude/settings.json`.", missing: [] },
-  { name: "a bare name beside the naming file is found", line: "See `testing.md`.", missing: [] },
   {
     name: "a shipped file the repo lacks is reported",
     gone: [GUIDE],
@@ -513,16 +512,30 @@ test("named paths: a moved file is compared with its base under the old path", n
   assert.deepEqual(out.missing, []);
 });
 
-test("named paths: a bare rule name outside the rules folder is found there", needsPython, async () => {
-  const guide = ".github/review-guide.md";
+const REVIEW_GUIDE = ".github/review-guide.md";
+
+// Only the rules-folder candidate resolves `testing.md` named from the review guide: neither
+// `testing.md` nor `.github/testing.md` ships.
+test("named paths: a bare rule name the repo left out is reported from elsewhere", needsPython, async () => {
   const { out } = await update((r) => {
-    const base = r.read(guide).split("\n").filter((l) => !l.includes("`testing.md`")).join("\n");
-    assert.notEqual(base, r.read(guide), "the review guide names the testing rule by its bare name");
-    r.pristine.files[guide] = base;
-    r.write(guide, base);
+    const named = r.read(REVIEW_GUIDE);
+    const base = named.split("\n").filter((l) => !l.includes("`testing.md`")).join("\n");
+    assert.notEqual(base, named, "the review guide names the testing rule by its bare name");
+    r.pristine.files[REVIEW_GUIDE] = base;
+    r.write(REVIEW_GUIDE, base);
+    drop(r, OTHER);
   });
-  assert.ok(out.updated.includes(guide));
-  assert.deepEqual(out.missing, []);
+  assert.ok(out.updated.includes(REVIEW_GUIDE));
+  assert.deepEqual(out.missing, [{ file: REVIEW_GUIDE, names: ["testing.md"] }]);
+});
+
+// Only the beside-the-file candidate resolves `review-gate.yml` named from the review guide.
+test("named paths: a bare sibling the repo left out is reported", needsPython, async () => {
+  const { out } = await update((r) => drop(r, ".github/review-gate.yml"), {
+    edits: { [`${REVIEW_GUIDE}.template`]: (text) => `${text}\nSee \`review-gate.yml\`.\n` },
+  });
+  assert.deepEqual(out.updated, [REVIEW_GUIDE]);
+  assert.deepEqual(out.missing, [{ file: REVIEW_GUIDE, names: ["review-gate.yml"] }]);
 });
 
 test("named paths: a merged file reports only what the template added", needsPython, async () => {

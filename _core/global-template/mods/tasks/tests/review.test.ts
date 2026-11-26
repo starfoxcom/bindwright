@@ -6,11 +6,11 @@ type Answer = { deny?: string; context?: string[] }
 
 // Just enough engine for the task list to save and for shell and edit calls to answer. `offered` is the
 // session's tool list.
-function world(on: On, offered = ['TaskCreate', 'TaskUpdate', 'Bash']): void {
+function world(on: On, offered = ['TaskCreate', 'TaskUpdate', 'Bash']): ReturnType<typeof mock.clock> {
   on('tool.list', () => ({ value: offered.map(name => ({ name })) }) as never)
   const files = new Map<string, string>()
   const key = (path: string) => path.replaceAll('\\', '/')
-  mock.clock(on, { now: Date.UTC(2026, 10, 22, 9, 0, 0) })
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 22, 9, 0, 0) })
   mock.env(on, { USERPROFILE: 'C:/Users/me' })
   on('fs.read', ($, e) => {
     const text = files.get(key(e.path))
@@ -34,6 +34,7 @@ function world(on: On, offered = ['TaskCreate', 'TaskUpdate', 'Bash']): void {
   on('tool.call', { tool: 'TaskUpdate' }, () => ({ result: {} }) as never)
   on('tool.call', { tool: 'TaskList' }, () => ({ result: { tasks: [] } }) as never)
   on('tool.call', { tool: ['Bash', 'PowerShell', 'Edit', 'Read'] }, () => ({ result: 'ok' }) as never)
+  return clock
 }
 
 async function call($: Engine, input: Record<string, unknown>): Promise<Answer> {
@@ -142,4 +143,32 @@ test("a subagent's commit is not held", async ($, on) => {
   await call($, { tool: 'Bash', command: 'git commit -m first' })
   const answer = await call($, { tool: 'Bash', command: 'git commit -m second', agentId: 'sub-1' })
   expect(answer.deny).toBe(undefined)
+})
+
+test('a commit waits while two tasks are in progress, and goes once one is set back', async ($, on) => {
+  world(on)
+  await started($)
+  await call($, { tool: 'TaskUpdate', taskId: '1', status: 'in_progress' })
+  await call($, { tool: 'TaskCreate', subject: 'docs', description: 'the skill text' })
+  await call($, { tool: 'TaskUpdate', taskId: '3', status: 'in_progress' })
+  const refused = (await call($, { tool: 'Bash', command: 'git commit -m x' })).deny ?? ''
+  expect(refused).toContain('2 tasks are in progress')
+  expect(refused).toContain('#3 "docs" (in progress)')
+  expect(refused).not.toContain('Update the task list before this commit')
+  await call($, { tool: 'TaskUpdate', taskId: '3', status: 'pending' })
+  expect((await call($, { tool: 'Bash', command: 'git commit -m x' })).deny).toBe(undefined)
+})
+
+test('a commit waits on a hold unchecked for over 6 hours, until it is set again', async ($, on) => {
+  const clock = world(on)
+  await started($)
+  await clock.advance(6 * 60 * 60 * 1000)
+  expect((await call($, { tool: 'Bash', command: 'git commit -m a' })).deny).toBe(undefined)
+  await clock.advance(1)
+  await call($, { tool: 'TaskUpdate', taskId: '1', description: 'PR #12 merged' })
+  const refused = (await call($, { tool: 'Bash', command: 'git commit -m b' })).deny ?? ''
+  expect(refused).toContain('last checked over 6 hours ago')
+  expect(refused).toContain('#2 "rename" (on hold, waits on: the owner moves the folder)')
+  await call($, { tool: 'TaskUpdate', taskId: '2', metadata: { hold: 'the owner moves the folder' } })
+  expect((await call($, { tool: 'Bash', command: 'git commit -m b' })).deny).toBe(undefined)
 })

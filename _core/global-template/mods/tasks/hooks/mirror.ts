@@ -13,6 +13,8 @@ export type MirrorTask = {
   doneAt?: number
   // Set while the task waits on something outside it (a decision, another task); the reason.
   hold?: string
+  // When the hold was last set, the same text again included (ms): setting it again says it still holds.
+  holdCheckedAt?: number
   // Set when the task was deleted unfinished: kept in the list as dropped, not done.
   droppedAt?: number
   description?: string
@@ -112,7 +114,7 @@ export function openTasks(mirror: Mirror): MirrorTask[] {
   return mirror.tasks.filter(task => task.status !== 'completed' && !task.droppedAt)
 }
 
-function inProgress(mirror: Mirror): MirrorTask[] {
+export function inProgress(mirror: Mirror): MirrorTask[] {
   return mirror.tasks.filter(task => task.status === 'in_progress' && !task.hold && !task.droppedAt)
 }
 
@@ -127,13 +129,18 @@ export function applyCreate(
   mirror.tasks.push({ id, subject, activeForm, status: 'pending', createdTurn: turn })
 }
 
+function liftHold(task: MirrorTask): void {
+  delete task.hold
+  delete task.holdCheckedAt
+}
+
 export function applyUpdate(mirror: Mirror, args: UpdateArgs, turn: number, now: number): void {
   const id = String(args.taskId ?? '')
   if (args.status === 'deleted') {
     const gone = mirror.tasks.find(task => task.id === id)
     if (gone && gone.status !== 'completed') {
       gone.droppedAt = now
-      delete gone.hold
+      liftHold(gone)
     } else mirror.tasks = mirror.tasks.filter(task => task.id !== id)
     return
   }
@@ -155,13 +162,15 @@ export function applyUpdate(mirror: Mirror, args: UpdateArgs, turn: number, now:
     task.status = 'pending'
     task.startedTurn = undefined
   }
-  if (args.status === 'completed' || args.status === 'in_progress') delete task.hold
+  if (args.status === 'completed' || args.status === 'in_progress') liftHold(task)
   const metadata = metadataOf(args.metadata)
   if (!metadata) return
   for (const [key, value] of Object.entries(metadata)) {
     if (key === 'hold') {
-      if (typeof value === 'string' && value.trim()) task.hold = value.trim()
-      else delete task.hold
+      if (typeof value === 'string' && value.trim()) {
+        task.hold = value.trim()
+        task.holdCheckedAt = now
+      } else liftHold(task)
     } else if (value === null) {
       if (task.metadata) delete task.metadata[key]
     } else task.metadata = { ...task.metadata, [key]: value }
