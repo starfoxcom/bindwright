@@ -37,7 +37,7 @@ export const MAX_PER_SEND = 500;
 /** Upper bound for the red review rounds in one send: 500 PRs at a 50-round ceiling each. */
 export const MAX_ROUNDS_PER_SEND = MAX_PER_SEND * 50;
 
-/** Red review rounds at which a PR counts as stalled: the review rules stop to research a simpler way. */
+/** Red review rounds at which a fixed PR counts as stalled: the page splits fixed PRs there. */
 export const STALL_ROUNDS = 3;
 
 /** A project may send again only this long after its last accepted send. */
