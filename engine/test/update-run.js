@@ -25,23 +25,25 @@ const enginesIn = (root) => [
 ];
 export const engines = enginesIn(project);
 
-// A throwaway kit whose task-tracking rule template reads `edit(text)`, so the templates
-// a test binds from can name paths of its own.
-function kitWith(edit) {
+// A throwaway kit whose templates read `edit(text)` for each template path `edits` keys,
+// so the templates a test binds from can name paths of their own.
+function kitWith(edits) {
   const kit = mkdtempSync(join(tmpdir(), "update-kit-"));
   const skipTests = (src) => !/[\\/](test|__pycache__)$/.test(src);
   cpSync(join(project, "engine"), join(kit, "engine"), { recursive: true, filter: skipTests });
   cpSync(join(project, "_core"), join(kit, "_core"), { recursive: true });
   copyFileSync(join(project, "VERSION"), join(kit, "VERSION"));
-  const rule = join(kit, "_core", "project-template", RULE);
-  writeFileSync(rule, edit(readFileSync(rule, "utf8")));
+  for (const [path, edit] of Object.entries(edits)) {
+    const target = join(kit, "_core", "project-template", ...path.split("/"));
+    writeFileSync(target, edit(readFileSync(target, "utf8")));
+  }
   return kit;
 }
 
-// Both engines on identical copies; returns the JS repo and its report. With `template`, the
-// engines bind from a kit whose task-tracking rule template is `template(text)`.
-export async function update(change, { template } = {}) {
-  const kit = template ? kitWith(template) : project;
+// Both engines on identical copies; returns the JS repo and its report. With `edits`, the
+// engines bind from a kit whose templates change as `kitWith` says.
+export async function update(change, { edits } = {}) {
+  const kit = edits ? kitWith(edits) : project;
   const runs = [];
   for (const [cmd, args] of python ? enginesIn(kit) : enginesIn(kit).slice(0, 1)) {
     const repo = await makeRepo(change);
@@ -55,7 +57,7 @@ export async function update(change, { template } = {}) {
     }
   }
   for (const r of runs.slice(1)) rmSync(r.repo.at(""), { recursive: true, force: true });
-  if (template) rmSync(kit, { recursive: true, force: true });
+  if (edits) rmSync(kit, { recursive: true, force: true });
   return runs[0];
 }
 
