@@ -1,5 +1,6 @@
 """Tests for .github/scripts/pick_account.py, which picks the account a review runs on."""
 
+import errno
 import importlib.util
 import json
 import os
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(ROOT, ".github", "scripts", "pick_account.py")
@@ -29,8 +31,11 @@ def answer(used=None, result=OK, as_array=True):
     return json.dumps(events + [result])
 
 
-SPENT = (1, json.dumps([{"type": "result", "subtype": "success", "is_error": True, "api_error_status": 429,
-                         "result": "You've hit your limit"}]))
+SPENT_RESULT = {"type": "result", "subtype": "success", "is_error": True, "api_error_status": 429,
+                "result": "You've hit your limit"}
+SPENT = (1, json.dumps([SPENT_RESULT]))
+# A CLI that reports the refusal in its answer but still exits 0.
+SPENT_EXIT_0 = (0, answer(1, result=SPENT_RESULT))
 REFUSED = (1, json.dumps([{"type": "result", "subtype": "success", "is_error": True, "api_error_status": 401,
                            "result": "Invalid bearer token"}]))
 BLIP = (1, "")
@@ -45,6 +50,9 @@ ROWS = [
     ("an account under the ceiling is used", {1: ok(10), 2: ok(5)}, 98, 1),
     ("an account one step under the ceiling is used", {1: ok(97), 2: ok(5)}, 98, 1),
     ("an account at the ceiling is passed over", {1: ok(98), 2: ok(5)}, 98, 2),
+    ("a share that is not exact in binary still meets the ceiling", {1: ok(57), 2: ok(5)}, 57, 2),
+    ("an error answer that exits 0 is never the one with the most room",
+     {1: SPENT_EXIT_0, 2: ok(99)}, 98, 2),
     ("an account with no room is passed over", {1: SPENT, 2: ok(5)}, 98, 2),
     ("an account whose token is refused is passed over", {1: REFUSED, 2: ok(5)}, 98, 2),
     ("a blip keeps the account it hit", {1: BLIP, 2: ok(5)}, 98, 1),
@@ -70,6 +78,15 @@ class PickTest(unittest.TestCase):
         for text, expected in [("", 100), ("abc", 100), ("0", 100), ("101", 100), ("1", 1), ("98", 98), (" 98 ", 98)]:
             with self.subTest(text=text):
                 self.assertEqual(pick_account.ceiling_of(text), expected)
+
+    def test_a_probe_folder_that_will_not_go_keeps_the_pick_going(self):
+        # A process the CLI leaves behind can write into the folder while it is removed.
+        with tempfile.TemporaryDirectory() as runner_temp:
+            busy = OSError(errno.ENOTEMPTY, "Directory not empty")
+            with mock.patch.dict(os.environ, {"RUNNER_TEMP": runner_temp}), \
+                    mock.patch("os.rmdir", side_effect=busy):
+                result = pick_account.probe(os.path.join(runner_temp, "no-such-cli"), "model", "token")
+            self.assertEqual(result, (1, ""))
 
 
 FAKE_CLI = r'''

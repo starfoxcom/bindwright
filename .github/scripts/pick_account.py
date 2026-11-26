@@ -23,6 +23,7 @@ number from 1 to 100, so only a spent plan moves the review on.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -67,15 +68,17 @@ def read_answer(stdout):
         for window in (windows or {}).values() if isinstance(windows, dict) else ():
             share = window.get("utilization") if isinstance(window, dict) else None
             if isinstance(share, (int, float)) and not isinstance(share, bool):
-                used = max(used or 0.0, share * 100)
+                # Rounded, since 0.57 * 100 is 56.99999999999999 in binary floats.
+                used = max(used or 0.0, round(share * 100, 6))
     return (results[-1] if results else {}), used
 
 
 def verdict(status, result, used, ceiling):
-    """"use", "full" (no room, or past the ceiling) or "refused" for one account's answer."""
+    """"use", "past" (answered, at or past the ceiling), "full" (no room) or
+    "refused" for one account's answer."""
     answered = status == 0 and result and not result.get("is_error") and result.get("subtype", "success") == "success"
     if answered:
-        return "full" if used is not None and used >= ceiling else "use"
+        return "past" if used is not None and used >= ceiling else "use"
     text = result.get("result") if isinstance(result.get("result"), str) else ""
     api = result.get("api_error_status")
     if api == 429 or LIMIT.search(text):
@@ -90,23 +93,33 @@ def probe(cli, model, token):
     env = {k: v for k, v in os.environ.items() if k not in SECRET_NAMES}
     # Under RUNNER_TEMP, which the runner empties after every job, so a step its
     # timeout stops leaves nothing behind.
-    with tempfile.TemporaryDirectory(prefix="probe-", dir=os.environ.get("RUNNER_TEMP") or None) as home:
-        env.update(HOME=home, USERPROFILE=home, CLAUDE_CONFIG_DIR=os.path.join(home, ".claude"),
-                   CLAUDE_CODE_OAUTH_TOKEN=token, DISABLE_AUTOUPDATER="1")
-        args = [cli, "-p", PROMPT, "--setting-sources", "user", "--strict-mcp-config",
-                "--permission-mode", "default", "--max-turns", "1", "--model", model,
-                "--effort", "low", "--output-format", "json", "--verbose"]
-        # The answer goes to a file, not a pipe: a process the CLI leaves behind
-        # holding a pipe open would keep the wait going past the timeout.
-        answer_path = os.path.join(home, "answer.json")
-        try:
-            with open(answer_path, "w", encoding="utf-8") as answer:
-                done = subprocess.run(args, cwd=home, env=env, stdin=subprocess.DEVNULL,
-                                      stdout=answer, stderr=subprocess.DEVNULL, timeout=PROBE_SECONDS)
-        except (OSError, subprocess.TimeoutExpired):
-            return 1, ""
-        with open(answer_path, encoding="utf-8", errors="replace") as answer:
-            return done.returncode, answer.read()
+    home = tempfile.mkdtemp(prefix="probe-", dir=os.environ.get("RUNNER_TEMP") or None)
+    try:
+        return _run_probe(cli, model, home, dict(
+            env, HOME=home, USERPROFILE=home, CLAUDE_CONFIG_DIR=os.path.join(home, ".claude"),
+            CLAUDE_CODE_OAUTH_TOKEN=token, DISABLE_AUTOUPDATER="1"))
+    finally:
+        # Best effort: a process the CLI leaves behind may still be writing
+        # there, and a folder that will not go must not fail the pick.
+        shutil.rmtree(home, ignore_errors=True)
+
+
+def _run_probe(cli, model, home, env):
+    """The request itself, run in `home` with `env`. Returns (exit status, stdout)."""
+    args = [cli, "-p", PROMPT, "--setting-sources", "user", "--strict-mcp-config",
+            "--permission-mode", "default", "--max-turns", "1", "--model", model,
+            "--effort", "low", "--output-format", "json", "--verbose"]
+    # The answer goes to a file, not a pipe: a process the CLI leaves behind
+    # holding a pipe open would keep the wait going past the timeout.
+    answer_path = os.path.join(home, "answer.json")
+    try:
+        with open(answer_path, "w", encoding="utf-8") as answer:
+            done = subprocess.run(args, cwd=home, env=env, stdin=subprocess.DEVNULL,
+                                  stdout=answer, stderr=subprocess.DEVNULL, timeout=PROBE_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+    with open(answer_path, encoding="utf-8", errors="replace") as answer:
+        return done.returncode, answer.read()
 
 
 def pick(cli, model, ceiling, tokens, run_probe=probe):
@@ -120,7 +133,7 @@ def pick(cli, model, ceiling, tokens, run_probe=probe):
             return i, notices
         if outcome == "refused":
             notices.append("Account %d refused its token (API status %s)" % (i, result.get("api_error_status")))
-        elif used is not None and status == 0:
+        elif outcome == "past":
             notices.append("Account %d is at %d%% of its plan, past the %d%% ceiling" % (i, used, ceiling))
             room[i] = used
         else:
