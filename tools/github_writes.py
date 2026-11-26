@@ -36,6 +36,8 @@ LABEL_DESCRIPTION_MAX = 100
 # Letters, digits and underscores, not starting with a digit or with GITHUB_.
 SECRET_NAME = re.compile(r"(?!GITHUB_)[A-Z_][A-Z0-9_]*", re.IGNORECASE)
 SECRET_VALUE_MAX = 48 * 1024
+# Configuration variables take the secrets' naming rule and hold at most 48 KB each.
+VARIABLE_VALUE_MAX = 48 * 1024
 REPO = r"repos/[^/]+/[^/]+"
 
 
@@ -132,6 +134,18 @@ def _secret(path, body):
     return None
 
 
+def _variable(path, body):
+    """A create names the variable in its body; an update names it in its path."""
+    name = body.get("name") or path.rsplit("/", 1)[1]
+    if not SECRET_NAME.fullmatch(name):
+        return "variable names hold letters, digits and underscores, and start with neither a digit nor GITHUB_"
+    if not isinstance(body.get("value"), str) or not body["value"]:
+        return "value is required"
+    if len(body["value"].encode("utf-8")) > VARIABLE_VALUE_MAX:
+        return "a variable holds at most 48 KB"
+    return None
+
+
 WRITES = [
     ("POST", REPO + r"/statuses/[0-9a-f]{40}", _status),
     ("POST", REPO + r"/check-runs", lambda path, body: _check_run(body, True)),
@@ -141,6 +155,8 @@ WRITES = [
     ("PUT", REPO + r"/rulesets/\d+", lambda path, body: _ruleset(body, False)),
     ("POST", REPO + r"/labels", _label),
     ("PUT", REPO + r"/actions/secrets/[^/]+", _secret),
+    ("POST", REPO + r"/actions/variables", _variable),
+    ("PATCH", REPO + r"/actions/variables/[^/]+", _variable),
 ]
 
 
