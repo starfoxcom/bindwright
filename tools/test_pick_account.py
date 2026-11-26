@@ -85,6 +85,16 @@ print(json.dumps([{"type": "rate_limit_event", "rate_limit_info": {"unifiedWindo
 
 
 class MainTest(unittest.TestCase):
+    def test_no_token_picks_nothing_and_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "github_output")
+            env = {k: v for k, v in os.environ.items() if not k.startswith("TOKEN_")}
+            run = subprocess.run([sys.executable, SCRIPT, "claude", "model", "--output", out],
+                                 env=env, capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertNotIn("index=", run.stdout)
+            self.assertFalse(os.path.exists(out))
+
     def test_each_account_sees_only_its_own_token(self):
         with tempfile.TemporaryDirectory() as tmp:
             fake = os.path.join(tmp, "fake_cli.py")

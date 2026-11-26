@@ -5,7 +5,8 @@ commit, so a PR cannot change how its own review picks an account.
     pick_account.py CLI MODEL [--ceiling N] [--output FILE]
         -> one ::notice:: line per account it moves past, then index=I, the
            number of the account to use (1 for CLAUDE_CODE_OAUTH_TOKEN, 2 to 5
-           for CLAUDE_CODE_OAUTH_TOKEN_2 to _5), written to FILE as well
+           for CLAUDE_CODE_OAUTH_TOKEN_2 to _5), written to FILE as well; with
+           no token set (the API key pays), no index at all
 
 The tokens come in TOKEN_1 to TOKEN_5. Each set one, in order, gets a one-line
 request on MODEL through the Claude Code CLI at CLI, run in an empty folder that
@@ -87,19 +88,25 @@ def verdict(status, result, used, ceiling):
 def probe(cli, model, token):
     """Runs the one-line request on one account. Returns (exit status, stdout)."""
     env = {k: v for k, v in os.environ.items() if k not in SECRET_NAMES}
-    with tempfile.TemporaryDirectory(prefix="probe-") as home:
+    # Under RUNNER_TEMP, which the runner empties after every job, so a step its
+    # timeout stops leaves nothing behind.
+    with tempfile.TemporaryDirectory(prefix="probe-", dir=os.environ.get("RUNNER_TEMP") or None) as home:
         env.update(HOME=home, USERPROFILE=home, CLAUDE_CONFIG_DIR=os.path.join(home, ".claude"),
                    CLAUDE_CODE_OAUTH_TOKEN=token, DISABLE_AUTOUPDATER="1")
         args = [cli, "-p", PROMPT, "--setting-sources", "user", "--strict-mcp-config",
                 "--permission-mode", "default", "--max-turns", "1", "--model", model,
                 "--effort", "low", "--output-format", "json", "--verbose"]
+        # The answer goes to a file, not a pipe: a process the CLI leaves behind
+        # holding a pipe open would keep the wait going past the timeout.
+        answer_path = os.path.join(home, "answer.json")
         try:
-            done = subprocess.run(args, cwd=home, env=env, stdin=subprocess.DEVNULL,
-                                  capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace", timeout=PROBE_SECONDS)
+            with open(answer_path, "w", encoding="utf-8") as answer:
+                done = subprocess.run(args, cwd=home, env=env, stdin=subprocess.DEVNULL,
+                                      stdout=answer, stderr=subprocess.DEVNULL, timeout=PROBE_SECONDS)
         except (OSError, subprocess.TimeoutExpired):
             return 1, ""
-        return done.returncode, done.stdout
+        with open(answer_path, encoding="utf-8", errors="replace") as answer:
+            return done.returncode, answer.read()
 
 
 def pick(cli, model, ceiling, tokens, run_probe=probe):
@@ -142,8 +149,9 @@ def main(argv):
     tokens = {i: os.environ.get("TOKEN_%d" % i, "") for i in range(1, ACCOUNTS + 1)}
     tokens = {i: t for i, t in tokens.items() if t}
     if not tokens:
-        print("Usage: no TOKEN_1 to TOKEN_%d is set" % ACCOUNTS, file=sys.stderr)
-        return 1
+        # The API key pays, so there is no account to pick and no index.
+        print("::notice::No account token is set: nothing to pick")
+        return 0
     # One account leaves nothing to pick, so nothing is spent asking it.
     index, notices = (min(tokens), [])
     if len(tokens) > 1:
