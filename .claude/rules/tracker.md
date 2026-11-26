@@ -22,6 +22,23 @@ The issue body, not a comment thread, carries the state, so the latest state sit
 
 A PR body carries only its `Resolves #N` or `Part of #N` line (`Resolves <owner>/<repo>#N` when the issues live in a `trackerRepo`) and the usual What and Why. It never holds hand-off state.
 
+## Issue status
+
+GitHub issues can carry a status beyond open and closed: Backlog, Todo, In progress, In review, Done, Not planned and Duplicate. Not every repo has them, so list the repo's statuses first. An empty list means this section does not apply. A query that fails says nothing about the statuses: say what failed, as when the tracker is offline, and leave them as they are.
+
+- When work on an issue starts, set it to In progress.
+- GitHub moves an issue to Todo when someone is assigned. A PR into the default branch that links it (`Resolves #N`) moves it to In review while open and to Done when it merges; set nothing for those.
+- A PR into any other branch links nothing, even with `Resolves #N`, since GitHub reads closing keywords only on the default branch. So set In review when the PR that resolves the issue opens, and Done when it merges, closing the issue if it is still open. A `Part of #N` PR moves its issue on neither path.
+- An item that will not be done gets Not planned, and one that repeats another gets Duplicate with the other issue's id. Either status closes the issue with the matching reason, so no separate close is needed.
+- The board's Status field follows the issue's status, and the other way round, wherever the field has an option of the same name. Set the issue's status, not the board field.
+
+In both commands, `<owner>` and `<repo>` name the repo the issues live in: `advanced.trackerRepo` when it names one, otherwise this one.
+
+| Job | Command |
+|---|---|
+| List the statuses | `gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){planningStatuses(first:20){nodes{id name}} issue(number:$n){id status{name}}}}' -f o=<owner> -f r=<repo> -F n=<issue>`: each status's id, and the issue's id and current status |
+| Set a status | `gh api graphql -f query='mutation($i:ID!,$s:ID!){setIssueStatus(input:{issueId:$i,statusId:$s}){issue{status{name}}}}' -f i=<issue id> -f s=<status id>`; for Duplicate, add `duplicateIssueId:$d` to the input, `$d:ID!` to the arguments and `-f d=<the other issue's id>` |
+
 ## Project status updates
 
 A status update says the project's state changed. It is not a session log. Post one only when:
