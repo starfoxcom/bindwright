@@ -124,16 +124,29 @@ def _state(record, files, hashes):
     return "older" if files or record != hashes else "current"
 
 
+def _version_of(folder):
+    """The `version` a mod folder's manifest names, or None when it names none or cannot be read."""
+    try:
+        with open(os.path.join(folder, ".claude-plugin", "plugin.json"), encoding="utf-8") as fh:
+            version = json.load(fh).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return version if isinstance(version, str) else None
+
+
 def mod_status(home, folder):
+    """The installed copy's state and differing files, with its version and the shipped one's."""
     _check_mod_folder(folder)
     target = _mod_target(home, folder)
+    versions = {"version": None, "shipped_version": _version_of(folder)}
     if not os.path.lexists(target):
-        return {"installed": target, "state": "missing", "files": {}}
+        return dict(versions, installed=target, state="missing", files={})
     if _is_link(os.lstat(target)):
-        return {"installed": target, "state": "linked", "files": {}}
+        return dict(versions, installed=target, state="linked", files={})
+    versions["version"] = _version_of(target)
     record = _record_of(target)
     files = _differences(folder, target, record)
-    return {"installed": target, "state": _state(record, files, _shipped_hashes(folder)), "files": files}
+    return dict(versions, installed=target, state=_state(record, files, _shipped_hashes(folder)), files=files)
 
 
 def _copy_atomic(source, target):
