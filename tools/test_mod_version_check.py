@@ -27,6 +27,8 @@ ROWS = [
     ("a lower version fails", {MOD + "/hooks/register.ts": "b", MANIFEST: manifest("1.4.9")}, ["tasks"]),
     ("a version that is not x.y.z fails", {MOD + "/hooks/register.ts": "b", MANIFEST: manifest("next")}, ["tasks"]),
     ("tests alone need no new version", {MOD + "/tests/rules.test.ts": "b", MOD + "/hooks/a.test.ts": "b"}, []),
+    ("helper script tests alone need no new version", {MOD + "/test-helper/sweep.spec.cjs": "b"}, []),
+    ("a file named like a test word is still code", {MOD + "/hooks/latest.ts": "b"}, ["tasks"]),
     ("Markdown alone needs no new version", {MOD + "/README.md": "b"}, []),
     ("a mod new since the base passes", {"_core/global-template/mods/fresh/hooks/register.ts": "a"}, []),
     ("a mod deleted since the base passes", {MOD: None}, []),

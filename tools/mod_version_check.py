@@ -3,7 +3,8 @@
     python tools/mod_version_check.py <base ref>
 
 A mod is a folder under _core/global-template/mods/. Its code is every file in it except its tests
-(a tests/ folder, *.test.ts, *.test.tsx) and Markdown. For each mod whose code differs between the
+(anything in a tests/, test-helper/ or __tests__/ folder, and any *.test.* or *.spec.* file) and
+Markdown. For each mod whose code differs between the
 merge base of <base ref> and HEAD, .claude-plugin/plugin.json at HEAD must name an x.y.z version
 higher than the base's. A mod the base does not have passes, and so does one the change deletes.
 Standard library, Python 3.8+.
@@ -16,6 +17,8 @@ import sys
 
 MODS = "_core/global-template/mods"
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+TEST_FOLDERS = {"tests", "test-helper", "__tests__"}
+TEST_FILE = re.compile(r"\.(test|spec)\.[^.]+$")
 
 
 def _git(*args):
@@ -25,7 +28,8 @@ def _git(*args):
 def _is_code(rel):
     """Whether a path inside a mod folder is part of what the mod runs."""
     parts = rel.split("/")
-    return not ("tests" in parts[:-1] or rel.endswith((".test.ts", ".test.tsx", ".md")))
+    in_test_folder = any(part in TEST_FOLDERS for part in parts[:-1])
+    return not (in_test_folder or TEST_FILE.search(parts[-1]) or rel.endswith(".md"))
 
 
 def changed_mods(base):
