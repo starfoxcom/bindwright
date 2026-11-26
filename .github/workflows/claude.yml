@@ -808,9 +808,9 @@ jobs:
       # accounts' tokens, the attempts on the first account run on it, and the
       # backup on the account it picks. It also names the first account whose
       # token is set, which the first attempt and its retry take when the key
-      # does not pay for them, and the backup and its label take when "Pick
-      # the fallback's account" leaves no index. Only whether each secret is set
-      # is read here, never its value.
+      # does not pay for them and "Pick the review's account" leaves no index,
+      # and the fallback and its label take when neither picker leaves one.
+      # Only whether each secret is set is read here, never its value.
       - name: Pick who pays for the review
         id: payer
         shell: bash
