@@ -1332,9 +1332,9 @@ jobs:
       # accounts' tokens, the attempts on the first account run on it, and the
       # backup on the account it picks. It also names the first account whose
       # token is set, which the main review takes when the key does not pay
-      # for it, and the backup and its label take when "Pick the backup's
-      # account" leaves no index. Only whether each secret is set is read
-      # here, never its value.
+      # for it and "Pick the review's account" leaves no index, and the
+      # backup and its label take when neither picker leaves one. Only
+      # whether each secret is set is read here, never its value.
       - name: Pick who pays for the review
         id: payer
         shell: bash
