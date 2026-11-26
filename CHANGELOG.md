@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - **Fakes of outside services refuse what the service refuses.** `testing.md` § Test the real code gains the rule, along with one real call for each new kind of write to an outside service, and the review guide's checklist gains the matching row. A new project hook, `live-check.py`, reads each pull request right after `gh pr create` or `gh pr edit` opens or changes it, and notes one whose diff adds such a write with no `Live check:` line in the body; it only logs for now, and never blocks.
+- **The tasks mod holds a commit while the task list says something that may no longer be true.** Besides waiting for the list to change since the last commit, a commit now waits while more than one task is in progress, and while a hold has gone more than 6 hours without being set again, listing each one to fix. Setting a hold again is how a session confirms it still holds, so a hold whose wait ended (an answer the user gave, a count that passed) no longer sits unchecked. `task-tracking.md` says so.
 
 ### Fixed
 
