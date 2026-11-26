@@ -24,7 +24,7 @@ export function drawCards(ui: Ui, cards: Card[], width: number) {
       <Text bold color={card.tone} wrap="wrap">
         {card.text}
       </Text>
-      <Box>
+      <Box key="usage-card-buttons" flexWrap="wrap">
         {card.buttons.map(({ key, label, isPrimary, onPress }) =>
           isPrimary ? (
             <Button key={key} label={label} variant="primary" onPress={onPress} />
