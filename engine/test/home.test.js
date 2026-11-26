@@ -237,7 +237,24 @@ test("an installed mod reads back as current, and a mod never installed as missi
     const installed = home(dir, "add-mod", mod).out.installed;
     const record = JSON.parse(readFileSync(recordPath(installed), "utf8"));
     assert.deepEqual(Object.keys(record.sha256), [".claude-plugin/plugin.json", "hooks/rules.ts", "user-files.json"]);
-    assert.deepEqual(modStatus(dir, mod), { installed, state: "current", files: {} });
+    assert.deepEqual(modStatus(dir, mod),
+      { installed, state: "current", files: {}, version: null, shipped_version: null });
+  });
+});
+
+test("mod-status names the installed version and the shipped one", { skip }, () => {
+  withHome((dir) => {
+    const mod = shipMod(dir, { ".claude-plugin/plugin.json": '{"version": "1.2.0"}', "hooks/rules.ts": "v1" });
+    assert.equal(modStatus(dir, mod).version, null, "nothing installed yet");
+    const installed = home(dir, "add-mod", mod).out.installed;
+    writeFileSync(join(mod, ".claude-plugin", "plugin.json"), '{"version": "1.3.0"}');
+    const status = modStatus(dir, mod);
+    assert.equal(status.version, "1.2.0");
+    assert.equal(status.shipped_version, "1.3.0");
+    assert.equal(updateMod(dir, mod).out.version, "1.2.0", "update-mod reports the version it replaced");
+    assert.equal(modStatus(dir, mod).version, "1.3.0");
+    writeFileSync(join(installed, ".claude-plugin", "plugin.json"), "not json");
+    assert.equal(modStatus(dir, mod).version, null, "an unreadable manifest names no version");
   });
 });
 
@@ -303,7 +320,8 @@ test("an update stopped between writing a file and recording it is finished by t
     writeFileSync(rules, "v2");
     writeFileSync(join(mod, "hooks", "extra.ts"), "x");
     writeFileSync(join(installed, "hooks", "extra.ts"), "x");
-    assert.deepEqual(modStatus(dir, mod), { installed, state: "older", files: {} });
+    assert.deepEqual(modStatus(dir, mod),
+      { installed, state: "older", files: {}, version: null, shipped_version: null });
     const r = updateMod(dir, mod);
     assert.equal(r.status, 0, r.stderr);
     assert.deepEqual(r.out.updated, []);
@@ -368,7 +386,8 @@ test("an unrecorded copy is left alone until --adopt, which replaces it and writ
     const mod = shipMod(dir, { "hooks/rules.ts": "v1" });
     const installed = home(dir, "add-mod", mod).out.installed;
     rmSync(recordPath(installed));
-    assert.deepEqual(modStatus(dir, mod), { installed, state: "unrecorded", files: {} });
+    assert.deepEqual(modStatus(dir, mod),
+      { installed, state: "unrecorded", files: {}, version: null, shipped_version: null });
     writeFileSync(join(mod, "hooks", "rules.ts"), "v2");
     assert.equal(modStatus(dir, mod).state, "unrecorded");
     assert.deepEqual(modStatus(dir, mod).files, { "hooks/rules.ts": "replace" });

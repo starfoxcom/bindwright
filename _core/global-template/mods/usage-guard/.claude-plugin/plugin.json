@@ -1,6 +1,6 @@
 {
   "name": "usage-guard",
-  "version": "0.1.0",
+  "version": "1.2.1",
   "description": "Near a plan usage limit, every session saves its work and stops background jobs, then work resumes on its own after the limit resets.",
   "types": "./types/index.d.ts",
   "userConfig": {
