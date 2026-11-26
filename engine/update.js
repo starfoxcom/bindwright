@@ -14,7 +14,7 @@ import { OWNED, isOwned, keptSections, ownedPatterns } from "./keep.js";
 import { safe, refuseLinks } from "./apply.js";
 import { expandAnswers } from "./model.js";
 import { parsePlainObject } from "./propose.js";
-import { missingReport } from "./missing.js";
+import { missingReport, staleReport, unlinkedReport } from "./missing.js";
 
 // The file in git's folder that holds the pristine record the last update replaced.
 const BEFORE = "bindwright-pristine-before.json";
@@ -358,8 +358,8 @@ function entry(root, path) {
 // what merged cleanly, stages new files the repo already has and conflicts,
 // and records the new pristine render. `bindWith(answers, { year, version })`
 // returns a bind. Returns every outcome list plus `skipped`: staged copies
-// left from before, which stay as they were; and `missing`: the repo paths
-// the written files name that the repo lacks (missing.js).
+// left from before, which stay as they were; and `missing`, `unlinked` and `stale`: the broken
+// pointers the update leaves behind (missing.js).
 export async function runUpdate(root, { bindWith, version }) {
   const read = reader(root);
   const [answers, saved] = [ANSWERS, PRISTINE].map(read);
@@ -399,7 +399,9 @@ export async function runUpdate(root, { bindWith, version }) {
     renamed: plan.renamed,
     owned_changed: plan.owned_changed,
     skipped,
-    missing: missingReport(root, writtenFiles(plan), repoFiles(rendered).keys()),
+    missing: missingReport(root, writtenFiles(plan), repoFiles(rendered)),
+    unlinked: unlinkedReport(root, plan.added, repoFiles(rendered), pristine.files),
+    stale: staleReport(root, plan, repoFiles(rendered), pristine.files),
   };
 }
 

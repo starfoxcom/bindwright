@@ -1,7 +1,9 @@
 // Runs both engines' --update on identical bound repos; shared by the update tests.
 
 import assert from "node:assert/strict";
-import { cpSync, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -25,18 +27,30 @@ const enginesIn = (root) => [
 ];
 export const engines = enginesIn(project);
 
-// A throwaway kit whose templates read `edit(text)` for each template path `edits` keys,
-// so the templates a test binds from can name paths of their own.
+// A throwaway kit whose templates change as `edits` says, keyed by template path: a function
+// edits that template's text, a string adds a new template with that text, and null drops it.
+// The kit's list of core files follows the change, since the bind reads templates from it.
 function kitWith(edits) {
   const kit = mkdtempSync(join(tmpdir(), "update-kit-"));
   const skipTests = (src) => !/[\\/](test|__pycache__)$/.test(src);
   cpSync(join(project, "engine"), join(kit, "engine"), { recursive: true, filter: skipTests });
   cpSync(join(project, "_core"), join(kit, "_core"), { recursive: true });
   copyFileSync(join(project, "VERSION"), join(kit, "VERSION"));
+  const core = join(kit, "_core", "project-template");
+  const manifest = join(kit, "engine", "core-files.json");
+  let files = JSON.parse(readFileSync(manifest, "utf8"));
   for (const [path, edit] of Object.entries(edits)) {
-    const target = join(kit, "_core", "project-template", ...path.split("/"));
-    writeFileSync(target, edit(readFileSync(target, "utf8")));
+    const target = join(core, ...path.split("/"));
+    if (edit === null) {
+      rmSync(target);
+      files = files.filter((file) => file !== path);
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, typeof edit === "string" ? edit : edit(readFileSync(target, "utf8")));
+    if (!files.includes(path)) files.push(path);
   }
+  writeFileSync(manifest, `${JSON.stringify(files.sort(), null, 2)}\n`);
   return kit;
 }
 
