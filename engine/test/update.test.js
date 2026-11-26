@@ -331,39 +331,50 @@ test("a merge that drops a kept section counts as a conflict", () => {
   assert.deepEqual(plan.stage, [[`${STAGING}x.py`, "b\n"]]);
 });
 
+// Docs the bind ships, which a row deletes from the repo so its name has nothing to resolve to.
+const GUIDE = "docs/ci-watching.md";
+const AUDIT = "docs/test-audit.md";
+// Deletes repo files the bind wrote; the record keeps them, so the update leaves them deleted.
+const drop = (r, ...paths) => {
+  for (const path of paths) rmSync(r.at(path), { recursive: true, force: true });
+};
+
 // Each row adds one line to the rule's template and checks the report's `missing` key.
-// `base` is a line the saved record and the repo already hold before the update.
+// `base` is a line the saved record and the repo already hold before the update; `gone` lists
+// shipped paths the repo deleted.
 const NAMED_ROWS = [
   { name: "a path at the repo root is found", line: "See `.claude/settings.json`.", missing: [] },
   { name: "a bare name beside the naming file is found", line: "See `testing.md`.", missing: [] },
   {
-    name: "a path the repo lacks is reported",
-    line: "See `docs/never-written.md`.",
-    missing: [{ file: RULE, names: ["docs/never-written.md"] }],
+    name: "a shipped file the repo lacks is reported",
+    gone: [GUIDE],
+    line: `See \`${GUIDE}\`.`,
+    missing: [{ file: RULE, names: [GUIDE] }],
   },
   {
     name: "a name repeated in the new text is reported once",
-    line: "See `docs/never-written.md` and `docs/never-written.md`.",
-    missing: [{ file: RULE, names: ["docs/never-written.md"] }],
+    gone: [GUIDE],
+    line: `See \`${GUIDE}\` and \`${GUIDE}\`.`,
+    missing: [{ file: RULE, names: [GUIDE] }],
   },
   {
     name: "a span the base text already names is not reported",
-    base: "Old `docs/known.md` wording.",
-    line: "New `docs/known.md` wording.",
+    gone: [GUIDE],
+    base: `Old \`${GUIDE}\` wording.`,
+    line: `New \`${GUIDE}\` wording.`,
     missing: [],
   },
-  { name: "a placeholder is not reported", line: "Copy `<path>/x.md` or `*.md`.", missing: [] },
-  { name: "a URL is not reported", line: "See `https://example.com/a/b.md`.", missing: [] },
-  { name: "a branch name is not reported", line: "Branch as `feature/user-auth-flow`.", missing: [] },
-  { name: "a version is not reported", line: "Since `7.19.1`.", missing: [] },
   {
-    name: "a folder the repo lacks is reported",
-    line: "See `docs/never/`.",
-    missing: [{ file: RULE, names: ["docs/never/"] }],
+    name: "a shipped folder the repo lacks is reported",
+    gone: ["docs"],
+    line: "See `docs/`.",
+    missing: [{ file: RULE, names: ["docs/"] }],
   },
   {
-    name: "a Windows path is never looked up or reported",
-    line: "See `..\\..\\x.md`, `\\\\host\\share\\x.md`, `C:x.md` and `C:\\x.md`.",
+    name: "names the bind does not ship are never reported",
+    line: "Set `content.type` and `gorm.DB`; lay out `cart/index.ts` and `auth/`; create " +
+      "`docs/never-written.md`; skip `<path>/x.md`, `https://example.com/a.md`, " +
+      "`feature/user-auth-flow`, `7.19.1`, `..\\..\\x.md`, `\\\\host\\share\\x.md` and `C:x.md`.",
     missing: [],
   },
 ];
@@ -394,7 +405,10 @@ async function checkRow(row) {
 
 const namedRow = (row) => ({
   kit: { [RULE]: addLine(row.line) },
-  repo: row.base === undefined ? undefined : withBase(row.base),
+  repo: (r) => {
+    drop(r, ...(row.gone ?? []));
+    if (row.base !== undefined) withBase(row.base)(r);
+  },
   expect: row.missing,
 });
 for (const row of NAMED_ROWS) {
@@ -513,19 +527,21 @@ test("named paths: a bare rule name outside the rules folder is found there", ne
 
 test("named paths: a merged file reports only what the template added", needsPython, async () => {
   const { out } = await update((r) => {
-    r.write(RULE, `Our own \`hooks/own-never.py\`.\n${r.read(RULE)}`);
-  }, { edits: { [RULE]: (text) => `${text}\nSee \`docs/never-written.md\`.\n` } });
+    drop(r, GUIDE, AUDIT);
+    r.write(RULE, `Our own \`${GUIDE}\`.\n${r.read(RULE)}`);
+  }, { edits: { [RULE]: (text) => `${text}\nSee \`${AUDIT}\`.\n` } });
   assert.deepEqual(out.merged, [RULE]);
-  assert.deepEqual(out.missing, [{ file: RULE, names: ["docs/never-written.md"] }]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: [AUDIT] }]);
 });
 
 test("named paths: a held base is what a name is compared with", needsPython, async () => {
-  const line = "See `docs/held-never.md`.";
+  const line = `See \`${GUIDE}\`.`;
   const { out } = await update((r) => {
+    drop(r, GUIDE);
     const held = r.read(RULE);
     r.pristine.held = { [RULE]: held };
     r.pristine.files[RULE] = `${held}\nOld ${line}\n`;
   }, { edits: { [RULE]: (text) => `${text}\n${line}\n` } });
   assert.deepEqual(out.updated, [RULE]);
-  assert.deepEqual(out.missing, [{ file: RULE, names: ["docs/held-never.md"] }]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: [GUIDE] }]);
 });

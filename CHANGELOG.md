@@ -9,7 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Added
 
 - **Fakes of outside services refuse what the service refuses.** `testing.md` § Test the real code gains the rule, along with one real call for each new kind of write to an outside service, and the review guide's checklist gains the matching row. A new project hook, `live-check.py`, reads each pull request right after `gh pr create` or `gh pr edit` opens or changes it, and notes one whose diff adds such a write with no `Live check:` line in the body; it only logs for now, and never blocks.
-- **`/bindwright:update` lists the paths the new template text points at that the repo does not have.** The update's output gains a `missing` list, one entry per written file, so a rule that now names a file the project left out is named before it reaches a review. The same list names a section the new text points into that the repo's copy lacks, an `unlinked` list names each new file whose pointer from an owned or unsettled file never landed, and a `stale` list names each kept file that still points at something the update removed.
+- **`/bindwright:update` lists the Bindwright files the new template text points at that the repo does not have.** The update's output gains a `missing` list, one entry per written file, so a rule that now names a file the project left out is named before it reaches a review. The same list names a section the new text points into that the repo's copy lacks, an `unlinked` list names each new file whose pointer from an owned or unsettled file never landed, and a `stale` list names each kept file that still points at something the update removed.
 
 ### Fixed
 

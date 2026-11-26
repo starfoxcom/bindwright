@@ -10,8 +10,6 @@ import { safe } from "./apply.js";
 const WHITESPACE = /[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/;
 // Placeholders, URLs and Windows paths (a backslash, a drive or a share).
 const PLACEHOLDER = /[<{*$~\\:]/;
-// A file extension starts with a letter, so a version such as 7.19.1 is no path.
-const EXTENSION = /\.[A-Za-z][A-Za-z0-9]{0,4}$/;
 // A backticked span, then the section text of a `§` reference: the text runs to the line's end
 // or to the next backtick.
 const SPAN = /`([^`\n]+)`(?: *§ *"?([^`\n]*))?/g;
@@ -23,28 +21,37 @@ function spansOf(text) {
   return [...text.matchAll(SPAN)].map((match) => match[1]);
 }
 
-// A span that may name a repo path: it ends in a file extension or, for a folder, in a slash,
-// and is no placeholder, URL, whitespace or absolute path. A branch name such as
-// feature/user-auth-flow has neither ending.
-function isPathLike(span) {
-  const hasShape = span.endsWith("/") || EXTENSION.test(span);
-  return hasShape && !PLACEHOLDER.test(span) && !WHITESPACE.test(span) && !span.startsWith("/");
-}
-
 // The folder the templates name a rule from by its bare file name, wherever they point at it.
 const RULES = ".claude/rules";
 
-// The repo paths a span can name, counted from the root, from the naming file's folder and, for
-// a bare file name, from the rules folder. Only plain relative segments are kept, or "." for the
-// root: a path that climbs out of the repo, or holds a backslash, drive or control character, is
-// left out, and so is an absolute span.
+// The repo paths a span can name: from the root, from the naming file's folder and, for a bare
+// file name, from the rules folder. Only plain relative segments are kept, so no path climbs out
+// of the repo or holds a backslash, drive or control character, and a placeholder, URL or
+// absolute span names none.
 function candidatesOf(file, span) {
-  if (span.startsWith("/")) return [];
+  if (span.startsWith("/") || PLACEHOLDER.test(span) || WHITESPACE.test(span)) return [];
   const tries = [span, posix.join(posix.dirname(file), span)];
   if (!span.includes("/")) tries.push(posix.join(RULES, span));
   return tries
     .map((candidate) => posix.normalize(candidate).replace(/\/$/, ""))
-    .filter((path) => path === "." || safe(path));
+    .filter((path) => path !== "." && safe(path));
+}
+
+// Every path the bind ships, and every folder above one.
+function shippedPaths(files) {
+  const paths = new Set();
+  for (const file of files) {
+    const parts = file.split("/");
+    for (let end = 1; end <= parts.length; end += 1) paths.add(parts.slice(0, end).join("/"));
+  }
+  return paths;
+}
+
+// True when a span names a path the bind ships and the repo has it at none of the span's places.
+function isMissing(root, file, span, shipped) {
+  const candidates = candidatesOf(file, span);
+  return candidates.some((candidate) => shipped.has(candidate))
+    && !candidates.some((candidate) => existsSync(join(root, ...candidate.split("/"))));
 }
 
 // The first candidate path that the repo holds or that `known` accepts, or undefined.
@@ -80,7 +87,7 @@ function sectionHeading(section, headings) {
 // with name "<span> § <heading>". Only a path-like .md span that `resolve` finds, and whose
 // headings from `headingsFor` hold the heading, makes one.
 function sectionRef(file, span, section, { resolve, headingsFor }) {
-  if (section === undefined || !isPathLike(span) || !span.endsWith(".md")) return undefined;
+  if (section === undefined || !span.endsWith(".md")) return undefined;
   const target = resolve(file, span);
   const heading = target === undefined ? undefined : sectionHeading(section, headingsFor(target));
   return heading === undefined ? undefined : { target, name: `${span} § ${heading}`, heading };
@@ -98,11 +105,11 @@ function addName(names, name) {
   if (!names.includes(name)) names.push(name);
 }
 
-// The names one written file gives that the repo lacks, in first-seen order without repeats.
-// `priors` are the texts the file had before this update (its base and the repo's own copy);
-// the spans and section refs they already named are not new. A section ref counts when the
-// repo's copy of its file lacks the heading.
-function unresolvedNames(root, { path, text, priors }, templates) {
+// The names one written file gives that the bind ships and the repo lacks, in first-seen order
+// without repeats. `priors` are the texts the file had before this update (its base and the
+// repo's own copy); the spans and section refs they already named are not new. A section ref
+// counts when the repo's copy of its file lacks the heading.
+function unresolvedNames(root, { path, text, priors }, templates, shipped) {
   const options = {
     resolve: (file, span) => resolvedPath(root, file, span),
     headingsFor: (target) => (templates.has(target) ? headingsOf(templates.get(target)) : []),
@@ -112,9 +119,7 @@ function unresolvedNames(root, { path, text, priors }, templates) {
   const knownRefs = new Set(priorRefs.map((ref) => ref.name));
   const names = [];
   for (const [, span, section] of text.matchAll(SPAN)) {
-    if (isPathLike(span) && !known.has(span) && resolvedPath(root, path, span) === undefined) {
-      addName(names, span);
-    }
+    if (!known.has(span) && isMissing(root, path, span, shipped)) addName(names, span);
     const ref = sectionRef(path, span, section, options);
     if (ref === undefined || knownRefs.has(ref.name)) continue;
     const copy = diskText(root, ref.target);
@@ -126,9 +131,10 @@ function unresolvedNames(root, { path, text, priors }, templates) {
 // The `missing` report for the files an update wrote: one entry per file with unresolved names,
 // sorted by path. `templates` maps each repo path to its rendered text.
 export function missingReport(root, files, templates) {
+  const shipped = shippedPaths(templates.keys());
   const named = new Map();
   for (const file of files) {
-    const names = unresolvedNames(root, file, templates);
+    const names = unresolvedNames(root, file, templates, shipped);
     if (names.length) named.set(file.path, names);
   }
   return [...named.keys()].sort().map((file) => ({ file, names: named.get(file) }));
@@ -172,7 +178,7 @@ export function unlinkedReport(root, added, templates, baseFiles) {
 function staleNames(root, file, gone, options) {
   const names = [];
   for (const [, span, section] of (diskText(root, file) ?? "").matchAll(SPAN)) {
-    if (isPathLike(span) && candidatesOf(file, span).some((path) => gone.has(path))) {
+    if (candidatesOf(file, span).some((path) => gone.has(path))) {
       addName(names, span);
     }
     const ref = sectionRef(file, span, section, options);

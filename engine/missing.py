@@ -14,8 +14,6 @@ from apply import _code_units, _safe
 WHITESPACE = re.compile(r"[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]")
 # Placeholders, URLs and Windows paths (a backslash, a drive or a share).
 PLACEHOLDER = re.compile(r"[<{*$~\\:]")
-# A file extension starts with a letter, so a version such as 7.19.1 is no path.
-EXTENSION = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,4}\Z")
 # A backticked span, then the section text of a `§` reference: the text runs to the line's end
 # or to the next backtick.
 SPAN = re.compile(r'`([^`\n]+)`(?: *§ *"?([^`\n]*))?')
@@ -30,31 +28,38 @@ def _spans_of(text):
     return [match.group(1) for match in SPAN.finditer(text)]
 
 
-def _is_path_like(span):
-    """A span that may name a repo path: it ends in a file extension or, for a folder, in a slash,
-    and is no placeholder, URL, whitespace or absolute path. A branch name such as
-    feature/user-auth-flow has neither ending.
-    """
-    has_shape = span.endswith("/") or EXTENSION.search(span) is not None
-    clean = PLACEHOLDER.search(span) is None and WHITESPACE.search(span) is None
-    return has_shape and clean and not span.startswith("/")
-
-
 def _candidates_of(file, span):
-    """The repo paths a span can name, counted from the root, from the naming file's folder and,
-    for a bare file name, from the rules folder.
+    """The repo paths a span can name: from the root, from the naming file's folder and, for a
+    bare file name, from the rules folder.
 
-    Only plain relative segments are kept, or "." for the root: a path that climbs out of the
-    repo, or holds a backslash, drive or control character, is left out, and so is an absolute span.
+    Only plain relative segments are kept, so no path climbs out of the repo or holds a
+    backslash, drive or control character, and a placeholder, URL or absolute span names none.
     """
-    if span.startswith("/"):
+    if span.startswith("/") or PLACEHOLDER.search(span) or WHITESPACE.search(span):
         return []
     tries = [span, posixpath.join(posixpath.dirname(file), span)]
     if "/" not in span:
         tries.append(posixpath.join(RULES, span))
-    candidates = [posixpath.normpath(candidate) for candidate in tries]
-    paths = [path[:-1] if path.endswith("/") else path for path in candidates]
-    return [path for path in paths if path == "." or _safe(path)]
+    paths = [posixpath.normpath(candidate) for candidate in tries]
+    return [path for path in paths if path != "." and _safe(path)]
+
+
+def _shipped_paths(files):
+    """Every path the bind ships, and every folder above one."""
+    paths = set()
+    for file in files:
+        parts = file.split("/")
+        for end in range(1, len(parts) + 1):
+            paths.add("/".join(parts[:end]))
+    return paths
+
+
+def _is_missing(root, file, span, shipped):
+    """True when a span names a path the bind ships and the repo has it at none of the span's places."""
+    candidates = _candidates_of(file, span)
+    if not any(candidate in shipped for candidate in candidates):
+        return False
+    return not any(os.path.exists(os.path.join(root, *c.split("/"))) for c in candidates)
 
 
 def _resolved_path(root, file, span, known=lambda path: False):
@@ -96,7 +101,7 @@ def _section_ref(file, span, section, resolve, headings_for):
     target, name and heading, the name being "<span> § <heading>". Only a path-like .md span that
     `resolve` finds, and whose headings from `headings_for` hold the heading, makes one.
     """
-    if section is None or not _is_path_like(span) or not span.endswith(".md"):
+    if section is None or not span.endswith(".md"):
         return None
     target = resolve(file, span)
     heading = None if target is None else _section_heading(section, headings_for(target))
@@ -118,7 +123,7 @@ def _add_name(names, name):
         names.append(name)
 
 
-def _unresolved_names(root, path, text, priors, templates):
+def _unresolved_names(root, path, text, priors, templates, shipped):
     """The names one written file gives that the repo lacks, in first-seen order without repeats.
 
     `priors` are the texts the file had before this update (its base and the repo's own copy);
@@ -138,7 +143,7 @@ def _unresolved_names(root, path, text, priors, templates):
     names = []
     for match in SPAN.finditer(text):
         span, section = match.group(1), match.group(2)
-        if _is_path_like(span) and span not in known and _resolved_path(root, path, span) is None:
+        if span not in known and _is_missing(root, path, span, shipped):
             _add_name(names, span)
         ref = _section_ref(path, span, section, resolve, headings_for)
         if ref is None or ref["name"] in known_refs:
@@ -156,9 +161,10 @@ def missing_report(root, files, templates):
 
     One entry per file with unresolved names, sorted by path.
     """
+    shipped = _shipped_paths(templates)
     named = {}
     for path, text, priors in files:
-        names = _unresolved_names(root, path, text, priors, templates)
+        names = _unresolved_names(root, path, text, priors, templates, shipped)
         if names:
             named[path] = names
     return [{"file": path, "names": named[path]} for path in sorted(named, key=_code_units)]
@@ -207,7 +213,7 @@ def _stale_names(root, file, gone, resolve, headings_for):
     names = []
     for match in SPAN.finditer(_disk_text(root, file) or ""):
         span, section = match.group(1), match.group(2)
-        if _is_path_like(span) and any(path in gone for path in _candidates_of(file, span)):
+        if any(path in gone for path in _candidates_of(file, span)):
             _add_name(names, span)
         ref = _section_ref(file, span, section, resolve, headings_for)
         if ref is None:
