@@ -1,9 +1,10 @@
 import type { Mirror, MirrorTask } from './mirror'
-import { openTasks } from './mirror'
+import { inProgress, openTasks } from './mirror'
 import { maskCommand } from './shellmask'
 
-// A commit lands a code change, so it waits until the task list changed since the last commit, and the
-// first file edit after a change names the task it belongs to. Reading or listing the tasks is no change.
+// A commit lands a code change, so it waits until the task list changed since the last commit, while more
+// than one task is in progress, and while a hold has gone unchecked too long; the first file edit after a
+// change names the task it belongs to. Reading or listing the tasks is no change.
 
 export const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit'])
 // `git commit` as a command, after any of git's own options (`git -C dir commit`, `git -c k=v commit`),
@@ -14,6 +15,8 @@ const GIT_OPTS = String.raw`(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?|-(?!-|[Cc](?:
 const COMMIT = new RegExp(String.raw`(?:^|[\s;&|({])git(?:\.exe)?${GIT_OPTS}\s+commit(?![\w-])`)
 // The characters of a task's description shown when a commit waits; the rest is one TaskGet away.
 const SHOWN = 160
+// How long a hold stands before a commit asks for it again, since what it waits on may have happened.
+export const HOLD_RECHECK_MS = 6 * 60 * 60 * 1000
 
 const state = { isListChanged: false, isEditNoted: false }
 
@@ -45,10 +48,7 @@ function line(task: MirrorTask): string {
   return `- #${task.id} "${task.subject}" (${where}).${about}`
 }
 
-/** Why a commit waits, with every open task to check, or undefined when it may go. */
-export function commitRefusal(mirror: Mirror): string | undefined {
-  if (state.isListChanged) return undefined
-  const open = openTasks(mirror)
+function unchangedNote(open: MirrorTask[]): string {
   return (
     '[tasks] Update the task list before this commit: put what the commit does on the task it belongs to ' +
     '(TaskUpdate its description or status, or TaskCreate one; mcp__tasks__taskmod_update and _create where ' +
@@ -56,6 +56,37 @@ export function commitRefusal(mirror: Mirror): string | undefined {
     'says what is true now and fix any that does not. The commit goes through once the list has changed.\n' +
     (open.length > 0 ? open.map(line).join('\n') : '- (no open tasks)')
   )
+}
+
+function overlapNote(running: MirrorTask[]): string {
+  return (
+    `[tasks] ${running.length} tasks are in progress, and only the one being worked on may be: before this ` +
+    'commit, complete each other one, set it back to pending, or put it on hold with what it waits on.\n' +
+    running.map(line).join('\n')
+  )
+}
+
+function staleHoldNote(stale: MirrorTask[]): string {
+  return (
+    '[tasks] These holds were last checked over 6 hours ago, so what they wait on may have happened. Before ' +
+    'this commit, check each one: set its hold again (TaskUpdate metadata {"hold": "..."}) when it still ' +
+    'holds, in words that say what is true now, start or reopen the task when it no longer waits, or complete ' +
+    'it when it is done.\n' +
+    stale.map(line).join('\n')
+  )
+}
+
+/** Why a commit waits, with the tasks to fix, or undefined when it may go. `now` is the clock in ms. */
+export function commitRefusal(mirror: Mirror, now: number): string | undefined {
+  const open = openTasks(mirror)
+  const running = inProgress(mirror)
+  const stale = open.filter(task => task.hold && now - (task.holdCheckedAt ?? 0) > HOLD_RECHECK_MS)
+  const notes = [
+    state.isListChanged ? undefined : unchangedNote(open),
+    running.length > 1 ? overlapNote(running) : undefined,
+    stale.length > 0 ? staleHoldNote(stale) : undefined,
+  ].filter(note => note !== undefined)
+  return notes.length > 0 ? notes.join('\n\n') : undefined
 }
 
 /** The note for the first file edit since the list last changed, or undefined after it. */

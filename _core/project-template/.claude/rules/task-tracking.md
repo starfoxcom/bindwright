@@ -5,7 +5,7 @@ Any turn that will take three or more steps starts with `TaskCreate`, before the
 - Mark a task `in_progress` the moment you start it and `completed` the moment it is done. Never work ahead of the list or batch status updates.
 - One task in progress at a time, unless the work is explicitly parallel.
 - A step discovered mid-run becomes a task immediately.
-- Before each commit, put what it does on the task it belongs to, and check that every open task's text and hold still say what is true now. The tasks mod holds a commit until the list has changed since the last one.
+- Before each commit, put what it does on the task it belongs to, and check that every open task's text and hold still say what is true now. The tasks mod holds a commit until the list has changed since the last one, while more than one task is in progress, and while a hold has gone more than 6 hours without being set again: setting it again, in words that say what is true now, is how a session confirms it still holds.
 <!-- TOGGLE:code_host_local START -->
 - For work split across several save points, create one task per piece up front and chain them with `TaskUpdate({ taskId, addBlockedBy: [...] })` so the list follows the order they land in.
 <!-- TOGGLE:code_host_local END -->
