@@ -15,6 +15,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Changed
 
+- **The commit subject and PR title limits are checked after the command, from what landed.** The tool-rules guard no longer splits a command into words to find its `-m` or `--title`, which left every PowerShell call, here-document and message file unread. After any Bash or PowerShell call that mentions `git commit` or `gh pr create` or `edit`, it now reads the subject with `git log -1` and the title with `gh pr view`, and tells the session when a subject runs over 72 characters, or a title over 64 where PRs squash-merge. Over two days of side-by-side use it caught 7 long subjects and 10 long titles where the old rows caught 2 and none, at a median 45 ms per commit. Setup registers the guard for the after-command event too, and `home.py install-hook` takes `--matcher` with `--events` for that.
 - **Research comes before every round of review, the first one included.** `review-tiers.md` and `local-review.md` now ask for five compared lookups before a PR opens and before the fix of every red round, in place of a step back after the 3rd, the 5th and every red round from the 6th. The ci-watch mod holds `gh pr create` until five distinct lookups have run since the session last opened a PR, and every red round now holds edits, commits and pushes until five more have run. The 10th red round in a row is still the hard stop.
 
 ### Fixed

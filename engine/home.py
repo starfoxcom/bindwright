@@ -34,9 +34,10 @@ project-mod writes the repo's personal .claude/settings.local.json, never
 ~/.claude, and keeps no .bak there: the repo's ignore list covers that file,
 not a backup beside it.
 
-install-hook takes exactly one of --matcher (an entry under PreToolUse) or
---events (one entry per named event, with no matcher). --block-on-failure sets
-"onFailure": "block" on the hook, so a hook that crashes, times out or cannot
+install-hook takes --matcher (an entry under PreToolUse), --events (one entry
+per named event, with no matcher), or both (one entry per named event, each
+with that matcher). --block-on-failure sets "onFailure": "block" on the
+PreToolUse entry, so a hook that crashes, times out or cannot
 start (its interpreter removed) blocks the tool call; a removed hook file still
 lets it through. Use it for a guard, never for a hook that only adds context.
 remove-hook and list-hooks cover every event under hooks.
@@ -303,19 +304,20 @@ def install_hook(home, file, python, matcher=None, events=None, block_on_failure
     name = os.path.basename(file)
     if not name.endswith(".py"):
         raise HomeError("A hook is a .py file: " + file)
-    if (matcher is None) == (events is None):
-        raise HomeError("install-hook takes exactly one of --matcher or --events")
-    if matcher is not None:
+    if matcher is None and events is None:
+        raise HomeError("install-hook takes --matcher, --events, or both")
+    if events is None:
         placements = [("PreToolUse", matcher)]
     else:
-        placements = [(event, None) for event in _event_names(events)]
+        placements = [(event, matcher) for event in _event_names(events)]
     path, data = _load(home)
     sections = [(_event_entries(data, event, path), where) for event, where in placements]
     target = _write_hook_files(home, file)
-    for entries, where in sections:
+    for (entries, where), (event, _) in zip(sections, placements):
         _drop(entries, name)
         entry = {} if where is None else {"matcher": where}
-        entry["hooks"] = [_launcher_hook(python, target, block_on_failure)]
+        # Only a hook that runs before the tool can stop it, so only that entry blocks when the hook fails.
+        entry["hooks"] = [_launcher_hook(python, target, block_on_failure and event == "PreToolUse")]
         entries.append(entry)
     _save(path, data)
     return {"installed": target, "settings": path}

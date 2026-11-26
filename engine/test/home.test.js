@@ -973,15 +973,26 @@ test("remove-hook and list-hooks cover every event under hooks, not only PreTool
   });
 });
 
-test("install-hook refuses both or neither of --matcher and --events, and writes nothing", { skip }, () => {
+test("install-hook puts --matcher on each --events entry, and only PreToolUse blocks", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "tool-rules.py");
+    const both = home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash|PowerShell",
+      "--events", "PreToolUse,PostToolUse", "--block-on-failure");
+    assert.equal(both.status, 0);
+    const { hooks } = settings(dir);
+    const matchers = [hooks.PreToolUse[0].matcher, hooks.PostToolUse[0].matcher];
+    assert.deepEqual(matchers, ["Bash|PowerShell", "Bash|PowerShell"]);
+    assert.equal(hooks.PreToolUse[0].hooks[0].onFailure, "block");
+    assert.ok(!("onFailure" in hooks.PostToolUse[0].hooks[0]));
+  });
+});
+
+test("install-hook refuses neither --matcher nor --events, and writes nothing", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "session-title.py");
-    const both = home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash", "--events", "SessionStart");
-    assert.equal(both.status, 1);
-    assert.match(both.out.error, /exactly one of --matcher or --events/);
     const neither = home(dir, "install-hook", file, "--python", "/usr/bin/python3");
     assert.equal(neither.status, 1);
-    assert.match(neither.out.error, /exactly one of --matcher or --events/);
+    assert.match(neither.out.error, /takes --matcher, --events, or both/);
     const empty = home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--events", "SessionStart,,");
     assert.equal(empty.status, 1);
     assert.match(empty.out.error, /Not a list of event names/);
