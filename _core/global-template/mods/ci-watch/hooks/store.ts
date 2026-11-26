@@ -1,9 +1,7 @@
 // Where ci-watch keeps its files, and each PR's fix rounds, shared by every session.
 import type { EngineInterface } from 'claude-code'
 import type { Watch } from '../types'
-import {
-  crossedResearch, isRound, mayBeRound, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED,
-} from './rounds'
+import { isRound, mayBeRound, recordRound, redStreak, roundOf, ROUNDS_FILE, SOURCES_NEEDED } from './rounds'
 import type { PrRounds } from './rounds'
 import { givenDir } from './settings'
 
@@ -63,7 +61,7 @@ async function updateRounds($: EngineInterface, key: string, change: (pr?: PrRou
 // Each watch that settled on a pushed head is one round: red when a check failed. A watch that ran out of
 // time, whose only failure is a review run that never got to post its review, or whose PR conflicts with its base
 // says nothing about the code and is no round. A failed write leaves the count as it was. Returns,
-// per PR (as `owner/name#N`) whose red round asks for a step back, the lookups that step back takes.
+// per PR (as `owner/name#N`) with a red round, the lookups the step back it asks for takes.
 export async function recordRounds($: EngineInterface, settled: readonly Watch[]): Promise<Map<string, number>> {
   const stepBacks = new Map<string, number>()
   for (const w of settled) {
@@ -72,9 +70,8 @@ export async function recordRounds($: EngineInterface, settled: readonly Watch[]
     const red = w.outcome === 'failed'
     const key = `${w.repo}#${w.number}`
     const counted = (pr?: PrRounds) => {
-      const next = recordRound(pr, w.headSha, red)
-      if (red && crossedResearch(pr, w.headSha, next)) stepBacks.set(key, SOURCES_NEEDED)
-      return next
+      if (red) stepBacks.set(key, SOURCES_NEEDED)
+      return recordRound(pr, w.headSha, red)
     }
     await updateRounds($, key, counted).catch(() => stepBacks.delete(key))
   }

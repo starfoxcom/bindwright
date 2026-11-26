@@ -1,10 +1,10 @@
-// The text of the one wake a watch sends: how its checks ended, a step back when one is due, and how long
-// ago they finished. Pure, no engine access.
+// The text of the one wake a watch sends: how its checks ended, the step back a red round asks for, and
+// how long ago they finished. Pure, no engine access.
 
 import type { Watch } from '../types'
 import { isNoCi } from './checks'
 import { incidentText } from './incident'
-import { isResearchDue, researchText } from './rounds'
+import { researchText } from './rounds'
 import { FAILED, PENDING } from './settle'
 
 // How long ago the checks finished, so a late wake shows its delay.
@@ -17,9 +17,7 @@ function finishedAgo(watch: Watch, now?: number): string {
 export function wakeText(watch: Watch, now?: number, red = 0): string {
   const pr = `${watch.repo}#${watch.number}`
   const isCounted = watch.outcome === 'failed' && watch.noVerdict === undefined
-  // A latched step back asks for research too: a streak that jumped past the 3rd round never lands on it.
-  const isStepBack = isResearchDue(red) || watch.stepBackTopics !== undefined
-  const research = isCounted && isStepBack ? researchText(pr, red) : ''
+  const research = isCounted ? researchText(pr, red) : ''
   // No check finished on a watch settled for a repo without CI or for a deep review that never started.
   const finished = isNoCi(watch) || watch.deepNeverStarted ? '' : finishedAgo(watch, now)
   return `${outcomeText(watch, now, red)}${research}${finished}`

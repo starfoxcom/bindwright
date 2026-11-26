@@ -2,7 +2,8 @@ import { atom, update, type EngineInterface, type Hook, type Register } from 'cl
 
 import type { Watch } from '../types'
 import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './branch'
-import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
+import { isCommitOrPush, isPreview, isPushOrPr, mergedNumber, targetFolder } from './command'
+import { noteFirstRoundLookup, noteOpened, openingRefusal } from './first-round'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
   hardStopRefusal, isHardStop, lookupTopic, redStreak, researchRefusal, roundsText, stepBackOf, withTopic,
@@ -14,6 +15,7 @@ import {
 import { isSameRun, PENDING, reconcile, settle } from './settle'
 import { withReview } from './deep-start'
 import { wakeText } from './wake'
+import { claimWake, isRecorded, wakeKey } from './wakes'
 import { keyOf, phoneText, registerView, STOP_PREFIX, summary } from './view'
 import { isJudgedPass, isNothingToWatch, readChecks, withMergeable, withWorkflows } from './checks'
 import { claim, followId, ownerOf } from './owner'
@@ -22,8 +24,17 @@ import { checkRuns, noteRun, registerRuns, takeRunNotes } from './runs'
 export { HELP } from './help'
 export { MKDIR_SCRIPT } from './store'
 export { wakeText } from './wake'
+export { claimWake } from './wakes'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
+// `gh pr create` prints the new PR's address on a line of its own; one inside a body it echoes does not count.
+const PR_URL_LINE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+\s*$/m
+
+// True when a command's output shows it opened a PR, not just previewed one.
+function hasOpenedPr(command: string, isPowerShell: boolean, output: unknown): boolean {
+  const stdout = String((output as { stdout?: unknown } | undefined)?.stdout ?? '')
+  return !isPreview(command, isPowerShell) && PR_URL_LINE.test(stdout)
+}
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
 // and wakes it; later, it is someone else's push and only updates the row. Past that hour a settled watch
 // asks GitHub about its PR every RECHECK_MS instead of every poll.
@@ -161,27 +172,6 @@ async function stopOne($: EngineInterface, key: string): Promise<void> {
   live.watches = live.watches.filter(w => keyOf(w) !== key)
   live.generation++
   await save($)
-}
-
-// True when the saved file already records this watch as settled: another instance woke the session, or
-// holds the wake pending, which the live instance sends.
-function isRecorded(saved: readonly Watch[] | undefined, watch: Watch): boolean {
-  const there = saved?.find(w => w.repo === watch.repo && w.number === watch.number && w.headSha === watch.headSha)
-  return there?.outcome !== undefined
-}
-
-// A last guard against a second wake from the same instance (two of its polls settling one watch). A
-// hot reload's instances may not share this global (see hooks/owner.ts), so across instances the
-// owner file and `isRecorded` are what keep a wake to one.
-const wakeKey = (watch: Watch) => `${watch.id ?? ''}|${watch.repo}#${watch.number}@${watch.headSha}`
-
-export function claimWake(watch: Watch): boolean {
-  const shared = globalThis as { __ciWatchWoken?: Set<string> }
-  const woken = (shared.__ciWatchWoken ??= new Set())
-  const key = wakeKey(watch)
-  if (woken.has(key)) return false
-  woken.add(key)
-  return true
 }
 
 async function gh($: EngineInterface, args: readonly string[], cwd?: string): Promise<string> {
@@ -598,10 +588,12 @@ function startPolling($: EngineInterface): Promise<void> {
   return start
 }
 
-// Each web lookup the main session ran counts toward an owed step back, once per topic (`lookupTopic`).
+// Each web lookup the main session ran counts toward the next PR's research and an owed step back.
 async function noteWebLookup($: EngineInterface, e: unknown): Promise<void> {
   const topic = lookupTopic(e)
-  if (topic === undefined || (await isRetired($)) || !live.watches.some(w => w.stepBackTopics)) return
+  if (topic === undefined || (await isRetired($))) return
+  noteFirstRoundLookup(topic)
+  if (!live.watches.some(w => w.stepBackTopics)) return
   const counted = (w: Watch): Watch => ({
     ...w, stepBackTopics: withTopic(w.stepBackTopics ?? [], topic, w.stepBackNeeded),
   })
@@ -647,6 +639,15 @@ async function readSettings($: EngineInterface): Promise<void> {
   const file = await $.fs.read(`${config}/mods-data/ci-watch/settings.json`.replace(/\\/g, '/')).catch(() => '')
   const manifest = (dir: string) => $.fs.read(`${$.plugin.root}${dir}/plugin.json`)
   applyFile(String(file), String(await manifest('/.claude-plugin').catch(() => manifest('').catch(() => ''))))
+}
+
+// Why a shell command waits, or undefined: a commit or push owed a step back or a rebuild, or a new PR
+// owed its first round's research.
+async function shellRefusal($: EngineInterface, agentId: unknown, command: string, isPowerShell: boolean) {
+  const isHeld = agentId === undefined && isCommitOrPush(command, isPowerShell)
+  const steps = isHeld ? commandSteps(command, isPowerShell) : []
+  const held = isHeld ? (await owedResearch($, steps, command)) ?? (await owedRebuild($)) : undefined
+  return held ?? openingRefusal(agentId, command, isPowerShell)
 }
 
 // The settings come from the mod's own file over the loaded options, read again as it changes.
@@ -733,9 +734,7 @@ export const register: Register = (on, options) => {
     const isPowerShell = (e as { tool?: unknown }).tool === 'PowerShell'
     await startPolling($)
     if (await isRetired($)) return next(e)
-    const isHeld = e.agentId === undefined && isCommitOrPush(command, isPowerShell)
-    const steps = isHeld ? commandSteps(command, isPowerShell) : []
-    const refusal = isHeld ? (await owedResearch($, steps, command)) ?? (await owedRebuild($)) : undefined
+    const refusal = await shellRefusal($, e.agentId, command, isPowerShell)
     if (refusal) return { deny: refusal }
     const answered = await next(e)
     // A finished watch rides on this result; a subagent's call or a refused one carries none.
@@ -743,6 +742,7 @@ export const register: Register = (on, options) => {
     const isPlain = 'deny' in answered || notes.length === 0
     const result = isPlain ? answered : { ...answered, context: [...(answered.context ?? []), ...notes] }
     if (result.deny !== undefined || result.isError) return result
+    noteOpened(e.agentId, command, isPowerShell, hasOpenedPr(command, isPowerShell, result.result))
     await noteRun($, e, result)
     // One command can merge a PR and push or open the next: forget the one, then watch the other.
     const merged = mergedNumber(command, isPowerShell)
