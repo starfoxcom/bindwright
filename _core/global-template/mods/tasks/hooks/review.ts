@@ -69,7 +69,8 @@ function overlapNote(running: MirrorTask[]): string {
 function staleHoldNote(stale: MirrorTask[]): string {
   return (
     '[tasks] These holds were last checked over 6 hours ago, so what they wait on may have happened. Before ' +
-    'this commit, check each one: set its hold again (TaskUpdate metadata {"hold": "..."}) when it still ' +
+    'this commit, check each one: set its hold again (TaskUpdate metadata {"hold": "..."}, or ' +
+    'mcp__tasks__taskmod_update where it stands in) when it still ' +
     'holds, in words that say what is true now, start or reopen the task when it no longer waits, or complete ' +
     'it when it is done.\n' +
     stale.map(line).join('\n')
