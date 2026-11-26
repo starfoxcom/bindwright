@@ -686,7 +686,8 @@ def landed(program, *args):
 
 
 def is_fresh(seconds_since_epoch):
-    return 0 <= time.time() - seconds_since_epoch <= FRESH_SECONDS
+    """Written within FRESH_SECONDS of now either way, since GitHub's clock and this computer's can differ."""
+    return abs(time.time() - seconds_since_epoch) <= FRESH_SECONDS
 
 
 def fresh_subject():

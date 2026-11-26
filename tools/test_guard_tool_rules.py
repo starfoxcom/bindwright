@@ -189,10 +189,12 @@ class LengthRowsTest(unittest.TestCase):
     def test_a_long_title_gets_a_note_only_where_prs_squash_merge(self):
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         old = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 600))
+        ahead = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 30))
         for name, style, command, line, want in (
                 ("squash", "squash", "gh pr create --base develop --body-file b.md", f"{now}\t{self.TITLE_LONG}",
                  True),
                 ("an edit", "squash", "gh pr edit --title x", f"{now}\t{self.TITLE_LONG}", True),
+                ("GitHub's clock ahead of this one", "squash", "gh pr create", f"{ahead}\t{self.TITLE_LONG}", True),
                 ("a PR the command did not change", "squash", "gh pr edit 5 --title x", f"{old}\t{self.TITLE_LONG}",
                  False),
                 ("exactly 64", "squash", "gh pr create", f"{now}\t{self.TITLE_LONG[:64]}", False),
