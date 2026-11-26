@@ -830,188 +830,12 @@ class Command(unittest.TestCase):
                 self.assertIn("error", json.loads(out))
 
 
-# A stand-in for the gh CLI that keeps a pretend repository in a JSON file,
-# logs every call, runs --jq filters through the real jq, and refuses every
-# write GitHub would refuse, any write with no rule included.
-FAKE_GH = r'''
-import json, os, subprocess, sys
-
-sys.path.insert(0, os.environ["FAKE_GH_TOOLS"])
-import github_writes
-
-STATE, LOG = os.environ["FAKE_GH_STATE"], os.environ["FAKE_GH_LOG"]
-VALUED = {"-X", "--jq", "--input", "-F", "-f", "-H", "-R", "--json", "--color",
-          "--description", "--body", "--limit"}
-
-
-def parse(argv):
-    pos, opts = [], {}
-    it = iter(argv)
-    for arg in it:
-        if arg in VALUED:
-            opts.setdefault(arg, []).append(next(it))
-        elif arg.startswith("-"):
-            opts[arg] = [True]
-        else:
-            pos.append(arg)
-    return pos, opts
-
-
-def out(data, opts):
-    if "--silent" in opts:
-        return 0
-    if isinstance(data, str) and "--jq" not in opts:
-        sys.stdout.write(data)
-        return 0
-    if "--jq" in opts:
-        run = subprocess.run(["jq", "-r", "-c", opts["--jq"][0]], input=json.dumps(data),
-                             capture_output=True, text=True)
-        sys.stdout.write(run.stdout)
-        sys.stderr.write(run.stderr)
-        return run.returncode
-    sys.stdout.write(json.dumps(data))
-    return 0
-
-
-class Refused(str):
-    """GitHub's reason for refusing a write."""
-
-
-def not_found():
-    sys.stderr.write("gh: Not Found (HTTP 404)\n")
-    return 1
-
-
-def write_body(opts):
-    """The body a write sends: --input from stdin, else its -F and -f fields, typed as gh types them."""
-    if "--input" in opts:
-        return json.load(sys.stdin)
-    body = {}
-    for field in opts.get("-F", []):
-        key, value = field.split("=", 1)
-        body[key] = {"true": True, "false": False}.get(value, value)
-    for field in opts.get("-f", []):
-        key, value = field.split("=", 1)
-        body[key] = value
-    return body
-
-
-def api(path, opts, st):
-    method = opts.get("-X", ["GET"])[0]
-    path = path.split("?")[0]
-    repo = "repos/" + st["name"]
-    sets = st["rulesets"]
-    if method != "GET":
-        body = write_body(opts)
-        reason = github_writes.refusal(method, path, body)
-        if reason:
-            return Refused(reason)
-    if path.endswith("/contents/.github/workflows/claude-code-review.yml"):
-        return {} if "/".join(path.split("/")[1:3]) in st.get("with_workflow", []) else KeyError
-    if method == "PATCH" and path == repo:
-        st["repo"].update(body)
-        return None
-    if method == "POST" and path == repo + "/rulesets":
-        body["id"] = 100 + len(sets)
-        body["source_type"] = "Repository"
-        sets.append(body)
-        return None
-    if method == "PUT" and path.startswith(repo + "/rulesets/"):
-        rid = int(path.rsplit("/", 1)[1])
-        body.update(id=rid, source_type="Repository")
-        sets[:] = [body if r["id"] == rid else r for r in sets]
-        return None
-    if method != "GET":
-        return KeyError
-    if path == repo:
-        return dict(st["repo"], full_name=st["name"])
-    if path == repo + "/rulesets":
-        return [{k: r[k] for k in ("id", "name", "target", "source_type")} for r in sets]
-    if path.startswith(repo + "/rulesets/"):
-        return next((r for r in sets if str(r["id"]) == path.rsplit("/", 1)[1]), KeyError)
-    if path.startswith(repo + "/labels/"):
-        name = path.rsplit("/", 1)[1]
-        return {"name": name} if name in st["labels"] else KeyError
-    if path.startswith(repo + "/branches/"):
-        name = path.split("/branches/", 1)[1]
-        return {"name": name} if name in st["branches"] else KeyError
-    if path == repo + "/issues/comments":
-        return st.get("comments", [])
-    if path == repo + "/contents/.github/review-gate.yml":
-        return st["gate_yml"] if "gate_yml" in st else KeyError
-    if path == repo + "/contents/.github/scripts/review_gate.py":
-        return {"forbidden": PermissionError, "absent": KeyError}.get(st.get("gate_script"), {})
-    if path.startswith("orgs/"):
-        return {"installations": st.get("installations", [])}
-    if path == "user/memberships/orgs":
-        memberships = st.get("memberships", [])
-        return PermissionError if memberships == "forbidden" else memberships
-    return KeyError
-
-
-def repo_path(opts, st):
-    """The API path of the repo a gh command names with -R, else of the pretend one."""
-    return "repos/" + opts.get("-R", [st["name"]])[0]
-
-
-def main():
-    sys.stdout.reconfigure(newline="\n")  # Windows would end lines with CRLF
-    pos, opts = parse(sys.argv[1:])
-    with open(STATE) as f:
-        st = json.load(f)
-    before = json.dumps(st)
-    with open(LOG, "a") as f:
-        f.write(json.dumps(sys.argv[1:]) + "\n")
-    cmd = pos[:2]
-    data = None
-    if pos[0] == "api":
-        data = api(pos[1], opts, st)
-    elif cmd == ["repo", "view"]:
-        data = {"nameWithOwner": st["name"]}
-    elif cmd == ["label", "create"]:
-        label = {"name": pos[2], "color": opts.get("--color", ["ededed"])[0],
-                 "description": opts.get("--description", [""])[0]}
-        data = Refused(github_writes.refusal("POST", repo_path(opts, st) + "/labels", label) or "")
-        if not data:
-            st["labels"].append(pos[2])
-            data = None
-    elif cmd == ["secret", "list"]:
-        data = [{"name": n} for n in st["secrets"]]
-    elif cmd == ["repo", "list"]:
-        names = st.get("org_repos", {}).get(pos[2], []) if len(pos) > 2 else st.get("owned", [])
-        data = [{"nameWithOwner": n} for n in names]
-    elif cmd == ["secret", "set"]:
-        value = "" if sys.stdin.isatty() else sys.stdin.read()
-        path = repo_path(opts, st) + "/actions/secrets/" + pos[2]
-        data = Refused(github_writes.refusal("PUT", path, {"value": value}) or "")
-        if not data:
-            st["secrets"].append(pos[2])
-            st.setdefault("written", []).append([opts.get("-R", [""])[0], pos[2], value])
-            data = None
-    if data is KeyError:
-        return not_found()
-    if isinstance(data, Refused):
-        sys.stderr.write("gh: Validation Failed: %s (HTTP 422)\n" % data)
-        return 1
-    if data is PermissionError:
-        sys.stderr.write("gh: Resource not accessible by integration (HTTP 403)\n")
-        return 1
-    # The script pipes one call into another (read a ruleset, write it back),
-    # so two fakes run at once: only a call that changed the state writes it,
-    # and the file is swapped whole, never seen half written.
-    if json.dumps(st) != before:
-        with open(STATE + ".new", "w") as f:
-            json.dump(st, f)
-        os.replace(STATE + ".new", STATE)
-    return out(data, opts) if data is not None else 0
-
-
-sys.exit(main())
-'''
+# A stand-in for the gh CLI, run as a script.
+FAKE_GH = os.path.join(ROOT, "tools", "fake_gh.py")
 
 SETUP = os.path.join(ROOT, ".github", "scripts", "setup-review-gate.sh")
 SWEEP = os.path.join(ROOT, ".github", "scripts", "set-review-tokens.sh")
-WRITES = (["label", "create"], ["secret", "set"])
+WRITES = (["label", "create"], ["secret", "set"], ["variable", "set"])
 
 
 def fresh_repo(**changes):
@@ -1062,20 +886,31 @@ class SetupScript(unittest.TestCase):
         self.dir = tempfile.mkdtemp()
         self.state = os.path.join(self.dir, "state.json")
         self.log = os.path.join(self.dir, "log.jsonl")
-        stub = os.path.join(self.dir, "fake_gh.py")
-        with open(stub, "w") as f:
-            f.write(FAKE_GH)
+        stub = FAKE_GH
         gh = os.path.join(self.dir, "gh")
         with open(gh, "w", newline="\n") as f:
             f.write('#!/usr/bin/env bash\nexec "%s" "%s" "$@"\n'
                     % (sys.executable.replace("\\", "/"), stub.replace("\\", "/")))
         os.chmod(gh, 0o755)
 
-    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False):
+    def run_setup(self, state, *args, script=SETUP, stdin=None, in_claude_code=False, guard_settings=None,
+                  guard_mode=None):
         with open(self.state, "w") as f:
             json.dump(state, f)
         open(self.log, "w").close()
+        # A Claude config folder of the test's own, so this computer's usage guard settings stay out of the runs.
+        config = os.path.join(self.dir, "config")
+        settings = os.path.join(config, "mods-data", "usage-guard", "settings.json")
+        if guard_settings is None and os.path.exists(settings):
+            os.remove(settings)
+        if guard_settings is not None:
+            os.makedirs(os.path.dirname(settings), exist_ok=True)
+            with open(settings, "w", newline="") as f:
+                f.write(guard_settings)
+            if guard_mode is not None:
+                os.chmod(settings, guard_mode)
         env = dict(os.environ, FAKE_GH_STATE=self.state, FAKE_GH_LOG=self.log,
+                   CLAUDE_CONFIG_DIR=config.replace("\\", "/"),
                    FAKE_GH_TOOLS=os.path.join(ROOT, "tools"), PATH=self.dir + os.pathsep + os.environ["PATH"])
         # These tests may run inside a Claude Code session, which the token script refuses.
         env.pop("CLAUDECODE", None)
@@ -1358,6 +1193,55 @@ class SetupScript(unittest.TestCase):
             run, after, _ = self.run_setup(fresh_repo(), *args, "--repo", "acme/game", script=SWEEP, stdin=key)
             self.assertEqual(run.returncode, 2, name)
             self.assertNotIn("written", after, name)
+
+    def test_the_ceiling_alone_is_set_without_asking_for_a_token(self):
+        state = fresh_repo(owned=["acme/game", "acme/site", "acme/notes"],
+                           with_workflow=["acme/game", "acme/site"])
+        run, after, _ = self.run_setup(state, "--ceiling", "98", script=SWEEP, guard_settings='{"wrapUpAt": 90}')
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(sorted(after["variables"]), [["acme/game", "REVIEW_ACCOUNT_CEILING", "98"],
+                                                      ["acme/site", "REVIEW_ACCOUNT_CEILING", "98"]])
+        self.assertNotIn("written", after)
+        self.assertNotIn("token", run.stderr)
+
+    def test_without_a_ceiling_the_sweep_copies_the_usage_guards_percent(self):
+        token = "sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n"
+        for name, settings, expected in (
+                ("a whole percent", '{\n  "wrapUpAt": 98\n}\n', "98"),
+                ("the last key, with no comma after it", '{"compactAbovePercent": 35, "wrapUpAt": 100}', "100"),
+                ("no settings file", None, None),
+                ("no pause percent saved", '{"compactAbovePercent": 35}', None),
+                ("CRLF line endings", '{\r\n  "wrapUpAt": 98\r\n}\r\n', "98"),
+                ("a fraction", '{"wrapUpAt": 98.5}', None),
+                ("an exponent JSON.stringify writes", '{"wrapUpAt": 1e+21}', None),
+                ("a hand-written exponent", '{"wrapUpAt": 9e1}', None),
+                ("a negative", '{"wrapUpAt": -98}', None),
+                ("a string", '{"wrapUpAt": "98"}', None),
+                ("zero", '{"wrapUpAt": 0}', None),
+                ("past 100", '{"wrapUpAt": 150}', None)):
+            run, after, _ = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
+                                           stdin=token, guard_settings=settings)
+            self.assertEqual(run.returncode, 0, name + run.stderr)
+            self.assertEqual(len(after["written"]), 1, name)
+            want = [["acme/game", "REVIEW_ACCOUNT_CEILING", expected]] if expected else None
+            self.assertEqual(after.get("variables"), want, name)
+
+    def test_an_unreadable_guard_settings_file_leaves_the_variable_and_the_run_goes_on(self):
+        run, after, _ = self.run_setup(fresh_repo(), "--accounts", "1", "--repo", "acme/game", script=SWEEP,
+                                       stdin="sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa\n",
+                                       guard_settings='{"wrapUpAt": 98}', guard_mode=0)
+        if os.access(os.path.join(self.dir, "config", "mods-data", "usage-guard", "settings.json"), os.R_OK):
+            self.skipTest("this user or file system reads a file with no permissions")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(len(after["written"]), 1)
+        self.assertNotIn("variables", after)
+
+    def test_a_ceiling_outside_1_to_100_is_refused_before_any_call(self):
+        for ceiling in ("0", "101", "9x", "-5", "050"):
+            run, after, calls = self.run_setup(fresh_repo(), "--ceiling", ceiling, "--repo", "acme/game",
+                                               script=SWEEP)
+            self.assertEqual(run.returncode, 2, ceiling)
+            self.assertEqual(calls, [], ceiling)
 
     def test_an_api_key_or_a_later_token_stands_in_for_the_first_token(self):
         run, _, _ = self.run_setup(fresh_repo(secrets=["ANTHROPIC_API_KEY"]), "--check")
