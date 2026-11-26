@@ -11,6 +11,7 @@ import tempfile
 
 from apply import _code_units, _safe, refuse_links
 from keep import OWNED, is_owned, kept_sections, owned_patterns
+from missing import missing_report
 from model import expand_answers
 from propose import parse_plain_object
 
@@ -101,7 +102,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
     theirs_all = repo_files(rendered)
     paths = sorted(set(pristine["files"]) | set(theirs_all), key=_code_units)
     result = {o: [] for o in OUTCOMES}
-    result.update({"write": [], "stage": [], "renamed": [], "remove": [], "owned_changed": []})
+    result.update({"write": [], "stage": [], "renamed": [], "remove": [], "owned_changed": [], "priors": {}})
     files = {}
     moves = _moves_for(theirs_all, pristine, read_repo, owned)
     moved_from = set(moves.values())
@@ -131,6 +132,7 @@ def plan_update(rendered, pristine, read_repo, owned, merge, version):
         result[outcome].append(path)
         if outcome in ("updated", "merged", "added"):
             result["write"].append((path, decided[1]))
+            result["priors"][path] = [t for t in (base, ours) if isinstance(t, str)]
         if outcome in ("staged", "conflict"):
             result["stage"].append((STAGING + path, decided[1]))
         # A moved file the merge leaves as it was, or stages, still lands at its new path.
@@ -362,10 +364,18 @@ def run_update(root, bind_with, version, state_json):
         _remove_moved(at(path))
     _put(root, PRISTINE, state_json(plan["pristine"]))
     out = {o: plan[o] for o in OUTCOMES}
-    out["renamed"] = plan["renamed"]
-    out["owned_changed"] = plan["owned_changed"]
-    out["skipped"] = skipped
+    out.update(renamed=plan["renamed"], owned_changed=plan["owned_changed"], skipped=skipped,
+               missing=missing_report(root, _written_files(plan), repo_files(rendered)))
     return out
+
+
+def _written_files(plan):
+    """The files this update wrote with a new text, as (path, new text, priors) triples; the priors
+    are the base the update decided the file against and the repo's copy before it.
+    """
+    written = dict(plan["write"])
+    paths = [path for outcome in ("added", "merged", "updated") for path in plan[outcome]]
+    return [(path, written[path], plan["priors"][path]) for path in paths]
 
 
 def _record_of(text, what):

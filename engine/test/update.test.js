@@ -330,3 +330,129 @@ test("a merge that drops a kept section counts as a conflict", () => {
   assert.deepEqual(plan.write, []);
   assert.deepEqual(plan.stage, [[`${STAGING}x.py`, "b\n"]]);
 });
+
+// Docs the bind ships, which a row deletes from the repo so its name has nothing to resolve to.
+const GUIDE = "docs/ci-watching.md";
+const AUDIT = "docs/test-audit.md";
+// Deletes repo files the bind wrote; the record keeps them, so the update leaves them deleted.
+const drop = (r, ...paths) => {
+  for (const path of paths) rmSync(r.at(path), { recursive: true, force: true });
+};
+
+// Each row adds one line to the rule's template and checks the report's `missing` key.
+// `base` is a line the saved record and the repo already hold before the update; `gone` lists
+// shipped paths the repo deleted.
+const NAMED_ROWS = [
+  { name: "a path at the repo root is found", line: "See `.claude/settings.json`.", missing: [] },
+  {
+    name: "a shipped file the repo lacks is reported",
+    gone: [GUIDE],
+    line: `See \`${GUIDE}\`.`,
+    missing: [{ file: RULE, names: [GUIDE] }],
+  },
+  {
+    name: "a name repeated in the new text is reported once",
+    gone: [GUIDE],
+    line: `See \`${GUIDE}\` and \`${GUIDE}\`.`,
+    missing: [{ file: RULE, names: [GUIDE] }],
+  },
+  {
+    name: "a span the base text already names is not reported",
+    gone: [GUIDE],
+    base: `Old \`${GUIDE}\` wording.`,
+    line: `New \`${GUIDE}\` wording.`,
+    missing: [],
+  },
+  {
+    name: "a shipped folder the repo lacks is reported",
+    gone: ["docs"],
+    line: "See `docs/`.",
+    missing: [{ file: RULE, names: ["docs/"] }],
+  },
+  {
+    name: "names the bind does not ship are never reported",
+    line: "Set `content.type` and `gorm.DB`; lay out `cart/index.ts` and `auth/`; create " +
+      "`docs/never-written.md`; skip `<path>/x.md`, `https://example.com/a.md`, " +
+      "`feature/user-auth-flow`, `7.19.1`, `..\\..\\x.md`, `\\\\host\\share\\x.md` and `C:x.md`.",
+    missing: [],
+  },
+];
+
+for (const row of NAMED_ROWS) {
+  test(`named paths: ${row.name}`, needsPython, async () => {
+    const { out } = await update((r) => {
+      drop(r, ...(row.gone ?? []));
+      if (row.base === undefined) return;
+      const base = `${r.read(RULE)}\n${row.base}\n`;
+      r.pristine.files[RULE] = base;
+      r.write(RULE, base);
+    }, { edits: { [RULE]: (text) => `${text}\n${row.line}\n` } });
+    assert.deepEqual(out.updated, [RULE]);
+    assert.deepEqual(out.missing, row.missing);
+  });
+}
+
+const SKILL = ".claude/skills/close-session/SKILL.md";
+const OLD_SKILL = ".claude/skills/session-close/SKILL.md";
+
+// Only the old path's base names the dropped guide, so priors taken from the new path report it.
+test("named paths: a moved file is compared with its base under the old path", needsPython, async () => {
+  const { out } = await update((r) => {
+    drop(r, GUIDE);
+    const base = `${r.read(SKILL)}\nOld \`${GUIDE}\` wording.\n`;
+    delete r.pristine.files[SKILL];
+    r.pristine.files[OLD_SKILL] = base;
+    rmSync(r.at(SKILL));
+    r.write(OLD_SKILL, base);
+  }, { edits: { [SKILL]: (text) => `${text}\nNew \`${GUIDE}\` wording.\n` } });
+  assert.deepEqual(out.renamed, [[OLD_SKILL, SKILL]]);
+  assert.deepEqual(out.updated, [SKILL]);
+  assert.deepEqual(out.missing, []);
+});
+
+const REVIEW_GUIDE = ".github/review-guide.md";
+
+// Only the rules-folder candidate resolves `testing.md` named from the review guide: neither
+// `testing.md` nor `.github/testing.md` ships.
+test("named paths: a bare rule name the repo left out is reported from elsewhere", needsPython, async () => {
+  const { out } = await update((r) => {
+    const named = r.read(REVIEW_GUIDE);
+    const base = named.split("\n").filter((l) => !l.includes("`testing.md`")).join("\n");
+    assert.notEqual(base, named, "the review guide names the testing rule by its bare name");
+    r.pristine.files[REVIEW_GUIDE] = base;
+    r.write(REVIEW_GUIDE, base);
+    drop(r, OTHER);
+  });
+  assert.ok(out.updated.includes(REVIEW_GUIDE));
+  assert.deepEqual(out.missing, [{ file: REVIEW_GUIDE, names: ["testing.md"] }]);
+});
+
+// Only the beside-the-file candidate resolves `review-gate.yml` named from the review guide.
+test("named paths: a bare sibling the repo left out is reported", needsPython, async () => {
+  const { out } = await update((r) => drop(r, ".github/review-gate.yml"), {
+    edits: { [`${REVIEW_GUIDE}.template`]: (text) => `${text}\nSee \`review-gate.yml\`.\n` },
+  });
+  assert.deepEqual(out.updated, [REVIEW_GUIDE]);
+  assert.deepEqual(out.missing, [{ file: REVIEW_GUIDE, names: ["review-gate.yml"] }]);
+});
+
+test("named paths: a merged file reports only what the template added", needsPython, async () => {
+  const { out } = await update((r) => {
+    drop(r, GUIDE, AUDIT);
+    r.write(RULE, `Our own \`${GUIDE}\`.\n${r.read(RULE)}`);
+  }, { edits: { [RULE]: (text) => `${text}\nSee \`${AUDIT}\`.\n` } });
+  assert.deepEqual(out.merged, [RULE]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: [AUDIT] }]);
+});
+
+test("named paths: a held base is what a name is compared with", needsPython, async () => {
+  const line = `See \`${GUIDE}\`.`;
+  const { out } = await update((r) => {
+    drop(r, GUIDE);
+    const held = r.read(RULE);
+    r.pristine.held = { [RULE]: held };
+    r.pristine.files[RULE] = `${held}\nOld ${line}\n`;
+  }, { edits: { [RULE]: (text) => `${text}\n${line}\n` } });
+  assert.deepEqual(out.updated, [RULE]);
+  assert.deepEqual(out.missing, [{ file: RULE, names: [GUIDE] }]);
+});
