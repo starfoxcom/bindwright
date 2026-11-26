@@ -41,7 +41,7 @@ GitHub issues can carry a status beyond open and closed: Backlog, Todo, In progr
 
 - When work on an issue starts, set it to In progress.
 - GitHub moves an issue to Todo when someone is assigned. A PR into the default branch that links it (`Resolves #N`) moves it to In review while open and to Done when it merges; set nothing for those.
-- A PR into any other branch links nothing, since GitHub reads closing keywords only on the default branch. So set In review when that PR opens, and Done when it merges, closing the issue if it is still open.
+- A PR into any other branch links nothing, even with `Resolves #N`, since GitHub reads closing keywords only on the default branch. So set In review when the PR that resolves the issue opens, and Done when it merges, closing the issue if it is still open. A `Part of #N` PR moves its issue on neither path.
 - An item that will not be done gets Not planned, and one that repeats another gets Duplicate with the other issue's id. Either status closes the issue with the matching reason, so no separate close is needed.
 <!-- TOGGLE:tracker_board START -->
 - The board's Status field follows the issue's status, and the other way round, wherever the field has an option of the same name. Set the issue's status, not the board field.
