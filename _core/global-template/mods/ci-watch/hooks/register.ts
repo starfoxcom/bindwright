@@ -2,7 +2,7 @@ import { atom, update, type EngineInterface, type Hook, type Register } from 'cl
 
 import type { Watch } from '../types'
 import { commandSteps, folderOf, mayBeOn, type RedPr, type WorkStep } from './branch'
-import { isCommitOrPush, isPushOrPr, mergedNumber, targetFolder } from './command'
+import { isCommitOrPush, isPreview, isPushOrPr, mergedNumber, targetFolder } from './command'
 import { noteFirstRoundLookup, noteOpened, openingRefusal } from './first-round'
 import { actionsIncident, STATUS_EVERY_MS, STATUS_SCRIPT, STUCK_MS } from './incident'
 import {
@@ -27,6 +27,14 @@ export { wakeText } from './wake'
 export { claimWake } from './wakes'
 
 const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/
+// `gh pr create` prints the new PR's address on a line of its own; one inside a body it echoes does not count.
+const PR_URL_LINE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+\s*$/m
+
+// True when a command's output shows it opened a PR, not just previewed one.
+function hasOpenedPr(command: string, isPowerShell: boolean, output: unknown): boolean {
+  const stdout = String((output as { stdout?: unknown } | undefined)?.stdout ?? '')
+  return !isPreview(command, isPowerShell) && PR_URL_LINE.test(stdout)
+}
 // For an hour after this session pushed to a PR (or asked to watch it), a new head on it is the session's own
 // and wakes it; later, it is someone else's push and only updates the row. Past that hour a settled watch
 // asks GitHub about its PR every RECHECK_MS instead of every poll.
@@ -734,7 +742,7 @@ export const register: Register = (on, options) => {
     const isPlain = 'deny' in answered || notes.length === 0
     const result = isPlain ? answered : { ...answered, context: [...(answered.context ?? []), ...notes] }
     if (result.deny !== undefined || result.isError) return result
-    noteOpened(e.agentId, command, isPowerShell, PR_URL.test(JSON.stringify(result.result ?? '')))
+    noteOpened(e.agentId, command, isPowerShell, hasOpenedPr(command, isPowerShell, result.result))
     await noteRun($, e, result)
     // One command can merge a PR and push or open the next: forget the one, then watch the other.
     const merged = mergedNumber(command, isPowerShell)

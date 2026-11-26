@@ -22,6 +22,13 @@ export function isPushOrPr(command: string, isPowerShell = false): boolean {
 }
 
 // A new PR waits for its first round's research.
+// A command that only previews a PR or shows help: `--dry-run`, `--help` or `-h` as a word of its
+// own, outside quotes, so a title that mentions one does not count.
+const PREVIEW = /(?:^|\s)(?:--dry-run|--help|-h)(?=$|[\s=;&|)])/
+export function isPreview(command: string, isPowerShell = false): boolean {
+  return PREVIEW.test(maskCommand(command, isPowerShell))
+}
+
 export function isPrCreate(command: string, isPowerShell = false): boolean {
   return PR_CREATE_ONLY.test(maskCommand(command, isPowerShell))
 }
