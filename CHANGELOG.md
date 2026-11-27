@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The live check no longer notes Bindwright's own scripts.** An update PR carries the writes in Bindwright's template scripts, such as the review gate's, so every update got the note though the project added no write. A line the bind's record holds as Bindwright's text for that file is now left out, while a write the project adds to one of those files still gets the note.
+
 ## [v7.21.6] — 2026-11-27
 
 ### Fixed
