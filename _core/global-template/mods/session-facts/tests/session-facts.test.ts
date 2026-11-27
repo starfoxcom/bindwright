@@ -52,11 +52,10 @@ test('every prompt carries the local time, the context fill to compaction and pl
   expect(seen[0]).toContain('| ctx 🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ 57% · 181k to compact |')
   expect(seen[0]).toContain('plan used: 5-hour 3%, week 20%')
   expect(seen[0]).not.toContain('2026-10-04')
-  expect(seen[0]).not.toContain('keep working')
 })
 
-// Sessions stopped or held work on a red bar right before compaction (2026-10-13).
-test('a bar near compaction tells the model to keep working through it', async ($, on) => {
+// A line that talks about the coming compaction reads as a cue to wrap up: near it, the line holds figures only.
+test('a bar near compaction carries no instruction about the compaction', async ($, on) => {
   mock.clock(on, { now: NOON_UTC })
   on('process.run', () => {
     throw new Error('no node')
@@ -82,7 +81,7 @@ test('a bar near compaction tells the model to keep working through it', async (
   await $.prompt.submit({ text: 'hello' } as never)
 
   expect(seen[0]).toContain('· 37k to compact')
-  expect(seen[0]).toContain('| compaction is expected: keep working')
+  expect(seen[0]).not.toMatch(/keep working|compaction is expected/)
 })
 
 test('an unreadable host zone and window fall back instead of failing the prompt', async ($, on) => {

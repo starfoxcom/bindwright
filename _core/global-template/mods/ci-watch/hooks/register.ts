@@ -465,9 +465,10 @@ async function poll($: EngineInterface): Promise<void> {
     changed = true
     if (next.outcome) settled.push(next)
   }
+  const polled = kept.map(w => ({ ...w, polledAt: now, pollMs: live.pollMs }))
   const stepBacks = await recordRounds($, settled)
   // A push, a stop or a merge while this poll waited on gh changed the list: lay the results over it.
-  live.watches = live.generation === generation ? kept : reconcile(live.watches, kept)
+  live.watches = live.generation === generation ? polled : reconcile(live.watches, polled)
   // Found by watch and head, not identity: a push made meanwhile is laid onto the polled copy, and the
   // watch as it is now decides whether it is silent. One stopped or restarted meanwhile is not found.
   const toWake = live.watches.filter(w => w.outcome && !w.isSilent && settled.some(s => isSameRun(s, w)))
@@ -494,7 +495,7 @@ async function poll($: EngineInterface): Promise<void> {
   const latch = (w: Watch) => ({ stepBackTopics: [], stepBackNeeded: stepBacks.get(`${w.repo}#${w.number}`) })
   const marked = (w: Watch): Watch => ({ ...w, wakePending: true, ...(isStepBack(w) ? latch(w) : {}) })
   if (due.length > 0) live.watches = live.watches.map(w => (isDue(w) ? marked(w) : w))
-  if (changed || isIncidentNoted || live.isUnsaved) await save($)
+  if (changed || isIncidentNoted || live.isUnsaved || live.watches.some(w => w.wakePending)) await save($)
   if (!live.isTurnRunning) await sendHeld($)
 }
 

@@ -1,8 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
-  hasEngineWake, hasPendingWake, isNearCompaction, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS,
-  nearCompactionText, workable,
+  hasEngineWake, hasPendingWake, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS, silentWatches, workable,
 } from './keepgoing'
 import { builtInName, hasListTool, registerOwnTools } from './owntools'
 import { commitRefusal, EDIT_TOOLS, editNote, isCommit, noteCommitted, noteListChanged, resetReview } from './review'
@@ -81,6 +80,10 @@ const live: {
   promptedAt?: number
   // The last turn's end left background work or a scheduled wake that will wake the session (Stop event).
   hasEngineWake: boolean
+  // The turn a later look at a CI wake that has not come yet was armed in.
+  recheckFor?: number
+  // Silent CI watches first seen at `since`, suspected until the same silence outlasts a look.
+  suspect?: { stamp: string; since: number }
   // The session the carry-over last ran for: a /clear changes the session with no session.start.
   carriedFor?: string
 } = {
@@ -270,70 +273,79 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
   return $.fs.read(`${dir}/${name}`).then(String, () => undefined)
 }
 
-// Whether the person turned automatic compaction off: `DISABLE_AUTO_COMPACT` or `DISABLE_COMPACT`, or
-// auto-compact off in /config (`autoCompactEnabled`, in the settings or the global config). An unreadable
-// global config counts as off, since it may hold the switch.
-async function isAutoCompactOff($: EngineInterface): Promise<boolean> {
-  const isSet = (value: string | undefined) => Boolean(value) && !/^(0|false)$/i.test(value ?? '')
-  if (isSet(await $.env.get('DISABLE_AUTO_COMPACT').catch(() => undefined))) return true
-  if (isSet(await $.env.get('DISABLE_COMPACT').catch(() => undefined))) return true
-  const settings = (await $.settings.read().catch(() => ({}))) as { autoCompactEnabled?: unknown }
-  if (settings.autoCompactEnabled === false) return true
-  const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'
-  const configured = givenDir(await $.env.get('CLAUDE_CONFIG_DIR'))
-  const file = (configured ? `${configured}/.claude.json` : `${home}/.claude.json`).replace(/\\/g, '/')
-  try {
-    return (JSON.parse(String(await $.fs.read(file))) as { autoCompactEnabled?: unknown }).autoCompactEnabled === false
-  } catch {
-    return true
-  }
-}
+// While a CI wake the session waits on has not come, how often the idle session looks again.
+const WAKE_RECHECK_MS = 5 * 60_000
 
-// Whether a compaction is coming soon: the context near the auto-compaction point, with auto-compaction on.
-// False when the engine cannot say.
-async function isContextNearCompaction($: EngineInterface): Promise<boolean> {
-  try {
-    const { context } = await $.session.usage({ breakdown: 'summary' })
-    if (!isNearCompaction(context.tokens, context.breakdown?.autoCompactThreshold)) return false
-  } catch {
-    return false
-  }
-  return !(await isAutoCompactOff($))
+// A hot reload leaves the old copy's timers running, and copies need not share globals: the copy that
+// sees a main turn start or end writes its own name to the session's owner file, and a look acts only
+// while the file names it. No file means no turn ran in this session yet, as right after a /clear.
+const INSTANCE = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+const ownerFile = async ($: EngineInterface) => `${await dataDir($)}/${await $.session.id()}.owner`
+async function claimOwner($: EngineInterface): Promise<void> {
+  await $.fs.write(await ownerFile($), INSTANCE).catch(() => undefined)
+}
+async function isOwner($: EngineInterface): Promise<boolean> {
+  const owner = await $.fs.read(await ownerFile($)).then(String, () => '')
+  return owner.trim() === INSTANCE
 }
 
 // A turn that ended with work nobody has to wait for gets a prompt to carry on, unless something else
 // wakes the session (background work, a scheduled wake, a CI watch, a plan-limit pause) or the last prompts
-// changed nothing on the list. Near the compaction a turn's end gets one even with no workable task: the
-// next step it announced is the work.
+// changed nothing on the list. A CI wake still coming is looked at again while the session stays idle, so
+// one that never arrives cannot hold the prompt back for good; a pause is usage-guard's to end.
 async function keepGoing($: EngineInterface): Promise<void> {
   if (live.isTurnRunning) return
   const mirror = await mirrorOf($)
   const tasks = workable(mirror)
-  if (live.hasEngineWake) return
-  if (tasks.length === 0 && !(await isContextNearCompaction($))) return
-  if (await isWakeComing($)) return
+  if (live.hasEngineWake || tasks.length === 0 || (await isPauseComing($))) return
+  if (await isWatchComing($)) return recheckLater($)
   const isIdle = live.idlePrompts > 0 && live.promptedAt === mirror.changedAt
-  // With no task to name, one prompt: a turn that still ends after it waits on a person.
-  if (isIdle && live.idlePrompts >= (tasks.length > 0 ? MAX_IDLE_PROMPTS : 1)) return
+  if (isIdle && live.idlePrompts >= MAX_IDLE_PROMPTS) return
   live.idlePrompts = isIdle ? live.idlePrompts + 1 : 1
   live.promptedAt = mirror.changedAt
-  await $.prompt.submit({ text: tasks.length > 0 ? keepGoingText(tasks) : nearCompactionText() })
+  await $.prompt.submit({ text: keepGoingText(tasks) })
 }
 
-// A CI watch or a plan-limit pause that wakes the session by itself.
-async function isWakeComing($: EngineInterface): Promise<boolean> {
-  const ciWatch = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
-  if (hasPendingWake(ciWatch, await $.clock.now())) return true
+// One look per turn; a turn that starts meanwhile, turning keepGoing off, or a newer copy cancels it.
+function recheckLater($: EngineInterface): void {
+  const turn = live.turn
+  if (live.recheckFor === turn) return
+  live.recheckFor = turn
+  $.clock.after(WAKE_RECHECK_MS, async () => {
+    if (live.turn !== turn || !live.keepGoing || !(await isOwner($).catch(() => false))) return
+    live.recheckFor = undefined
+    await keepGoing($).catch(() => undefined)
+  })
+}
+
+// A CI watch that wakes the session by itself. One that reads silent is only suspected at first, since the
+// computer may have slept or the session just resumed before ci-watch could poll again; it counts as gone
+// once the same silence outlasts a look and two poll intervals.
+async function isWatchComing($: EngineInterface): Promise<boolean> {
+  const state = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
+  const now = await $.clock.now()
+  const isComing = hasPendingWake(state, now)
+  const silent = isComing ? undefined : silentWatches(state, now)
+  if (silent === undefined) {
+    live.suspect = undefined
+    return isComing
+  }
+  if (live.suspect?.stamp !== silent.stamp) live.suspect = { stamp: silent.stamp, since: now }
+  return now - live.suspect.since < Math.max(WAKE_RECHECK_MS, 2 * silent.pollMs)
+}
+
+// A plan-limit pause that wakes the session by itself, or whose automatic resume the person cancelled.
+async function isPauseComing($: EngineInterface): Promise<boolean> {
   return isPauseHolding(await peerFile($, 'usage-guard', 'pause.json'), await $.clock.now())
 }
 
-// The reason to refuse a turn's end near the compaction while a task needs no one and nothing will wake the
-// session, so the turn goes on instead of ending on a step it announced. Once per stop: the engine marks the
-// next one `stop_hook_active`, which always ends, and the keep-going prompt takes over from there.
+// The reason to refuse a turn's end while a task needs no one and nothing will wake the session, so the
+// turn goes on instead of ending on a step it announced. Once per stop: the engine marks the next one
+// `stop_hook_active`, which always ends, and the keep-going prompt takes over from there.
 async function refusedStop($: EngineInterface, isRepeat: boolean): Promise<string | undefined> {
   if (!live.keepGoing || isRepeat || live.hasEngineWake) return undefined
   const tasks = workable(await mirrorOf($))
-  if (tasks.length === 0 || !(await isContextNearCompaction($)) || (await isWakeComing($))) return undefined
+  if (tasks.length === 0 || (await isPauseComing($)) || (await isWatchComing($))) return undefined
   return keepGoingText(tasks)
 }
 
@@ -401,6 +413,8 @@ function registerTurns(on: On): void {
     // A subagent's turn (2.1.299+) runs inside or after main's: it starts no new main turn.
     if ((e as { agentId?: string }).agentId !== undefined) return next(e)
     live.turn += 1
+    // A turn this copy sees silences any look an older copy left armed.
+    await claimOwner($)
     live.isTurnRunning = true
     live.toolsThisTurn = 0
     live.sawTaskTool = false
@@ -424,6 +438,7 @@ function registerTurns(on: On): void {
     // A subagent's turn ends inside main's or after it: main's turn is not over.
     if (e.agentId !== undefined) return next(e)
     live.isTurnRunning = false
+    await claimOwner($)
     // Looked at a moment after the turn ends, never from the end itself: a prompt sent there was seen lost.
     // `reason` is the engine's TurnCompleteReason ('answer' | 'aborted' | 'refusal' | 'error'): only a turn
     // the model answered goes on.
