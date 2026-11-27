@@ -8,6 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- **The attribution guard says why it refuses a body file the command writes itself.** It reads a `--body-file` or `-F` file before the command runs, so a command that writes the file and passes it in one go was refused with "could not read message/body file", which read like a wrong path only. It now says the file was not found where the guard reads it, and gives both fixes: write it in an earlier call, or use a literal absolute path.
 - **The live check no longer notes Bindwright's own scripts.** An update PR carries the writes in Bindwright's template scripts, such as the review gate's, so every update got the note though the project added no write. A line the bind's record holds as Bindwright's text for that file is now left out, while a write the project adds to one of those files still gets the note.
 
 ## [v7.21.6] — 2026-11-27
