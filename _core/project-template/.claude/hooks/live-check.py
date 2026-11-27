@@ -120,19 +120,22 @@ def is_within(folder, top):
         return False
 
 
-def repo_folder(start):
-    """The top folder of the outermost repo holding `start`, where a repo, or the one a
+def repo_folder(start, follow_links=True):
+    """The top folder of the outermost repo holding `start`, resolved, where a repo, or the one a
     submodule sits in, could ship its own programs. A repo at the home folder or above it holds
     the user's own installs and does not count, unless the home folder is unknown. Outside a
-    repo it is `start` itself, or None when `start` is the home folder or above it."""
+    repo it is `start` itself, or None when `start` is the home folder or above it. With
+    `follow_links` false, the folders walked are the ones `start` was reached through."""
     home = os.path.expanduser("~")
     home = real_path(home) if os.path.isabs(home) else None
-    folder = real_path(start)
-    top = None if home and is_within(home, folder) else folder
+    folder = real_path(start) if follow_links else os.path.normcase(os.path.abspath(start))
+    top, first = None, True
     while True:
-        if os.path.exists(os.path.join(folder, ".git")) and not (home and is_within(home, folder)):
-            top = folder
-        parent = os.path.dirname(folder)
+        real = real_path(folder)
+        counts = not (home and is_within(home, real))
+        if counts and (first or os.path.exists(os.path.join(folder, ".git"))):
+            top = real
+        parent, first = os.path.dirname(folder), False
         if parent == folder:
             return top
         folder = parent
@@ -141,20 +144,21 @@ def repo_folder(start):
 def trusted_folders(session):
     """The absolute PATH folders a repo cannot have shipped a program in, or None when the folders
     cannot be read, as when the current folder was deleted. A PATH folder that is relative (a `.`),
-    is the session folder or the current folder, or sits in the folder repo_folder gives for the
-    session folder is skipped, and Windows's search of the current folder first is switched off.
+    is the session folder or the current folder, or sits in a folder repo_folder gives for the
+    session folder, as reached or with its links followed, is skipped, and Windows's search of the
+    current folder first is switched off.
     Every program a guard runs is found here, always from the session folder, never from a repo
     root found later, so every guard trusts the same folders."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     try:
         here = {real_path(place) for place in (session, os.getcwd())}
-        repo = repo_folder(session)
+        repos = {repo_folder(session), repo_folder(session, follow_links=False)} - {None}
     except OSError:
         return None
     folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
                if os.path.isabs(entry)}
     return [entry for entry, real in folders.items()
-            if real and real not in here and not (repo and is_within(real, repo))]
+            if real and real not in here and not any(is_within(real, repo) for repo in repos)]
 
 
 def gh(folders, *args):

@@ -408,6 +408,25 @@ class TrustedGitTest(unittest.TestCase):
                 self.assertIsNone(hook.landed("git", "log", "-1"))
             popen.assert_not_called()
 
+    def test_a_session_linked_into_another_repo_skips_the_repo_holding_the_link(self):
+        # The session folder is a link in one repo to a folder of another: the git the first repo
+        # ships is skipped, though the folder the link leads to sits in the other repo.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as holder, tempfile.TemporaryDirectory() as other:
+            for repo in (holder, other):
+                os.mkdir(os.path.join(repo, ".git"))
+            planted, link = plant_git(os.path.join(holder, "bin")), os.path.join(holder, "out")
+            try:
+                os.symlink(other, link, target_is_directory=True)
+            except OSError:
+                self.skipTest("this system makes no folder links")
+            with unittest.mock.patch.dict(os.environ, {"PATH": os.path.dirname(planted)}), \
+                    unittest.mock.patch.object(hook, "CWD", link), \
+                    unittest.mock.patch.object(hook.subprocess, "Popen") as popen:
+                self.assertIsNone(hook.trusted_program("git"))
+                self.assertIsNone(hook.landed("git", "log", "-1"))
+            popen.assert_not_called()
+
     def test_a_session_below_a_repo_at_home_skips_its_own_folders(self):
         # The session folder is no repo, but the home folder above it is one; a program inside the
         # session folder is the folder's own, so the git the guard runs is the user's install.
