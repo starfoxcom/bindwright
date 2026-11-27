@@ -436,9 +436,10 @@ CHANGELOG_LIMIT = 4 * 1024 * 1024
 
 
 def repo_root():
-    """The folder holding CWD's `.git` (a folder, or a worktree's file), or None outside a repo."""
+    """The folder holding CWD's `.git` (a folder, or a worktree's file), or None outside a repo. CWD is
+    resolved first, as trusted_folders judges it, so the root always holds the folder it judged."""
     try:
-        folder = os.path.abspath(CWD)
+        folder = real_path(CWD)
     except OSError:  # a "." whose folder was deleted
         return None
     while not os.path.exists(os.path.join(folder, ".git")):

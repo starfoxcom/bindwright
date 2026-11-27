@@ -182,7 +182,7 @@ def is_within(folder, top):
         return False
 
 
-def shell_commands(command, shell, project):
+def shell_commands(command, shell):
     """Each simple command's words as the shell reads them, or None when the parser cannot run
     or read the command. A word built at run time is a RunTime."""
     node, script = trusted_program("node"), parser_script()
@@ -466,7 +466,7 @@ def read_and_check(command, shell, project):
     if not scheme_and_format or not os.path.isfile(check_script(project)):
         return None
     scheme, fmt = scheme_and_format
-    commands = shell_commands(command, shell, project)
+    commands = shell_commands(command, shell)
     if commands is None:
         return UNREAD
     return first_refusal(commands, project, scheme, fmt)
