@@ -193,26 +193,52 @@ class LogEntry(HookTest):
         self.assertTrue(entries[0]["time"])
 
 
+class FakeProcess:
+    """A started gh: prints `out`, or outlasts every wait when `hangs`, so a second wait fails the test."""
+
+    def __init__(self, out=b"", hangs=False):
+        self.out, self.hangs, self.returncode, self.killed, self.waits = out, hangs, 0, False, 0
+
+    def communicate(self, timeout=None):
+        self.waits += 1
+        if self.waits > 1:
+            raise AssertionError("waited for gh's output again")
+        if self.hangs:
+            raise subprocess.TimeoutExpired("gh", timeout)
+        return self.out, None
+
+    def kill(self):
+        self.killed = True
+
+
 class GhOutput(unittest.TestCase):
-    def test_gh_output_keeps_every_line_ending(self):
+    OWN = os.path.abspath(os.path.join(os.sep, "usr", "bin", "gh"))
+
+    def run_gh(self, process):
         hook = load_hook()
-        done = subprocess.CompletedProcess([], 0, stdout=b'{"body": "a"}\r\nb\rc')
-        own = os.path.abspath(os.path.join(os.sep, "usr", "bin", "gh"))
-        with mock.patch.object(hook.subprocess, "run", return_value=done), \
-                mock.patch.object(hook.shutil, "which", return_value=own):
-            self.assertEqual(hook.gh([os.path.dirname(own)], "api", "x"), '{"body": "a"}\r\nb\rc')
+        with mock.patch.object(hook.subprocess, "Popen", return_value=process), \
+                mock.patch.object(hook.shutil, "which", return_value=self.OWN):
+            return hook.gh([os.path.dirname(self.OWN)], "api", "x")
+
+    def test_gh_output_keeps_every_line_ending(self):
+        self.assertEqual(self.run_gh(FakeProcess(b'{"body": "a"}\r\nb\rc')), '{"body": "a"}\r\nb\rc')
+
+    def test_a_gh_that_outlasts_its_time_is_killed_without_a_second_wait(self):
+        process = FakeProcess(hangs=True)
+        self.assertIsNone(self.run_gh(process))
+        self.assertTrue(process.killed)
 
     def test_a_gh_inside_the_session_folder_never_runs(self):
         # A repo can ship its own gh first on PATH; the hook runs the user's install instead.
         hook = load_hook()
-        done = subprocess.CompletedProcess([], 0, stdout=b"{}")
         with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as elsewhere:
             os.mkdir(os.path.join(repo, ".git"))
             shipped, own = plant_gh(os.path.join(repo, "bin")), plant_gh(elsewhere)
             with mock.patch.dict(os.environ, {"PATH": os.pathsep.join([os.path.dirname(shipped), elsewhere])}), \
-                    mock.patch.object(hook.subprocess, "run", return_value=done) as run:
+                    mock.patch.object(hook.subprocess, "Popen", side_effect=lambda *a, **k: FakeProcess(b"{}")) \
+                    as popen:
                 hook.read_pull_request(hook.trusted_folders(repo), "owner/repo", "12")
-            ran = {hook.real_path(call.args[0][0]) for call in run.call_args_list}
+            ran = {hook.real_path(call.args[0][0]) for call in popen.call_args_list}
             self.assertEqual(ran, {hook.real_path(own)}, shipped)
 
 

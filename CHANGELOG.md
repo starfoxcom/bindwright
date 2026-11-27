@@ -6,6 +6,13 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.6] — 2026-11-27
+
+### Fixed
+
+- **An update's early PR moves to a newer release without a clash.** When an update lands in two PRs, the early one (the workflow edit into the default branch) keeps that branch's record of the files, so running the update again on it after a newer release read the files it already carried as the project's own edits and reported them as conflicts. `/bindwright:update` now says to put those files back to the base branch's copies first, so the second run updates them cleanly.
+- **The live-check hook stops on time when `gh` hangs.** When its call to `gh` ran out of time, the hook waited for `gh`'s output again, and on Windows a program `gh` started kept that output open, so the hook could run past its time and be cut off before it wrote its note. It now stops `gh` and goes on at once, as the tool-rules guard already does.
+
 ## [v7.21.5] — 2026-11-27
 
 ### Fixed
