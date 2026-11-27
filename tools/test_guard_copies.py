@@ -4,8 +4,8 @@ Each guard is installed on its own: tool-rules.py into the user's hook folder,
 version-check.py and the attribution guard into the project's, and
 version_check.py into .github/scripts, which CI runs with `python -I`. No
 folder holds all four, so they cannot import one shared module, and this test
-keeps the copies from drifting instead. repo_folder is left out: each guard
-starts its search from a different place on purpose.
+keeps the copies from drifting instead. Each guard starts repo_folder from a
+different place, but the function is the same in all four.
 """
 
 import ast
@@ -19,7 +19,7 @@ GUARDS = [
     "_core/project-template/.claude/hooks/version-check.py",
     "_core/project-template/.github/scripts/version_check.py",
 ]
-SHARED = ("real_path", "resolved", "is_within")
+SHARED = ("real_path", "resolved", "is_within", "repo_folder")
 
 
 def functions(path):

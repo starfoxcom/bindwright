@@ -30,7 +30,8 @@ def same_file(a, b):
 
 class NodeProgramTest(unittest.TestCase):
     """A repo can ship its own node beside its code, first on PATH; the attribution guard skips it
-    and runs the next node on PATH, the user's own, and a node outside any repo runs as found."""
+    and runs the next node on PATH, the user's own. Outside a repo, the session folder counts as
+    the repo; a repo at the home folder or above it does not count."""
 
     def test_a_node_the_repo_ships_is_skipped_for_the_users_own(self):
         # `home` is where the mocked home folder sits inside the temp folder, "~" one that cannot be
@@ -41,7 +42,7 @@ class NodeProgramTest(unittest.TestCase):
                 ("in a repo subfolder on PATH, as direnv adds", True, "bin", None, "", True),
                 ("in the outer repo's subfolder, from a session in a submodule", True, "bin", None, "lib", True),
                 ("in a repo subfolder, with no home folder to be found", True, "bin", "~", "", True),
-                ("in a subfolder of a folder that is no repo", False, "bin", None, "", False),
+                ("in a subfolder of a session folder that is no repo", False, "bin", None, "", True),
                 ("in a subfolder of a repo at the home folder", True, "bin", "", "", False),
                 ("in a subfolder of a repo above the home folder", True, "bin", "home", "", False)):
             with self.subTest(label), tempfile.TemporaryDirectory() as root, \

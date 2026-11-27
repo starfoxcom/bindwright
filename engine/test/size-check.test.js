@@ -298,19 +298,76 @@ function scriptCall(expr, arg) {
 test("TypeScript is cut before each top-level statement, line numbers kept", { skip }, () => {
   const text = "const a = {\n  x: 1,\n}\n\nfunction f() {\n  return 1\n}\n// note\nexport type T = { a: string }\n";
   const chunks = scriptCall("size_check.top_level_chunks(arg)", text);
-  assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 7, 8]);
+  assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 8]);
   assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
 });
+
+// Read by the real lizard, which the Linux test job installs: a bracket inside a regex literal
+// folds the functions after it into one, and a body cut from its signature reads as one line.
+// Each row: [name, source, its function, that function's length]. The length is null for an
+// expression-bodied arrow, whose end lizard puts at the next statement; the function after it
+// must still keep its own 3 lines.
+const hasLizard = Boolean(python) && spawnSync(python, ["-c", "import lizard"]).status === 0;
+const READS = [
+  ["a regex after return", "export function hasGlob(text) {\n  return /[*?[{]/.test(text)\n}\n\n", "hasGlob", 3],
+  ["a regex after an arrow", "export const isGlob = (s) => /[*?[{]/.test(s)\n\n", "isGlob", null],
+  ["a regex after a keyword", "export function kind(t) {\n  return typeof /[{]/ === t\n}\n\n", "kind", 3],
+  ["a brace on its own line", `function big(a, b)\n{\n${"  a += b\n".repeat(6)}  return a\n}\n\n`, "big", 10],
+  ["a comment before a brace on its own line",
+    `function big(a, b)\n// why\n{\n${"  a += b\n".repeat(6)}  return a\n}\n\n`, "big", 11],
+  ["a division before a block", "export function half(n) {\n  const h = n / 2; if (h) { return h }\n  return 0\n}\n\n",
+    "half", 4],
+  ["a regex in a call that goes on", "export function pick(s) {\n  return s.replace(/[{]/g,\n    '')\n}\n\n",
+    "pick", 4],
+  ["a division starting a line", "export function ratio(a, b, c, d) {\n  const r = (a + b)\n    / (c * (d / 2))\n"
+    + "  return r\n}\n\n", "ratio", 5],
+  ["a division after a postfix", "export function avg(i, n, total) {\n  total += (i++ / n) // note\n"
+    + "  return total\n}\n\n", "avg", 4],
+  ["a division after a property named like a keyword", "export function per(units, a, b) {\n"
+    + "  return units.in / (a / b)\n}\n\n", "per", 3],
+  ["a division wrapped onto the next line", "export function share(done, total) {\n  return (done\n"
+    + "    / total) // share done\n}\n\n", "share", 4],
+  ["a wrapped division after a property named like a keyword", "export function sc(units, a, b, c) {\n"
+    + "  return scale(units.in / (a / b\n    + c))\n}\n\n", "sc", 4],
+  ["yield used as a name", "export function rate(periods) {\n  const r = yield / (100 / periods)\n  return r\n}\n\n",
+    "rate", 4, ["js"]],
+  ["a regex after return in a JSX file", "export function hasGlob(text) {\n  return /[*?[{]/.test(text)\n}\n\n",
+    "hasGlob", 3, ["jsx", "tsx"]],
+  ["JSX text with a slash after a keyword", "export function Zoom({ level }) {\n  return (\n"
+    + "    <p>Zoom in / {level} out</p>\n  )\n}\n\n", "Zoom", 5, ["jsx", "tsx"]],
+];
+
+for (const [name, source, fn, length, exts = ["mjs", "ts"]] of READS) {
+  for (const ext of exts) {
+    test(`lizard reads .${ext}: ${name}`, { skip: skip || (!hasLizard && "needs lizard") }, () => {
+      const file = join(mkdtempSync(join(tmpdir(), "size-read-")), `case.${ext}`);
+      writeFileSync(file, `${source}export function next() {\n  return 1\n}\n`);
+      const code = "import json, sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n"
+        + "print(json.dumps([[f[0], f[1]] for f in size_check.functions(sys.argv[2])]))\n";
+      const r = spawnSync(python, ["-B", "-c", code, dirname(SCRIPT), file], { encoding: "utf8" });
+      assert.equal(r.status, 0, r.stderr);
+      const found = JSON.parse(r.stdout);
+      assert.deepEqual(found.map(([n]) => n), [fn, "next"]);
+      assert.deepEqual(found[1], ["next", 3]);
+      if (length !== null) assert.equal(found[0][1], length);
+    });
+  }
+}
 
 // Where a statement may start: [name, source, the line indexes that start one].
 const STARTS = [
   ["column-0 text inside a template literal", "function f() {\n  return `\nx {\n`\n}\nconst b = 1\n", [0, 5]],
   ["a template's ${} with braces inside", "const t = `${ {a: 1}.a }\n{`\nconst u = 2\n", [0, 2]],
-  ["column-0 text inside a block comment", "/*\nx {\n*/\nconst b = 1\n", [0, 3]],
+  ["column-0 text inside a block comment", "/*\nx {\n*/\nconst b = 1\n", [3]],
+  ["a comment line belongs to the code around it", "function f()\n// why\n{\n  return 1\n}\nconst t = 1\n",
+    [0, 5]],
+  ["a private name like a keyword divides", "x = this.#in / (a +\n  b)\nconst t = 1\n", [0, 2]],
   ["brackets inside strings and comments", "const s = '{' // {\nconst t = \"}\"\n", [0, 1]],
   ["an escaped quote keeps the string open", "const s = '\\'{'\nconst t = 1\n", [0, 1]],
   ["brackets inside a regex literal", "const r = s.replace(/\\[[^\\]]*\\]$/, '')\nconst t = 1\n", [0, 1]],
   ["a slash after a value divides", "const h = (a / 2) / (b)\nconst t = 1\n", [0, 1]],
+  ["a regex after an arrow", "const g = (s) => /[{]/.test(s)\nconst t = 1\n", [0, 1]],
+  ["a brace on its own line opens the line before", "function f()\n{\n  return 1\n}\nconst t = 1\n", [0, 4]],
   ["a line still inside brackets", "foo(\nbar)\nbaz()\n", [0, 2]],
   ["brackets that do not add up read the file whole", "}\nconst a = 1\n", null],
 ];
