@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.0] — 2026-11-26
+
 ### Changed
 
 - **Nothing tells a session to stop, hand off or change course near the compaction any more.** The turn's end is refused once whenever a task needs no one and nothing will wake the session, whatever the context fill; before, that held only past 75% of the compaction point, and below it a turn could end on a task left open. The tasks mod's near-compaction prompt, the session-facts (1.2.0) line's note about the coming compaction, and `token-efficiency.md`'s advice to keep the task list current as the context fills are gone, and `/close-session`'s description no longer mentions the context. The line still shows how much room is left before the compaction.
