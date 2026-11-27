@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.3] — 2026-11-27
+
 ### Fixed
 
 - **Every guard trusts the same PATH folders, taken from the folder the session runs in.** With a repo at the home folder and a session folder below it that is no repo, the tool-rules guard and the version check trusted a program in a subfolder of the session folder that the attribution guard skipped, and the live-check hook ran the first `gh` on PATH. All of them now find every program through one shared rule given the session folder, and a test keeps that rule the same in each copy.
