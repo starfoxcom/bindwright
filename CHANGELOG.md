@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **The gate's commit status waits for the PR's own base branch.** The gate began writing its status once the default branch's review workflows allowed it, but a PR into another branch runs that branch's copy of the routine review, so until the release reached it there the routine tier was refused while the deep tier wrote, and the status lagged the check. The gate now also reads the workflows on the base of each open PR whose head is the commit.
+- **The live check no longer notes Bindwright's own scripts.** An update PR carries the writes in Bindwright's template scripts, such as the review gate's, so every update got the note though the project added no write. A line the bind's record holds as Bindwright's text for that file is now left out, while a write the project adds to one of those files still gets the note.
 
 ## [v7.21.6] — 2026-11-27
 
