@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.1] — 2026-11-26
+
 ### Fixed
 
 - **The tool-rules guard finds git and gh again in a session started at the home folder.** Its search for the repo a program could come from took the session folder itself as that repo, the home folder included, so with a dotfiles repo at home it skipped every program folder under home (`~/.local/bin`, nvm, a Homebrew in home) and its commit checks found no git. A home folder now never counts, as the other guards already read it.
