@@ -104,7 +104,7 @@ def parse_args(argv):
 def git_program():
     """git as an absolute path, found once from the folder the check started in, in the first PATH
     folder a repo cannot have shipped it in. A PATH folder that is relative, is that folder, or
-    sits anywhere in its repo is skipped, so a repo's own `git` never runs; Windows's search of
+    sits in the folder repo_folder gives for it is skipped, so a repo's own `git` never runs; Windows's search of
     the current folder first is switched off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     here, repo = real_path(os.getcwd()), repo_folder(os.getcwd())

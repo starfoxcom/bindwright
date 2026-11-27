@@ -490,8 +490,8 @@ def repo_folder(start):
 
 def trusted_folders(root):
     """The PATH folders a repo cannot have shipped a program in, or None when the hook's own folder is gone.
-    A PATH folder that is relative (a `.`), is the session folder or the current folder, or sits anywhere in
-    the outermost repo holding `root` is skipped; Windows's search of the current folder first is switched
+    A PATH folder that is relative (a `.`), is the session folder or the current folder, or sits in the
+    folder repo_folder gives for `root` is skipped; Windows's search of the current folder first is switched
     off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     try:

@@ -83,7 +83,7 @@ def repo_folder(start):
 def node_program(cwd):
     """`node` as an absolute path, from the first PATH folder a repo cannot have shipped it in,
     or None when no such folder holds one. A PATH folder that is relative (a `.`), is the session
-    folder or the current folder, or sits in the session folder or its repo is skipped, so a
+    folder or the current folder, or sits in the folder repo_folder gives for it is skipped, so a
     repo's own `node` never runs; Windows's search of the current folder first is switched off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     repo = repo_folder(cwd)

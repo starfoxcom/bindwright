@@ -116,7 +116,7 @@ def parser_script():
 def trusted_program(name, project):
     """The program as an absolute path, from the first PATH folder a repo cannot have shipped it
     in, or None when no such folder holds it. A PATH folder that is relative, is the project
-    folder or the current folder, or sits in the project folder or its repo is skipped, so a
+    folder or the current folder, or sits in the folder repo_folder gives for it is skipped, so a
     repo's own `git` or `node` never runs; Windows's search of the current folder first is off."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     repo = repo_folder(project)
