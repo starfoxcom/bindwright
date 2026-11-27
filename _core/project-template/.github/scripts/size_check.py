@@ -229,13 +229,11 @@ def _scan_literal(line, at, mode):
 
 
 def _scan_line(line, state):
-    """Carries the scan through one line and returns the (start, end) index
-    spans of the bodies of the regex literals that open after a word or "=>"
-    and close on that line. `state` is [depth, mode, templates]: bracket depth
-    in code, the mode the line ends in ("code", "block" or "`") and the depths
-    where each open template's `${` returns."""
+    """Carries the scan through one line. `state` is [depth, mode, templates]:
+    bracket depth in code, the mode the line ends in ("code", "block" or "`")
+    and the depths where each open template's `${` returns."""
     depth, mode, templates = state
-    i, body, spans = 0, None, []
+    i = 0
     while i < len(line):
         c = line[i]
         if mode == "`" and line[i:i + 2] == "${":
@@ -243,37 +241,13 @@ def _scan_line(line, state):
             depth, mode, i = depth + 1, "code", i + 2
         elif mode != "code":
             i, mode = _scan_literal(line, i, mode)
-            if mode == "code" and body is not None:
-                spans.append((body, i - 1))
-                body = None
         elif c == "}" and templates and depth - 1 == templates[-1]:
             depth, mode, i = templates.pop(), "`", i + 1
         else:
             depth += (c in OPENERS) - (c in CLOSERS)
-            at = i
             i, opened = _scan_code(line, i)
             mode = opened or mode
-            if opened == "/" and REGEX_AFTER_WORD.search(line[:at].rstrip()):
-                body = i
     state[:] = [depth, "code" if mode in LINE_MODES else mode, templates]
-    return spans
-
-
-def mask_regex_bodies(text):
-    """The text with the body of each regex literal that opens after a word or
-    "=>" and holds brackets that do not pair up filled with "_": lizard reads
-    those brackets as code and loses its place, while it still reads the filled
-    literal as one regex token, and lines and columns hold. Anything else that
-    looks like a regex, such as a division at a line start or JSX text, is left
-    to lizard, and a body that does not close on its line is never filled."""
-    state, out = [0, "code", []], []
-    for line in text.splitlines(keepends=True):
-        for start, end in _scan_line(line, state):
-            body = line[start:end]
-            if any(body.count(o) != body.count(c) for o, c in zip(OPENERS, CLOSERS)):
-                line = line[:start] + "_" * (end - start) + line[end:]
-        out.append(line)
-    return "".join(out)
 
 
 def top_level_starts(text):
@@ -301,17 +275,22 @@ def top_level_chunks(text):
 
 
 def javascript_functions(lizard, full):
-    # lizard reads a bracket inside a regex literal after a word (return /[{]/)
-    # as code and folds the functions after it into one, so those bodies are
-    # filled first. In
-    # TypeScript it also loses its place after some type shapes, such as an
-    # object type inside a generic (Promise<{ a: string }>); reading each
-    # top-level statement on its own keeps that misread inside the statement.
+    # lizard can lose its place and fold the functions after it into one: in
+    # TypeScript after some type shapes (Promise<{ a: string }>), in JavaScript
+    # after a bracket inside a regex literal (return /[{]/). A fold shows as a
+    # function that runs past the start of a later top-level statement, and then
+    # each statement is read on its own, which keeps a misread inside it.
+    # TypeScript is always read that way.
     # As lizard reads a file: a byte that is not UTF-8 never stops the check, and a BOM is dropped.
     with open(full, encoding="utf-8-sig", errors="replace") as f:
-        text = mask_regex_bodies(f.read())
-    chunks = top_level_chunks(text) if full.endswith((".ts", ".tsx", ".mts", ".cts")) else [text]
-    return [fn for chunk in chunks for fn in lizard.analyze_file.analyze_source_code(full, chunk).function_list]
+        text = f.read()
+    read = lizard.analyze_file.analyze_source_code
+    starts = top_level_starts(text) or []
+    if not full.endswith((".ts", ".tsx", ".mts", ".cts")):
+        found = read(full, text).function_list
+        if not any(f.start_line < s + 1 <= f.end_line for f in found for s in starts):
+            return found
+    return [fn for chunk in top_level_chunks(text) for fn in read(full, chunk).function_list]
 
 
 def param_count(path, f):
