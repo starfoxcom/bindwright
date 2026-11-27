@@ -57,7 +57,7 @@ test("a hook installs once, in the launcher form, beside the user's own entries"
     writeSettings(dir, { model: "x", hooks: { PreToolUse: [mine] } });
     const file = hookFile(dir, "push-guard.py");
     // An interpreter PATH does not reach stays an absolute path.
-    const interpreterPath = join(dir, "py", "python3");
+    const interpreterPath = interpreter(join(dir, "py"));
     for (let i = 0; i < 2; i++) {
       const r = home(dir, "install-hook", file, "--python", interpreterPath, "--matcher", "Bash|PowerShell");
       assert.equal(r.status, 0, r.stderr);
@@ -159,7 +159,7 @@ test("only the named hook leaves an entry it shares with other hooks", { skip },
       { matcher: "Bash|PowerShell", hooks: [mine, guard("push-guard.py"), guard("no-ai-attribution.py")] },
     ] } });
     const file = hookFile(dir, "push-guard.py");
-    assert.equal(home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--matcher", "Bash").status, 0);
+    assert.equal(home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash").status, 0);
     let entries = settings(dir).hooks.PreToolUse;
     assert.deepEqual(entries[0].hooks, [mine, guard("no-ai-attribution.py")]);
     assert.equal(entries.length, 2);
@@ -708,7 +708,7 @@ test("hook-status names every event whose entry runs the hook, so an update can 
 test("a null hook event is skipped, so a guard beside it still lists and removes", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "push-guard.py");
-    assert.equal(home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--matcher", "Bash").status, 0);
+    assert.equal(home(dir, "install-hook", file, "--python", PYTHON, "--matcher", "Bash").status, 0);
     writeSettings(dir, { ...settings(dir), hooks: { ...settings(dir).hooks, Stop: null } });
     assert.ok(home(dir, "list-hooks").out.hooks.some((h) => JSON.stringify(h).includes("push-guard.py")));
     assert.equal(home(dir, "remove-hook", "push-guard.py").out.removed_hooks, 1);
@@ -931,7 +931,8 @@ test("a removed output style is turned off only when it is the one in use", { sk
     assert.deepEqual(settings(dir), { outputStyle: "Explanatory" });
   });
 });
-const PYTHON = "/usr/bin/python3";
+// install-hook refuses an interpreter that is not there, so the tests pass one that is.
+const PYTHON = process.execPath;
 const EVENTS = "SessionStart,UserPromptSubmit";
 
 test("--events installs one entry per event, with no matcher, beside the user's own entries", { skip }, () => {
@@ -995,7 +996,7 @@ test("remove-hook and list-hooks cover every event under hooks, not only PreTool
   withHome((dir) => {
     const guard = hookFile(dir, "push-guard.py");
     const title = hookFile(dir, "session-title.py");
-    assert.equal(home(dir, "install-hook", guard, "--python", "/usr/bin/python3", "--matcher", "Bash").status, 0);
+    assert.equal(home(dir, "install-hook", guard, "--python", PYTHON, "--matcher", "Bash").status, 0);
     assert.equal(home(dir, "install-hook", title, "--python", PYTHON, "--events", EVENTS).status, 0);
     assert.deepEqual(home(dir, "list-hooks").out.hooks.sort(), ["push-guard.py", "session-title.py"]);
     assert.deepEqual(home(dir, "remove-hook", "session-title.py").out, { removed_hooks: 2, deleted_file: true });
@@ -1022,13 +1023,27 @@ test("install-hook puts --matcher on each --events entry, and only PreToolUse bl
 test("install-hook refuses neither --matcher nor --events, and writes nothing", { skip }, () => {
   withHome((dir) => {
     const file = hookFile(dir, "session-title.py");
-    const neither = home(dir, "install-hook", file, "--python", "/usr/bin/python3");
+    const neither = home(dir, "install-hook", file, "--python", PYTHON);
     assert.equal(neither.status, 1);
     assert.match(neither.out.error, /takes --matcher, --events, or both/);
-    const empty = home(dir, "install-hook", file, "--python", "/usr/bin/python3", "--events", "SessionStart,,");
+    const empty = home(dir, "install-hook", file, "--python", PYTHON, "--events", "SessionStart,,");
     assert.equal(empty.status, 1);
     assert.match(empty.out.error, /Not a list of event names/);
     assert.equal(existsSync(join(dir, ".claude", "hooks", "session-title.py")), false);
+    assert.equal(existsSync(settingsPath(dir)), false);
+  });
+});
+
+// A guard installed to block on failure with no interpreter behind it stops every shell command.
+test("install-hook refuses a --python that names no file, such as find-python's whole line", { skip }, () => {
+  withHome((dir) => {
+    const file = hookFile(dir, "tool-rules.py");
+    for (const python of [JSON.stringify({ python: PYTHON }), join(dir, "missing", "python3")]) {
+      const r = home(dir, "install-hook", file, "--python", python, "--matcher", "Bash", "--block-on-failure");
+      assert.equal(r.status, 1, python);
+      assert.match(r.out.error, /names no Python file .*`python` field/);
+    }
+    assert.equal(existsSync(join(dir, ".claude", "hooks", "tool-rules.py")), false);
     assert.equal(existsSync(settingsPath(dir)), false);
   });
 });
