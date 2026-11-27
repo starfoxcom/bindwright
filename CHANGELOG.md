@@ -10,6 +10,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
+- **The tool-rules guard finds git and gh again in a session started at the home folder.** Its search for the repo a program could come from took the session folder itself as that repo, the home folder included, so with a dotfiles repo at home it skipped every program folder under home (`~/.local/bin`, nvm, a Homebrew in home) and its commit checks found no git. A home folder now never counts, as the other guards already read it.
 - **Installing a global hook can no longer leave every shell command refused.** `home.py install-hook` took any `--python` value, so a run that passed `find-python`'s whole JSON line wrote it as the hook's command, and a guard set to block on failure then refused every Bash and PowerShell call on the computer. It now refuses a `--python` that names no file, and setup and update say to pass only the path in that line's `python` field.
 
 ## [v7.21.0] — 2026-11-26
