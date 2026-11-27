@@ -45,10 +45,20 @@ def event(command="gh pr create --base develop --body-file body.md", stdout=ADDR
             "tool_response": {"stdout": stdout, "stderr": ""}, "cwd": "/repo"}
 
 
+def plant_gh(folder):
+    """A stand-in gh in `folder`, found by name on PATH."""
+    os.makedirs(folder, exist_ok=True)
+    planted = os.path.join(folder, "gh.bat" if os.name == "nt" else "gh")
+    with open(planted, "w", encoding="utf-8") as script:
+        script.write("exit 0\n")
+    os.chmod(planted, 0o755)
+    return planted
+
+
 def fake_gh(body, files):
     """gh answering the pull request and its files for ADDRESS, one page per file the way
     --paginate prints pages, and failing every other call."""
-    def gh(*args):
+    def gh(_folders, *args):
         if args == ("api", "--hostname", "github.com", PULL_PATH) and body is not None:
             return json.dumps({"number": 12, "body": body})
         if args == ("api", "--hostname", "github.com", "--paginate", PULL_PATH + "/files") and files is not None:
@@ -187,8 +197,23 @@ class GhOutput(unittest.TestCase):
     def test_gh_output_keeps_every_line_ending(self):
         hook = load_hook()
         done = subprocess.CompletedProcess([], 0, stdout=b'{"body": "a"}\r\nb\rc')
-        with mock.patch.object(hook.subprocess, "run", return_value=done):
-            self.assertEqual(hook.gh("api", "x"), '{"body": "a"}\r\nb\rc')
+        own = os.path.abspath(os.path.join(os.sep, "usr", "bin", "gh"))
+        with mock.patch.object(hook.subprocess, "run", return_value=done), \
+                mock.patch.object(hook.shutil, "which", return_value=own):
+            self.assertEqual(hook.gh([os.path.dirname(own)], "api", "x"), '{"body": "a"}\r\nb\rc')
+
+    def test_a_gh_inside_the_session_folder_never_runs(self):
+        # A repo can ship its own gh first on PATH; the hook runs the user's install instead.
+        hook = load_hook()
+        done = subprocess.CompletedProcess([], 0, stdout=b"{}")
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as elsewhere:
+            os.mkdir(os.path.join(repo, ".git"))
+            shipped, own = plant_gh(os.path.join(repo, "bin")), plant_gh(elsewhere)
+            with mock.patch.dict(os.environ, {"PATH": os.pathsep.join([os.path.dirname(shipped), elsewhere])}), \
+                    mock.patch.object(hook.subprocess, "run", return_value=done) as run:
+                hook.read_pull_request(hook.trusted_folders(repo), "owner/repo", "12")
+            ran = {hook.real_path(call.args[0][0]) for call in run.call_args_list}
+            self.assertEqual(ran, {hook.real_path(own)}, shipped)
 
 
 class NeverBlocks(unittest.TestCase):

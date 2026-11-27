@@ -24,6 +24,16 @@ def load_tool_rules():
     return module
 
 
+def plant_git(folder):
+    """A stand-in git in `folder`, found by name on PATH."""
+    os.makedirs(folder, exist_ok=True)
+    planted = os.path.join(folder, "git.bat" if os.name == "nt" else "git")
+    with open(planted, "w", encoding="utf-8") as script:
+        script.write("exit 0\n")
+    os.chmod(planted, 0o755)
+    return planted
+
+
 def observed(hook):
     if not os.path.exists(hook.OBSERVED_LOG):
         return []
@@ -365,7 +375,7 @@ class TrustedGitTest(unittest.TestCase):
 
         with unittest.mock.patch.dict(os.environ, {"PATH": share + os.pathsep + os.environ.get("PATH", "")}), \
                 unittest.mock.patch.object(hook, "real_path", refusing):
-            self.assertIsNotNone(hook.trusted_program(REPO, "git"))
+            self.assertIsNotNone(hook.trusted_program("git"))
 
     def test_a_session_at_the_home_folder_keeps_the_path_folders_under_home(self):
         # A dotfiles repo at home holds the user's own installs (~/.local/bin, nvm), not programs a repo ships.
@@ -380,6 +390,67 @@ class TrustedGitTest(unittest.TestCase):
                     unittest.mock.patch.object(hook, "CWD", work):
                 self.assertEqual(hook.trusted_folders(home), [installs])
                 self.assertEqual(hook.trusted_folders(installs), [])
+
+    def test_a_session_reached_through_a_link_runs_no_git_of_the_repo(self):
+        # The session folder is a link in the repo to a folder outside it: no repo holds the resolved
+        # folder, so the guard reads no repo and never runs the git the repo ships.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as outside:
+            os.mkdir(os.path.join(repo, ".git"))
+            planted, link = plant_git(os.path.join(repo, "bin")), os.path.join(repo, "out")
+            try:
+                os.symlink(outside, link, target_is_directory=True)
+            except OSError:
+                self.skipTest("this system makes no folder links")
+            with unittest.mock.patch.dict(os.environ, {"PATH": os.path.dirname(planted)}), \
+                    unittest.mock.patch.object(hook, "CWD", link), \
+                    unittest.mock.patch.object(hook.subprocess, "Popen") as popen:
+                self.assertIsNone(hook.landed("git", "log", "-1"))
+            popen.assert_not_called()
+
+    def test_a_session_linked_into_another_repo_skips_the_repo_holding_the_link(self):
+        # The session folder is a link in one repo to a folder of another: the git the first repo
+        # ships is skipped, though the folder the link leads to sits in the other repo.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as holder, tempfile.TemporaryDirectory() as other:
+            for repo in (holder, other):
+                os.mkdir(os.path.join(repo, ".git"))
+            planted, link = plant_git(os.path.join(holder, "bin")), os.path.join(holder, "out")
+            try:
+                os.symlink(other, link, target_is_directory=True)
+            except OSError:
+                self.skipTest("this system makes no folder links")
+            with unittest.mock.patch.dict(os.environ, {"PATH": os.path.dirname(planted)}), \
+                    unittest.mock.patch.object(hook, "CWD", link), \
+                    unittest.mock.patch.object(hook.subprocess, "Popen") as popen:
+                self.assertIsNone(hook.trusted_program("git"))
+                self.assertIsNone(hook.landed("git", "log", "-1"))
+            popen.assert_not_called()
+
+    def test_the_repo_root_keeps_its_own_spelling(self):
+        # git opens the root, and in a folder Windows marks case-sensitive only the real spelling
+        # names it.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as scratch:
+            repo = os.path.join(scratch, "MixedCase")
+            os.makedirs(os.path.join(repo, ".git"))
+            with unittest.mock.patch.object(hook, "CWD", repo):
+                self.assertEqual(os.path.basename(hook.repo_root()), "MixedCase")
+
+    def test_a_session_below_a_repo_at_home_skips_its_own_folders(self):
+        # The session folder is no repo, but the home folder above it is one; a program inside the
+        # session folder is the folder's own, so the git the guard runs is the user's install.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as home:
+            home = hook.real_path(home)
+            os.mkdir(os.path.join(home, ".git"))
+            session = os.path.join(home, "Downloads", "tool")
+            shipped, installs = os.path.join(session, "bin"), os.path.join(home, "bin")
+            planted, own = plant_git(shipped), plant_git(installs)
+            with unittest.mock.patch.dict(os.environ, {"PATH": os.pathsep.join([shipped, installs]),
+                                                       "HOME": home, "USERPROFILE": home}), \
+                    unittest.mock.patch.object(hook, "CWD", session):
+                self.assertEqual(hook.real_path(hook.trusted_program("git") or ""), hook.real_path(own), planted)
 
 
 class ToolRulesSweepTest(unittest.TestCase):
