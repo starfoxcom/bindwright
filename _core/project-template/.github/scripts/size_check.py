@@ -278,8 +278,9 @@ def javascript_functions(lizard, full):
     # lizard can lose its place and fold the functions after it into one: in
     # TypeScript after some type shapes (Promise<{ a: string }>), in JavaScript
     # after a bracket inside a regex literal (return /[{]/). A fold shows as a
-    # function that runs past the start of a later top-level statement, and then
-    # each statement is read on its own, which keeps a misread inside it.
+    # function that reaches the first line of a later top-level statement, where
+    # lizard also ends an arrow function written without a semicolon. Either way
+    # each statement is then read on its own, which keeps a misread inside it.
     # TypeScript is always read that way.
     # As lizard reads a file: a byte that is not UTF-8 never stops the check, and a BOM is dropped.
     with open(full, encoding="utf-8-sig", errors="replace") as f:
