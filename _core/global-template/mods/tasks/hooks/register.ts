@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import {
-  hasEngineWake, hasPendingWake, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS, workable,
+  hasEngineWake, hasPendingWake, isPauseHolding, keepGoingText, MAX_IDLE_PROMPTS, silentWatches, workable,
 } from './keepgoing'
 import { builtInName, hasListTool, registerOwnTools } from './owntools'
 import { commitRefusal, EDIT_TOOLS, editNote, isCommit, noteCommitted, noteListChanged, resetReview } from './review'
@@ -82,6 +82,8 @@ const live: {
   hasEngineWake: boolean
   // The turn a later look at a CI wake that has not come yet was armed in.
   recheckFor?: number
+  // Silent CI watches first seen at `since`, suspected until the same silence outlasts a look.
+  suspect?: { stamp: string; since: number }
   // The session the carry-over last ran for: a /clear changes the session with no session.start.
   carriedFor?: string
 } = {
@@ -316,9 +318,20 @@ function recheckLater($: EngineInterface): void {
   })
 }
 
-// A CI watch that wakes the session by itself.
+// A CI watch that wakes the session by itself. One that reads silent is only suspected at first, since the
+// computer may have slept or the session just resumed before ci-watch could poll again; it counts as gone
+// once the same silence outlasts a look and two poll intervals.
 async function isWatchComing($: EngineInterface): Promise<boolean> {
-  return hasPendingWake(await peerFile($, 'ci-watch', `${await $.session.id()}.json`), await $.clock.now())
+  const state = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
+  const now = await $.clock.now()
+  const isComing = hasPendingWake(state, now)
+  const silent = isComing ? undefined : silentWatches(state, now)
+  if (silent === undefined) {
+    live.suspect = undefined
+    return isComing
+  }
+  if (live.suspect?.stamp !== silent.stamp) live.suspect = { stamp: silent.stamp, since: now }
+  return now - live.suspect.since < Math.max(WAKE_RECHECK_MS, 2 * silent.pollMs)
 }
 
 // A plan-limit pause that wakes the session by itself, or whose automatic resume the person cancelled.

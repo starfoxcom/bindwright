@@ -172,10 +172,24 @@ test('a wake that never comes is looked at again while the session stays idle', 
   expect(seen.prompts).toEqual([])
   await clock.advance(5 * 60_000)
   expect(seen.prompts).toEqual([])
-  seen.files.set(watchFile, JSON.stringify({ watches: [{ polledAt: 0 }] }))
+  seen.files.set(watchFile, JSON.stringify({ watches: [{ polledAt: -1e9 }] }))
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toEqual([])
   await clock.advance(5 * 60_000)
   expect(seen.prompts).toHaveLength(1)
   expect(seen.prompts[0]).toContain('task #1 "task 1" needs no one. Continue it now.')
+})
+
+// After a resume or a sleep the stamp reads old until ci-watch polls again, so a silence is first suspected.
+test('a watch silent at a turn end but polled again before the next look prompts nothing', async ($, on) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const watch = (polledAt: number) => JSON.stringify({ watches: [{ polledAt }] })
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: watch(-1e9) })
+  await turnEnds($, clock)
+  expect(seen.prompts).toEqual([])
+  seen.files.set(watchFile, watch(6_000))
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toEqual([])
 })
 
 // A look armed at one turn's end belongs to that turn: an interrupted turn after it leaves nothing to resume.

@@ -72,6 +72,26 @@ export function hasPendingWake(ciWatchState: string | undefined, now = 0): boole
 }
 
 /**
+ * The watches still waiting that read as unpolled, as one stamp that changes whenever any of them is polled
+ * again, with the slowest poll interval among them. Undefined when there is none.
+ */
+export function silentWatches(
+  ciWatchState: string | undefined,
+  now = 0,
+): { stamp: string; pollMs: number } | undefined {
+  if (!ciWatchState) return undefined
+  try {
+    const watches = (JSON.parse(ciWatchState) as { watches?: WatchFields[] }).watches ?? []
+    const silent = watches.filter(watch => (!watch.outcome || watch.wakePending) && !isPolled(watch, now))
+    if (silent.length === 0) return undefined
+    const stamp = silent.map(watch => `${watch.polledAt ?? 'none'}@${watch.startedAt ?? 'none'}`).join(',')
+    return { stamp, pollMs: Math.max(...silent.map(watch => watch.pollMs ?? 0)) }
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * What the engine's Stop event says will wake the session on its own: background work still in flight (a
  * shell job run in the background, a subagent, a monitor) or a scheduled wake (`/loop`, a cron, a wakeup).
  */
