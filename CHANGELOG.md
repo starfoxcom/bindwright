@@ -6,6 +6,11 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **A session no longer sits idle when the CI wake it waits on never comes.** The tasks mod held its keep-going prompt back while ci-watch's file still listed an unsettled watch, so a watch whose poller had stopped kept a session idle for hours with work left. ci-watch (1.8.1) now stamps each watch with the time of its last poll, and the tasks mod (1.6.0) counts a watch as a coming wake only while it was polled in the last 10 minutes, or, for a watch saved before the stamp, started within 65 minutes. While a wake is still coming, the idle session looks again every 5 minutes.
+- **Nothing tells a session to stop, hand off or change course near the compaction any more.** The turn's end is refused once whenever a task needs no one and nothing will wake the session, whatever the context fill; before, that held only past 75% of the compaction point, and below it a turn could end on a task left open. The tasks mod's near-compaction prompt, the session-facts (1.1.1) line's note about the coming compaction, and `token-efficiency.md`'s advice to keep the task list current as the context fills are gone, and `/close-session`'s description no longer mentions the context. The line still shows how much room is left before the compaction.
+
 ## [v7.20.0] — 2026-11-26
 
 ### Added

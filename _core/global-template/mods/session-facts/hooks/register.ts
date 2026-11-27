@@ -3,7 +3,7 @@ import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
 import type { Budgets, CacheCheck } from '../types'
 import { type Account, accountText, nextAccount, readAccount } from './account'
-import { compactedMark, contextText, fillTone, phoneText, registerBudgetsView } from './budgets'
+import { compactedMark, contextText, phoneText, registerBudgetsView } from './budgets'
 import {
   checkCache,
   IDLE_COMPACT_MIN_TOKENS,
@@ -96,18 +96,6 @@ function markSent(line: FactsLine, at: number): void {
   if (line.account) live.account = line.account
 }
 
-// Sessions read a yellow or red bar as a cue to wrap up, and stopped or held work right before the
-// compaction (2026-10-13). The note sits outside the ctx text the State line copies.
-const KEEP_WORKING =
-  ' | compaction is expected: keep working through it at full depth; never stop, hold a task, ' +
-  'hand off or end the turn on "Next:" because of it'
-
-function nearCompactionNote(tokens: number | undefined, fullWindow: number): string {
-  if (tokens === undefined) return ''
-  const ratio = tokens / (live.window?.compactsAt ?? live.window?.size ?? fullWindow)
-  return fillTone(ratio) === 'green' ? '' : KEEP_WORKING
-}
-
 // While the compaction is still finishing, the engine's fill can be the one from before it.
 async function factsLine($: EngineInterface, isCompacting = false): Promise<FactsLine> {
   const now = await $.clock.now()
@@ -124,8 +112,7 @@ async function factsLine($: EngineInterface, isCompacting = false): Promise<Fact
     const seen = nextAccount(live.account, signedIn)
     const account = accountText(seen.account, seen.isSwitched)
     const wake = wakePart(now, live.zone.offsetMinutes, pausedUntil, armAt)
-    const note = nearCompactionNote(tokens, context.window)
-    const text = `${time} | ${ctx.text}${plan.text}${account}${wake}${note}`
+    const text = `${time} | ${ctx.text}${plan.text}${account}${wake}`
     return { text, isPartial: !ctx.isKnown || !plan.isOwn, account: seen.account }
   } catch {
     return { text: `${time} | ctx unreadable`, isPartial: true }

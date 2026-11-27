@@ -8,6 +8,8 @@ export type Watch = {
   stablePolls: number
   // When the checks last went quiet; unset while any runs.
   quietSince?: number
+  /** When a poll last read the watch: the tasks mod stops counting a watch nobody polls as a coming wake. */
+  polledAt?: number
   outcome?: 'passed' | 'failed' | 'timeout'
   settledAt?: number
   /** Set when the watch starts; names its wake claim (see `claimWake`). */

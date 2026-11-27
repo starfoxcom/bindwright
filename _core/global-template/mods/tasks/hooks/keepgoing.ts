@@ -1,20 +1,17 @@
 import type { Mirror, MirrorTask } from './mirror'
 
 // Keep going: a turn that ends while a task on the list needs no one gets a prompt to carry on, so an
-// unattended run never sits idle with work left that nobody has to wait for. Near a coming compaction a
-// turn's end gets one even with no such task, for a next step announced in prose. Pure, no engine access:
+// unattended run never sits idle with work left that nobody has to wait for. Pure, no engine access:
 // register.ts decides when to look and sends the prompt.
 
 /** Prompts in a row, with no change to the task list between them, before the mod stops asking. */
 export const MAX_IDLE_PROMPTS = 2
 
-/** Context fill, against the auto-compaction point, from which a turn's end counts as near the compaction:
- * where the session-facts row turns yellow. Sessions ended turns there on a next step they announced. */
-export const NEAR_COMPACTION = 0.75
+/** How long a CI watch may go without a poll and still count as a wake: ci-watch polls every 30 s. */
+export const WATCH_SILENCE_MS = 10 * 60_000
 
-export function isNearCompaction(tokens: number | undefined, compactsAt: number | undefined): boolean {
-  return tokens !== undefined && compactsAt !== undefined && compactsAt > 0 && tokens / compactsAt >= NEAR_COMPACTION
-}
+/** How long a watch saved before ci-watch stamped its polls counts as a wake: ci-watch gives up after an hour. */
+export const WATCH_LIMIT_MS = 65 * 60_000
 
 /** The tasks the model can work on now: open, not on hold, not waiting on another open task. */
 export function workable(mirror: Mirror): MirrorTask[] {
@@ -28,7 +25,21 @@ export function workable(mirror: Mirror): MirrorTask[] {
   return [...ready.filter(isStarted), ...ready.filter(task => !isStarted(task))]
 }
 
-type WatchFields = { outcome?: string; wakePending?: boolean; settledAt?: number; pushedAt?: number }
+type WatchFields = {
+  outcome?: string
+  wakePending?: boolean
+  settledAt?: number
+  pushedAt?: number
+  startedAt?: number
+  polledAt?: number
+}
+
+// A watch ci-watch is still polling. One whose poller stopped (a reload that left no timer, a retired
+// instance) never wakes the session, so it must not hold the keep-going prompt back.
+const isPolled = (watch: WatchFields, now: number) =>
+  watch.polledAt !== undefined
+    ? now - watch.polledAt <= WATCH_SILENCE_MS
+    : watch.startedAt === undefined || now - watch.startedAt <= WATCH_LIMIT_MS
 
 /**
  * How long a push to a settled watch's PR counts as pending. Right after a push GitHub can still name the old
@@ -44,14 +55,15 @@ const isPushedSinceSettled = (watch: WatchFields, now: number) =>
   now - watch.pushedAt <= PUSH_RESTART_MS
 
 /**
- * What is still coming that wakes the session on its own: a CI watch not yet settled or not yet sent, or one
- * pushed to again a moment ago.
+ * What is still coming that wakes the session on its own: a CI watch not yet settled or not yet sent while
+ * ci-watch still polls it, or one pushed to again a moment ago.
  */
 export function hasPendingWake(ciWatchState: string | undefined, now = 0): boolean {
   if (!ciWatchState) return false
   try {
     const watches = (JSON.parse(ciWatchState) as { watches?: WatchFields[] }).watches
-    return (watches ?? []).some(watch => !watch.outcome || watch.wakePending || isPushedSinceSettled(watch, now))
+    const isWaiting = (watch: WatchFields) => (!watch.outcome || watch.wakePending) && isPolled(watch, now)
+    return (watches ?? []).some(watch => isWaiting(watch) || isPushedSinceSettled(watch, now))
   } catch {
     return false
   }
@@ -88,16 +100,5 @@ export function keepGoingText(tasks: readonly MirrorTask[]): string {
     `[tasks] The turn ended with nothing pending to wake the session, and task #${first?.id} ` +
     `"${first?.subject}"${more} needs no one. Continue it now. If it waits on a person, a decision or ` +
     'another task, put it on hold with what it waits on; if it is done, mark it completed.'
-  )
-}
-
-export function nearCompactionText(): string {
-  return (
-    '[tasks] The turn ended near the compaction with nothing pending to wake the session and no task on ' +
-    'the list to carry on. The compaction carries the context across, so it is no reason to stop: if this ' +
-    'turn announced a step or left one open that needs no one, put each such step on the task list ' +
-    '(TaskCreate, or mcp__tasks__taskmod_create where that is missing) and start the first now, so the list ' +
-    'holds the turn open until they are done. If ' +
-    'nothing is left, or what is left waits on a person, say so in one line and end the turn.'
   )
 }
