@@ -1,9 +1,9 @@
 // Host-side sweep for the tasks mod (the mod's sandbox deletes no files).
 //   node sweep.cjs <dir> <sessionId> <days> [<doneDays>]
 // Removes other sessions' own files not written for <days>, and sooner, after <doneDays>, a list with
-// nothing left to carry over (handed over, or no open task) with its alive stamp, and an alive stamp
-// whose list is gone. Nothing else in the folder (settings.json) is ever touched, and a missing folder
-// is left missing.
+// nothing left to carry over (handed over, or no open task) with its alive stamp and owner file, and
+// an alive stamp or owner file whose list is gone. Nothing else in the folder (settings.json) is ever
+// touched, and a missing folder is left missing.
 'use strict'
 
 const fs = require('fs')

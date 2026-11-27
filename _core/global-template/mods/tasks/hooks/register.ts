@@ -274,15 +274,16 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
 // While a CI wake the session waits on has not come, how often the idle session looks again.
 const WAKE_RECHECK_MS = 5 * 60_000
 
-// A hot reload leaves the old copy's timers running, and copies need not share globals: each copy writes
-// its own name to the session's owner file at its start, and a look acts only while the file names it.
+// A hot reload leaves the old copy's timers running, and copies need not share globals: the copy that
+// sees a main turn start or end writes its own name to the session's owner file, and a look acts only
+// while the file names it. No file means no turn ran in this session yet, as right after a /clear.
 const INSTANCE = `${Date.now()}-${Math.random().toString(36).slice(2)}`
 const ownerFile = async ($: EngineInterface) => `${await dataDir($)}/${await $.session.id()}.owner`
 async function claimOwner($: EngineInterface): Promise<void> {
   await $.fs.write(await ownerFile($), INSTANCE).catch(() => undefined)
 }
 async function isOwner($: EngineInterface): Promise<boolean> {
-  const owner = await $.fs.read(await ownerFile($)).then(String, () => INSTANCE)
+  const owner = await $.fs.read(await ownerFile($)).then(String, () => '')
   return owner.trim() === INSTANCE
 }
 
@@ -378,9 +379,6 @@ function registerLifecycle(on: On): void {
     await clearEngineStore($).catch(() => undefined)
     await carryOverOnce($)
     await startAlive($)
-    // A reload runs this start again: the new copy takes the look over from the old one.
-    await claimOwner($)
-    if (live.keepGoing) recheckLater($)
     await registerOwnTools($, HOLD_HELP).catch(() => false)
     return result
   })
@@ -402,6 +400,8 @@ function registerTurns(on: On): void {
     // A subagent's turn (2.1.299+) runs inside or after main's: it starts no new main turn.
     if ((e as { agentId?: string }).agentId !== undefined) return next(e)
     live.turn += 1
+    // A turn this copy sees silences any look an older copy left armed.
+    await claimOwner($)
     live.isTurnRunning = true
     live.toolsThisTurn = 0
     live.sawTaskTool = false
@@ -425,6 +425,7 @@ function registerTurns(on: On): void {
     // A subagent's turn ends inside main's or after it: main's turn is not over.
     if (e.agentId !== undefined) return next(e)
     live.isTurnRunning = false
+    await claimOwner($)
     // Looked at a moment after the turn ends, never from the end itself: a prompt sent there was seen lost.
     // `reason` is the engine's TurnCompleteReason ('answer' | 'aborted' | 'refusal' | 'error'): only a turn
     // the model answered goes on.

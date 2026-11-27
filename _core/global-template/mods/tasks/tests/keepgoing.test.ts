@@ -189,13 +189,32 @@ test('a turn that starts after the look was armed cancels it', async ($, on) => 
   expect(seen.prompts).toEqual([])
 })
 
-// A hot reload leaves the old copy's timer running; the copy that started last owns the look.
-test('a look armed by a copy that no longer owns the session does nothing', async ($, on) => {
+// A hot reload leaves the old copy's timer running; the copy that saw the last turn owns the look.
+test('a look armed by a copy that no longer owns the session does nothing until a turn claims it', async (
+  $,
+  on,
+) => {
   const watchFile = `${DATA}/ci-watch/sess-a.json`
-  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: JSON.stringify({ watches: [{}] }) })
+  const watch = JSON.stringify({ watches: [{}] })
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: watch })
   await turnEnds($, clock)
   seen.files.set(`${DATA}/tasks/sess-a.owner`, 'a-newer-copy')
   seen.files.delete(watchFile)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+  seen.files.set(watchFile, watch)
+  await turnEnds($, clock)
+  seen.files.delete(watchFile)
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toHaveLength(1)
+})
+
+// A resumed session carries its list over, but nobody has been answered yet, so nothing prompts it.
+test('a session that starts with work left is not prompted before a turn ends', async ($, on) => {
+  const { seen, clock } = world(on, [task('1', 'in_progress')])
+  on('command.register', () => ({ value: undefined }) as never)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
   await clock.advance(10 * 60_000)
   expect(seen.prompts).toEqual([])
 })
