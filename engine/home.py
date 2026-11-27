@@ -300,10 +300,20 @@ def _write_hook_files(home, file):
     return target
 
 
+def _check_interpreter(python):
+    """Refuses a --python that names no interpreter: the hook would fail on every call, and a guard
+    installed to block on failure would then stop every shell command."""
+    if os.path.isfile(python) or (os.path.basename(python) == python and shutil.which(python)):
+        return
+    raise HomeError("--python names no Python file (pass the path in the `python` field that "
+                    "find-python prints, not its whole line): " + python[:200])
+
+
 def install_hook(home, file, python, matcher=None, events=None, block_on_failure=False):
     name = os.path.basename(file)
     if not name.endswith(".py"):
         raise HomeError("A hook is a .py file: " + file)
+    _check_interpreter(python)
     if matcher is None and events is None:
         raise HomeError("install-hook takes --matcher, --events, or both")
     if events is None:

@@ -367,6 +367,20 @@ class TrustedGitTest(unittest.TestCase):
                 unittest.mock.patch.object(hook, "real_path", refusing):
             self.assertIsNotNone(hook.trusted_program(REPO, "git"))
 
+    def test_a_session_at_the_home_folder_keeps_the_path_folders_under_home(self):
+        # A dotfiles repo at home holds the user's own installs (~/.local/bin, nvm), not programs a repo ships.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as home:
+            home = hook.real_path(home)
+            os.mkdir(os.path.join(home, ".git"))
+            installs, work = os.path.join(home, "bin"), os.path.join(home, "work")
+            os.mkdir(installs)
+            os.mkdir(work)
+            with unittest.mock.patch.dict(os.environ, {"PATH": installs, "HOME": home, "USERPROFILE": home}), \
+                    unittest.mock.patch.object(hook, "CWD", work):
+                self.assertEqual(hook.trusted_folders(home), [installs])
+                self.assertEqual(hook.trusted_folders(installs), [])
+
 
 class ToolRulesSweepTest(unittest.TestCase):
     """A seeded sweep of the tool-rules guard: each rule's trigger, written inside a quoted message,
