@@ -427,6 +427,16 @@ class TrustedGitTest(unittest.TestCase):
                 self.assertIsNone(hook.landed("git", "log", "-1"))
             popen.assert_not_called()
 
+    def test_the_repo_root_keeps_its_own_spelling(self):
+        # git opens the root, and in a folder Windows marks case-sensitive only the real spelling
+        # names it.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as scratch:
+            repo = os.path.join(scratch, "MixedCase")
+            os.makedirs(os.path.join(repo, ".git"))
+            with unittest.mock.patch.object(hook, "CWD", repo):
+                self.assertEqual(os.path.basename(hook.repo_root()), "MixedCase")
+
     def test_a_session_below_a_repo_at_home_skips_its_own_folders(self):
         # The session folder is no repo, but the home folder above it is one; a program inside the
         # session folder is the folder's own, so the git the guard runs is the user's install.

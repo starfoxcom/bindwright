@@ -136,10 +136,12 @@ def repo_folder(start, follow_links=True):
     submodule sits in, could ship its own programs. A repo at the home folder or above it holds
     the user's own installs and does not count, unless the home folder is unknown. Outside a
     repo it is `start` itself, or None when `start` is the home folder or above it. With
-    `follow_links` false, the folders walked are the ones `start` was reached through."""
+    `follow_links` false, the folders walked are the ones `start` was reached through. The walk
+    keeps each folder's own spelling, so a folder Windows marks case-sensitive still finds its
+    `.git`; only the folder given back is case-folded, for comparing."""
     home = os.path.expanduser("~")
     home = real_path(home) if os.path.isabs(home) else None
-    folder = real_path(start) if follow_links else os.path.normcase(os.path.abspath(start))
+    folder = os.path.realpath(start) if follow_links else os.path.abspath(start)
     top, first = None, True
     while True:
         real = real_path(folder)
