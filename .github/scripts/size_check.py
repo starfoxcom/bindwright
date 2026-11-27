@@ -208,10 +208,19 @@ def _scan_code(line, at):
         return at + 2, "block"
     if line[at] in "'\"`":
         return at + 1, line[at]
-    before = line[:at].rstrip()
-    if line[at] == "/" and (not before or before[-1] in REGEX_AFTER or REGEX_AFTER_WORD.search(before)):
-        return at + 1, "/"
-    return at + 1, None
+    return at + 1, "/" if line[at] == "/" and _opens_regex(line, at) else None
+
+
+def _opens_regex(line, at):
+    """Whether the slash at `at` opens a regex literal, read from the code just
+    before it, so each slash costs the same however long the line is."""
+    end = at
+    while end and line[end - 1].isspace():
+        end -= 1
+    if not end or line[end - 1] in REGEX_AFTER:
+        return True
+    # Eleven characters hold the longest listed word and the one before it.
+    return bool(REGEX_AFTER_WORD.search(line[max(0, end - 11):end]))
 
 
 def _scan_literal(line, at, mode):
