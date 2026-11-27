@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every guard skips a program found inside a session folder that is not a repo.** The release and attribution guards still ran a `git` or `node` from a folder inside such a session folder, which the tool-rules guard already skipped. All four guards now share one rule for which folder a repo could ship programs in, and a test keeps that rule the same in each copy.
+
 ## [v7.21.1] — 2026-11-26
 
 ### Fixed

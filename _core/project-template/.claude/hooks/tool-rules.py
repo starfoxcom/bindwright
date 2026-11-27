@@ -470,14 +470,14 @@ def is_within(folder, top):
         return False
 
 
-def repo_folder(root):
-    """The top folder of the outermost repo holding `root`, where a repo, or the one a submodule sits
-    in, could ship its own programs. A repo at the home folder or above it holds the user's own
-    installs and does not count, unless the home folder is unknown. Outside a repo it is `root`
-    itself, or None when `root` is the home folder or above it."""
+def repo_folder(start):
+    """The top folder of the outermost repo holding `start`, where a repo, or the one a
+    submodule sits in, could ship its own programs. A repo at the home folder or above it holds
+    the user's own installs and does not count, unless the home folder is unknown. Outside a
+    repo it is `start` itself, or None when `start` is the home folder or above it."""
     home = os.path.expanduser("~")
     home = real_path(home) if os.path.isabs(home) else None
-    folder = real_path(root)
+    folder = real_path(start)
     top = None if home and is_within(home, folder) else folder
     while True:
         if os.path.exists(os.path.join(folder, ".git")) and not (home and is_within(home, folder)):
