@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.4] — 2026-11-27
+
+### Fixed
+
+- **The deep review gets the list of Bindwright template files a PR changes.** Only the routine review read the pre-screen's template check, so the deep review blocked on findings in Bindwright's own template text that the routine review sends upstream. The deep review now runs the same check from the base branch on GitHub's merge commit for the PR, reads its list in its brief, and files findings in those files under "Upstream: Bindwright template text" instead of the verdict.
+
 ## [v7.21.3] — 2026-11-27
 
 ### Fixed
