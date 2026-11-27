@@ -315,6 +315,14 @@ const READS = [
   ["a brace on its own line", `function big(a, b)\n{\n${"  a += b\n".repeat(6)}  return a\n}\n\n`, "big", 10],
   ["a division before a block", "export function half(n) {\n  const h = n / 2; if (h) { return h }\n  return 0\n}\n\n",
     "half", 4],
+  ["a regex in a call that goes on", "export function pick(s) {\n  return s.replace(/[{]/g,\n    '')\n}\n\n",
+    "pick", 4],
+  ["a division starting a line", "export function ratio(a, b, c, d) {\n  const r = (a + b)\n    / (c * (d / 2))\n"
+    + "  return r\n}\n\n", "ratio", 5],
+  ["a division after a postfix", "export function avg(i, n, total) {\n  total += (i++ / n) // note\n"
+    + "  return total\n}\n\n", "avg", 4],
+  ["a division after a property named like a keyword", "export function per(units, a, b) {\n"
+    + "  return units.in / (a / b)\n}\n\n", "per", 3],
 ];
 
 for (const [name, source, fn, length] of READS) {

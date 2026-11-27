@@ -8,7 +8,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **The size check measures a function with a bracket in a regex right.** lizard read a bracket inside a regex literal, such as `/[*?[{]/`, as code, and folded that function into the ones after it, so a three-line function could read as a hard breach of hundreds of lines. Each regex literal's body is now blanked before lizard reads JavaScript or TypeScript, after `return`, `=>` and the other words an expression follows too. TypeScript functions whose opening brace sits on its own line are no longer cut from their signature, which made them read as one line long.
+- **The size check measures a function with a bracket in a regex right.** lizard read a bracket inside a regex literal, such as `/[*?[{]/`, as code, and folded that function into the ones after it, so a three-line function could read as a hard breach of hundreds of lines. Before lizard reads JavaScript or TypeScript, a regex literal whose brackets would unbalance its line, after an operator, `return`, `=>` or another word an expression follows, now has its body filled in, and a division that only looks like a regex is left as it is. TypeScript functions whose opening brace sits on its own line are no longer cut from their signature, which made them read as one line long.
 
 ## [v7.21.1] — 2026-11-26
 

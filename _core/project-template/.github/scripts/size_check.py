@@ -255,15 +255,26 @@ def _scan_line(line, state):
     return spans
 
 
+def _bracket_nets(text):
+    """Openers minus closers in `text`, for each bracket pair."""
+    return [text.count(o) - text.count(c) for o, c in zip(OPENERS, CLOSERS)]
+
+
 def mask_regex_bodies(text):
-    """The text with each regex literal's body blanked to spaces, so no bracket
-    or quote inside one is read as code; lines and columns hold. A body that
-    does not close on its line is left as it is: a regex literal cannot span
-    lines, so that slash was a division."""
+    """The text with the regex literal bodies that would unbalance their line's
+    brackets filled with "_", so lizard still reads each as one regex token and
+    never as code; lines and columns hold. A body is filled only when that brings
+    the line's bracket counts closer to even and leaves none further off, so a
+    division taken for a regex, whose removal would unbalance its line, stays as
+    it is. A body that does not close on its line is never filled: a regex
+    literal cannot span lines."""
     state, out = [0, "code", []], []
     for line in text.splitlines(keepends=True):
         for start, end in _scan_line(line, state):
-            line = line[:start] + " " * (end - start) + line[end:]
+            filled = line[:start] + "_" * (end - start) + line[end:]
+            pairs = list(zip(_bracket_nets(line), _bracket_nets(filled)))
+            if all(abs(a) <= abs(b) for b, a in pairs) and any(abs(a) < abs(b) for b, a in pairs):
+                line = filled
         out.append(line)
     return "".join(out)
 
