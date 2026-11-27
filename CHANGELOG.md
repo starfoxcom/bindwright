@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.1] — 2026-11-26
+
 ### Fixed
 
 - **Installing a global hook can no longer leave every shell command refused.** `home.py install-hook` took any `--python` value, so a run that passed `find-python`'s whole JSON line wrote it as the hook's command, and a guard set to block on failure then refused every Bash and PowerShell call on the computer. It now refuses a `--python` that names no file, and setup and update say to pass only the path in that line's `python` field.
