@@ -339,8 +339,10 @@ def main():
         try:
             text = open(path, encoding="utf-8-sig", errors="replace").read()
         except FileNotFoundError:
-            # The guard reads the file before the command runs, so one the command itself writes is not there yet.
-            deny(f"the message/body file {path} does not exist yet. Write it in an earlier call, then run this.")
+            # Read before the command runs: a file it writes itself is not there yet, and a shell path
+            # such as Git Bash's /tmp can name a place the guard does not read.
+            deny(f"the message/body file {path} was not found where the guard reads it. If this command "
+                 "writes it, write it in an earlier call; otherwise use a literal absolute path.")
         except Exception as e:
             deny(f"could not read message/body file {path}: {e}. Use a literal absolute path.")
         scan_text(text, f"file {path}")
