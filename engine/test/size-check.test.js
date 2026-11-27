@@ -302,6 +302,21 @@ test("TypeScript is cut before each top-level statement, line numbers kept", { s
   assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
 });
 
+// The real lizard folds a function holding a brace in a regex class into the next one; read per
+// statement, each keeps its own length. Skipped where lizard is not installed, as in the test CI.
+const hasLizard = spawnSync(python, ["-c", "import lizard"]).status === 0;
+test("a JavaScript regex with a brace in its class keeps its function's length", { skip: skip || !hasLizard }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "size-regex-"));
+  const file = join(dir, "glob.mjs");
+  writeFileSync(file, "export function hasGlob(text) {\n  return /[*?[{]/.test(text)\n}\n\n"
+    + "export function next() {\n  return 1\n}\n");
+  const code = "import sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n"
+    + "print([[f[0], f[1]] for f in size_check.functions(sys.argv[2])])\n";
+  const r = spawnSync(python, ["-B", "-c", code, dirname(SCRIPT), file], { cwd: dir, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), "[['hasGlob', 3], ['next', 3]]");
+});
+
 // Where a statement may start: [name, source, the line indexes that start one].
 const STARTS = [
   ["column-0 text inside a template literal", "function f() {\n  return `\nx {\n`\n}\nconst b = 1\n", [0, 5]],

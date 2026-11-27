@@ -178,7 +178,7 @@ def functions(path):
     if lizard.get_reader_for(path) is None:
         return False
     full = os.path.join(ROOT, path)
-    if path.endswith((".ts", ".tsx", ".mts", ".cts")):
+    if path.endswith(LANGUAGE_EXTENSIONS["JavaScript / TypeScript"]):
         found = typescript_functions(lizard, full)
     else:
         found = lizard.analyze_file(full).function_list
@@ -269,10 +269,10 @@ def top_level_chunks(text):
 
 
 def typescript_functions(lizard, full):
-    # lizard loses its place in TypeScript after some type shapes, such as an
-    # object type inside a generic (Promise<{ a: string }>), and folds the
-    # functions after it into one. Reading each top-level statement on its own
-    # keeps a misread inside that statement.
+    # lizard loses its place after some shapes, such as an object type inside a
+    # generic (Promise<{ a: string }>) or a brace in a regex literal's class
+    # (/[{]/), and folds the functions after it into one. Reading each top-level
+    # statement on its own keeps a misread inside that statement.
     # As lizard reads a file: a byte that is not UTF-8 never stops the check, and a BOM is dropped.
     with open(full, encoding="utf-8-sig", errors="replace") as f:
         text = f.read()
