@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The attribution guard says why it refuses a body file the command writes itself.** It reads a `--body-file` or `-F` file before the command runs, so a command that writes the file and passes it in one go was refused with "could not read message/body file", which read like a wrong path. It now says the file does not exist yet and to write it in an earlier call.
+
 ## [v7.21.6] — 2026-11-27
 
 ### Fixed

@@ -540,7 +540,8 @@ class GuardHookTest(unittest.TestCase):
         for command, result in self.each(("gh pr create --title t --body-file /no/such/body.md",
                         "gh pr create --title t --body-file=/no/such/body.md"), lambda command: self.attr(command)):
             with self.subTest(command=command):
-                self.assert_denied(result)
+                # A file the command itself writes is not there yet when the guard reads it.
+                self.assert_denied(result, "Write it in an earlier call")
 
     def unconverted_twin(self, path, text):
         """Writes `text` where `path` in Git Bash form lands when nothing converts it: the
@@ -561,7 +562,7 @@ class GuardHookTest(unittest.TestCase):
         own drive when nothing does, so the guard reads both; elsewhere it is a plain path."""
         if os.name != "nt":
             rows = [("plain path", "gh pr create --title t --body-file /c/no-such/body.md", "Bash",
-                     "could not read message/body file /c/no-such/body.md")]
+                     "message/body file /c/no-such/body.md does not exist yet")]
         else:
             def git_bash(path):
                 return "/" + path[0].lower() + path[2:].replace("\\", "/")
