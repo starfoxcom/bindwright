@@ -1,16 +1,16 @@
 // Host-side sweep for the tasks mod (the mod's sandbox deletes no files).
 //   node sweep.cjs <dir> <sessionId> <days> [<doneDays>]
 // Removes other sessions' own files not written for <days>, and sooner, after <doneDays>, a list with
-// nothing left to carry over (handed over, or no open task) with its alive stamp, and an alive stamp
-// whose list is gone. Nothing else in the folder (settings.json) is ever touched, and a missing folder
-// is left missing.
+// nothing left to carry over (handed over, or no open task) with its alive stamp and owner file, and
+// an alive stamp or owner file whose list is gone. Nothing else in the folder (settings.json) is ever
+// touched, and a missing folder is left missing.
 'use strict'
 
 const fs = require('fs')
 const path = require('path')
 
-// A session's own files, named by its id: its task list and its alive stamp.
-const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(json|alive)$/i
+// A session's own files, named by its id: its task list, its alive stamp and its owner file.
+const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(json|alive|owner)$/i
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Whether the sweep removes a file once it is old: another session's own file. This session's list
@@ -39,8 +39,8 @@ function isDone(text) {
 function daysFor(dir, name, days, doneDays, now) {
   if (doneDays === undefined) return days
   const short = Math.min(days, doneDays)
-  const list = path.join(dir, name.replace(/\.alive$/i, '.json'))
-  if (!fs.existsSync(list)) return name.endsWith('.alive') ? short : days
+  const list = path.join(dir, name.replace(/\.(alive|owner)$/i, '.json'))
+  if (!fs.existsSync(list)) return /\.(alive|owner)$/i.test(name) ? short : days
   const alive = list.replace(/\.json$/, '.alive')
   if (fs.existsSync(alive) && fs.statSync(alive).mtimeMs >= now - short * DAY_MS) return days
   return isDone(fs.readFileSync(list, 'utf8')) ? short : days

@@ -1,6 +1,6 @@
 {
   "name": "session-facts",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Adds the exact local time and context fill to every prompt, for the model only, shows the session's budgets (context, plan usage, prompt cache) in a row above the prompt, and compacts a big conversation left idle before its prompt cache goes cold, which the engine no longer does itself.",
   "types": "./types/index.d.ts",
   "userConfig": {

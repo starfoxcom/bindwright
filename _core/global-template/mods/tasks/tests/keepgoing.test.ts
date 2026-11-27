@@ -8,6 +8,8 @@ import {
   isPauseHolding,
   keepGoingText,
   PUSH_RESTART_MS,
+  WATCH_LIMIT_MS,
+  WATCH_SILENCE_MS,
   workable,
 } from '../hooks/keepgoing'
 import type { Mirror, MirrorTask } from '../hooks/mirror'
@@ -52,6 +54,24 @@ test('a CI watch still running, or settled and not yet sent, is a pending wake',
   expect(hasPendingWake(JSON.stringify({ watches: [{ outcome: 'passed' }] }))).toBe(false)
   expect(hasPendingWake(JSON.stringify({ watches: [{}] }))).toBe(true)
   expect(hasPendingWake(JSON.stringify({ watches: [{ outcome: 'failed', wakePending: true }] }))).toBe(true)
+})
+
+// A watch whose poller stopped never wakes the session, so it stops holding the prompt back.
+test('a watch nobody polls any more is no pending wake', () => {
+  const NOW = 100 * 60_000
+  const watch = (fields: object) => JSON.stringify({ watches: [fields] })
+  const cases: [string, object, boolean][] = [
+    ['polled just now', { polledAt: NOW }, true],
+    ['polled at the silence limit', { polledAt: NOW - WATCH_SILENCE_MS }, true],
+    ['silent past the limit', { polledAt: NOW - WATCH_SILENCE_MS - 1 }, false],
+    ['a held wake, silent past the limit', { outcome: 'passed', wakePending: true, polledAt: 0 }, false],
+    ['a slow poller, within three intervals', { polledAt: NOW - 15 * 60_000, pollMs: 5 * 60_000 }, true],
+    ['a slow poller, past three intervals', { polledAt: NOW - 15 * 60_000 - 1, pollMs: 5 * 60_000 }, false],
+    ['never stamped, started within the hour', { startedAt: NOW - WATCH_LIMIT_MS }, true],
+    ['never stamped, started long ago', { startedAt: NOW - WATCH_LIMIT_MS - 1 }, false],
+  ]
+  for (const [name, fields, expected] of cases)
+    expect([name, hasPendingWake(watch(fields), NOW)]).toEqual([name, expected])
 })
 
 // Right after a push GitHub can still name the old head: ci-watch stamps the settled watch and restarts it
@@ -144,6 +164,85 @@ test('no prompt when every open task is on hold, the turn was interrupted, or a 
   expect(seen.prompts).toEqual([])
 })
 
+// The turn ended while a CI watch was due to wake the session, and the wake never came.
+test('a wake that never comes is looked at again while the session stays idle', async ($, on) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: JSON.stringify({ watches: [{}] }) })
+  await turnEnds($, clock)
+  expect(seen.prompts).toEqual([])
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toEqual([])
+  seen.files.set(watchFile, JSON.stringify({ watches: [{ polledAt: -1e9 }] }))
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toEqual([])
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toHaveLength(1)
+  expect(seen.prompts[0]).toContain('task #1 "task 1" needs no one. Continue it now.')
+})
+
+// After a resume or a sleep the stamp reads old until ci-watch polls again, so a silence is first suspected.
+test('a watch silent at a turn end but polled again before the next look prompts nothing', async ($, on) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const watch = (polledAt: number) => JSON.stringify({ watches: [{ polledAt }] })
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: watch(-1e9) })
+  await turnEnds($, clock)
+  expect(seen.prompts).toEqual([])
+  seen.files.set(watchFile, watch(6_000))
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toEqual([])
+})
+
+// A look armed at one turn's end belongs to that turn: an interrupted turn after it leaves nothing to resume.
+test('a turn that starts after the look was armed cancels it', async ($, on) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: JSON.stringify({ watches: [{}] }) })
+  await turnEnds($, clock)
+  await turnEnds($, clock, 'aborted')
+  seen.files.delete(watchFile)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+})
+
+// A hot reload leaves the old copy's timer running; the copy that saw the last turn owns the look.
+test('a look armed by a copy that no longer owns the session does nothing until a turn claims it', async (
+  $,
+  on,
+) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const watch = JSON.stringify({ watches: [{}] })
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: watch })
+  await turnEnds($, clock)
+  seen.files.set(`${DATA}/tasks/sess-a.owner`, 'a-newer-copy')
+  seen.files.delete(watchFile)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+  seen.files.set(watchFile, watch)
+  await turnEnds($, clock)
+  seen.files.delete(watchFile)
+  await clock.advance(5 * 60_000)
+  expect(seen.prompts).toHaveLength(1)
+})
+
+// A resumed session carries its list over, but nobody has been answered yet, so nothing prompts it.
+test('a session that starts with work left is not prompted before a turn ends', async ($, on) => {
+  const { seen, clock } = world(on, [task('1', 'in_progress')])
+  on('command.register', () => ({ value: undefined }) as never)
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: 'C:/Repos/x', surface: 'terminal', isInteractive: true })
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+})
+
+// A cancelled automatic resume stays cancelled: the pause is usage-guard's to end, never a look's.
+test('a plan-limit pause starts no later look', async ($, on) => {
+  const pauseFile = `${DATA}/usage-guard/pause.json`
+  const pause = JSON.stringify({ status: 'cancelled', wakeAt: 6_000 + 60_000 })
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [pauseFile]: pause })
+  await turnEnds($, clock)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+})
+
 test('a pause whose wake already passed does not hold the prompt back', async ($, on) => {
   const stale = { [`${DATA}/usage-guard/pause.json`]: JSON.stringify({ status: 'active', wakeAt: 500 }) }
   const { seen, clock } = world(on, [task('1', 'in_progress')], stale)
@@ -172,49 +271,19 @@ test('two prompts that change nothing on the list are the last; the person promp
   expect(seen.prompts.filter(text => text.startsWith('[tasks]'))).toHaveLength(5)
 })
 
-// Near the compaction, a turn's end with no workable task still gets one prompt to carry on; far from it,
-// none. A second turn end with nothing changed gets no more.
-test('near the compaction a turn end with no workable task gets one prompt to carry on', async ($, on) => {
-  const { seen, clock } = world(on, [task('1', 'pending', { hold: 'Alex' })])
-  let tokens = 100_000
-  const context = () => ({ tokens, window: 200_000, breakdown: { autoCompactThreshold: 160_000 } })
-  on('session.usage', () => ({ value: { context: context() } }) as never)
-  on('settings.read', () => ({ value: {} }) as never)
-  seen.files.set('C:/Users/me/.claude.json', JSON.stringify({ autoCompactEnabled: false }))
-  await turnEnds($, clock)
-  tokens = 125_000
-  // Auto-compaction off in /config: no compaction is coming, so no prompt.
-  await turnEnds($, clock)
-  expect(seen.prompts).toEqual([])
-  seen.files.set('C:/Users/me/.claude.json', '{}')
-  tokens = 100_000
-  await turnEnds($, clock)
-  expect(seen.prompts).toEqual([])
-  tokens = 125_000
-  await turnEnds($, clock)
-  await turnEnds($, clock)
-  expect(seen.prompts).toHaveLength(1)
-  expect(seen.prompts[0]).toContain('ended near the compaction')
-  expect(seen.prompts[0]).toContain('put each such step on the task list')
-})
-
-// Near the compaction, with a task that needs no one, the turn's end itself is refused once; far from it,
-// on the engine's repeat stop, or with every task on hold, the turn ends.
-test('near the compaction a turn end with a workable task is refused once', async ($, on) => {
+// A turn's end with a task that needs no one is refused once, however full the context; on the engine's
+// repeat stop, with a wake coming, or with every task on hold, the turn ends.
+test('a turn end with a workable task is refused once', async ($, on) => {
   const { seen } = world(on, [task('1', 'in_progress')])
-  let tokens = 100_000
-  const context = () => ({ tokens, window: 200_000, breakdown: { autoCompactThreshold: 160_000 } })
-  on('session.usage', () => ({ value: { context: context() } }) as never)
-  on('settings.read', () => ({ value: {} }) as never)
-  seen.files.set('C:/Users/me/.claude.json', '{}')
   let below: object = {}
   on('classic.Stop', () => below as never)
   const event = (repeat: boolean) =>
     ({ hook_event_name: 'Stop', stop_hook_active: repeat, background_tasks: [], session_crons: [] }) as never
   const stop = async (repeat = false) => (await $.classic.Stop(event(repeat))) as { block?: string }
-  expect(await stop()).not.toHaveProperty('block')
-  tokens = 125_000
   expect((await stop()).block).toContain('task #1 "task 1" needs no one. Continue it now.')
+  seen.files.set(`${DATA}/ci-watch/sess-a.json`, JSON.stringify({ watches: [{ startedAt: 1_000 }] }))
+  expect(await stop()).not.toHaveProperty('block')
+  seen.files.delete(`${DATA}/ci-watch/sess-a.json`)
   expect(await stop(true)).not.toHaveProperty('block')
   // A refusal or a stop from a hook beneath stands as it is.
   below = { block: 'run the tests before you stop' }
