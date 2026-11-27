@@ -189,6 +189,17 @@ test('a turn that starts after the look was armed cancels it', async ($, on) => 
   expect(seen.prompts).toEqual([])
 })
 
+// A hot reload leaves the old copy's timer running; the copy that started last owns the look.
+test('a look armed by a copy that no longer owns the session does nothing', async ($, on) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: JSON.stringify({ watches: [{}] }) })
+  await turnEnds($, clock)
+  seen.files.set(`${DATA}/tasks/sess-a.owner`, 'a-newer-copy')
+  seen.files.delete(watchFile)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+})
+
 // A cancelled automatic resume stays cancelled: the pause is usage-guard's to end, never a look's.
 test('a plan-limit pause starts no later look', async ($, on) => {
   const pauseFile = `${DATA}/usage-guard/pause.json`

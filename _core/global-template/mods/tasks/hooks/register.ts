@@ -80,7 +80,7 @@ const live: {
   promptedAt?: number
   // The last turn's end left background work or a scheduled wake that will wake the session (Stop event).
   hasEngineWake: boolean
-  // The generation a later look at a CI wake that has not come yet was armed in.
+  // The turn a later look at a CI wake that has not come yet was armed in.
   recheckFor?: number
   // The session the carry-over last ran for: a /clear changes the session with no session.start.
   carriedFor?: string
@@ -274,11 +274,16 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
 // While a CI wake the session waits on has not come, how often the idle session looks again.
 const WAKE_RECHECK_MS = 5 * 60_000
 
-// Shared by every loaded copy of this module, since a hot reload leaves the old copy's timers running:
-// each turn's start and each load move it on, so a look armed before either does nothing.
-const shared = globalThis as { __tasksKeepGoingGeneration?: number }
-function nextGeneration(): void {
-  shared.__tasksKeepGoingGeneration = (shared.__tasksKeepGoingGeneration ?? 0) + 1
+// A hot reload leaves the old copy's timers running, and copies need not share globals: each copy writes
+// its own name to the session's owner file at its start, and a look acts only while the file names it.
+const INSTANCE = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+const ownerFile = async ($: EngineInterface) => `${await dataDir($)}/${await $.session.id()}.owner`
+async function claimOwner($: EngineInterface): Promise<void> {
+  await $.fs.write(await ownerFile($), INSTANCE).catch(() => undefined)
+}
+async function isOwner($: EngineInterface): Promise<boolean> {
+  const owner = await $.fs.read(await ownerFile($)).then(String, () => INSTANCE)
+  return owner.trim() === INSTANCE
 }
 
 // A turn that ended with work nobody has to wait for gets a prompt to carry on, unless something else
@@ -298,15 +303,15 @@ async function keepGoing($: EngineInterface): Promise<void> {
   await $.prompt.submit({ text: keepGoingText(tasks) })
 }
 
-// One look per generation; turning keepGoing off meanwhile cancels it too.
+// One look per turn; a turn that starts meanwhile, turning keepGoing off, or a newer copy cancels it.
 function recheckLater($: EngineInterface): void {
-  const generation = shared.__tasksKeepGoingGeneration
-  if (live.recheckFor === generation) return
-  live.recheckFor = generation
-  $.clock.after(WAKE_RECHECK_MS, () => {
-    if (shared.__tasksKeepGoingGeneration !== generation || !live.keepGoing) return
+  const turn = live.turn
+  if (live.recheckFor === turn) return
+  live.recheckFor = turn
+  $.clock.after(WAKE_RECHECK_MS, async () => {
+    if (live.turn !== turn || !live.keepGoing || !(await isOwner($).catch(() => false))) return
     live.recheckFor = undefined
-    void keepGoing($).catch(() => undefined)
+    await keepGoing($).catch(() => undefined)
   })
 }
 
@@ -373,6 +378,9 @@ function registerLifecycle(on: On): void {
     await clearEngineStore($).catch(() => undefined)
     await carryOverOnce($)
     await startAlive($)
+    // A reload runs this start again: the new copy takes the look over from the old one.
+    await claimOwner($)
+    if (live.keepGoing) recheckLater($)
     await registerOwnTools($, HOLD_HELP).catch(() => false)
     return result
   })
@@ -394,7 +402,6 @@ function registerTurns(on: On): void {
     // A subagent's turn (2.1.299+) runs inside or after main's: it starts no new main turn.
     if ((e as { agentId?: string }).agentId !== undefined) return next(e)
     live.turn += 1
-    nextGeneration()
     live.isTurnRunning = true
     live.toolsThisTurn = 0
     live.sawTaskTool = false
@@ -536,7 +543,6 @@ function registerTools(on: On): void {
 }
 
 export const register: Register = (on, options) => {
-  nextGeneration()
   // The settings come from the mod's own file over the loaded options, read again as it changes.
   settings(on, options, values => {
     live.nudgeAfter = Number(values.nudgeAfterTools ?? 3)

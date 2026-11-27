@@ -9,8 +9,8 @@
 const fs = require('fs')
 const path = require('path')
 
-// A session's own files, named by its id: its task list and its alive stamp.
-const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(json|alive)$/i
+// A session's own files, named by its id: its task list, its alive stamp and its owner file.
+const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(json|alive|owner)$/i
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Whether the sweep removes a file once it is old: another session's own file. This session's list
@@ -39,8 +39,8 @@ function isDone(text) {
 function daysFor(dir, name, days, doneDays, now) {
   if (doneDays === undefined) return days
   const short = Math.min(days, doneDays)
-  const list = path.join(dir, name.replace(/\.alive$/i, '.json'))
-  if (!fs.existsSync(list)) return name.endsWith('.alive') ? short : days
+  const list = path.join(dir, name.replace(/\.(alive|owner)$/i, '.json'))
+  if (!fs.existsSync(list)) return /\.(alive|owner)$/i.test(name) ? short : days
   const alive = list.replace(/\.json$/, '.alive')
   if (fs.existsSync(alive) && fs.statSync(alive).mtimeMs >= now - short * DAY_MS) return days
   return isDone(fs.readFileSync(list, 'utf8')) ? short : days

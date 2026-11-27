@@ -12,7 +12,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ### Fixed
 
-- **A session no longer sits idle when the CI wake it waits on never comes.** The tasks mod held its keep-going prompt back while ci-watch's file still listed an unsettled watch, so a watch whose poller had stopped kept a session idle for hours with work left. ci-watch (1.8.1) now stamps each watch with the time of its last poll and its poll interval, and the tasks mod (1.6.0) counts a watch as a coming wake only while it was polled in the last 10 minutes (three intervals when ci-watch polls slower), or, for a watch saved before the stamp, started within 65 minutes. While a CI wake is still coming, the idle session looks again every 5 minutes; a new turn or a reload of the mod cancels that look, and a plan-limit pause never starts one.
+- **A session no longer sits idle when the CI wake it waits on never comes.** The tasks mod held its keep-going prompt back while ci-watch's file still listed an unsettled watch, so a watch whose poller had stopped kept a session idle for hours with work left. ci-watch (1.8.1) now stamps each watch with the time of its last poll and its poll interval, and the tasks mod (1.6.0) counts a watch as a coming wake only while it was polled in the last 10 minutes (three intervals when ci-watch polls slower), or, for a watch saved before the stamp, started within 65 minutes. While a CI wake is still coming, the idle session looks again every 5 minutes; a new turn cancels that look, a reload of the mod hands it to the new copy, and a plan-limit pause never starts one.
 
 ## [v7.20.0] — 2026-11-26
 
