@@ -10,6 +10,8 @@ export type Watch = {
   quietSince?: number
   /** When a poll last read the watch: the tasks mod stops counting a watch nobody polls as a coming wake. */
   polledAt?: number
+  /** The poll interval in force at that poll, so the reader scales how long a silence it allows. */
+  pollMs?: number
   outcome?: 'passed' | 'failed' | 'timeout'
   settledAt?: number
   /** Set when the watch starts; names its wake claim (see `claimWake`). */

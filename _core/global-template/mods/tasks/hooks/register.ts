@@ -80,14 +80,13 @@ const live: {
   promptedAt?: number
   // The last turn's end left background work or a scheduled wake that will wake the session (Stop event).
   hasEngineWake: boolean
-  // A later look at a wake that has not come yet is pending.
-  isRecheckArmed: boolean
+  // The generation a later look at a CI wake that has not come yet was armed in.
+  recheckFor?: number
   // The session the carry-over last ran for: a /clear changes the session with no session.start.
   carriedFor?: string
 } = {
   turn: 0,
   hasEngineWake: false,
-  isRecheckArmed: false,
   isTurnRunning: false,
   toolsThisTurn: 0,
   sawTaskTool: false,
@@ -272,19 +271,26 @@ async function peerFile($: EngineInterface, mod: string, name: string): Promise<
   return $.fs.read(`${dir}/${name}`).then(String, () => undefined)
 }
 
-// While a wake the session waits on has not come, how often the idle session looks again.
+// While a CI wake the session waits on has not come, how often the idle session looks again.
 const WAKE_RECHECK_MS = 5 * 60_000
+
+// Shared by every loaded copy of this module, since a hot reload leaves the old copy's timers running:
+// each turn's start and each load move it on, so a look armed before either does nothing.
+const shared = globalThis as { __tasksKeepGoingGeneration?: number }
+function nextGeneration(): void {
+  shared.__tasksKeepGoingGeneration = (shared.__tasksKeepGoingGeneration ?? 0) + 1
+}
 
 // A turn that ended with work nobody has to wait for gets a prompt to carry on, unless something else
 // wakes the session (background work, a scheduled wake, a CI watch, a plan-limit pause) or the last prompts
-// changed nothing on the list. A wake that is still coming is looked at again while the session stays
-// idle, so one that never arrives cannot hold the prompt back for good.
+// changed nothing on the list. A CI wake still coming is looked at again while the session stays idle, so
+// one that never arrives cannot hold the prompt back for good; a pause is usage-guard's to end.
 async function keepGoing($: EngineInterface): Promise<void> {
   if (live.isTurnRunning) return
   const mirror = await mirrorOf($)
   const tasks = workable(mirror)
-  if (live.hasEngineWake || tasks.length === 0) return
-  if (await isWakeComing($)) return recheckLater($)
+  if (live.hasEngineWake || tasks.length === 0 || (await isPauseComing($))) return
+  if (await isWatchComing($)) return recheckLater($)
   const isIdle = live.idlePrompts > 0 && live.promptedAt === mirror.changedAt
   if (isIdle && live.idlePrompts >= MAX_IDLE_PROMPTS) return
   live.idlePrompts = isIdle ? live.idlePrompts + 1 : 1
@@ -292,20 +298,25 @@ async function keepGoing($: EngineInterface): Promise<void> {
   await $.prompt.submit({ text: keepGoingText(tasks) })
 }
 
-// One look pending at a time; a turn that starts meanwhile makes it a no-op.
+// One look per generation; turning keepGoing off meanwhile cancels it too.
 function recheckLater($: EngineInterface): void {
-  if (live.isRecheckArmed) return
-  live.isRecheckArmed = true
+  const generation = shared.__tasksKeepGoingGeneration
+  if (live.recheckFor === generation) return
+  live.recheckFor = generation
   $.clock.after(WAKE_RECHECK_MS, () => {
-    live.isRecheckArmed = false
+    if (shared.__tasksKeepGoingGeneration !== generation || !live.keepGoing) return
+    live.recheckFor = undefined
     void keepGoing($).catch(() => undefined)
   })
 }
 
-// A CI watch or a plan-limit pause that wakes the session by itself.
-async function isWakeComing($: EngineInterface): Promise<boolean> {
-  const ciWatch = await peerFile($, 'ci-watch', `${await $.session.id()}.json`)
-  if (hasPendingWake(ciWatch, await $.clock.now())) return true
+// A CI watch that wakes the session by itself.
+async function isWatchComing($: EngineInterface): Promise<boolean> {
+  return hasPendingWake(await peerFile($, 'ci-watch', `${await $.session.id()}.json`), await $.clock.now())
+}
+
+// A plan-limit pause that wakes the session by itself, or whose automatic resume the person cancelled.
+async function isPauseComing($: EngineInterface): Promise<boolean> {
   return isPauseHolding(await peerFile($, 'usage-guard', 'pause.json'), await $.clock.now())
 }
 
@@ -315,7 +326,7 @@ async function isWakeComing($: EngineInterface): Promise<boolean> {
 async function refusedStop($: EngineInterface, isRepeat: boolean): Promise<string | undefined> {
   if (!live.keepGoing || isRepeat || live.hasEngineWake) return undefined
   const tasks = workable(await mirrorOf($))
-  if (tasks.length === 0 || (await isWakeComing($))) return undefined
+  if (tasks.length === 0 || (await isPauseComing($)) || (await isWatchComing($))) return undefined
   return keepGoingText(tasks)
 }
 
@@ -383,6 +394,7 @@ function registerTurns(on: On): void {
     // A subagent's turn (2.1.299+) runs inside or after main's: it starts no new main turn.
     if ((e as { agentId?: string }).agentId !== undefined) return next(e)
     live.turn += 1
+    nextGeneration()
     live.isTurnRunning = true
     live.toolsThisTurn = 0
     live.sawTaskTool = false
@@ -524,6 +536,7 @@ function registerTools(on: On): void {
 }
 
 export const register: Register = (on, options) => {
+  nextGeneration()
   // The settings come from the mod's own file over the loaded options, read again as it changes.
   settings(on, options, values => {
     live.nudgeAfter = Number(values.nudgeAfterTools ?? 3)

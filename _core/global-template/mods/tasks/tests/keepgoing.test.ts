@@ -65,6 +65,8 @@ test('a watch nobody polls any more is no pending wake', () => {
     ['polled at the silence limit', { polledAt: NOW - WATCH_SILENCE_MS }, true],
     ['silent past the limit', { polledAt: NOW - WATCH_SILENCE_MS - 1 }, false],
     ['a held wake, silent past the limit', { outcome: 'passed', wakePending: true, polledAt: 0 }, false],
+    ['a slow poller, within three intervals', { polledAt: NOW - 15 * 60_000, pollMs: 5 * 60_000 }, true],
+    ['a slow poller, past three intervals', { polledAt: NOW - 15 * 60_000 - 1, pollMs: 5 * 60_000 }, false],
     ['never stamped, started within the hour', { startedAt: NOW - WATCH_LIMIT_MS }, true],
     ['never stamped, started long ago', { startedAt: NOW - WATCH_LIMIT_MS - 1 }, false],
   ]
@@ -174,6 +176,27 @@ test('a wake that never comes is looked at again while the session stays idle', 
   await clock.advance(5 * 60_000)
   expect(seen.prompts).toHaveLength(1)
   expect(seen.prompts[0]).toContain('task #1 "task 1" needs no one. Continue it now.')
+})
+
+// A look armed at one turn's end belongs to that turn: an interrupted turn after it leaves nothing to resume.
+test('a turn that starts after the look was armed cancels it', async ($, on) => {
+  const watchFile = `${DATA}/ci-watch/sess-a.json`
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [watchFile]: JSON.stringify({ watches: [{}] }) })
+  await turnEnds($, clock)
+  await turnEnds($, clock, 'aborted')
+  seen.files.delete(watchFile)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
+})
+
+// A cancelled automatic resume stays cancelled: the pause is usage-guard's to end, never a look's.
+test('a plan-limit pause starts no later look', async ($, on) => {
+  const pauseFile = `${DATA}/usage-guard/pause.json`
+  const pause = JSON.stringify({ status: 'cancelled', wakeAt: 6_000 + 60_000 })
+  const { seen, clock } = world(on, [task('1', 'in_progress')], { [pauseFile]: pause })
+  await turnEnds($, clock)
+  await clock.advance(10 * 60_000)
+  expect(seen.prompts).toEqual([])
 })
 
 test('a pause whose wake already passed does not hold the prompt back', async ($, on) => {

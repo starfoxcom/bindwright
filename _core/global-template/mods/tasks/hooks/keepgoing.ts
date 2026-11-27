@@ -7,7 +7,8 @@ import type { Mirror, MirrorTask } from './mirror'
 /** Prompts in a row, with no change to the task list between them, before the mod stops asking. */
 export const MAX_IDLE_PROMPTS = 2
 
-/** How long a CI watch may go without a poll and still count as a wake: ci-watch polls every 30 s. */
+/** How long a CI watch may go without a poll and still count as a wake, at the least: three poll intervals
+ * when ci-watch polls slower than every 200 s. */
 export const WATCH_SILENCE_MS = 10 * 60_000
 
 /** How long a watch saved before ci-watch stamped its polls counts as a wake: ci-watch gives up after an hour. */
@@ -32,13 +33,14 @@ type WatchFields = {
   pushedAt?: number
   startedAt?: number
   polledAt?: number
+  pollMs?: number
 }
 
 // A watch ci-watch is still polling. One whose poller stopped (a reload that left no timer, a retired
 // instance) never wakes the session, so it must not hold the keep-going prompt back.
 const isPolled = (watch: WatchFields, now: number) =>
   watch.polledAt !== undefined
-    ? now - watch.polledAt <= WATCH_SILENCE_MS
+    ? now - watch.polledAt <= Math.max(WATCH_SILENCE_MS, 3 * (watch.pollMs ?? 0))
     : watch.startedAt === undefined || now - watch.startedAt <= WATCH_LIMIT_MS
 
 /**
