@@ -434,12 +434,14 @@ def check_script(project):
 
 
 def check_release(project, scheme, fmt, version, ref):
-    """The reasons the release is refused, or None when it may go ahead."""
+    """The reasons the release is refused, or None when it may go ahead. The script gets a PATH of
+    only the folders trusted from the session folder, so the repo root it runs in cannot widen them."""
     argv = [sys.executable, "-I", check_script(project), version, "--scheme", scheme, "--ref", ref]
     if scheme == "calver" and fmt:
         argv += ["--format", fmt]
+    env = dict(os.environ, PATH=os.pathsep.join(trusted_folders(SESSION_FOLDER) or []))
     try:
-        out = subprocess.run(argv, cwd=project, capture_output=True, text=True, encoding="utf-8",
+        out = subprocess.run(argv, cwd=project, env=env, capture_output=True, text=True, encoding="utf-8",
                              errors="replace", timeout=seconds_left())
     except subprocess.TimeoutExpired:
         return OUT_OF_TIME

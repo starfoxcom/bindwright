@@ -596,6 +596,24 @@ class TrustedProgram(unittest.TestCase):
                 found = session_program(hook, session)
             self.assertEqual(hook.real_path(found or ""), hook.real_path(own), planted)
 
+    def test_the_check_script_gets_only_the_folders_trusted_from_the_session(self):
+        # The script runs in the repo root at home, which would trust the session's own folders:
+        # the PATH it is given holds only the folders the hook trusted from the session folder.
+        hook = load("version_check_hook", HOOK)
+        with tempfile.TemporaryDirectory() as home:
+            home = hook.real_path(home)
+            os.makedirs(os.path.join(home, ".git"))
+            session = os.path.join(home, "Downloads", "tool")
+            planted, own = plant_git(os.path.join(session, "bin")), plant_git(os.path.join(home, "bin"))
+            script = pathlib.Path(hook.check_script(home))
+            script.parent.mkdir(parents=True)
+            script.write_text("import os, sys\nprint(os.environ['PATH'])\nsys.exit(2)\n")
+            path = os.pathsep.join([os.path.dirname(planted), os.path.dirname(own)])
+            with mock.patch.dict(os.environ, {"PATH": path, "HOME": home, "USERPROFILE": home}), \
+                    mock.patch.object(hook, "SESSION_FOLDER", session):
+                given = hook.check_release(home, "semver", None, "1.0.0", "HEAD").split(os.pathsep)
+            self.assertEqual([hook.real_path(entry) for entry in given], [hook.real_path(os.path.dirname(own))])
+
     # A repo can ship its own git beside its code, first on PATH; the hook and the check script it
     # starts skip it and run the next git on PATH, the user's own.
     def test_a_program_anywhere_in_the_project_is_skipped_for_the_next_on_path(self):
