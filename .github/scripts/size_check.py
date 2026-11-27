@@ -190,9 +190,9 @@ OPENERS, CLOSERS = "([{", ")]}"
 # Not after "}" or "<": in JSX those come before the slash of a closing tag.
 REGEX_AFTER = "(,=:[!&|?{;+-*%~^"
 # Reserved words an expression follows, so a slash after one opens a regex literal;
-# "=>" is the arrow before an arrow function's body. A word after "." is a property
+# "=>" is the arrow before an arrow function's body. A word after "." or "#" is a property
 # name, and of, yield and await are left out, since plain code may use them as names.
-REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.])(?:return|typeof|instanceof|in|new|delete|void"
+REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.#])(?:return|typeof|instanceof|in|new|delete|void"
                               r"|throw|case|do|else)$|=>$")
 # Modes that end with their line: strings, and regex literals ("/", "/[" in a class).
 LINE_MODES = ("'", '"', "/", "/[")
@@ -259,14 +259,24 @@ def _scan_line(line, state):
     state[:] = [depth, "code" if mode in LINE_MODES else mode, templates]
 
 
+def _is_comment(line):
+    """Whether a line holds only a comment, or opens one that runs onto the next line."""
+    if line.startswith("//"):
+        return True
+    end = line.find("*/", 2)
+    return line.startswith("/*") and (end < 0 or not line[end + 2:].strip())
+
+
 def top_level_starts(text):
-    """Lines that begin a top-level statement: column 0, not a bracket, at
-    bracket depth 0 and outside strings, templates and comments. A "{" there
-    opens the body of the line before it, as in a brace-on-its-own-line style.
+    """Lines that begin a top-level statement: column 0, not a closing bracket,
+    at bracket depth 0 and outside strings, templates and comments. A "{" there
+    opens the body of the line before it, as in a brace-on-its-own-line style,
+    and a comment belongs to the code around it, so neither starts a statement.
     None when the brackets do not add up, so the file is read whole."""
     state, starts = [0, "code", []], []
     for i, line in enumerate(text.splitlines(keepends=True)):
-        if state[:2] == [0, "code"] and line[:1] not in ("", " ", "\t", "\r", "\n", "{", *CLOSERS):
+        at_top = state[:2] == [0, "code"] and line[:1] not in ("", " ", "\t", "\r", "\n", "{", *CLOSERS)
+        if at_top and not _is_comment(line):
             starts.append(i)
         _scan_line(line, state)
         if state[0] < 0:

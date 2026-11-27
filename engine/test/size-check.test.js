@@ -298,7 +298,7 @@ function scriptCall(expr, arg) {
 test("TypeScript is cut before each top-level statement, line numbers kept", { skip }, () => {
   const text = "const a = {\n  x: 1,\n}\n\nfunction f() {\n  return 1\n}\n// note\nexport type T = { a: string }\n";
   const chunks = scriptCall("size_check.top_level_chunks(arg)", text);
-  assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 7, 8]);
+  assert.deepEqual(chunks.map((c) => c.length - c.replace(/^\n+/, "").length), [0, 4, 8]);
   assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
 });
 
@@ -313,6 +313,8 @@ const READS = [
   ["a regex after an arrow", "export const isGlob = (s) => /[*?[{]/.test(s)\n\n", "isGlob", null],
   ["a regex after a keyword", "export function kind(t) {\n  return typeof /[{]/ === t\n}\n\n", "kind", 3],
   ["a brace on its own line", `function big(a, b)\n{\n${"  a += b\n".repeat(6)}  return a\n}\n\n`, "big", 10],
+  ["a comment before a brace on its own line",
+    `function big(a, b)\n// why\n{\n${"  a += b\n".repeat(6)}  return a\n}\n\n`, "big", 11],
   ["a division before a block", "export function half(n) {\n  const h = n / 2; if (h) { return h }\n  return 0\n}\n\n",
     "half", 4],
   ["a regex in a call that goes on", "export function pick(s) {\n  return s.replace(/[{]/g,\n    '')\n}\n\n",
@@ -356,7 +358,10 @@ for (const [name, source, fn, length, exts = ["mjs", "ts"]] of READS) {
 const STARTS = [
   ["column-0 text inside a template literal", "function f() {\n  return `\nx {\n`\n}\nconst b = 1\n", [0, 5]],
   ["a template's ${} with braces inside", "const t = `${ {a: 1}.a }\n{`\nconst u = 2\n", [0, 2]],
-  ["column-0 text inside a block comment", "/*\nx {\n*/\nconst b = 1\n", [0, 3]],
+  ["column-0 text inside a block comment", "/*\nx {\n*/\nconst b = 1\n", [3]],
+  ["a comment line belongs to the code around it", "function f()\n// why\n{\n  return 1\n}\nconst t = 1\n",
+    [0, 5]],
+  ["a private name like a keyword divides", "x = this.#in / (a +\n  b)\nconst t = 1\n", [0, 2]],
   ["brackets inside strings and comments", "const s = '{' // {\nconst t = \"}\"\n", [0, 1]],
   ["an escaped quote keeps the string open", "const s = '\\'{'\nconst t = 1\n", [0, 1]],
   ["brackets inside a regex literal", "const r = s.replace(/\\[[^\\]]*\\]$/, '')\nconst t = 1\n", [0, 1]],
