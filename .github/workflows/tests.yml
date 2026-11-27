@@ -76,6 +76,15 @@ jobs:
           python3 --version
           python3 -c "import sys; assert sys.version_info >= (3, 8), sys.version"
 
+      # The size check's tests read some files with the real lizard, pinned as the
+      # size-check workflow pins it. The engine tests run this environment's Python,
+      # as on a machine where lizard is installed; its stand-in tests use -S to keep it out.
+      - name: Install lizard
+        if: steps.engine.outputs.present == 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/lizard"
+          "$RUNNER_TEMP/lizard/bin/pip" install --quiet lizard==1.24.3
+
       # A skipped test counts as a failure here: the golden test and the hook
       # tests skip themselves when Python is missing, and CI must not pass that way.
       # So does a run with no tests in it.
@@ -85,6 +94,7 @@ jobs:
           # Files, not the folder: Node 22 and later read a folder argument as
           # a module path and run nothing. failglob stops the step if no file matches.
           shopt -s failglob
+          export PATH="$RUNNER_TEMP/lizard/bin:$PATH"
           node --test --test-reporter=tap engine/test/*.test.js | tee node-tests.txt
           grep -qx "# skipped 0" node-tests.txt || { echo "::error::Engine tests were skipped"; exit 1; }
           grep -qE "^# pass [1-9]" node-tests.txt || { echo "::error::No engine tests ran"; exit 1; }
