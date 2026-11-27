@@ -172,10 +172,18 @@ def gh(folders, *args):
     # gh starts git itself, so its PATH holds only the trusted folders.
     env = dict(os.environ, PATH=os.pathsep.join(folders))
     try:
-        done = subprocess.run([found, *args], capture_output=True, timeout=GH_SECONDS, env=env)
+        process = subprocess.Popen([found, *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, env=env)
     except (OSError, subprocess.SubprocessError):
         return None
-    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
+    try:
+        out, _ = process.communicate(timeout=GH_SECONDS)
+    except subprocess.TimeoutExpired:
+        # Waiting again for the output, as `subprocess.run` does, can outlast the hook's time: on Windows
+        # a child gh started keeps the pipe open after gh is killed.
+        process.kill()
+        return None
+    return out.decode("utf-8", "replace") if process.returncode == 0 else None
 
 
 def pr_address(event):
