@@ -102,20 +102,32 @@ def parse_args(argv):
 
 @functools.lru_cache(maxsize=None)
 def git_program():
-    """git as an absolute path, found once from the folder the check started in, in the first PATH
-    folder a repo cannot have shipped it in. A PATH folder that is relative, is that folder, or
-    sits in the folder repo_folder gives for it is skipped, so a repo's own `git` never runs; Windows's search of
-    the current folder first is switched off."""
-    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    here, repo = real_path(os.getcwd()), repo_folder(os.getcwd())
-    folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
-               if os.path.isabs(entry)}
-    trusted = [entry for entry, real in folders.items()
-               if real and real != here and not (repo and is_within(real, repo))]
-    found = shutil.which("git", path=os.pathsep.join(trusted))
+    """git as an absolute path, found once from the trusted folders of the folder the check
+    started in, so a repo's own `git` never runs."""
+    folders = trusted_folders(os.getcwd())
+    found = folders and shutil.which("git", path=os.pathsep.join(folders))
     if not found or not os.path.isabs(found):
         raise CheckError("no git found on PATH outside this repo's folders")
     return found
+
+
+def trusted_folders(session):
+    """The absolute PATH folders a repo cannot have shipped a program in, or None when the folders
+    cannot be read, as when the current folder was deleted. A PATH folder that is relative (a `.`),
+    is the session folder or the current folder, or sits in the folder repo_folder gives for the
+    session folder is skipped, and Windows's search of the current folder first is switched off.
+    Every program a guard runs is found here, always from the session folder, never from a repo
+    root found later, so every guard trusts the same folders."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    try:
+        here = {real_path(place) for place in (session, os.getcwd())}
+        repo = repo_folder(session)
+    except OSError:
+        return None
+    folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if os.path.isabs(entry)}
+    return [entry for entry, real in folders.items()
+            if real and real not in here and not (repo and is_within(real, repo))]
 
 
 def repo_folder(start):

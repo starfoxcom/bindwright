@@ -24,6 +24,16 @@ def load_tool_rules():
     return module
 
 
+def plant_git(folder):
+    """A stand-in git in `folder`, found by name on PATH."""
+    os.makedirs(folder, exist_ok=True)
+    planted = os.path.join(folder, "git.bat" if os.name == "nt" else "git")
+    with open(planted, "w", encoding="utf-8") as script:
+        script.write("exit 0\n")
+    os.chmod(planted, 0o755)
+    return planted
+
+
 def observed(hook):
     if not os.path.exists(hook.OBSERVED_LOG):
         return []
@@ -365,7 +375,7 @@ class TrustedGitTest(unittest.TestCase):
 
         with unittest.mock.patch.dict(os.environ, {"PATH": share + os.pathsep + os.environ.get("PATH", "")}), \
                 unittest.mock.patch.object(hook, "real_path", refusing):
-            self.assertIsNotNone(hook.trusted_program(REPO, "git"))
+            self.assertIsNotNone(hook.trusted_program("git"))
 
     def test_a_session_at_the_home_folder_keeps_the_path_folders_under_home(self):
         # A dotfiles repo at home holds the user's own installs (~/.local/bin, nvm), not programs a repo ships.
@@ -380,6 +390,21 @@ class TrustedGitTest(unittest.TestCase):
                     unittest.mock.patch.object(hook, "CWD", work):
                 self.assertEqual(hook.trusted_folders(home), [installs])
                 self.assertEqual(hook.trusted_folders(installs), [])
+
+    def test_a_session_below_a_repo_at_home_skips_its_own_folders(self):
+        # The session folder is no repo, but the home folder above it is one; a program inside the
+        # session folder is the folder's own, so the git the guard runs is the user's install.
+        hook = load_tool_rules()
+        with tempfile.TemporaryDirectory() as home:
+            home = hook.real_path(home)
+            os.mkdir(os.path.join(home, ".git"))
+            session = os.path.join(home, "Downloads", "tool")
+            shipped, installs = os.path.join(session, "bin"), os.path.join(home, "bin")
+            planted, own = plant_git(shipped), plant_git(installs)
+            with unittest.mock.patch.dict(os.environ, {"PATH": os.pathsep.join([shipped, installs]),
+                                                       "HOME": home, "USERPROFILE": home}), \
+                    unittest.mock.patch.object(hook, "CWD", session):
+                self.assertEqual(hook.real_path(hook.trusted_program("git") or ""), hook.real_path(own), planted)
 
 
 class ToolRulesSweepTest(unittest.TestCase):

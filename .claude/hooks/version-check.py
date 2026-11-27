@@ -87,6 +87,9 @@ TEXT_TOOLS = {"echo", "printf", "write-output", "write-host", "awk", "gawk", "ma
 # this budget, so the hook gives its own reason before that.
 HOOK_SECONDS = 27
 STARTED = time.monotonic()
+# The folder the command runs in, set by refusal(). Programs are found from it, never from the
+# repo root the check reads later, which can be a repo at the home folder.
+SESSION_FOLDER = "."
 PARSE_SECONDS = 20
 OUT_OF_TIME = (f"the version check did not finish within {HOOK_SECONDS} s. Run the command again "
                "once the computer is less busy.")
@@ -113,19 +116,11 @@ def parser_script():
     return next((script for script in scripts if os.path.isfile(script)), None)
 
 
-def trusted_program(name, project):
-    """The program as an absolute path, from the first PATH folder a repo cannot have shipped it
-    in, or None when no such folder holds it. A PATH folder that is relative, is the project
-    folder or the current folder, or sits in the folder repo_folder gives for it is skipped, so a
-    repo's own `git` or `node` never runs; Windows's search of the current folder first is off."""
-    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    repo = repo_folder(project)
-    here = {real_path(place) for place in (project, os.getcwd())}
-    folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
-               if os.path.isabs(entry)}
-    trusted = [entry for entry, real in folders.items()
-               if real and real not in here and not (repo and is_within(real, repo))]
-    found = shutil.which(name, path=os.pathsep.join(trusted))
+def trusted_program(name):
+    """The program as an absolute path from the trusted folders of the session folder, so a repo's
+    own `git` or `node` never runs, or None when none of them holds one."""
+    folders = trusted_folders(SESSION_FOLDER)
+    found = folders and shutil.which(name, path=os.pathsep.join(folders))
     return found if found and os.path.isabs(found) else None
 
 
@@ -145,6 +140,25 @@ def repo_folder(start):
         if parent == folder:
             return top
         folder = parent
+
+
+def trusted_folders(session):
+    """The absolute PATH folders a repo cannot have shipped a program in, or None when the folders
+    cannot be read, as when the current folder was deleted. A PATH folder that is relative (a `.`),
+    is the session folder or the current folder, or sits in the folder repo_folder gives for the
+    session folder is skipped, and Windows's search of the current folder first is switched off.
+    Every program a guard runs is found here, always from the session folder, never from a repo
+    root found later, so every guard trusts the same folders."""
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+    try:
+        here = {real_path(place) for place in (session, os.getcwd())}
+        repo = repo_folder(session)
+    except OSError:
+        return None
+    folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
+               if os.path.isabs(entry)}
+    return [entry for entry, real in folders.items()
+            if real and real not in here and not (repo and is_within(real, repo))]
 
 
 def real_path(path):
@@ -171,7 +185,7 @@ def is_within(folder, top):
 def shell_commands(command, shell, project):
     """Each simple command's words as the shell reads them, or None when the parser cannot run
     or read the command. A word built at run time is a RunTime."""
-    node, script = trusted_program("node", project), parser_script()
+    node, script = trusted_program("node"), parser_script()
     if not node or not script:
         return None
     try:
@@ -314,7 +328,7 @@ class OutOfTime(Exception):
 
 def git_output(project, *args):
     """What git prints, or "" when it fails. Running out of time is not an answer: it raises."""
-    git = trusted_program("git", project)
+    git = trusted_program("git")
     if not git:
         return ""
     try:
@@ -435,8 +449,10 @@ def check_release(project, scheme, fmt, version, ref):
 def refusal(command, shell, project):
     """Why the command's release is blocked, or None. A command that cannot make a release
     returns before anything that can fail; past that, a failure blocks with its reason."""
+    global SESSION_FOLDER
     if not may_be_release(command):
         return None
+    SESSION_FOLDER = project
     try:
         return read_and_check(command, shell, project)
     except OutOfTime:

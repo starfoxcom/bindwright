@@ -575,12 +575,32 @@ def plant_git(folder):
     return planted
 
 
+def session_program(hook, session):
+    """The git the hook finds for a command run in `session`."""
+    with mock.patch.object(hook, "SESSION_FOLDER", session):
+        return hook.trusted_program("git")
+
+
 class TrustedProgram(unittest.TestCase):
+    def test_a_session_below_a_repo_at_home_skips_its_own_folders(self):
+        # The session folder is no repo, but the home folder above it is one: the hook keeps
+        # finding programs from the session folder even after it reads the repo root at home.
+        hook = load("version_check_hook", HOOK)
+        with tempfile.TemporaryDirectory() as home:
+            home = hook.real_path(home)
+            os.makedirs(os.path.join(home, ".git"))
+            session = os.path.join(home, "Downloads", "tool")
+            planted, own = plant_git(os.path.join(session, "bin")), plant_git(os.path.join(home, "bin"))
+            path = os.pathsep.join([os.path.dirname(planted), os.path.dirname(own)])
+            with mock.patch.dict(os.environ, {"PATH": path, "HOME": home, "USERPROFILE": home}):
+                found = session_program(hook, session)
+            self.assertEqual(hook.real_path(found or ""), hook.real_path(own), planted)
+
     # A repo can ship its own git beside its code, first on PATH; the hook and the check script it
     # starts skip it and run the next git on PATH, the user's own.
     def test_a_program_anywhere_in_the_project_is_skipped_for_the_next_on_path(self):
         hook, script = load("version_check_hook", HOOK), load("version_check_script", SCRIPT)
-        finders = {"the hook": lambda project: hook.trusted_program("git", project),
+        finders = {"the hook": lambda project: session_program(hook, project),
                    "the check script": lambda project: script.git_program.__wrapped__()}
         here = os.getcwd()
         for (name, folder, cwd), (finder, find) in itertools.product((

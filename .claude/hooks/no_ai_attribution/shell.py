@@ -80,19 +80,30 @@ def repo_folder(start):
         folder = parent
 
 
-def node_program(cwd):
-    """`node` as an absolute path, from the first PATH folder a repo cannot have shipped it in,
-    or None when no such folder holds one. A PATH folder that is relative (a `.`), is the session
-    folder or the current folder, or sits in the folder repo_folder gives for it is skipped, so a
-    repo's own `node` never runs; Windows's search of the current folder first is switched off."""
+def trusted_folders(session):
+    """The absolute PATH folders a repo cannot have shipped a program in, or None when the folders
+    cannot be read, as when the current folder was deleted. A PATH folder that is relative (a `.`),
+    is the session folder or the current folder, or sits in the folder repo_folder gives for the
+    session folder is skipped, and Windows's search of the current folder first is switched off.
+    Every program a guard runs is found here, always from the session folder, never from a repo
+    root found later, so every guard trusts the same folders."""
     os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
-    repo = repo_folder(cwd)
-    here = {real_path(place) for place in (cwd, os.getcwd())}
+    try:
+        here = {real_path(place) for place in (session, os.getcwd())}
+        repo = repo_folder(session)
+    except OSError:
+        return None
     folders = {entry: resolved(entry) for entry in os.environ.get("PATH", "").split(os.pathsep)
                if os.path.isabs(entry)}
-    trusted = [entry for entry, real in folders.items()
-               if real and real not in here and not (repo and is_within(real, repo))]
-    found = shutil.which("node", path=os.pathsep.join(trusted))
+    return [entry for entry, real in folders.items()
+            if real and real not in here and not (repo and is_within(real, repo))]
+
+
+def node_program(cwd):
+    """`node` as an absolute path from the trusted folders of the session folder `cwd`, so a repo's
+    own `node` never runs, or None when none of them holds one."""
+    folders = trusted_folders(cwd)
+    found = folders and shutil.which("node", path=os.pathsep.join(folders))
     return found if found and os.path.isabs(found) else None
 
 
