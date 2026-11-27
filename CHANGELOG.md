@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The gate's commit status waits for the PR's own base branch.** The gate began writing its status once the default branch's review workflows allowed it, but a PR into another branch runs that branch's copy of the routine review, so until the release reached it there the routine tier was refused while the deep tier wrote, and the status lagged the check. The gate now also reads the workflows on the base of each open PR whose head is the commit.
+
 ## [v7.21.6] — 2026-11-27
 
 ### Fixed

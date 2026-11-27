@@ -520,7 +520,7 @@ class Upsert(unittest.TestCase):
                 run["external_id"] = ""
             return {}
         self.ready, ready = True, gate._statuses_ready
-        gate._gh, gate.SETTLE_SECONDS, gate._statuses_ready = fake, (0, 0), lambda repo: self.ready
+        gate._gh, gate.SETTLE_SECONDS, gate._statuses_ready = fake, (0, 0), lambda repo, sha: self.ready
         self.addCleanup(setattr, gate, "_statuses_ready", ready)
         self.addCleanup(setattr, gate, "_gh", real)
         self.addCleanup(setattr, gate, "SETTLE_SECONDS", settle)
@@ -602,23 +602,36 @@ class Upsert(unittest.TestCase):
 
     def test_the_workflows_read_decides_whether_statuses_are_written(self):
         granted, missing = "    permissions:\n      statuses: write\n", "      # statuses: write\n"
+        both = {"review": granted, "claude": granted}
+        into_release = [{"state": "open", "head": {"sha": self.SHA}, "base": {"ref": "release/v2"}}]
+        # name, each branch's workflows, the commit's pull requests, statuses written
         rows = [
-            ("both workflows grant it", {"review": granted, "claude": granted}, True),
-            ("one workflow lacks it", {"review": granted, "claude": missing}, False),
-            ("a lookup fails", {"review": granted, "claude": None}, False),
+            ("both workflows grant it", {"main": both}, [], True),
+            ("one workflow lacks it", {"main": {"review": granted, "claude": missing}}, [], False),
+            ("a lookup fails", {"main": {"review": granted, "claude": None}}, [], False),
+            ("a pull request's base still runs the routine review without it",
+             {"main": both, "release/v2": {"review": missing, "claude": granted}}, into_release, False),
+            ("a pull request's base that grants it too", {"main": both, "release/v2": both}, into_release, True),
+            ("a closed pull request's base is not read",
+             {"main": both}, [dict(into_release[0], state="closed")], True),
+            ("a pull request whose head is another commit is not read",
+             {"main": both}, [dict(into_release[0], head={"sha": "0" * 40})], True),
         ]
         self.addCleanup(setattr, gate, "_READY", {})
-        for name, texts, expected in rows:
+        for name, branches, pulls, expected in rows:
             with self.subTest(name):
                 def fake(path, method="GET", body=None):
                     if path == "repos/o/r":
                         return {"default_branch": "main"}
-                    text = texts["review" if "claude-code-review" in path else "claude"]
+                    if path == "repos/o/r/commits/%s/pulls" % self.SHA:
+                        return pulls
+                    branch = path.split("?ref=")[1].replace("%2F", "/")
+                    text = branches[branch]["review" if "claude-code-review" in path else "claude"]
                     if text is None:
                         raise gate.GateError("gh api GET failed: Not Found (HTTP 404)")
                     return {"content": base64.b64encode(text.encode("utf-8")).decode("ascii")}
                 gate._gh, gate._READY = fake, {}
-                self.assertIs(READY_CHECK("o/r"), expected)
+                self.assertIs(READY_CHECK("o/r", self.SHA), expected)
 
     def test_a_job_without_the_status_permission_still_writes_the_check(self):
         self.status_error = "gh api POST failed: Resource not accessible by integration (HTTP 403)"
