@@ -6,6 +6,12 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.5] — 2026-11-27
+
+### Fixed
+
+- **The deep review workflow's comments stand on their own.** Its comments sent the reader to the routine review workflow for the account ceiling variable and for how the review's account is picked, but an update lands the deep review workflow before the routine one, so for a while they pointed at text the repo did not have yet. They now describe the extra account tokens, the ceiling variable and the account pick themselves, with no pointer into the other workflow.
+
 ## [v7.21.4] — 2026-11-27
 
 ### Fixed
