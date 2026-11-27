@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **Every guard skips a program found inside a session folder that is not a repo.** The release and attribution guards still ran a `git` or `node` from a folder inside such a session folder, which the tool-rules guard already skipped. All four guards now share one rule for which folder a repo could ship programs in, and a test keeps that rule the same in each copy.
+- **The size check measures a function with a bracket in a regex right.** lizard read a bracket inside a regex literal, such as `/[*?[{]/`, as code, and folded that function into the ones after it, so a three-line function could read as a hard breach of hundreds of lines. When lizard reports a JavaScript function that reaches the first line of a later top-level statement, the file is now read again one statement at a time, as TypeScript already is, so a misread stays inside its statement. An arrow function written without a semicolon, which lizard ends on the next statement's first line, is read that way too and gets its own lines; every other file is read exactly as before. TypeScript functions whose opening brace sits on its own line, with or without a comment line before it, are no longer cut from their signature, which made them read as one line long.
 
 ## [v7.21.1] — 2026-11-26
 
