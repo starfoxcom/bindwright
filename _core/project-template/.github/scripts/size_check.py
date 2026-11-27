@@ -189,9 +189,9 @@ OPENERS, CLOSERS = "([{", ")]}"
 # A slash after one of these, or at the start of a line, opens a regex literal.
 # Not after "}" or "<": in JSX those come before the slash of a closing tag.
 REGEX_AFTER = "(,=:[!&|?{;+-*%~^"
-# Words an expression follows, so a slash after one opens a regex literal too;
-# "=>" is the arrow before an arrow function's body.
-REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$])(?:return|typeof|instanceof|in|of|new|delete|void"
+# Words an expression follows, so a slash after one always opens a regex literal;
+# "=>" is the arrow before an arrow function's body. A word after "." is a property name.
+REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.])(?:return|typeof|instanceof|in|of|new|delete|void"
                               r"|throw|case|do|else|yield|await)$|=>$")
 # Modes that end with their line: strings, and regex literals ("/", "/[" in a class).
 LINE_MODES = ("'", '"', "/", "/[")
@@ -229,9 +229,10 @@ def _scan_literal(line, at, mode):
 
 def _scan_line(line, state):
     """Carries the scan through one line and returns the (start, end) index
-    spans of the regex literal bodies that close on it. `state` is [depth,
-    mode, templates]: bracket depth in code, the mode the line ends in ("code",
-    "block" or "`") and the depths where each open template's `${` returns."""
+    spans of the bodies of the regex literals that open after a word or "=>"
+    and close on that line. `state` is [depth, mode, templates]: bracket depth
+    in code, the mode the line ends in ("code", "block" or "`") and the depths
+    where each open template's `${` returns."""
     depth, mode, templates = state
     i, body, spans = 0, None, []
     while i < len(line):
@@ -248,33 +249,26 @@ def _scan_line(line, state):
             depth, mode, i = templates.pop(), "`", i + 1
         else:
             depth += (c in OPENERS) - (c in CLOSERS)
+            at = i
             i, opened = _scan_code(line, i)
             mode = opened or mode
-            body = i if opened == "/" else body
+            if opened == "/" and REGEX_AFTER_WORD.search(line[:at].rstrip()):
+                body = i
     state[:] = [depth, "code" if mode in LINE_MODES else mode, templates]
     return spans
 
 
-def _bracket_nets(text):
-    """Openers minus closers in `text`, for each bracket pair."""
-    return [text.count(o) - text.count(c) for o, c in zip(OPENERS, CLOSERS)]
-
-
 def mask_regex_bodies(text):
-    """The text with the regex literal bodies that would unbalance their line's
-    brackets filled with "_", so lizard still reads each as one regex token and
-    never as code; lines and columns hold. A body is filled only when that brings
-    the line's bracket counts closer to even and leaves none further off, so a
-    division taken for a regex, whose removal would unbalance its line, stays as
-    it is. A body that does not close on its line is never filled: a regex
-    literal cannot span lines."""
+    """The text with the body of each regex literal that opens after a word or
+    "=>" filled with "_", where lizard reads the literal's brackets as code; it
+    still reads the filled literal as one regex token, and lines and columns
+    hold. A slash there always opens a regex, so no division is touched; one at
+    a line start or after an operator is left to lizard, which reads those
+    itself. A body that does not close on its line is never filled."""
     state, out = [0, "code", []], []
     for line in text.splitlines(keepends=True):
         for start, end in _scan_line(line, state):
-            filled = line[:start] + "_" * (end - start) + line[end:]
-            pairs = list(zip(_bracket_nets(line), _bracket_nets(filled)))
-            if all(abs(a) <= abs(b) for b, a in pairs) and any(abs(a) < abs(b) for b, a in pairs):
-                line = filled
+            line = line[:start] + "_" * (end - start) + line[end:]
         out.append(line)
     return "".join(out)
 
@@ -304,8 +298,9 @@ def top_level_chunks(text):
 
 
 def javascript_functions(lizard, full):
-    # lizard reads a bracket inside a regex literal (/[{]/) as code and folds the
-    # functions after it into one, so each regex body is blanked first. In
+    # lizard reads a bracket inside a regex literal after a word (return /[{]/)
+    # as code and folds the functions after it into one, so those bodies are
+    # filled first. In
     # TypeScript it also loses its place after some type shapes, such as an
     # object type inside a generic (Promise<{ a: string }>); reading each
     # top-level statement on its own keeps that misread inside the statement.

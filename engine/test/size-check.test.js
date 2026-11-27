@@ -323,6 +323,10 @@ const READS = [
     + "  return total\n}\n\n", "avg", 4],
   ["a division after a property named like a keyword", "export function per(units, a, b) {\n"
     + "  return units.in / (a / b)\n}\n\n", "per", 3],
+  ["a division wrapped onto the next line", "export function share(done, total) {\n  return (done\n"
+    + "    / total) // share done\n}\n\n", "share", 4],
+  ["a wrapped division after a property named like a keyword", "export function sc(units, a, b, c) {\n"
+    + "  return scale(units.in / (a / b\n    + c))\n}\n\n", "sc", 4],
 ];
 
 for (const [name, source, fn, length] of READS) {
