@@ -327,10 +327,16 @@ const READS = [
     + "    / total) // share done\n}\n\n", "share", 4],
   ["a wrapped division after a property named like a keyword", "export function sc(units, a, b, c) {\n"
     + "  return scale(units.in / (a / b\n    + c))\n}\n\n", "sc", 4],
+  ["yield used as a name", "export function rate(periods) {\n  const r = yield / (100 / periods)\n  return r\n}\n\n",
+    "rate", 4, ["js"]],
+  ["a regex after return in a JSX file", "export function hasGlob(text) {\n  return /[*?[{]/.test(text)\n}\n\n",
+    "hasGlob", 3, ["jsx", "tsx"]],
+  ["JSX text with a slash after a keyword", "export function Zoom({ level }) {\n  return (\n"
+    + "    <p>Zoom in / {level} out</p>\n  )\n}\n\n", "Zoom", 5, ["jsx", "tsx"]],
 ];
 
-for (const [name, source, fn, length] of READS) {
-  for (const ext of ["mjs", "ts"]) {
+for (const [name, source, fn, length, exts = ["mjs", "ts"]] of READS) {
+  for (const ext of exts) {
     test(`lizard reads .${ext}: ${name}`, { skip: skip || (!hasLizard && "needs lizard") }, () => {
       const file = join(mkdtempSync(join(tmpdir(), "size-read-")), `case.${ext}`);
       writeFileSync(file, `${source}export function next() {\n  return 1\n}\n`);

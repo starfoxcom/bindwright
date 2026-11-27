@@ -189,10 +189,11 @@ OPENERS, CLOSERS = "([{", ")]}"
 # A slash after one of these, or at the start of a line, opens a regex literal.
 # Not after "}" or "<": in JSX those come before the slash of a closing tag.
 REGEX_AFTER = "(,=:[!&|?{;+-*%~^"
-# Words an expression follows, so a slash after one always opens a regex literal;
-# "=>" is the arrow before an arrow function's body. A word after "." is a property name.
-REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.])(?:return|typeof|instanceof|in|of|new|delete|void"
-                              r"|throw|case|do|else|yield|await)$|=>$")
+# Reserved words an expression follows, so a slash after one opens a regex literal;
+# "=>" is the arrow before an arrow function's body. A word after "." is a property
+# name, and of, yield and await are left out, since plain code may use them as names.
+REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$.])(?:return|typeof|instanceof|in|new|delete|void"
+                              r"|throw|case|do|else)$|=>$")
 # Modes that end with their line: strings, and regex literals ("/", "/[" in a class).
 LINE_MODES = ("'", '"', "/", "/[")
 
@@ -260,15 +261,17 @@ def _scan_line(line, state):
 
 def mask_regex_bodies(text):
     """The text with the body of each regex literal that opens after a word or
-    "=>" filled with "_", where lizard reads the literal's brackets as code; it
-    still reads the filled literal as one regex token, and lines and columns
-    hold. A slash there always opens a regex, so no division is touched; one at
-    a line start or after an operator is left to lizard, which reads those
-    itself. A body that does not close on its line is never filled."""
+    "=>" and holds brackets that do not pair up filled with "_": lizard reads
+    those brackets as code and loses its place, while it still reads the filled
+    literal as one regex token, and lines and columns hold. Anything else that
+    looks like a regex, such as a division at a line start or JSX text, is left
+    to lizard, and a body that does not close on its line is never filled."""
     state, out = [0, "code", []], []
     for line in text.splitlines(keepends=True):
         for start, end in _scan_line(line, state):
-            line = line[:start] + "_" * (end - start) + line[end:]
+            body = line[start:end]
+            if any(body.count(o) != body.count(c) for o, c in zip(OPENERS, CLOSERS)):
+                line = line[:start] + "_" * (end - start) + line[end:]
         out.append(line)
     return "".join(out)
 
