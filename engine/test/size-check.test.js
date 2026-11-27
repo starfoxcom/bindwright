@@ -302,20 +302,37 @@ test("TypeScript is cut before each top-level statement, line numbers kept", { s
   assert.equal(chunks.map((c) => c.replace(/^\n+/, "")).join(""), text);
 });
 
-// The real lizard folds a function holding a brace in a regex class into the next one; read per
-// statement, each keeps its own length. Skipped where lizard is not installed, as in the test CI.
-const hasLizard = spawnSync(python, ["-c", "import lizard"]).status === 0;
-test("a JavaScript regex with a brace in its class keeps its function's length", { skip: skip || !hasLizard }, () => {
-  const dir = mkdtempSync(join(tmpdir(), "size-regex-"));
-  const file = join(dir, "glob.mjs");
-  writeFileSync(file, "export function hasGlob(text) {\n  return /[*?[{]/.test(text)\n}\n\n"
-    + "export function next() {\n  return 1\n}\n");
-  const code = "import sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n"
-    + "print([[f[0], f[1]] for f in size_check.functions(sys.argv[2])])\n";
-  const r = spawnSync(python, ["-B", "-c", code, dirname(SCRIPT), file], { cwd: dir, encoding: "utf8" });
-  assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout.trim(), "[['hasGlob', 3], ['next', 3]]");
-});
+// Read by the real lizard, which the Linux test job installs: a bracket inside a regex literal
+// folds the functions after it into one, and a body cut from its signature reads as one line.
+// Each row: [name, source, its function, that function's length]. The length is null for an
+// expression-bodied arrow, whose end lizard puts at the next statement; the function after it
+// must still keep its own 3 lines.
+const hasLizard = Boolean(python) && spawnSync(python, ["-c", "import lizard"]).status === 0;
+const READS = [
+  ["a regex after return", "export function hasGlob(text) {\n  return /[*?[{]/.test(text)\n}\n\n", "hasGlob", 3],
+  ["a regex after an arrow", "export const isGlob = (s) => /[*?[{]/.test(s)\n\n", "isGlob", null],
+  ["a regex after a keyword", "export function kind(t) {\n  return typeof /[{]/ === t\n}\n\n", "kind", 3],
+  ["a brace on its own line", `function big(a, b)\n{\n${"  a += b\n".repeat(6)}  return a\n}\n\n`, "big", 10],
+  ["a division before a block", "export function half(n) {\n  const h = n / 2; if (h) { return h }\n  return 0\n}\n\n",
+    "half", 4],
+];
+
+for (const [name, source, fn, length] of READS) {
+  for (const ext of ["mjs", "ts"]) {
+    test(`lizard reads .${ext}: ${name}`, { skip: skip || (!hasLizard && "needs lizard") }, () => {
+      const file = join(mkdtempSync(join(tmpdir(), "size-read-")), `case.${ext}`);
+      writeFileSync(file, `${source}export function next() {\n  return 1\n}\n`);
+      const code = "import json, sys\nsys.path.insert(0, sys.argv[1])\nimport size_check\n"
+        + "print(json.dumps([[f[0], f[1]] for f in size_check.functions(sys.argv[2])]))\n";
+      const r = spawnSync(python, ["-B", "-c", code, dirname(SCRIPT), file], { encoding: "utf8" });
+      assert.equal(r.status, 0, r.stderr);
+      const found = JSON.parse(r.stdout);
+      assert.deepEqual(found.map(([n]) => n), [fn, "next"]);
+      assert.deepEqual(found[1], ["next", 3]);
+      if (length !== null) assert.equal(found[0][1], length);
+    });
+  }
+}
 
 // Where a statement may start: [name, source, the line indexes that start one].
 const STARTS = [
@@ -326,6 +343,8 @@ const STARTS = [
   ["an escaped quote keeps the string open", "const s = '\\'{'\nconst t = 1\n", [0, 1]],
   ["brackets inside a regex literal", "const r = s.replace(/\\[[^\\]]*\\]$/, '')\nconst t = 1\n", [0, 1]],
   ["a slash after a value divides", "const h = (a / 2) / (b)\nconst t = 1\n", [0, 1]],
+  ["a regex after an arrow", "const g = (s) => /[{]/.test(s)\nconst t = 1\n", [0, 1]],
+  ["a brace on its own line opens the line before", "function f()\n{\n  return 1\n}\nconst t = 1\n", [0, 4]],
   ["a line still inside brackets", "foo(\nbar)\nbaz()\n", [0, 2]],
   ["brackets that do not add up read the file whole", "}\nconst a = 1\n", null],
 ];

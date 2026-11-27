@@ -179,7 +179,7 @@ def functions(path):
         return False
     full = os.path.join(ROOT, path)
     if path.endswith(LANGUAGE_EXTENSIONS["JavaScript / TypeScript"]):
-        found = typescript_functions(lizard, full)
+        found = javascript_functions(lizard, full)
     else:
         found = lizard.analyze_file(full).function_list
     return [(f.name, f.end_line - f.start_line + 1, f.cyclomatic_complexity, param_count(path, f)) for f in found]
@@ -189,6 +189,10 @@ OPENERS, CLOSERS = "([{", ")]}"
 # A slash after one of these, or at the start of a line, opens a regex literal.
 # Not after "}" or "<": in JSX those come before the slash of a closing tag.
 REGEX_AFTER = "(,=:[!&|?{;+-*%~^"
+# Words an expression follows, so a slash after one opens a regex literal too;
+# "=>" is the arrow before an arrow function's body.
+REGEX_AFTER_WORD = re.compile(r"(?:^|[^\w$])(?:return|typeof|instanceof|in|of|new|delete|void"
+                              r"|throw|case|do|else|yield|await)$|=>$")
 # Modes that end with their line: strings, and regex literals ("/", "/[" in a class).
 LINE_MODES = ("'", '"', "/", "/[")
 
@@ -204,7 +208,7 @@ def _scan_code(line, at):
     if line[at] in "'\"`":
         return at + 1, line[at]
     before = line[:at].rstrip()
-    if line[at] == "/" and (not before or before[-1] in REGEX_AFTER or before.endswith("return")):
+    if line[at] == "/" and (not before or before[-1] in REGEX_AFTER or REGEX_AFTER_WORD.search(before)):
         return at + 1, "/"
     return at + 1, None
 
@@ -224,11 +228,12 @@ def _scan_literal(line, at, mode):
 
 
 def _scan_line(line, state):
-    """Carries the scan through one line. `state` is [depth, mode, templates]:
-    bracket depth in code, the mode the line ends in ("code", "block" or "`")
-    and the depths where each open template's `${` returns."""
+    """Carries the scan through one line and returns the (start, end) index
+    spans of the regex literal bodies that close on it. `state` is [depth,
+    mode, templates]: bracket depth in code, the mode the line ends in ("code",
+    "block" or "`") and the depths where each open template's `${` returns."""
     depth, mode, templates = state
-    i = 0
+    i, body, spans = 0, None, []
     while i < len(line):
         c = line[i]
         if mode == "`" and line[i:i + 2] == "${":
@@ -236,22 +241,41 @@ def _scan_line(line, state):
             depth, mode, i = depth + 1, "code", i + 2
         elif mode != "code":
             i, mode = _scan_literal(line, i, mode)
+            if mode == "code" and body is not None:
+                spans.append((body, i - 1))
+                body = None
         elif c == "}" and templates and depth - 1 == templates[-1]:
             depth, mode, i = templates.pop(), "`", i + 1
         else:
             depth += (c in OPENERS) - (c in CLOSERS)
             i, opened = _scan_code(line, i)
             mode = opened or mode
+            body = i if opened == "/" else body
     state[:] = [depth, "code" if mode in LINE_MODES else mode, templates]
+    return spans
+
+
+def mask_regex_bodies(text):
+    """The text with each regex literal's body blanked to spaces, so no bracket
+    or quote inside one is read as code; lines and columns hold. A body that
+    does not close on its line is left as it is: a regex literal cannot span
+    lines, so that slash was a division."""
+    state, out = [0, "code", []], []
+    for line in text.splitlines(keepends=True):
+        for start, end in _scan_line(line, state):
+            line = line[:start] + " " * (end - start) + line[end:]
+        out.append(line)
+    return "".join(out)
 
 
 def top_level_starts(text):
-    """Lines that begin a top-level statement: column 0, not a closing
-    bracket, at bracket depth 0 and outside strings, templates and comments.
+    """Lines that begin a top-level statement: column 0, not a bracket, at
+    bracket depth 0 and outside strings, templates and comments. A "{" there
+    opens the body of the line before it, as in a brace-on-its-own-line style.
     None when the brackets do not add up, so the file is read whole."""
     state, starts = [0, "code", []], []
     for i, line in enumerate(text.splitlines(keepends=True)):
-        if state[:2] == [0, "code"] and line[:1] not in ("", " ", "\t", "\r", "\n", *CLOSERS):
+        if state[:2] == [0, "code"] and line[:1] not in ("", " ", "\t", "\r", "\n", "{", *CLOSERS):
             starts.append(i)
         _scan_line(line, state)
         if state[0] < 0:
@@ -268,16 +292,17 @@ def top_level_chunks(text):
     return ["\n" * a + "".join(lines[a:b]) for a, b in zip(bounds, bounds[1:]) if b > a]
 
 
-def typescript_functions(lizard, full):
-    # lizard loses its place after some shapes, such as an object type inside a
-    # generic (Promise<{ a: string }>) or a brace in a regex literal's class
-    # (/[{]/), and folds the functions after it into one. Reading each top-level
-    # statement on its own keeps a misread inside that statement.
+def javascript_functions(lizard, full):
+    # lizard reads a bracket inside a regex literal (/[{]/) as code and folds the
+    # functions after it into one, so each regex body is blanked first. In
+    # TypeScript it also loses its place after some type shapes, such as an
+    # object type inside a generic (Promise<{ a: string }>); reading each
+    # top-level statement on its own keeps that misread inside the statement.
     # As lizard reads a file: a byte that is not UTF-8 never stops the check, and a BOM is dropped.
     with open(full, encoding="utf-8-sig", errors="replace") as f:
-        text = f.read()
-    return [fn for chunk in top_level_chunks(text)
-            for fn in lizard.analyze_file.analyze_source_code(full, chunk).function_list]
+        text = mask_regex_bodies(f.read())
+    chunks = top_level_chunks(text) if full.endswith((".ts", ".tsx", ".mts", ".cts")) else [text]
+    return [fn for chunk in chunks for fn in lizard.analyze_file.analyze_source_code(full, chunk).function_list]
 
 
 def param_count(path, f):
