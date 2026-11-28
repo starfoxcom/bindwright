@@ -100,6 +100,11 @@ async function pullRequest(folder, digest, row) {
   put(root, ".bindwright/pristine.json", JSON.stringify({ version: headVersion, year: 2026, files: {} }));
   putPin(root, headPin);
   git(root, "add", "-A");
+  if (row.headLink) {
+    // A symbolic link whose target string is the render: git shows the target as its text.
+    const blob = git(root, "hash-object", "-w", UNEDITED);
+    git(root, "update-index", "--cacheinfo", `120000,${blob},${UNEDITED}`);
+  }
   git(root, "commit", "-q", "-m", "update");
   git(root, "checkout", "-q", "main");
   git(root, "merge", "-q", "--no-ff", "pr", "-m", "merge");
@@ -147,6 +152,10 @@ const CASES = [
     name: "a base copy with one CRLF line does not license a CRLF head",
     baseEnding: "mixed",
     headEnding: "crlf",
+  },
+  {
+    name: "a symbolic link whose target string is the render lists nothing",
+    headLink: true,
   },
   {
     name: "a head record naming no release lists nothing",
