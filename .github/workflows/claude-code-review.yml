@@ -1375,6 +1375,77 @@ jobs:
             echo "first_index=5" >> "$GITHUB_OUTPUT"
           fi
 
+      # More accounts: with CLAUDE_CODE_OAUTH_TOKEN_2 to _5 set, the review runs
+      # on the first account, counting from the first, that answers a one-line
+      # request on the main model with its plan use under REVIEW_ACCOUNT_CEILING
+      # (see the header). pick_account.py decides, read from the gate's commit,
+      # or from the default branch's tip when that commit predates it, so a PR
+      # cannot change how its own review picks; with one token it sends
+      # nothing. Neither holding the script, or a failed pick, leaves the
+      # first account whose token is set, as "Pick who pays" names it. It
+      # runs before the credits run, the job's first model run, so no review
+      # has touched the runner while every token is in this one step.
+      - name: Pick the review's account
+        id: main-account
+        if: steps.payer.outputs.main_on_key != 'yes' && steps.claude-cli.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 12
+        shell: bash
+        env:
+          CLI: ${{ steps.claude-cli.outputs.path }}
+          MODEL: ${{ needs.init-gate.outputs.routine_model }}
+          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
+          GATE_SHA: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+        run: |
+          set -euo pipefail
+          script="$RUNNER_TEMP/pick_account_main.py"
+          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
+            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
+            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the review runs on the first account whose token is set"
+            exit 0
+          fi
+          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
+
+      # The backup's account: picked as "Pick the review's account" picks
+      # one, on the backup's model, probed with the job's CLI copy before any
+      # review runs, for the same reason. The first account still answers
+      # when only the main model's cap was hit, so the backup stays where it
+      # ran before. The script comes from the same place; neither the gate's
+      # commit nor the default branch holding it, or a failed pick, leaves the
+      # account the main review ran on.
+      - name: Pick the backup's account
+        id: account
+        if: steps.claude-cli.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 12
+        shell: bash
+        env:
+          CLI: ${{ steps.claude-cli.outputs.path }}
+          MODEL: ${{ needs.init-gate.outputs.routine_fallback_model }}
+          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
+          GATE_SHA: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+        run: |
+          set -euo pipefail
+          script="$RUNNER_TEMP/pick_account_backup.py"
+          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
+            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
+            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the backup runs on the main review's account"
+            exit 0
+          fi
+          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
+
       # ── First attempt: the plan's monthly API credits ─────────────────────
       # The org API key pays for a plain `claude -p` run from its monthly
       # credits; a run made through the review action is refused them
@@ -1547,41 +1618,6 @@ jobs:
             echo "::warning::The $WHO returned no review: the next attempt runs"
           fi
           echo "ok=$ok" >> "$GITHUB_OUTPUT"
-
-      # More accounts: with CLAUDE_CODE_OAUTH_TOKEN_2 to _5 set, the review runs
-      # on the first account, counting from the first, that answers a one-line
-      # request on the main model with its plan use under REVIEW_ACCOUNT_CEILING
-      # (see the header). pick_account.py decides, read from the gate's commit,
-      # or from the default branch's tip when that commit predates it, so a PR
-      # cannot change how its own review picks; with one token it sends
-      # nothing. Neither holding the script, or a failed pick, leaves the
-      # first account whose token is set, as "Pick who pays" names it.
-      - name: Pick the review's account
-        id: main-account
-        if: steps.credits-answer.outputs.ok != 'yes' && steps.payer.outputs.main_on_key != 'yes' && steps.claude-cli.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 12
-        shell: bash
-        env:
-          CLI: ${{ steps.claude-cli.outputs.path }}
-          MODEL: ${{ needs.init-gate.outputs.routine_model }}
-          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
-          GATE_SHA: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
-          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
-          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
-          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
-        run: |
-          set -euo pipefail
-          script="$RUNNER_TEMP/pick_account_main.py"
-          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
-            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
-            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the review runs on the first account whose token is set"
-            exit 0
-          fi
-          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
 
       - name: Run Claude Code Review
         id: claude-review
@@ -1809,40 +1845,6 @@ jobs:
           echo "::notice::The backup runs the stable Claude Code release $installed"
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "version=$installed" >> "$GITHUB_OUTPUT"
-
-      # The backup's account: picked as "Pick the review's account" picks
-      # one, on the backup's model and the stable CLI copy. The first account
-      # still answers when only the main model's cap was hit, so the backup
-      # stays where it ran before. Nothing is checked unless the main review
-      # failed. The script comes from the same place; neither the gate's
-      # commit nor the default branch holding it, or a failed pick, leaves the
-      # account the main review ran on.
-      - name: Pick the backup's account
-        id: account
-        if: steps.claude-review.outcome != 'skipped' && steps.main-answer.outputs.ok != 'yes' && steps.claude-cli-stable.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 12
-        shell: bash
-        env:
-          CLI: ${{ steps.claude-cli-stable.outputs.path }}
-          MODEL: ${{ needs.init-gate.outputs.routine_fallback_model }}
-          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
-          GATE_SHA: ${{ needs.init-gate.outputs.gate_sha || github.event.pull_request.base.sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
-          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
-          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
-          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
-        run: |
-          set -euo pipefail
-          script="$RUNNER_TEMP/pick_account_backup.py"
-          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
-            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
-            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the backup runs on the main review's account"
-            exit 0
-          fi
-          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
 
       # Backup: a main review that returned no readable review (a failure,
       # usage limit or otherwise, or a run that ended without one) retries once on
