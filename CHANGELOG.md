@@ -9,6 +9,7 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 ### Fixed
 
 - **A project check can no longer forge the template-text list.** The routine review's pre-screen ran every project check in one job, writing into one folder, so a check that runs the PR's own code could rewrite the template check's list, and the review then let its own findings pass in any file the forged list named. The template check now runs in a job of its own, Template check, from the gate's commit and with none of the PR's code, and the review reads its list only from the report's first section; a list anywhere else counts for nothing. The new job, and the deep review's own step, also find the check when `prescreen.dir` is written with a trailing slash.
+- **The ci-watch mod knows the Template check job (ci-watch 1.8.2).** It counts a round where only the review workflow's own jobs failed as a review round, and the new job was missing from that list, so a failed Template check counted as a code round.
 - **The template-text check lists only plain files.** It read each changed file's text with `git show`, which gives a symbolic link's target string as its text, so a PR that swapped a short template file for a link whose target string matched the render had the link listed as Bindwright's text, and the review let its findings pass. A path is now listed only when it is a regular file in the PR's commit.
 
 ## [v7.21.7] — 2026-11-27

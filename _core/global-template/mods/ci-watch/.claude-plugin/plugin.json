@@ -1,6 +1,6 @@
 {
   "name": "ci-watch",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Watches a pushed PR's checks locally, shows each PR's progress above the prompt, and wakes the session once when they settle, or when a background run it started goes quiet without reporting back.",
   "types": "./types/index.d.ts",
   "userConfig": {
