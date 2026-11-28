@@ -449,6 +449,8 @@ STATUS_STATE = {"success": "success", "failure": "failure", None: "pending"}
 
 WORKFLOWS = (".github/workflows/claude-code-review.yml", ".github/workflows/claude.yml")
 _READY = {}
+# Seconds before each retry of a workflows read that failed for a reason other than a missing file.
+LOOKUP_RETRY_SECONDS = (2, 5)
 
 
 def _open_pulls(repo):
@@ -477,14 +479,27 @@ def _workflow(repo, path, branch):
 
 def _statuses_ready(repo, sha):
     """Whether both review workflows grant statuses: write on every branch whose copy
-    runs for `sha`. A failed lookup counts as not, which leaves the check alone, as before."""
+    runs for `sha`. A workflow missing on a branch counts as not. A lookup that still
+    fails after its retries raises, so the gate fails instead of leaving an older status."""
     if (repo, sha) not in _READY:
+        _READY[repo, sha] = _read_ready(repo, sha)
+    return _READY[repo, sha]
+
+
+def _read_ready(repo, sha):
+    failure = None
+    for delay in (0,) + LOOKUP_RETRY_SECONDS:
+        time.sleep(delay)
         try:
             texts = [_workflow(repo, path, branch) for branch in _branches(repo, sha) for path in WORKFLOWS]
-            _READY[repo, sha] = all(re.search(r"^\s*statuses:\s*write\s*$", text, re.M) for text in texts)
-        except (GateError, KeyError, TypeError, ValueError):
-            _READY[repo, sha] = False
-    return _READY[repo, sha]
+            return all(re.search(r"^\s*statuses:\s*write\s*$", text, re.M) for text in texts)
+        except GateError as error:
+            if "(HTTP 404)" in str(error):
+                return False
+            failure = error
+        except (KeyError, TypeError, ValueError) as error:
+            failure = error
+    raise GateError("could not read whether the review workflows may set the commit status: %s" % failure)
 
 
 def _status_description(title):

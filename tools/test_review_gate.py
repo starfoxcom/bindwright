@@ -608,7 +608,7 @@ class Upsert(unittest.TestCase):
         rows = [
             ("both workflows grant it", {"main": both}, [], True),
             ("one workflow lacks it", {"main": {"review": granted, "claude": missing}}, [], False),
-            ("a lookup fails", {"main": {"review": granted, "claude": None}}, [], False),
+            ("a workflow missing on a branch", {"main": {"review": granted, "claude": None}}, [], False),
             ("a pull request's base still runs the routine review without it",
              {"main": both, "release/v2": {"review": missing, "claude": granted}}, into_release, False),
             ("a pull request's base that grants it too", {"main": both, "release/v2": both}, into_release, True),
@@ -634,6 +634,34 @@ class Upsert(unittest.TestCase):
                     return {"content": base64.b64encode(text.encode("utf-8")).decode("ascii")}
                 gate._gh, gate._READY = fake, {}
                 self.assertIs(READY_CHECK("o/r", self.SHA), expected)
+
+    def test_a_failing_workflows_read_is_retried_then_fails_the_gate(self):
+        granted = base64.b64encode(b"    permissions:\n      statuses: write\n").decode("ascii")
+        # name, how many reads fail before the lookup answers
+        rows = [("one failed read, then an answer", 1), ("every read fails", 99)]
+        self.addCleanup(setattr, gate, "_READY", {})
+        self.addCleanup(setattr, gate, "LOOKUP_RETRY_SECONDS", gate.LOOKUP_RETRY_SECONDS)
+        gate.LOOKUP_RETRY_SECONDS = (0, 0)
+        for name, failures in rows:
+            with self.subTest(name):
+                left = [failures]
+
+                def fake(path, method="GET", body=None):
+                    if path == "repos/o/r":
+                        return {"default_branch": "main"}
+                    if path.startswith("repos/o/r/pulls?"):
+                        return []
+                    if left[0] > 0:
+                        left[0] -= 1
+                        raise gate.GateError("gh api GET failed: Server Error (HTTP 502)")
+                    return {"content": granted}
+                gate._gh, gate._READY = fake, {}
+                if failures == 1:
+                    self.assertIs(READY_CHECK("o/r", self.SHA), True)
+                    continue
+                with self.assertRaises(gate.GateError):
+                    READY_CHECK("o/r", self.SHA)
+                self.assertNotIn(("o/r", self.SHA), gate._READY)
 
     def test_a_job_without_the_status_permission_still_writes_the_check(self):
         self.status_error = "gh api POST failed: Resource not accessible by integration (HTTP 403)"
