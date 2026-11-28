@@ -21,7 +21,8 @@ The base is the first parent of the merge commit the review checks out. The
 check never fails the pre-screen: when anything is missing or refused it says
 why and lists nothing, and every file keeps its normal review.
 
-Run by the gate's Project pre-screen job from the base branch:
+Run from the gate's commit by the routine review's Template check job and the deep
+review's own step, neither of which runs the PR's code:
     bindwright_templates.py FILES DIFF
 """
 
@@ -41,7 +42,7 @@ PRISTINE = ".bindwright/pristine.json"
 PIN = ".bindwright/helper.json"
 STAGING = ".bindwright/incoming/"
 RELEASES = "https://github.com/starfoxcom/bindwright/releases/download"
-# Together well under the pre-screen job's 300 s limit, which would fail the job.
+# Together well under the 240 s limit both review tiers run the check with.
 DOWNLOAD_SECONDS = 60
 RENDER_SECONDS = 120
 HEADING = "Bindwright template text, unedited"
