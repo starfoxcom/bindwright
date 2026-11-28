@@ -106,8 +106,11 @@ async function pullRequest(folder, digest, row) {
     git(root, "update-index", "--cacheinfo", `120000,${blob},${UNEDITED}`);
   }
   git(root, "commit", "-q", "-m", "update");
-  git(root, "checkout", "-q", "main");
-  git(root, "merge", "-q", "--no-ff", "pr", "-m", "merge");
+  // The merge commit is built from objects alone, so no checkout ever writes a link to disk:
+  // a link whose target is a whole file is past what a filesystem allows. `main` has not
+  // moved, so the merged tree is the PR's own.
+  const merge = git(root, "commit-tree", "pr^{tree}", "-p", "main", "-p", "pr", "-m", "merge");
+  git(root, "update-ref", "--no-deref", "HEAD", merge);
   put(folder, "files.txt", [UNEDITED, EDITED, ".bindwright/pristine.json"].join("\n") + "\n");
   return root;
 }
