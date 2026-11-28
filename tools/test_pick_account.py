@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -87,6 +88,40 @@ class PickTest(unittest.TestCase):
                     mock.patch("os.rmdir", side_effect=busy):
                 result = pick_account.probe(os.path.join(runner_temp, "no-such-cli"), "model", "token")
             self.assertEqual(result, (1, ""))
+
+    @unittest.skipUnless(hasattr(os, "killpg") and os.path.exists("/proc/self/stat"),
+                         "needs process groups and /proc to see the child")
+    def test_no_process_a_probe_starts_outlives_it(self):
+        # A CLI that leaves a child behind, then either answers or hangs past the timeout.
+        script = '#!/bin/sh\nsleep 60 &\necho $! > "$CHILD_PID"\n%s\n'
+        rows = [("the probe answers", 'echo \'[{"type": "result", "result": "OK"}]\'', 0),
+                ("the probe times out", "sleep 60", 1)]
+        for name, last_line, expected in rows:
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmp:
+                cli, pid_file = os.path.join(tmp, "cli"), os.path.join(tmp, "child.pid")
+                with open(cli, "w", encoding="utf-8") as fh:
+                    fh.write(script % last_line)
+                os.chmod(cli, 0o755)
+                with mock.patch.dict(os.environ, {"RUNNER_TEMP": tmp, "CHILD_PID": pid_file}), \
+                        mock.patch.object(pick_account, "PROBE_SECONDS", 2):
+                    status, _ = pick_account.probe(cli, "model", "token")
+                self.assertEqual(status, expected)
+                with open(pid_file, encoding="utf-8") as fh:
+                    self.assertFalse(_alive(int(fh.read())))
+
+
+def _alive(pid):
+    """Whether `pid` still runs, waiting up to 5 s for the system to reap a killed orphan."""
+    for _ in range(50):
+        try:
+            with open("/proc/%d/stat" % pid, encoding="utf-8") as fh:
+                if fh.read().rsplit(")", 1)[1].split()[0] == "Z":
+                    return False
+        except (FileNotFoundError, ProcessLookupError):
+            # Either one: the process was reaped, before the open or between it and the read.
+            return False
+        time.sleep(0.1)
+    return True
 
 
 FAKE_CLI = r'''
