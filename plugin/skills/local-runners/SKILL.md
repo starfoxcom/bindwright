@@ -28,7 +28,7 @@ Ask with the question tool, recommended option first:
 - **`kind: "options"`** (the repo has no CI jobs yet): one option per entry, each with what it would run (`runs`), the last being "Do nothing". Say these runners take jobs only once the repo has workflows that ask for them, and offer to write a first workflow for what the option runs, as a separate yes.
 - **`kind: "none"`:** the computer has no room for a runner beside the user's own work. Say so and go to step 4 without asking.
 
-A runner only takes jobs whose `runs-on` names its labels. Say which jobs would move (those running on `ubuntu-latest` today, when the runners will be Linux), and that the change is one line per job, plus `runner:` in `.github/review-gate.yml` for the AI review jobs. Offer those edits after the install, as a diff the user approves file by file.
+A runner only takes jobs whose `runs-on` names its labels. Say which jobs would move (those running on `ubuntu-latest` today, when the runners will be Linux), and that the change is one line per job. The AI review jobs stay on GitHub's machines: these runners take job after job on the same computer, so what one review leaves behind, files and processes, would sit beside the next job's account tokens. Offer those edits after the install, as a diff the user approves file by file.
 
 ## 4. Do nothing
 

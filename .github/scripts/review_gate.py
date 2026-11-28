@@ -448,9 +448,10 @@ STATUS_STATE = {"success": "success", "failure": "failure", None: "pending"}
 # A machine that runs more than one job keeps what a review leaves behind, files and
 # processes, for the next job, the steps that hold every account token included.
 SELF_HOSTED_WARNING = (
-    "::warning::The reviews run on a self-hosted runner. Register it as ephemeral "
-    "(config.sh --ephemeral, one job and then a fresh machine), or what one review leaves "
-    "behind stays beside the next job's account tokens.")
+    "::warning::The reviews run on a self-hosted runner. Give each job a fresh VM or "
+    "container, removed after it (config.sh --ephemeral alone only unregisters the runner "
+    "after one job), or what one review leaves behind stays beside the next job's account "
+    "tokens.")
 
 
 WORKFLOWS = (".github/workflows/claude-code-review.yml", ".github/workflows/claude.yml")
