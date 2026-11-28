@@ -2625,25 +2625,34 @@ jobs:
           # A commit status of the gate's name, once the gate script has set one
           # on this commit, still counts beside the failed check, so it fails
           # too. With none there it is left alone, since a status set here
-          # could never be cleared where the gate script writes none. A lookup
-          # is tried three times; one that never answers may have missed a
-          # status (after a reopen the merge counts the status alone), so the
-          # status is set then too.
+          # could never be cleared where the gate script writes none. Each
+          # lookup reads every page and is tried three times; a status lookup
+          # that never answers may have missed a status (after a reopen the
+          # merge counts the status alone), so the status is set then too.
+          lookup() {
+            for delay in 0 2 4; do
+              sleep "$delay"
+              if out=$(gh api --paginate "$1" --jq "$2" 2> /dev/null); then
+                printf '%s\n' "$out"
+                return 0
+              fi
+            done
+            return 1
+          }
           count=
-          for delay in 0 2 4; do
-            sleep "$delay"
-            count=$(gh api "repos/$REPO/commits/$HEAD_SHA/status?per_page=100" \
-              --jq '[.statuses[] | select(.context == "Review gate")] | length' 2> /dev/null || true)
-            case "$count" in ''|*[!0-9]*) count= ;; *) break ;; esac
-          done
+          if found=$(lookup "repos/$REPO/commits/$HEAD_SHA/statuses?per_page=100" \
+            '.[] | select(.context == "Review gate") | .state'); then
+            count=$(printf '%s' "$found" | grep -c . || true)
+          fi
           if [ "$count" != 0 ] && ! gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
             -f context="Review gate" -f "description=The review gate's files could not be checked out" > /dev/null; then
             echo "::warning::Could not mark the Review gate status as failed"
           fi
-          id=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=Review%20gate&per_page=100" \
-            --jq '[.check_runs[] | select(.name == "Review gate") | .id] | max // empty' 2> /dev/null || true)
-          # A failed lookup can print an error body instead of an id.
-          case "$id" in *[!0-9]*) id= ;; esac
+          id=
+          if found=$(lookup "repos/$REPO/commits/$HEAD_SHA/check-runs?check_name=Review%20gate&per_page=100" \
+            '.check_runs[] | select(.name == "Review gate") | .id'); then
+            id=$(printf '%s\n' "$found" | sort -n | tail -n 1)
+          fi
           if [ -z "$id" ] || ! gh api -X PATCH "repos/$REPO/check-runs/$id" \
             -f status=completed -f conclusion=failure \
             -f "output[title]=🔴 The review gate's files could not be checked out" \
