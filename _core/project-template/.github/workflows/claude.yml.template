@@ -913,6 +913,160 @@ jobs:
             echo "first_index=5" >> "$GITHUB_OUTPUT"
           fi
 
+      # The account the first attempt and its retry run on: the first account,
+      # counting from the first, that answers a one-line request on the deep
+      # model with its plan use under REVIEW_ACCOUNT_CEILING (see the header).
+      # pick_account.py decides, read from the gate's commit, or from the
+      # default branch's tip when that commit predates it (a PR can change
+      # neither). Neither holding it, or a failed pick, leaves the first
+      # account whose token is set. It runs before the credits run, the
+      # job's first model run, so no review has touched the runner while
+      # every token is in this one step.
+      - name: Pick the review's account
+        id: main-account
+        if: steps.brief.outcome == 'success' && steps.payer.outputs.main_on_key != 'yes' && steps.claude-cli.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 12
+        shell: bash
+        env:
+          CLI: ${{ steps.claude-cli.outputs.path }}
+          MODEL: ${{ steps.gate.outputs.deep_model }}
+          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
+          GATE_SHA: ${{ steps.gate.outputs.gate_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+        run: |
+          set -euo pipefail
+          script="$RUNNER_TEMP/pick_account_main.py"
+          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
+            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
+            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the review runs on the first account whose token is set"
+            exit 0
+          fi
+          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
+
+      # The fallback's CLI: the stable channel's release, one that has had time
+      # in the field, so a newest release that installs but then breaks does
+      # not take out the fallback too. Installed before any review runs, so
+      # the fallback's account is probed with it too.
+      # When the stable release is the newest one, the job's copy is reused.
+      # So is it when the stable lookup or install fails, so this step never
+      # costs the fallback its run.
+      - name: Install the stable Claude Code for the fallback
+        id: claude-cli-stable
+        working-directory: ${{ runner.temp }}
+        timeout-minutes: 30
+        if: steps.brief.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          DISABLE_AUTOUPDATER: "1"
+          NEWEST: ${{ steps.claude-cli.outputs.version }}
+          NEWEST_PATH: ${{ steps.claude-cli.outputs.path }}
+          NODE_BIN: ${{ steps.linux-node.outputs.bin }}
+        run: |
+          set -euo pipefail
+          # No stable copy: the fallback uses the job's newest copy, and is
+          # skipped only when there is none either.
+          no_stable() {
+            if [ -n "$NEWEST_PATH" ]; then
+              echo "::warning::$1: the fallback runs on the job's newest copy"
+              echo "path=$NEWEST_PATH" >> "$GITHUB_OUTPUT"
+              echo "version=$NEWEST" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::$1, and the newest release did not install either: no fallback model"
+            exit 1
+          }
+          RUNNER_PATH="$PATH"
+          if [ -n "$NODE_BIN" ]; then
+            PATH="$NODE_BIN:$PATH"
+          fi
+          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" = win32 ] || [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" != /* ]]; then
+            no_stable "No usable Node and npm on this runner"
+          fi
+          STABLE=""
+          for attempt in 1 2 3; do
+            if STABLE=$(timeout 60 npm view --global --cache "$RUNNER_TEMP/npm-cache" "@anthropic-ai/claude-code@stable" version); then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              no_stable "Could not look up the stable Claude Code release"
+            fi
+            sleep $((attempt * 20))
+          done
+          STABLE=$(printf '%s' "$STABLE" | tr -d '[:space:]')
+          if [[ ! "$STABLE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            no_stable "The stable channel returned no version"
+          fi
+          if [ "$STABLE" = "$NEWEST" ] && [ -n "$NEWEST_PATH" ]; then
+            echo "::notice::The stable release is the newest one ($STABLE): the fallback reuses the job's copy"
+            echo "path=$NEWEST_PATH" >> "$GITHUB_OUTPUT"
+            echo "version=$STABLE" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm-stable" --cache "$RUNNER_TEMP/npm-cache" --no-audit --no-fund --ignore-scripts=false --include=optional "@anthropic-ai/claude-code@$STABLE"; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              no_stable "Claude Code $STABLE install failed three times"
+            fi
+            sleep $((attempt * 20))
+          done
+          src="$(readlink -f "$RUNNER_TEMP/claude-npm-stable/bin/claude" || true)"
+          dest="$RUNNER_TEMP/claude-cli-stable/claude"
+          mkdir -p "$(dirname "$dest")"
+          cp "$src" "$dest" || no_stable "Claude Code $STABLE left no binary to copy"
+          chmod +x "$dest"
+          # Checked as the later steps run it, without the brought Node on PATH.
+          installed="$(PATH="$RUNNER_PATH" timeout -k 10 60 "$dest" --version 2>/dev/null | awk '{print $1}' || true)"
+          if [ "$installed" != "$STABLE" ]; then
+            no_stable "expected Claude Code $STABLE, got '$installed'"
+          fi
+          echo "::notice::The fallback runs the stable Claude Code release $installed"
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
+          echo "version=$installed" >> "$GITHUB_OUTPUT"
+
+      # The fallback's account, picked as "Pick the review's account" picks
+      # one, on the fallback model and the stable CLI copy, before any review
+      # runs, for the same reason, with the script from the same place. An
+      # attempt that uses up its account's plan while it runs leaves the
+      # fallback on that account all the same: the fallback then fails, the
+      # gate fails closed, and a re-run picks again. Neither the gate's
+      # commit nor the default branch holding the script, or a failed pick,
+      # leaves the first attempt's account.
+      - name: Pick the fallback's account
+        id: account
+        if: steps.claude-cli-stable.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 12
+        shell: bash
+        env:
+          CLI: ${{ steps.claude-cli-stable.outputs.path }}
+          MODEL: ${{ steps.gate.outputs.deep_fallback_model }}
+          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
+          GATE_SHA: ${{ steps.gate.outputs.gate_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+        run: |
+          set -euo pipefail
+          script="$RUNNER_TEMP/pick_account_fallback.py"
+          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
+            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
+            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the fallback runs on the first attempt's account"
+            exit 0
+          fi
+          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
+
       # First attempt: the plan's monthly API credits, as in the routine tier.
       # Like every attempt it posts nothing: it returns its review as
       # structured output, and only a review the gate's reader reads as 🟢
@@ -1015,40 +1169,6 @@ jobs:
           print(f"::notice::Deep review on the API credits: ${r.get('total_cost_usd')} over {r.get('num_turns')} turns")
           PYEOF
           ANSWER_FROM="$out" bash "$RUNNER_TEMP/deep-answer.sh"
-
-      # The account the first attempt and its retry run on: the first account,
-      # counting from the first, that answers a one-line request on the deep
-      # model with its plan use under REVIEW_ACCOUNT_CEILING (see the header).
-      # pick_account.py decides, read from the gate's commit, or from the
-      # default branch's tip when that commit predates it (a PR can change
-      # neither). Neither holding it, or a failed pick, leaves the first
-      # account whose token is set.
-      - name: Pick the review's account
-        id: main-account
-        if: steps.brief.outcome == 'success' && steps.claude_credits.outcome != 'success' && steps.payer.outputs.main_on_key != 'yes' && steps.claude-cli.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 12
-        shell: bash
-        env:
-          CLI: ${{ steps.claude-cli.outputs.path }}
-          MODEL: ${{ steps.gate.outputs.deep_model }}
-          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
-          GATE_SHA: ${{ steps.gate.outputs.gate_sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
-          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
-          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
-          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
-        run: |
-          set -euo pipefail
-          script="$RUNNER_TEMP/pick_account_main.py"
-          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
-            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
-            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the review runs on the first account whose token is set"
-            exit 0
-          fi
-          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
 
       # The review action, run with a prompt, reviews the checkout as it finds
       # it and checks nothing out itself. On a comment event this checkout is
@@ -1250,136 +1370,24 @@ jobs:
             echo "posted=no" >> "$GITHUB_OUTPUT"
           fi
 
-      # The fallback's CLI: the stable channel's release, one that has had time
-      # in the field, so a newest release that installs but then breaks does
-      # not take out the fallback too.
-      # When the stable release is the newest one, the job's copy is reused.
-      # So is it when the stable lookup or install fails, so this step never
-      # costs the fallback its run.
-      - name: Install the stable Claude Code for the fallback
-        id: claude-cli-stable
-        working-directory: ${{ runner.temp }}
-        timeout-minutes: 30
-        if: |
-          steps.posted-1.outputs.posted == 'no' && (
-          (steps.failure_class.outputs.usage_limit == 'true') ||
-          (steps.posted-2.outputs.posted == 'no'))
-        continue-on-error: true
-        shell: bash
-        env:
-          DISABLE_AUTOUPDATER: "1"
-          NEWEST: ${{ steps.claude-cli.outputs.version }}
-          NEWEST_PATH: ${{ steps.claude-cli.outputs.path }}
-          NODE_BIN: ${{ steps.linux-node.outputs.bin }}
-        run: |
-          set -euo pipefail
-          # No stable copy: the fallback uses the job's newest copy, and is
-          # skipped only when there is none either.
-          no_stable() {
-            if [ -n "$NEWEST_PATH" ]; then
-              echo "::warning::$1: the fallback runs on the job's newest copy"
-              echo "path=$NEWEST_PATH" >> "$GITHUB_OUTPUT"
-              echo "version=$NEWEST" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "::warning::$1, and the newest release did not install either: no fallback model"
-            exit 1
-          }
-          RUNNER_PATH="$PATH"
-          if [ -n "$NODE_BIN" ]; then
-            PATH="$NODE_BIN:$PATH"
-          fi
-          if [ "$(timeout 30 node -p process.platform 2>/dev/null || true)" = win32 ] || [[ "$(timeout 60 npm root -g --cache "$RUNNER_TEMP/npm-cache" 2>/dev/null || true)" != /* ]]; then
-            no_stable "No usable Node and npm on this runner"
-          fi
-          STABLE=""
-          for attempt in 1 2 3; do
-            if STABLE=$(timeout 60 npm view --global --cache "$RUNNER_TEMP/npm-cache" "@anthropic-ai/claude-code@stable" version); then
-              break
-            fi
-            if [ "$attempt" = 3 ]; then
-              no_stable "Could not look up the stable Claude Code release"
-            fi
-            sleep $((attempt * 20))
-          done
-          STABLE=$(printf '%s' "$STABLE" | tr -d '[:space:]')
-          if [[ ! "$STABLE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            no_stable "The stable channel returned no version"
-          fi
-          if [ "$STABLE" = "$NEWEST" ] && [ -n "$NEWEST_PATH" ]; then
-            echo "::notice::The stable release is the newest one ($STABLE): the fallback reuses the job's copy"
-            echo "path=$NEWEST_PATH" >> "$GITHUB_OUTPUT"
-            echo "version=$STABLE" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          for attempt in 1 2 3; do
-            if timeout 300 npm install --global --prefix "$RUNNER_TEMP/claude-npm-stable" --cache "$RUNNER_TEMP/npm-cache" --no-audit --no-fund --ignore-scripts=false --include=optional "@anthropic-ai/claude-code@$STABLE"; then
-              break
-            fi
-            if [ "$attempt" = 3 ]; then
-              no_stable "Claude Code $STABLE install failed three times"
-            fi
-            sleep $((attempt * 20))
-          done
-          src="$(readlink -f "$RUNNER_TEMP/claude-npm-stable/bin/claude" || true)"
-          dest="$RUNNER_TEMP/claude-cli-stable/claude"
-          mkdir -p "$(dirname "$dest")"
-          cp "$src" "$dest" || no_stable "Claude Code $STABLE left no binary to copy"
-          chmod +x "$dest"
-          # Checked as the later steps run it, without the brought Node on PATH.
-          installed="$(PATH="$RUNNER_PATH" timeout -k 10 60 "$dest" --version 2>/dev/null | awk '{print $1}' || true)"
-          if [ "$installed" != "$STABLE" ]; then
-            no_stable "expected Claude Code $STABLE, got '$installed'"
-          fi
-          echo "::notice::The fallback runs the stable Claude Code release $installed"
-          echo "path=$dest" >> "$GITHUB_OUTPUT"
-          echo "version=$installed" >> "$GITHUB_OUTPUT"
-
-      # The fallback's account, picked as "Pick the review's account" picks
-      # one, on the fallback model and the stable CLI copy, with the script
-      # from the same place. Neither the gate's commit nor the default branch
-      # holding it, or a failed pick, leaves the first attempt's account.
-      - name: Pick the fallback's account
-        id: account
-        if: steps.claude-cli-stable.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 12
-        shell: bash
-        env:
-          CLI: ${{ steps.claude-cli-stable.outputs.path }}
-          MODEL: ${{ steps.gate.outputs.deep_fallback_model }}
-          CEILING: ${{ vars.REVIEW_ACCOUNT_CEILING }}
-          GATE_SHA: ${{ steps.gate.outputs.gate_sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
-          TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
-          TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
-          TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
-        run: |
-          set -euo pipefail
-          script="$RUNNER_TEMP/pick_account_fallback.py"
-          if ! git show "$GATE_SHA:.github/scripts/pick_account.py" > "$script" 2>/dev/null \
-            && ! git show "refs/remotes/origin/$DEFAULT_BRANCH:.github/scripts/pick_account.py" > "$script" 2>/dev/null; then
-            echo "::notice::Neither the gate's commit nor the default branch has an account picker: the fallback runs on the first attempt's account"
-            exit 0
-          fi
-          python3 -I "$script" "$CLI" "$MODEL" --ceiling "$CEILING" --output "$GITHUB_OUTPUT"
-
       # Attempt 2b: the fallback model from the settings. Fires on a usage limit,
       # or when the same-model retry also left no verdict. It runs only on the
       # CLI copy "Install the stable Claude Code for the fallback" picked, on the
-      # account the step above picked. The Evaluate step below owns the
+      # account "Pick the fallback's account" picked. The Evaluate step below owns the
       # outcome, so every attempt continues on error.
       - name: Run Claude (fallback model)
         id: claude_fallback
         # The fallback model at high effort runs longest: a wider limit.
         timeout-minutes: 45
-        if: steps.claude-cli-stable.outcome == 'success'
+        if: |
+          steps.posted-1.outputs.posted == 'no' && (
+          (steps.failure_class.outputs.usage_limit == 'true') ||
+          (steps.posted-2.outputs.posted == 'no')) &&
+          steps.claude-cli-stable.outcome == 'success'
         continue-on-error: true
         uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67  # v1 (v1.0.286)
         env:
-          # The account the step above picked; an index from 2 up is set only
+          # The account "Pick the fallback's account" picked; an index from 2 up is set only
           # for an account whose token is set, so its secret is never empty.
           # Without an index from it, the first attempt's account, and without
           # that either, the first account that has a token, as "Pick who pays"
