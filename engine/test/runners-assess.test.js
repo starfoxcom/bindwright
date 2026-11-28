@@ -13,9 +13,24 @@ import {
   NO_CI_OPTIONS,
   countJobs,
   hardwareLimit,
+  isReviewRun,
   recommend,
   runStats,
 } from "../../helper/hooks/runners-assess.mjs";
+
+const reviewRunRows = [
+  ["the deep review workflow", ".github/workflows/claude.yml", true],
+  ["the routine review workflow", ".github/workflows/claude-code-review.yml", true],
+  ["a review workflow at a ref", ".github/workflows/claude.yml@refs/heads/main", true],
+  ["another workflow", ".github/workflows/tests.yml", false],
+  ["a name that only ends like a review workflow", ".github/workflows/not-claude.yml", false],
+  ["a dynamic run", "dynamic/pages/pages-build-deployment", false],
+  ["no path", undefined, false],
+];
+
+for (const [name, path, expected] of reviewRunRows) {
+  test(`isReviewRun: ${name}`, () => assert.equal(isReviewRun(path), expected));
+}
 
 const script = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "helper", "hooks", "runners-assess.mjs");
 
@@ -114,7 +129,7 @@ for (const [name, runs, expected] of runRows) {
   test(`runStats: ${name}`, () => assert.deepEqual(runStats(runs), expected));
 }
 
-const [one, two, three] = NO_CI_OPTIONS;
+const [one, two] = NO_CI_OPTIONS;
 const nothing = { count: 0, runs: "nothing" };
 
 const recommendRows = [
@@ -122,10 +137,10 @@ const recommendRows = [
     { limit: 0, jobs: 3, maxParallel: 3 }, { kind: "none", limitedBy: "hardware" }],
   ["no CI with room for one lists only the one option",
     { limit: 1, jobs: 0, maxParallel: 0 }, { kind: "options", options: [one, nothing] }],
-  ["no CI with room for two drops the three-runner option",
+  ["no CI with room for two lists both",
     { limit: 2, jobs: 0, maxParallel: 0 }, { kind: "options", options: [one, two, nothing] }],
-  ["no CI with room for three lists all three",
-    { limit: 3, jobs: 0, maxParallel: 0 }, { kind: "options", options: [one, two, three, nothing] }],
+  ["no CI with room past two still lists both",
+    { limit: 3, jobs: 0, maxParallel: 0 }, { kind: "options", options: [one, two, nothing] }],
   ["jobs run at the parallel count when the hardware has room",
     { limit: 4, jobs: 5, maxParallel: 2 }, { kind: "count", count: 2, limitedBy: "load", wanted: 2 }],
   ["no overlap seen still wants one runner",
@@ -150,7 +165,7 @@ function runCli(args, configDir) {
   return spawnSync(process.execPath, [script, ...args], { encoding: "utf8", env });
 }
 
-test("the CLI prints one JSON line for a two-job repo when gh is missing", () => {
+test("the CLI prints one JSON line for a two-job repo, review workflows left out, when gh is missing", () => {
   const temp = mkdtempSync(join(tmpdir(), "bw-runners-"));
   try {
     const repo = join(temp, "repo");
@@ -159,6 +174,9 @@ test("the CLI prints one JSON line for a two-job repo when gh is missing", () =>
     mkdirSync(configDir);
     writeFileSync(join(repo, ".github", "workflows", "ci.yml"),
       "jobs:\n  build:\n    runs-on: ubuntu-latest\n  test:\n    runs-on: ubuntu-latest\n");
+    for (const review of ["claude-code-review.yml", "claude.yml"]) {
+      writeFileSync(join(repo, ".github", "workflows", review), "jobs:\n  review:\n    runs-on: ubuntu-latest\n");
+    }
     const result = runCli([repo], configDir);
     assert.equal(result.status, 0);
     const out = JSON.parse(result.stdout);
