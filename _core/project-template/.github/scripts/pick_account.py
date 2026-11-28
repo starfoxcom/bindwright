@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -114,12 +115,34 @@ def _run_probe(cli, model, home, env):
     answer_path = os.path.join(home, "answer.json")
     try:
         with open(answer_path, "w", encoding="utf-8") as answer:
-            done = subprocess.run(args, cwd=home, env=env, stdin=subprocess.DEVNULL,
-                                  stdout=answer, stderr=subprocess.DEVNULL, timeout=PROBE_SECONDS)
-    except (OSError, subprocess.TimeoutExpired):
+            # A session of its own, so every process the CLI starts can be ended with it.
+            status = _wait_and_end(subprocess.Popen(
+                args, cwd=home, env=env, stdin=subprocess.DEVNULL, stdout=answer,
+                stderr=subprocess.DEVNULL, start_new_session=True))
+    except OSError:
+        return 1, ""
+    if status is None:
         return 1, ""
     with open(answer_path, encoding="utf-8", errors="replace") as answer:
-        return done.returncode, answer.read()
+        return status, answer.read()
+
+
+def _wait_and_end(child):
+    """The child's exit status, or None when it runs past PROBE_SECONDS. Either way
+    every process left in its group is ended, so none keeps the token into later steps."""
+    try:
+        status = child.wait(timeout=PROBE_SECONDS)
+    except subprocess.TimeoutExpired:
+        status = None
+    if hasattr(os, "killpg"):
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    else:
+        child.kill()
+    child.wait()
+    return status
 
 
 def pick(cli, model, ceiling, tokens, run_probe=probe):
