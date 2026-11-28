@@ -128,9 +128,121 @@ jobs:
               echo "::notice::$ASKER has no write access (permission: $PERM), so no deep review runs" ;;
           esac
 
+  # The Review gate's writes, which set its commit status, run in jobs of
+  # their own: this one before the review and "Evaluate the deep verdict"
+  # after it. The job that runs the model holds no statuses: write, so
+  # nothing a review leaves running can reach a token that sets what the
+  # merge counts. This job also fixes the PR's head and base commits for
+  # the whole run, so the hold, the review and the verdict see the same ones.
+  hold:
+    name: Hold the Review gate for the deep review
+    needs: authorize
+    if: needs.authorize.outputs.allowed == 'true'
+    runs-on: ${{ fromJSON(needs.authorize.outputs.runner_labels || '["ubuntu-latest"]') }}
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
+      statuses: write
+    outputs:
+      pr_number: ${{ steps.pr-head.outputs.pr_number }}
+      head_sha: ${{ steps.pr-head.outputs.head_sha }}
+      base_sha: ${{ steps.pr-head.outputs.base_sha }}
+      base_ref: ${{ steps.pr-head.outputs.base_ref }}
+      stamp: ${{ steps.pr-head.outputs.stamp }}
+      gate_sha: ${{ steps.gate.outputs.gate_sha }}
+      checks: ${{ steps.gate.outputs.checks }}
+    steps:
+      - name: Resolve PR HEAD SHA
+        id: pr-head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::notice::Not on a PR — skipping HEAD SHA resolution"
+            echo "head_sha=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Retried, then a hard stop: without these the gate cannot be read
+          # or written, and a review on guessed commits must not run.
+          for attempt in 1 2 3; do
+            read -r HEAD_SHA BASE_SHA BASE_REF < <(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '"\(.head.sha) \(.base.sha) \(.base.ref)"') || true
+            if [[ $HEAD_SHA =~ ^[0-9a-f]{40}$ && $BASE_SHA =~ ^[0-9a-f]{40}$ && -n $BASE_REF ]]; then
+              break
+            fi
+            HEAD_SHA="" BASE_SHA="" BASE_REF=""
+            [ "$attempt" = 3 ] || sleep 10
+          done
+          if [ -z "$HEAD_SHA" ] || [ -z "$BASE_SHA" ] || [ -z "$BASE_REF" ]; then
+            echo "::error::Could not resolve the head and base commits of PR $PR_NUMBER"
+            exit 1
+          fi
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          # The order stamp for this run's gate writes: the moment this job
+          # started, in nanoseconds, not the run id. Each approved request's
+          # review job joins the review group and cancels the run in flight,
+          # so the run that started last is the one whose verdict counts, even
+          # when it is an older run re-run by hand or the queue let requests
+          # in out of run order. The runs it cancelled carry older stamps, so
+          # their last writes are ignored.
+          echo "stamp=$(date +%s%N)" >> "$GITHUB_OUTPUT"
+          echo "::notice::PR #$PR_NUMBER HEAD SHA = $HEAD_SHA, base = $BASE_SHA"
+
+      # The gate script and settings from the PR's base commit, or from the
+      # default branch when the base has no gate yet, read through the API so
+      # this job checks nothing out.
+      - name: Fetch the gate script and settings
+        id: gate
+        if: steps.pr-head.outputs.head_sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ steps.pr-head.outputs.base_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -eo pipefail
+          dir="$RUNNER_TEMP/gate"
+          mkdir -p "$dir"
+          fetch() {
+            gh api "repos/$REPO/contents/$1?ref=$2" --jq .content | base64 -d > "$3"
+          }
+          GATE_SHA="$BASE_SHA"
+          if ! fetch .github/scripts/review_gate.py "$GATE_SHA" "$dir/review_gate.py"; then
+            GATE_SHA=$(gh api "repos/$REPO/commits/$DEFAULT_BRANCH" --jq .sha)
+            echo "::notice::The base commit has no review gate; using the gate from the default branch ($GATE_SHA)."
+            fetch .github/scripts/review_gate.py "$GATE_SHA" "$dir/review_gate.py"
+          fi
+          echo "script=$dir/review_gate.py" >> "$GITHUB_OUTPUT"
+          echo "gate_sha=$GATE_SHA" >> "$GITHUB_OUTPUT"
+          fetch .github/review-gate.yml "$GATE_SHA" "$dir/review-gate.yml" || rm -f "$dir/review-gate.yml"
+          if ! out=$(python3 -I "$dir/review_gate.py" settings --file "$dir/review-gate.yml"); then
+            echo "::error::Bad review gate settings: $out"
+            exit 1
+          fi
+          printf '%s\n' "$out" | sed -n '/^checks=/p' >> "$GITHUB_OUTPUT"
+
+      # A deep review now counts as asked for, and its earlier result (if any)
+      # no longer stands: the gate waits on this run's verdict. With
+      # `checks: two` the branch rules still require the older pair, so a
+      # failed write to the new check must not skip the review and leave
+      # Claude On-Demand failed: it stays visible on this step only.
+      - name: Hold the Review gate for the deep review
+        if: steps.pr-head.outputs.head_sha != ''
+        continue-on-error: ${{ steps.gate.outputs.checks == 'two' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I "${{ steps.gate.outputs.script }}" upsert --repo "${{ github.repository }}" \
+            --sha "${{ steps.pr-head.outputs.head_sha }}" --escalated --deep none \
+            --order "${{ steps.pr-head.outputs.stamp }}.${{ github.run_attempt }}.0" --note "A deep review is running."
+
   claude:
     name: On-demand deep review (@claude)
-    needs: authorize
+    needs: [authorize, hold]
     if: needs.authorize.outputs.allowed == 'true'
     # Job-level concurrency, entered only by approved requests: a progress
     # comment ("Claude Code is working…") and anyone without
@@ -147,12 +259,17 @@ jobs:
       issues: write
       id-token: write
       actions: read
-      # Needed to PATCH the `Claude On-Demand` check-run on the PR HEAD SHA
-      # both at job start (in_progress) and after the deep review completes
-      # (success/failure based on verdict).
+      # Needed to mark the `Claude On-Demand` check-run on the PR HEAD SHA
+      # in_progress while the review runs; "Evaluate the deep verdict"
+      # finishes it.
       checks: write
-      # Lets the gate script set the Review gate's commit status.
-      statuses: write
+    # What "Evaluate the deep verdict" reads: the review's start, the model
+    # whose review was posted, and how each attempt ended.
+    outputs:
+      floor: ${{ steps.floor.outputs.at }}
+      checks: ${{ steps.gate.outputs.checks }}
+      reviewer: ${{ steps.post.outcome != 'success' && 'none' || steps.claude_credits.outcome == 'success' && format('{0} {1} (API credits)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-1.outputs.posted == 'yes' && format('{0} {1}{2}', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort, steps.payer.outputs.main_on_key == 'yes' && ' (API credits)' || (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '' && (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '1' && format(' (account {0})', (steps.main-account.outputs.index || steps.payer.outputs.first_index)) || '') || steps.posted-2.outputs.posted == 'yes' && format('{0} {1} (retry{2})', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort, steps.payer.outputs.main_on_key == 'yes' && ', API credits' || (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '' && (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '1' && format(', account {0}', (steps.main-account.outputs.index || steps.payer.outputs.first_index)) || '') || steps.posted-3.outputs.posted == 'yes' && format('{0} {1} (fallback{2}{3})', steps.gate.outputs.deep_fallback_model, steps.gate.outputs.deep_fallback_effort, (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) != '' && (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) != '1' && format(', account {0}', (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index)) || '', steps.payer.outputs.key_only == 'yes' && ', API credits' || '') || 'none' }}
+      attempts: "API credits: ${{ steps.claude_credits.outcome || 'skipped' }}, first: ${{ steps.claude_attempt_1.outcome || 'skipped' }}, usage limit: ${{ steps.failure_class.outputs.usage_limit || 'no' }}, retry: ${{ steps.claude_retry.outcome || 'skipped' }}, fallback: ${{ steps.claude_fallback.outcome || 'skipped' }}, newest CLI: ${{ steps.claude-cli.outputs.version || 'not installed' }}, fallback CLI: ${{ steps.claude-cli-stable.outputs.version || 'none' }}"
     # What every deep attempt is told and returns. Attempts post nothing:
     # each returns its review as structured output, and "Post the deep
     # review" posts the first one the gate can read.
@@ -235,48 +352,30 @@ jobs:
           printf '%s\n' '* !diff -text !eol !working-tree-encoding !filter !ident' > .git/info/attributes
           git rm -rq --cached --ignore-unmatch . && git reset -q --hard
 
-      # ── Resolve PR HEAD SHA once for downstream Checks API calls ──────────
-      # claude.yml fires on issue_comment events, where the PR head SHA is
-      # not directly in the event payload. Resolve it via the PR API and
-      # expose it as a step output for the upsert + finalize steps.
+      # The PR's commits and the order stamp as "Hold the Review gate for the
+      # deep review" fixed them, so the review and the verdict use the same
+      # ones as the hold.
       - name: Resolve PR HEAD SHA
         id: pr-head
         env:
-          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.hold.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.hold.outputs.head_sha }}
+          BASE_SHA: ${{ needs.hold.outputs.base_sha }}
+          BASE_REF: ${{ needs.hold.outputs.base_ref }}
+          STAMP: ${{ needs.hold.outputs.stamp }}
         run: |
-          PR_NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
-          if [ -z "$PR_NUMBER" ]; then
+          if [ -z "$HEAD_SHA" ]; then
             echo "::notice::Not on a PR — skipping HEAD SHA resolution"
             echo "head_sha=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Three tries: one bad reply from the API must not end the review.
-          for attempt in 1 2 3; do
-            # An error reply is printed raw, so only two commit ids count as an answer.
-            read -r HEAD_SHA BASE_SHA BASE_REF < <(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '"\(.head.sha) \(.base.sha) \(.base.ref)"') || true
-            if [[ $HEAD_SHA =~ ^[0-9a-f]{40}$ && $BASE_SHA =~ ^[0-9a-f]{40}$ && -n $BASE_REF ]]; then
-              break
-            fi
-            HEAD_SHA="" BASE_SHA="" BASE_REF=""
-            [ "$attempt" = 3 ] || sleep 10
-          done
-          if [ -z "$HEAD_SHA" ] || [ -z "$BASE_SHA" ] || [ -z "$BASE_REF" ]; then
-            echo "::error::Could not resolve the head and base commits of PR $PR_NUMBER"
-            exit 1
-          fi
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
-          # The order stamp for this run's gate writes: the moment this job
-          # started, in nanoseconds, not the run id. Each approved request
-          # joins the review group above and cancels the run in flight, so
-          # the run that started last is the one whose verdict counts, even
-          # when it is an older run re-run by hand or the queue let requests
-          # in out of run order. The runs it cancelled carry older stamps, so
-          # their last writes are ignored.
-          echo "stamp=$(date +%s%N)" >> "$GITHUB_OUTPUT"
-          echo "::notice::PR #$PR_NUMBER HEAD SHA = $HEAD_SHA, base = $BASE_SHA"
+          {
+            echo "pr_number=$PR_NUMBER"
+            echo "head_sha=$HEAD_SHA"
+            echo "base_sha=$BASE_SHA"
+            echo "base_ref=$BASE_REF"
+            echo "stamp=$STAMP"
+          } >> "$GITHUB_OUTPUT"
 
       # The gate's script and settings from the PR's base commit, kept outside
       # the checkout: the review steps switch the checkout to the PR's own
@@ -285,8 +384,6 @@ jobs:
       # fetches the base and head commits when they are not local yet (pushed
       # after the checkout), so the credits review below needs no token of
       # its own for git: the reviewer it starts can read its environment.
-      # The script's path is written before the settings are read, so a bad
-      # settings file still leaves Evaluate a script to fail the gate with.
       # A base commit from before the gate (an old release line) has no
       # script; its PRs take the gate from the default branch's tip, which a
       # PR cannot change either, as the routine review does.
@@ -297,19 +394,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ steps.pr-head.outputs.base_sha }}
           HEAD_SHA: ${{ steps.pr-head.outputs.head_sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          # The gate's commit "Hold the Review gate for the deep review" picked.
+          GATE_SHA: ${{ needs.hold.outputs.gate_sha }}
         run: |
           dir="$RUNNER_TEMP/gate"
           mkdir -p "$dir"
-          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || ! git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null; then
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || ! git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null \
+              || ! git cat-file -e "$GATE_SHA^{commit}" 2>/dev/null; then
             auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
             echo "::add-mask::$auth"
-            git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --quiet --no-tags origin "$BASE_SHA" "$HEAD_SHA"
-          fi
-          GATE_SHA="$BASE_SHA"
-          if ! git cat-file -e "$BASE_SHA:.github/scripts/review_gate.py" 2>/dev/null; then
-            GATE_SHA=$(git rev-parse --verify --quiet "refs/remotes/origin/$DEFAULT_BRANCH^{commit}")
-            echo "::notice::The base commit has no review gate; using the gate from the default branch ($GATE_SHA)."
+            git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --quiet --no-tags origin "$BASE_SHA" "$HEAD_SHA" "$GATE_SHA"
           fi
           git show "$GATE_SHA:.github/scripts/review_gate.py" > "$dir/review_gate.py"
           echo "script=$dir/review_gate.py" >> "$GITHUB_OUTPUT"
@@ -340,21 +434,6 @@ jobs:
             printf '%s\n' "$out" | sed -n 's/^fallback_\(model\|effort\)=/deep_fallback_\1=/p' >> "$GITHUB_OUTPUT"
           fi
 
-      # A deep review now counts as asked for, and its earlier result (if any)
-      # no longer stands: the gate waits on this run's verdict. With
-      # `checks: two` the branch rules still require the older pair, so a
-      # failed write to the new check must not skip the review and leave
-      # Claude On-Demand failed: it stays visible on this step only.
-      - name: Hold the Review gate for the deep review
-        if: steps.pr-head.outputs.head_sha != ''
-        continue-on-error: ${{ steps.gate.outputs.checks == 'two' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 -I "${{ steps.gate.outputs.script }}" upsert --repo "${{ github.repository }}" \
-            --sha "${{ steps.pr-head.outputs.head_sha }}" --escalated --deep none \
-            --order "${{ steps.pr-head.outputs.stamp }}.${{ github.run_attempt }}.0" --note "A deep review is running."
-
       # ── Upsert Claude On-Demand check to in_progress ──────────────────────
       # claude-code-review.yml's init-gate job created the check at
       # status=in_progress; routine auto-escalation may have already PATCHed
@@ -376,7 +455,7 @@ jobs:
             gh api "repos/$REPO/check-runs/$CHECK_ID" -X PATCH \
               -F status="in_progress" \
               -F "output[title]=Deep review running" \
-              -F "output[summary]=The deep reviewer is running. This check will be updated to success/failure when the Evaluate deep-tier verdict step parses the completion comment. If no deep run is alive, ask again with a comment starting with \`@claude review this PR\`."
+              -F "output[summary]=The deep reviewer is running. This check will be updated to success/failure when the deep verdict job parses the completion comment. If no deep run is alive, ask again with a comment starting with \`@claude review this PR\`."
             echo "::notice::Set existing Claude On-Demand check $CHECK_ID to in_progress"
           else
             gh api "repos/$REPO/check-runs" -X POST \
@@ -400,11 +479,11 @@ jobs:
             gh api "repos/$REPO/check-runs/$CHECK_ID" -X PATCH \
               -F status="in_progress" \
               -F "output[title]=Deep review running" \
-              -F "output[summary]=The deep reviewer is running. This check will be updated to success/failure when the Evaluate deep-tier verdict step parses the completion comment. If no deep run is alive, ask again with a comment starting with \`@claude review this PR\`." >/dev/null || true
+              -F "output[summary]=The deep reviewer is running. This check will be updated to success/failure when the deep verdict job parses the completion comment. If no deep run is alive, ask again with a comment starting with \`@claude review this PR\`." >/dev/null || true
           fi
 
       # Comments older than this moment cannot be this run's verdict: a run
-      # this one cancelled is gone by now (the gate write above alone takes
+      # this one cancelled is gone by now (the checkout above alone takes
       # seconds after this job joined the group), and every review attempt
       # starts after it.
       # With `checks: two` it also marks Claude On-Demand running once more
@@ -1526,6 +1605,37 @@ jobs:
         if: always() && steps.pr-checkout.outcome == 'success'
         run: git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
 
+  # The deep verdict's writes to the Review gate, in a job of its own (see
+  # the hold job). It runs whatever happened to the review job, so a review
+  # that never finished still fails the gate closed.
+  verdict:
+    name: Evaluate the deep verdict
+    needs: [authorize, hold, claude]
+    if: always() && needs.hold.outputs.head_sha != ''
+    runs-on: ${{ fromJSON(needs.authorize.outputs.runner_labels || '["ubuntu-latest"]') }}
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      checks: write
+      statuses: write
+    steps:
+      # The gate's commit the hold job picked, read through the API so this
+      # job checks nothing out.
+      - name: Fetch the gate script
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          GATE_SHA: ${{ needs.hold.outputs.gate_sha }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/gate"
+          if [ -n "$GATE_SHA" ] && gh api "repos/$REPO/contents/.github/scripts/review_gate.py?ref=$GATE_SHA" \
+              --jq .content | base64 -d > "$RUNNER_TEMP/gate/review_gate.py"; then
+            echo "script=$RUNNER_TEMP/gate/review_gate.py" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Evaluate deep-tier verdict
         # Reads this run's deep verdict and writes it into the Review gate on
         # the PR head commit, where the script combines it with the routine
@@ -1541,19 +1651,19 @@ jobs:
         # so neither a prior push's 🟢 nor one from a run this one cancelled
         # can stand in for this run. No review posted by this run is an error;
         # a comment without a 🔴/🟢 line is a missing verdict. Both fail closed.
-        if: always() && steps.pr-head.outputs.head_sha != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.pr-head.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.pr-head.outputs.head_sha }}
+          PR_NUMBER: ${{ needs.hold.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.hold.outputs.head_sha }}
           GATE: ${{ steps.gate.outputs.script }}
-          CHECKS: ${{ steps.gate.outputs.checks }}
-          FLOOR: ${{ steps.floor.outputs.at }}
+          REPO_NAME: ${{ github.repository }}
+          CHECKS: ${{ needs.claude.outputs.checks || needs.hold.outputs.checks }}
+          FLOOR: ${{ needs.claude.outputs.floor }}
           # The model whose review was posted, for the check summaries: the job
           # name and a green first step cannot tell (every attempt continues on
           # error).
-          REVIEWER: ${{ steps.post.outcome != 'success' && 'none' || steps.claude_credits.outcome == 'success' && format('{0} {1} (API credits)', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort) || steps.posted-1.outputs.posted == 'yes' && format('{0} {1}{2}', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort, steps.payer.outputs.main_on_key == 'yes' && ' (API credits)' || (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '' && (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '1' && format(' (account {0})', (steps.main-account.outputs.index || steps.payer.outputs.first_index)) || '') || steps.posted-2.outputs.posted == 'yes' && format('{0} {1} (retry{2})', steps.gate.outputs.deep_model, steps.gate.outputs.deep_effort, steps.payer.outputs.main_on_key == 'yes' && ', API credits' || (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '' && (steps.main-account.outputs.index || steps.payer.outputs.first_index) != '1' && format(', account {0}', (steps.main-account.outputs.index || steps.payer.outputs.first_index)) || '') || steps.posted-3.outputs.posted == 'yes' && format('{0} {1} (fallback{2}{3})', steps.gate.outputs.deep_fallback_model, steps.gate.outputs.deep_fallback_effort, (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) != '' && (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index) != '1' && format(', account {0}', (steps.account.outputs.index || steps.main-account.outputs.index || steps.payer.outputs.first_index)) || '', steps.payer.outputs.key_only == 'yes' && ', API credits' || '') || 'none' }}
-          ATTEMPTS: "API credits: ${{ steps.claude_credits.outcome || 'skipped' }}, first: ${{ steps.claude_attempt_1.outcome || 'skipped' }}, usage limit: ${{ steps.failure_class.outputs.usage_limit || 'no' }}, retry: ${{ steps.claude_retry.outcome || 'skipped' }}, fallback: ${{ steps.claude_fallback.outcome || 'skipped' }}, newest CLI: ${{ steps.claude-cli.outputs.version || 'not installed' }}, fallback CLI: ${{ steps.claude-cli-stable.outputs.version || 'none' }}"
+          REVIEWER: ${{ needs.claude.outputs.reviewer || 'none' }}
+          ATTEMPTS: ${{ needs.claude.outputs.attempts || 'the review job did not run' }}
         run: |
           set -o pipefail
           REPO="${{ github.repository }}"
@@ -1563,7 +1673,8 @@ jobs:
           # so its copy can still fail the gate closed. (On review events that
           # commit is the PR's own, so there is no fallback.) No review ran.
           if [ -z "$GATE" ] && [ "${{ github.event_name }}" = "issue_comment" ] \
-              && git show "${{ github.sha }}:.github/scripts/review_gate.py" > "$RUNNER_TEMP/gate-fallback.py"; then
+              && gh api "repos/$REPO_NAME/contents/.github/scripts/review_gate.py?ref=${{ github.sha }}" --jq .content \
+                | base64 -d > "$RUNNER_TEMP/gate-fallback.py"; then
             GATE="$RUNNER_TEMP/gate-fallback.py"
             REVIEWER=none
           fi
@@ -1593,7 +1704,7 @@ jobs:
             echo "::error::The gate script could not be read from the PR's base commit, so the Review gate was not updated"
             STATUS=1
           else
-            ORDER="${{ steps.pr-head.outputs.stamp }}.${{ github.run_attempt }}.1"
+            ORDER="${{ needs.hold.outputs.stamp }}.${{ github.run_attempt }}.1"
             if OUT=$(python3 -I "$GATE" upsert --repo "$REPO" --sha "$HEAD_SHA" --escalated --deep "$DEEP" \
                 --order "$ORDER" --note "Deep reviewer: $REVIEWER."); then
               # Read the gate as it stands now, not this write's own result
