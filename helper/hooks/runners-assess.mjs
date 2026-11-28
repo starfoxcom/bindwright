@@ -31,10 +31,18 @@ export const NO_CI_OPTIONS = Object.freeze([
 // job, so they are left out of what a local runner would take.
 const REVIEW_WORKFLOWS = new Set(["claude-code-review.yml", "claude.yml"]);
 
+/** Whether a workflow run's `path` (`.github/workflows/<file>`, maybe with `@<ref>`) is a review workflow's. */
+export function isReviewRun(path) {
+  return typeof path === "string" && REVIEW_WORKFLOWS.has(basename(path.split("@")[0]));
+}
+
 const NOTHING_OPTION = Object.freeze({ count: 0, runs: "nothing" });
 const GIB = 1024 ** 3;
 // A run counts as started the moment it is created; the wait for a runner is per job.
 const RUN_SAMPLE = 20;
+// The runs read to find RUN_SAMPLE outside the review workflows: GitHub's list has no way to
+// leave a workflow out, so they are dropped here, before the sample is cut. 100 is the page's limit.
+const RUN_PAGE = 100;
 const GH_TIMEOUT_IN_MILLISECONDS = 60 * 1000;
 const USAGE = "usage: runners-assess.mjs <repo root>";
 const WORKFLOW_FILE = /\.ya?ml$/;
@@ -250,9 +258,10 @@ async function ghJson(root, args) {
 // they never wait for a runner. Any failure (no gh, not signed in, not a GitHub repo) gives no jobs.
 async function recentJobs(root) {
   try {
-    const runs = (await ghJson(root, ["api", `repos/{owner}/{repo}/actions/runs?per_page=${RUN_SAMPLE}`,
+    const runs = (await ghJson(root, ["api", `repos/{owner}/{repo}/actions/runs?per_page=${RUN_PAGE}`,
       "--jq", "[.workflow_runs[] | {id, path}]"]))
-      .filter((run) => !REVIEW_WORKFLOWS.has(basename(String(run.path).split("@")[0])));
+      .filter((run) => !isReviewRun(run.path))
+      .slice(0, RUN_SAMPLE);
     const lists = await Promise.all(runs.map((run) =>
       ghJson(root, ["api", `repos/{owner}/{repo}/actions/runs/${run.id}/jobs`, "--jq", ".jobs"])
         .catch(() => [])));

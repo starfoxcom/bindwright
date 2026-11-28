@@ -13,9 +13,24 @@ import {
   NO_CI_OPTIONS,
   countJobs,
   hardwareLimit,
+  isReviewRun,
   recommend,
   runStats,
 } from "../../helper/hooks/runners-assess.mjs";
+
+const reviewRunRows = [
+  ["the deep review workflow", ".github/workflows/claude.yml", true],
+  ["the routine review workflow", ".github/workflows/claude-code-review.yml", true],
+  ["a review workflow at a ref", ".github/workflows/claude.yml@refs/heads/main", true],
+  ["another workflow", ".github/workflows/tests.yml", false],
+  ["a name that only ends like a review workflow", ".github/workflows/not-claude.yml", false],
+  ["a dynamic run", "dynamic/pages/pages-build-deployment", false],
+  ["no path", undefined, false],
+];
+
+for (const [name, path, expected] of reviewRunRows) {
+  test(`isReviewRun: ${name}`, () => assert.equal(isReviewRun(path), expected));
+}
 
 const script = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "helper", "hooks", "runners-assess.mjs");
 
