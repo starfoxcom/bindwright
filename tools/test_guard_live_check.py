@@ -157,6 +157,37 @@ class WhatThePullRequestHolds(HookTest):
                 self.assertEqual(self.hook.observe(event()), expect_note)
 
 
+class BoundFiles(HookTest):
+    """Lines the bind's record holds as Bindwright's own text for a file are Bindwright's code."""
+    GATE = ".github/scripts/review_gate.py"
+    RECORD = json.dumps({"files": {GATE: "def post(url):\n    " + POST_LINE + "\n"}})
+    # name, where the record sits (None for no record), its text, the changed file, a note expected
+    ROWS = [
+        ("a write Bindwright wrote makes no note", "repo", RECORD, file_of(GATE, [POST_LINE]), False),
+        ("a write the project adds to a bound file notes",
+         "repo", RECORD, file_of(GATE, [POST_LINE, "httpx.delete(url)"]), True),
+        ("Bindwright's line in a file it did not write notes", "repo", RECORD, file_of("api.py", [POST_LINE]),
+         True),
+        ("a record above the repo's top folder is not read", "above", RECORD, file_of(GATE, [POST_LINE]), True),
+        ("a record that is not JSON is not read", "repo", "{not json", file_of(GATE, [POST_LINE]), True),
+        ("no record notes", None, None, file_of(GATE, [POST_LINE]), True),
+    ]
+
+    def test_bound_rows(self):
+        for name, where, record, changed, expect_note in self.ROWS:
+            with self.subTest(name), tempfile.TemporaryDirectory() as top:
+                repo = os.path.join(top, "repo")
+                os.makedirs(os.path.join(repo, ".git"))
+                os.makedirs(os.path.join(repo, "src"))
+                if where:
+                    folder = os.path.join(repo if where == "repo" else top, ".bindwright")
+                    os.makedirs(folder)
+                    with open(os.path.join(folder, "pristine.json"), "w", encoding="utf-8") as handle:
+                        handle.write(record)
+                self.hook.gh = fake_gh(BODY, [changed])
+                self.assertEqual(self.hook.observe(dict(event(), cwd=os.path.join(repo, "src"))), expect_note)
+
+
 class WriteLines(HookTest):
     # name, added line, a write expected
     ROWS = [

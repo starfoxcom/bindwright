@@ -6,6 +6,16 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.7] — 2026-11-27
+
+### Fixed
+
+- **A missing gate file no longer leaves a failure status nothing clears.** When the routine review cannot check out the gate's own files, it set a failed Review gate status on any failed lookup, even in a repo whose gate never writes statuses, so a re-run stayed blocked until the next push. It now tries the lookup three times and skips the status only when the commit has none; a lookup that never answers still fails closed.
+- **The gate's commit status waits for the PR's own base branch.** The gate began writing its status once the default branch's review workflows allowed it, but a PR into another branch runs that branch's copy of the routine review, so until the release reached it there the routine tier was refused while the deep tier wrote, and the status lagged the check. The gate now also reads the workflows on the base of each open PR whose head is the commit.
+- **The attribution guard says why it refuses a body file the command writes itself.** It reads a `--body-file` or `-F` file before the command runs, so a command that writes the file and passes it in one go was refused with "could not read message/body file", which read like a wrong path only. It now says the file was not found where the guard reads it, and gives both fixes: write it in an earlier call, or use a literal absolute path.
+- **The live check no longer notes Bindwright's own scripts.** An update PR carries the writes in Bindwright's template scripts, such as the review gate's, so every update got the note though the project added no write. A line the bind's record holds as Bindwright's text for that file is now left out, while a write the project adds to one of those files still gets the note.
+- **The reviews pick their accounts before any review runs.** With several account tokens set, the routine and deep reviews picked the account for each attempt in a step that holds every token at once, and those steps ran after an AI review had already run on the same runner, so anything that review left behind ran next to all the tokens. Both picks, and the stable CLI copy the backup is probed with, now run before the first review. A backup's account is now picked before the main review spends anything, so an account that review uses up while it runs keeps the backup on it, which fails closed until a re-run.
+
 ## [v7.21.6] — 2026-11-27
 
 ### Fixed

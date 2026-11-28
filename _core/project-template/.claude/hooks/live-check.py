@@ -7,9 +7,10 @@ address, this hook asks GitHub's API for that pull request's body and changed fi
 branch, base and repo are the ones GitHub holds, never a guess from the command's text, and each
 file's path and patch arrive as separate JSON fields, never parsed out of diff text. When a line
 a file adds outside test files and the bind's record under .bindwright/ makes a write (an API
-call with a write method, or an HTTP client's post, put, patch or delete) and the body has no
-`Live check:` line, it appends the match to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and
-hands the session one line of context.
+call with a write method, or an HTTP client's post, put, patch or delete), the record does not
+hold that line for that file as Bindwright's own text, and the body has no `Live check:` line,
+it appends the match to `<BINDWRIGHT_HOME>/live-check/observed.jsonl` and hands the session one
+line of context.
 
 It never blocks: every outcome exits 0, so the log shows how often the note fires before any
 version refuses. Output with no github.com address, or with more than one, makes no note, and so
@@ -50,6 +51,7 @@ WRITE_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\bfetch\((?=.*\bmethod\s*:\s*[\"']?" + WRITE_METHOD + r"\b)",
 )]
 RECORD_FOLDER = ".bindwright"
+RECORD_FILE = "pristine.json"
 TEST_FOLDERS = {"test", "tests", "__tests__", "spec"}
 TEST_NAME_MARKERS = ("_test.", ".test.", ".spec.")
 LIVE_CHECK_LINE = re.compile(r"(?:[-*] )?live check:", re.IGNORECASE)
@@ -64,8 +66,31 @@ def sends_nothing(path):
             or name.startswith("test_") or any(marker in name for marker in TEST_NAME_MARKERS))
 
 
-def write_lines(files):
-    """The lines the pull request's files add that make a write to an outside service.
+def bound_lines(session):
+    """Each file the bind's record holds, by repo path, as the set of its stripped lines: the
+    text Bindwright wrote, so a pull request that adds one of those lines adds Bindwright's
+    code, not the project's. The record is the first one found from `session` up to its repo's
+    top folder; empty when there is none or it cannot be read."""
+    folder = os.path.abspath(session)
+    while not os.path.isfile(os.path.join(folder, RECORD_FOLDER, RECORD_FILE)):
+        parent = os.path.dirname(folder)
+        if parent == folder or os.path.exists(os.path.join(folder, ".git")):
+            return {}
+        folder = parent
+    try:
+        with open(os.path.join(folder, RECORD_FOLDER, RECORD_FILE), encoding="utf-8") as handle:
+            files = json.load(handle).get("files")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    if not isinstance(files, dict):
+        return {}
+    return {name: {line.strip() for line in text.split("\n")}
+            for name, text in files.items() if isinstance(text, str)}
+
+
+def write_lines(files, bound=None):
+    """The lines the pull request's files add that make a write to an outside service, leaving
+    out each line `bound` (from bound_lines) holds for the same file.
 
     `files` is GitHub's list of changed files: each names its path in `filename` and holds its
     hunks in `patch`, so no line of content can be taken for a path. A hunk line ends only at
@@ -77,8 +102,10 @@ def write_lines(files):
         patch = changed.get("patch")
         if sends_nothing(changed["filename"]) or not isinstance(patch, str):
             continue
-        added += [line[1:].strip() for line in patch.split("\n")
-                  if line.startswith("+") and len(line) <= MAX_LINE_CHARS]
+        own = (bound or {}).get(changed["filename"], set())
+        lines = [line[1:].strip() for line in patch.split("\n")
+                 if line.startswith("+") and len(line) <= MAX_LINE_CHARS]
+        added += [line for line in lines if line not in own]
     return [line for line in added if any(pattern.search(line) for pattern in WRITE_PATTERNS)]
 
 
@@ -237,11 +264,12 @@ def observe(event):
     if not address:
         return False
     session = event.get("cwd")
-    folders = trusted_folders(session if isinstance(session, str) and session else os.getcwd())
+    session = session if isinstance(session, str) and session else os.getcwd()
+    folders = trusted_folders(session)
     pull_request = read_pull_request(folders, *address)
     if pull_request is None or has_live_check(pull_request[0]):
         return False
-    matches = write_lines(pull_request[1])
+    matches = write_lines(pull_request[1], bound_lines(session))
     if not matches:
         return False
     record("https://%s/%s/pull/%s" % (GITHUB_HOST, *address), matches)

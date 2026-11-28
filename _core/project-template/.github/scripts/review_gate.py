@@ -53,9 +53,10 @@ is set again from the check it read. A
 second run on one head commit (a reopened PR) can leave the check in a check
 suite the merge no longer counts, while the newest status for a name always
 counts; a failing check of that name still blocks beside a passing status.
-The status is written only once both review workflows on the default branch
-grant statuses: write: a job without it cannot replace a status another job
-set, so until then the check alone carries the result.
+The status is written only once both review workflows grant statuses: write
+on the default branch and on the base of each open pull request whose head is
+the commit: a job without it cannot replace a status another job set, so
+until then the check alone carries the result.
 
 Every command prints one line; a bad argument prints {"error": ...} and exits 1.
 """
@@ -67,6 +68,7 @@ import re
 import subprocess
 import sys
 import time
+from urllib.parse import quote
 
 # Never reviewed: the review app refuses its token to a run whose copy of the
 # review workflow differs from the default branch's, so a workflow-only PR has
@@ -449,18 +451,40 @@ WORKFLOWS = (".github/workflows/claude-code-review.yml", ".github/workflows/clau
 _READY = {}
 
 
-def _statuses_ready(repo):
-    """Whether both review workflows on the default branch grant statuses: write.
-    A failed lookup counts as not, which leaves the check alone, as before."""
-    if repo not in _READY:
+def _open_pulls(repo):
+    """Every open pull request, a page of 100 at a time. The list of a commit's pull
+    requests leaves out open ones once the commit is on the default branch."""
+    pulls, page = [], 1
+    while True:
+        batch = _gh("repos/%s/pulls?state=open&per_page=100&page=%d" % (repo, page))
+        pulls += batch
+        if len(batch) < 100:
+            return pulls
+        page += 1
+
+
+def _branches(repo, sha):
+    """The default branch, whose copy runs the deep review, and the base of each open pull
+    request whose head is `sha`, whose copy runs the routine review."""
+    return {_gh("repos/%s" % repo)["default_branch"]} | {
+        pull["base"]["ref"] for pull in _open_pulls(repo) if pull["head"]["sha"] == sha}
+
+
+def _workflow(repo, path, branch):
+    found = _gh("repos/%s/contents/%s?ref=%s" % (repo, path, quote(branch, safe="")))
+    return base64.b64decode(found["content"]).decode("utf-8")
+
+
+def _statuses_ready(repo, sha):
+    """Whether both review workflows grant statuses: write on every branch whose copy
+    runs for `sha`. A failed lookup counts as not, which leaves the check alone, as before."""
+    if (repo, sha) not in _READY:
         try:
-            branch = _gh("repos/%s" % repo)["default_branch"]
-            texts = [base64.b64decode(_gh("repos/%s/contents/%s?ref=%s" % (repo, path, branch))["content"])
-                     .decode("utf-8") for path in WORKFLOWS]
-            _READY[repo] = all(re.search(r"^\s*statuses:\s*write\s*$", text, re.M) for text in texts)
+            texts = [_workflow(repo, path, branch) for branch in _branches(repo, sha) for path in WORKFLOWS]
+            _READY[repo, sha] = all(re.search(r"^\s*statuses:\s*write\s*$", text, re.M) for text in texts)
         except (GateError, KeyError, TypeError, ValueError):
-            _READY[repo] = False
-    return _READY[repo]
+            _READY[repo, sha] = False
+    return _READY[repo, sha]
 
 
 def _status_description(title):
@@ -473,7 +497,7 @@ def _set_status(repo, sha, check):
     """Sets the commit status of the gate's name to the check's result, once
     both review workflows may. A job without statuses: write all the same gets a
     warning instead of a failed gate."""
-    if not _statuses_ready(repo):
+    if not _statuses_ready(repo, sha):
         return
     body = {"state": STATUS_STATE[check["conclusion"]], "context": GATE,
             "description": _status_description(check["title"])}
