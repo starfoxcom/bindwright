@@ -15,10 +15,9 @@ checks: one
 # job on such a runner a fresh VM or container, removed after it
 # (config.sh --ephemeral alone only unregisters the runner after one job),
 # since a reused machine keeps what a review leaves behind, files and
-# processes, beside the next job's account tokens; both reviews warn on
-# every run that names self-hosted. Run it under an account of its own
-# with no Claude Code setup: the reviewers load that account's user
-# settings, hooks and instructions.
+# processes, beside the next job's account tokens. Run it under an
+# account of its own with no Claude Code setup: the reviewers load that
+# account's user settings, hooks and instructions.
 # On a Linux runner (WSL counts) without a Linux Node 22 or newer and
 # npm, each review job downloads the
 # official Node build into its temp folder, checked against a pinned

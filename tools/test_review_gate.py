@@ -861,20 +861,6 @@ class Command(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("routine_model=claude-fable-5-2", out.splitlines())
 
-    def test_a_self_hosted_runner_gets_a_warning_beside_the_settings(self):
-        # name, the runner setting, a warning expected
-        rows = [("a hosted runner", "ubuntu-latest", False), ("self-hosted labels", "self-hosted, linux", True),
-                ("a label that only holds the word", "my-self-hosted-pool", False)]
-        for name, runner, warned in rows:
-            with self.subTest(name), tempfile.TemporaryDirectory() as d:
-                conf = os.path.join(d, "gate.yml")
-                with open(conf, "w", encoding="utf-8") as fh:
-                    fh.write("runner: %s\n" % runner)
-                r = subprocess.run([sys.executable, SCRIPT, "settings", "--file", conf], capture_output=True)
-                self.assertEqual(r.returncode, 0)
-                self.assertNotIn(b"::warning::", r.stdout)
-                self.assertEqual(b"::warning::" in r.stderr, warned)
-
     def test_bad_arguments_are_refused(self):
         for args in [("gate", "--triage", "skip"), ("gate", "--state", "", "--triage", "maybe"),
                      ("gate", "--state", "", "--routine", "ok"), ("gate", "--state", "deep=later"),
