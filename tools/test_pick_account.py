@@ -89,7 +89,8 @@ class PickTest(unittest.TestCase):
                 result = pick_account.probe(os.path.join(runner_temp, "no-such-cli"), "model", "token")
             self.assertEqual(result, (1, ""))
 
-    @unittest.skipUnless(hasattr(os, "killpg"), "process groups are POSIX only")
+    @unittest.skipUnless(hasattr(os, "killpg") and os.path.exists("/proc/self/stat"),
+                         "needs process groups and /proc to see the child")
     def test_no_process_a_probe_starts_outlives_it(self):
         # A CLI that leaves a child behind, then either answers or hangs past the timeout.
         script = '#!/bin/sh\nsleep 60 &\necho $! > "$CHILD_PID"\n%s\n'
@@ -116,7 +117,8 @@ def _alive(pid):
             with open("/proc/%d/stat" % pid, encoding="utf-8") as fh:
                 if fh.read().rsplit(")", 1)[1].split()[0] == "Z":
                     return False
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
+            # Either one: the process was reaped, before the open or between it and the read.
             return False
         time.sleep(0.1)
     return True
