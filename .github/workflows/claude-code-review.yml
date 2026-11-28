@@ -528,16 +528,19 @@ jobs:
           set -euo pipefail
           gate="$RUNNER_TEMP/template-check"
           mkdir -p "$gate"
-          check="$PRESCREEN_DIR/bindwright_templates.py"
-          git cat-file -e "$GATE_SHA:$check" 2>/dev/null || exit 0
-          git show "$GATE_SHA:$check" > "$gate/bindwright_templates.py"
+          # A pathspec, as Project pre-screen reads the folder, so a prescreen.dir
+          # written `dir/` or `dir//` still finds the check.
+          git archive "$GATE_SHA" -- "$PRESCREEN_DIR/bindwright_templates.py" 2>/dev/null \
+            | tar -x -C "$gate" 2>/dev/null || exit 0
+          script=$(find "$gate" -type f -name bindwright_templates.py | head -n 1)
+          [ -n "$script" ] || exit 0
           git -c core.quotePath=false diff --text --no-ext-diff --no-textconv \
             --ignore-submodules=none "origin/$BASE...HEAD" > "$gate/pr.diff"
           git diff -z --no-renames --name-only --ignore-submodules=none "origin/$BASE...HEAD" \
             | python3 -I -c 'import sys; sys.stdout.buffer.write(b"".join(n.decode("utf-8", "backslashreplace").replace("\r", " ").replace("\n", " ").encode() + b"\n" for n in sys.stdin.buffer.read().split(b"\0") if n))' \
             > "$gate/files.txt"
           env -i PATH="$PATH" HOME="$(mktemp -d "$RUNNER_TEMP/home.XXXXXX")" LANG=C.UTF-8 \
-            timeout 240 python3 -I "$gate/bindwright_templates.py" "$gate/files.txt" "$gate/pr.diff" \
+            timeout 240 python3 -I "$script" "$gate/files.txt" "$gate/pr.diff" \
             < /dev/null > "$gate/out" 2>&1 || exit 0
           python3 -I - "$gate/out" <<'PYEOF'
           import os, sys
