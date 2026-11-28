@@ -53,9 +53,10 @@ is set again from the check it read. A
 second run on one head commit (a reopened PR) can leave the check in a check
 suite the merge no longer counts, while the newest status for a name always
 counts; a failing check of that name still blocks beside a passing status.
-The status is written only once both review workflows on the default branch
-grant statuses: write: a job without it cannot replace a status another job
-set, so until then the check alone carries the result.
+The status is written only once both review workflows grant statuses: write
+on the default branch and on the base of each open pull request whose head is
+the commit: a job without it cannot replace a status another job set, so
+until then the check alone carries the result.
 
 Every command prints one line; a bad argument prints {"error": ...} and exits 1.
 """
@@ -450,12 +451,23 @@ WORKFLOWS = (".github/workflows/claude-code-review.yml", ".github/workflows/clau
 _READY = {}
 
 
+def _open_pulls(repo):
+    """Every open pull request, a page of 100 at a time. The list of a commit's pull
+    requests leaves out open ones once the commit is on the default branch."""
+    pulls, page = [], 1
+    while True:
+        batch = _gh("repos/%s/pulls?state=open&per_page=100&page=%d" % (repo, page))
+        pulls += batch
+        if len(batch) < 100:
+            return pulls
+        page += 1
+
+
 def _branches(repo, sha):
     """The default branch, whose copy runs the deep review, and the base of each open pull
     request whose head is `sha`, whose copy runs the routine review."""
-    pulls = _gh("repos/%s/commits/%s/pulls" % (repo, sha))
     return {_gh("repos/%s" % repo)["default_branch"]} | {
-        pull["base"]["ref"] for pull in pulls if pull["state"] == "open" and pull["head"]["sha"] == sha}
+        pull["base"]["ref"] for pull in _open_pulls(repo) if pull["head"]["sha"] == sha}
 
 
 def _workflow(repo, path, branch):

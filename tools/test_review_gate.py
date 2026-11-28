@@ -603,8 +603,8 @@ class Upsert(unittest.TestCase):
     def test_the_workflows_read_decides_whether_statuses_are_written(self):
         granted, missing = "    permissions:\n      statuses: write\n", "      # statuses: write\n"
         both = {"review": granted, "claude": granted}
-        into_release = [{"state": "open", "head": {"sha": self.SHA}, "base": {"ref": "release/v2"}}]
-        # name, each branch's workflows, the commit's pull requests, statuses written
+        into_release = [{"head": {"sha": self.SHA}, "base": {"ref": "release/v2"}}]
+        # name, each branch's workflows, the open pull requests, statuses written
         rows = [
             ("both workflows grant it", {"main": both}, [], True),
             ("one workflow lacks it", {"main": {"review": granted, "claude": missing}}, [], False),
@@ -612,8 +612,9 @@ class Upsert(unittest.TestCase):
             ("a pull request's base still runs the routine review without it",
              {"main": both, "release/v2": {"review": missing, "claude": granted}}, into_release, False),
             ("a pull request's base that grants it too", {"main": both, "release/v2": both}, into_release, True),
-            ("a closed pull request's base is not read",
-             {"main": both}, [dict(into_release[0], state="closed")], True),
+            ("a base found only on the second page of open pull requests is read",
+             {"main": both, "release/v2": {"review": missing, "claude": granted}},
+             [{"head": {"sha": "1" * 40}, "base": {"ref": "main"}}] * 100 + into_release, False),
             ("a pull request whose head is another commit is not read",
              {"main": both}, [dict(into_release[0], head={"sha": "0" * 40})], True),
         ]
@@ -623,8 +624,9 @@ class Upsert(unittest.TestCase):
                 def fake(path, method="GET", body=None):
                     if path == "repos/o/r":
                         return {"default_branch": "main"}
-                    if path == "repos/o/r/commits/%s/pulls" % self.SHA:
-                        return pulls
+                    if path.startswith("repos/o/r/pulls?state=open&per_page=100&page="):
+                        page = int(path.rsplit("=", 1)[1])
+                        return pulls[(page - 1) * 100:page * 100]
                     branch = path.split("?ref=")[1].replace("%2F", "/")
                     text = branches[branch]["review" if "claude-code-review" in path else "claude"]
                     if text is None:
