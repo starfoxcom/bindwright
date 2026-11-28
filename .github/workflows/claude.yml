@@ -750,13 +750,9 @@ jobs:
         run: |
           out="$RUNNER_TEMP/template-files.md"
           rm -f "$out"
-          # A pathspec, as Project pre-screen reads the folder, so a prescreen.dir
-          # written `dir/` or `dir//` still finds the check.
-          mkdir -p "$RUNNER_TEMP/gate/template-check"
-          git archive "$GATE_SHA" -- "$PRESCREEN_DIR/bindwright_templates.py" 2>/dev/null \
-            | tar -x -C "$RUNNER_TEMP/gate/template-check" 2>/dev/null || exit 0
-          script=$(find "$RUNNER_TEMP/gate/template-check" -type f -name bindwright_templates.py | head -n 1)
-          [ -n "$script" ] || exit 0
+          check="$PRESCREEN_DIR/bindwright_templates.py"
+          git cat-file -e "$GATE_SHA:$check" 2>/dev/null || exit 0
+          git show "$GATE_SHA:$check" > "$RUNNER_TEMP/gate/bindwright_templates.py"
           auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           echo "::add-mask::$auth"
           git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --quiet --no-tags origin "+refs/pull/$PR_NUMBER/merge"
@@ -776,7 +772,7 @@ jobs:
             | python3 -I -c 'import sys; sys.stdout.buffer.write(b"".join(n.decode("utf-8", "backslashreplace").replace("\r", " ").replace("\n", " ").encode() + b"\n" for n in sys.stdin.buffer.read().split(b"\0") if n))' \
             > "$RUNNER_TEMP/template-files.txt"
           if (cd "$tree" && env -i PATH="$PATH" HOME="$(mktemp -d "$RUNNER_TEMP/home.XXXXXX")" LANG=C.UTF-8 \
-              timeout 240 python3 -I "$script" \
+              timeout 240 python3 -I "$RUNNER_TEMP/gate/bindwright_templates.py" \
               "$RUNNER_TEMP/template-files.txt" "$RUNNER_TEMP/template-pr.diff" < /dev/null) > "$out.new" 2>&1; then
             head -c 4000 "$out.new" > "$out"
             cat "$out"
