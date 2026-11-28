@@ -69,8 +69,9 @@ def sends_nothing(path):
 def bound_lines(session):
     """Each file the bind's record holds, by repo path, as the set of its stripped lines: the
     text Bindwright wrote, so a pull request that adds one of those lines adds Bindwright's
-    code, not the project's. The record is the first one found from `session` up to its repo's
-    top folder; empty when there is none or it cannot be read."""
+    code, not the project's. A file an update held back to ship in a later PR has its new text
+    under `held`, and those lines count too. The record is the first one found from `session` up
+    to its repo's top folder; empty when there is none or it cannot be read."""
     folder = os.path.abspath(session)
     while not os.path.isfile(os.path.join(folder, RECORD_FOLDER, RECORD_FILE)):
         parent = os.path.dirname(folder)
@@ -79,13 +80,18 @@ def bound_lines(session):
         folder = parent
     try:
         with open(os.path.join(folder, RECORD_FOLDER, RECORD_FILE), encoding="utf-8") as handle:
-            files = json.load(handle).get("files")
+            record = json.load(handle)
+        files, held = record.get("files"), record.get("held")
     except (OSError, ValueError, AttributeError):
         return {}
     if not isinstance(files, dict):
         return {}
-    return {name: {line.strip() for line in text.split("\n")}
-            for name, text in files.items() if isinstance(text, str)}
+    bound = {}
+    for texts in (files, held if isinstance(held, dict) else {}):
+        for name, text in texts.items():
+            if isinstance(text, str):
+                bound.setdefault(name, set()).update(line.strip() for line in text.split("\n"))
+    return bound
 
 
 def write_lines(files, bound=None):

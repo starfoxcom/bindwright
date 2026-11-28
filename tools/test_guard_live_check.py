@@ -161,6 +161,8 @@ class BoundFiles(HookTest):
     """Lines the bind's record holds as Bindwright's own text for a file are Bindwright's code."""
     GATE = ".github/scripts/review_gate.py"
     RECORD = json.dumps({"files": {GATE: "def post(url):\n    " + POST_LINE + "\n"}})
+    # An update that ships the file in a later PR keeps the old text as its base and the new under `held`.
+    HELD = json.dumps({"files": {GATE: "def post(url):\n"}, "held": {GATE: "def post(url):\n    " + POST_LINE + "\n"}})
     # name, where the record sits (None for no record), its text, the changed file, a note expected
     ROWS = [
         ("a write Bindwright wrote makes no note", "repo", RECORD, file_of(GATE, [POST_LINE]), False),
@@ -168,6 +170,10 @@ class BoundFiles(HookTest):
          "repo", RECORD, file_of(GATE, [POST_LINE, "httpx.delete(url)"]), True),
         ("Bindwright's line in a file it did not write notes", "repo", RECORD, file_of("api.py", [POST_LINE]),
          True),
+        ("a write in the held text of a file shipped later makes no note",
+         "repo", HELD, file_of(GATE, [POST_LINE]), False),
+        ("a write the project adds beside held text notes",
+         "repo", HELD, file_of(GATE, [POST_LINE, "httpx.delete(url)"]), True),
         ("a record above the repo's top folder is not read", "above", RECORD, file_of(GATE, [POST_LINE]), True),
         ("a record that is not JSON is not read", "repo", "{not json", file_of(GATE, [POST_LINE]), True),
         ("no record notes", None, None, file_of(GATE, [POST_LINE]), True),
