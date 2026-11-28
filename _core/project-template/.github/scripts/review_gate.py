@@ -445,6 +445,12 @@ def _newest(repo, sha):
 
 
 STATUS_STATE = {"success": "success", "failure": "failure", None: "pending"}
+# A machine that runs more than one job keeps what a review leaves behind, files and
+# processes, for the next job, the steps that hold every account token included.
+SELF_HOSTED_WARNING = (
+    "::warning::The reviews run on a self-hosted runner. Register it as ephemeral "
+    "(config.sh --ephemeral, one job and then a fresh machine), or what one review leaves "
+    "behind stays beside the next job's account tokens.")
 
 
 WORKFLOWS = (".github/workflows/claude-code-review.yml", ".github/workflows/claude.yml")
@@ -762,6 +768,8 @@ def main(argv):
         return 1
     if argv and argv[0] == "settings":
         labels = [label.strip() for label in result["runner"].split(",")]
+        if any(label.lower() == "self-hosted" for label in labels):
+            print(SELF_HOSTED_WARNING, file=sys.stderr)
         lines = ["%s=%s" % (k.replace(".", "_"), v) for k, v in result.items()]
         print("\n".join(lines + ["runner_labels=" + json.dumps(labels)]))
     else:
