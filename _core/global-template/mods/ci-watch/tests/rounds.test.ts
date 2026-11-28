@@ -465,7 +465,7 @@ const ROUTINE = '## Code Review\n<!-- review-run: 11-1 review -->\n\n🟢 LGTM\n
 const REQUEST = '@claude review this PR — depth pass.\n\n<!-- review-run: 11-1 request -->\n'
 const DEEP = '## Deep review\n<!-- deep-run: 12-1 review -->\n\n- a finding\n\n**Verdict:** 🔴 Blocking\n'
 // The review workflow's early jobs, which a cancel during triage leaves cancelled.
-const EARLY = ['Diff triage', 'Project triggers', 'Project pre-screen']
+const EARLY = ['Diff triage', 'Project triggers', 'Project pre-screen', 'Template check']
 type VerdictRow = {
   name: string
   state?: string
