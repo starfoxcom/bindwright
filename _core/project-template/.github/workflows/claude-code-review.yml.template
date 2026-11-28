@@ -2529,10 +2529,18 @@ jobs:
           echo "::error::The review gate's own files could not be checked out, so the routine verdict cannot be read or written: failing closed. Re-run the workflow."
           # A commit status of the gate's name, once the gate script has set one
           # on this commit, still counts beside the failed check, so it fails
-          # too; with none there, the failed check blocks on its own. A failed
-          # lookup prints no count, so the status is set then too.
-          count=$(gh api "repos/$REPO/commits/$HEAD_SHA/status?per_page=100" \
-            --jq '[.statuses[] | select(.context == "Review gate")] | length' 2> /dev/null || true)
+          # too. With none there it is left alone, since a status set here
+          # could never be cleared where the gate script writes none. A lookup
+          # is tried three times; one that never answers may have missed a
+          # status (after a reopen the merge counts the status alone), so the
+          # status is set then too.
+          count=
+          for delay in 0 2 4; do
+            sleep "$delay"
+            count=$(gh api "repos/$REPO/commits/$HEAD_SHA/status?per_page=100" \
+              --jq '[.statuses[] | select(.context == "Review gate")] | length' 2> /dev/null || true)
+            case "$count" in ''|*[!0-9]*) count= ;; *) break ;; esac
+          done
           if [ "$count" != 0 ] && ! gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" -f state=failure \
             -f context="Review gate" -f "description=The review gate's files could not be checked out" > /dev/null; then
             echo "::warning::Could not mark the Review gate status as failed"
