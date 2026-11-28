@@ -174,6 +174,14 @@ def render(engine, answers, year):
     return files
 
 
+def is_regular_file(rev, path):
+    """Whether `path` at `rev` is a plain file: `git show` gives a link's target string as its text."""
+    r = subprocess.run(["git", "--literal-pathspecs", "ls-tree", "-z", rev, "--", path], capture_output=True)
+    entry = r.stdout.split(b"\0", 1)[0] if r.returncode == 0 else b""
+    info, _, name = entry.partition(b"\t")
+    return name == path.encode("utf-8") and info.split(b" ", 1)[0] in (b"100644", b"100755")
+
+
 def text_at(rev, path):
     data = git_show(rev, path)
     if data is None:
@@ -198,7 +206,7 @@ def unedited(changed, rendered, base):
     """The changed files whose head text equals the render."""
     found = []
     for path in changed:
-        if path not in rendered:
+        if path not in rendered or not is_regular_file("HEAD", path):
             continue
         text = text_at("HEAD", path)
         if text is not None and matches(text, rendered[path], text_at(base, path)):

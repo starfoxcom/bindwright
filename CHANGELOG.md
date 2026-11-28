@@ -6,6 +6,10 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+### Fixed
+
+- **The template-text check lists only plain files.** It read each changed file's text with `git show`, which gives a symbolic link's target string as its text, so a PR that swapped a short template file for a link whose target string matched the render had the link listed as Bindwright's text, and the review let its findings pass. A path is now listed only when it is a regular file in the PR's commit.
+
 ## [v7.21.7] — 2026-11-27
 
 ### Fixed
