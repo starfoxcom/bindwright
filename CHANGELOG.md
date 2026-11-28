@@ -6,6 +6,8 @@ Earlier conversational `v17` and `v18` mentions never shipped as standalone arti
 
 ## [Unreleased]
 
+## [v7.21.7] — 2026-11-27
+
 ### Fixed
 
 - **A missing gate file no longer leaves a failure status nothing clears.** When the routine review cannot check out the gate's own files, it set a failed Review gate status on any failed lookup, even in a repo whose gate never writes statuses, so a re-run stayed blocked until the next push. It now tries the lookup three times and skips the status only when the commit has none; a lookup that never answers still fails closed.
